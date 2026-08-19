@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getTargets } from '@/lib/data';
 import Header from '@/components/Header';
 import ThesisForm from '@/components/ThesisForm';
@@ -10,8 +9,7 @@ export const maxDuration = 60;
 export const metadata = { title: 'New thesis · The AI Atlas' };
 
 export default async function NewThesisPage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
   const targets = await getTargets();
 
   return (

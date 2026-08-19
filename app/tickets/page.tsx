@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getTickets } from '@/lib/data';
 import type { TicketKind, TicketStatus } from '@/lib/types';
 import Header from '@/components/Header';
@@ -19,8 +18,7 @@ export default async function TicketsPage({
 }: {
   searchParams: Promise<{ kind?: string; status?: string }>;
 }) {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
   const sp = await searchParams;
   const kind = sp.kind && KINDS.has(sp.kind) ? (sp.kind as TicketKind) : undefined;
   const status = sp.status && STATUSES.has(sp.status) ? (sp.status as TicketStatus) : undefined;

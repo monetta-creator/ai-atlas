@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getRuns, getCandidates, getTextCoverage } from '@/lib/data';
 import { timeAgo } from '@/lib/format';
 import Header from '@/components/Header';
@@ -14,8 +13,7 @@ export const maxDuration = 60;
 export const metadata = { title: 'Discovery pipeline · The AI Atlas' };
 
 export default async function PipelinePage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const [runs, textCoverage] = await Promise.all([getRuns(15), getTextCoverage()]);
   const latest = runs[0] ?? null;

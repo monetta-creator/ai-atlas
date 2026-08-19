@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getTrackedSince, getThreadsUpdatedSince } from '@/lib/data';
 import { sanitizeSynthesisHtml } from '@/lib/sanitize';
 
@@ -15,8 +14,7 @@ export default async function ResearchDigestPage({
 }: {
   searchParams: Promise<{ since?: string }>;
 }) {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  await requireAdminPage();
   const sp = await searchParams;
 
   // Default window (14 days) resolves in SQL — the react purity rule (correctly)

@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getTargets, getArgumentGapScan, getThesis, nextBridgeCode } from '@/lib/data';
 import { createBridgeAction } from '@/lib/actions';
 import type { Domain, Resolvability, Relation } from '@/lib/types';
@@ -17,8 +16,7 @@ export default async function NewBridgePage({
 }: {
   searchParams: Promise<{ gap?: string; thesis?: string }>;
 }) {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const { gap, thesis: thesisParam } = await searchParams;
   const { claims, bridges } = await getTargets();

@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import crypto from 'node:crypto';
 
 // The Admin/Guest gate. Admin sessions are a signed HMAC cookie; the guest
@@ -48,6 +49,15 @@ function verify(token: string | undefined, expected: 'admin' | 'portal'): boolea
 export async function isAdmin(): Promise<boolean> {
   const store = await cookies();
   return verify(store.get(ADMIN_COOKIE)?.value, 'admin');
+}
+
+// The admin PAGE gate: call first in every admin-only page. Centralizing the
+// redirect makes "forgot the gate line" impossible on new pages (the failure
+// mode behind the one real guest leak this app has had). Returns true so pages
+// can keep an `admin` flag for props: `const admin = await requireAdminPage()`.
+export async function requireAdminPage(): Promise<true> {
+  if (!(await isAdmin())) redirect('/login');
+  return true;
 }
 
 // The portal tier: a signed cookie unlocked by the shared team key (PORTAL_KEY).

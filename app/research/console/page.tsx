@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import {
   getResearchRuns, getReviewQueuePapers, countPendingPapers,
   getResearchThreads, getThreadScan, reconcileThreadScan, getRisingRejects,
@@ -27,8 +26,7 @@ export const metadata = { title: 'Research console · The AI Atlas' };
 // 2026-08-14 so the portal proper leads with insights instead of the factory
 // (the /reports/period pattern). Every server action re-checks requireAdmin().
 export default async function ResearchConsolePage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const [runs, queue, rising, rawScan, threads, coverage, steering, unprocessed, agentSummary] = await Promise.all([
     getResearchRuns(15), getReviewQueuePapers(), getRisingRejects(), getThreadScan(),

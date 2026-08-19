@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getTheses } from '@/lib/data';
 import { dateLabel } from '@/lib/format';
 import Header from '@/components/Header';
@@ -13,8 +12,7 @@ export const metadata = { title: 'Theses · The AI Atlas' };
 // thesis links to its run console (/theses/[id]); saved runs get public
 // /thesis-report links to share.
 export default async function ThesesPage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
   const theses = await getTheses();
 
   return (

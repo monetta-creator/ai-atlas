@@ -1,6 +1,6 @@
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { isAdmin, isPreview } from '@/lib/auth';
+import { requireAdminPage, isPreview } from '@/lib/auth';
 import { getQuestionBySlug, getQuestionSummaries, getAsOf } from '@/lib/data';
 import { LENS_LABEL } from '@/lib/format';
 import Header from '@/components/Header';
@@ -21,8 +21,7 @@ export default async function QuestionSummaryHistoryPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
   const preview = await isPreview();
   const personal = admin && !preview;
 

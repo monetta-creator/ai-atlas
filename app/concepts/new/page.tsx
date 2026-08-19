@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getConceptGraph, getConceptGapScan, getTargets } from '@/lib/data';
 import { createConceptAction } from '@/lib/actions';
 import type { ConceptStatus } from '@/lib/types';
@@ -17,8 +16,7 @@ export default async function NewConceptPage({
 }: {
   searchParams: Promise<{ gap?: string }>;
 }) {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const { gap } = await searchParams;
   const [{ concepts }, { claims, bridges }] = await Promise.all([getConceptGraph(), getTargets()]);

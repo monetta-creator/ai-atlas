@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { notFound } from 'next/navigation';
+import { requireAdminPage } from '@/lib/auth';
 import { getQuestion, getTargets, getArgumentGapScan, getThesis, nextClaimCode } from '@/lib/data';
 import { createClaimAction } from '@/lib/actions';
 import type { Domain, Resolvability, Relation } from '@/lib/types';
@@ -19,8 +19,7 @@ export default async function NewClaimPage({
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ gap?: string; thesis?: string }>;
 }) {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const { slug } = await params;
   const { gap, thesis: thesisParam } = await searchParams;

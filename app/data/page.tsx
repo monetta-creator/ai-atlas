@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getAllDomainRows, getNodeLensMap } from '@/lib/data';
 import Header from '@/components/Header';
 import DataField from '@/components/DataField';
@@ -10,8 +9,7 @@ import WorkspaceTabs, { MAP_EDITOR_TABS } from '@/components/WorkspaceTabs';
 export const dynamic = 'force-dynamic';
 
 export default async function DataPage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const [{ questions, stances, claims, bridges }, lensMap] = await Promise.all([
     getAllDomainRows(),

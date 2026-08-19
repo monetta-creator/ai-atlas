@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getTargets, getSources } from '@/lib/data';
 import { createSignalAction } from '@/lib/actions';
 import Header from '@/components/Header';
@@ -10,8 +9,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'New signal · The AI Atlas' };
 
 export default async function NewSignalPage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const { claims, bridges } = await getTargets();
   const sources = (await getSources()).map((s) => ({ id: s.id, title: s.title }));

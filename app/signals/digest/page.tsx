@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getSignals } from '@/lib/data';
 import {
   SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL, SIGNIFICANCE_LABEL, dateLabel,
@@ -19,8 +18,7 @@ export default async function DigestPage({
 }: {
   searchParams: Promise<{ since?: string; lenses?: string; significance?: string }>;
 }) {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  await requireAdminPage();
   const sp = await searchParams;
 
   const validLens = new Set<string>(SIGNAL_LENS_SLUGS);

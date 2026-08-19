@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { notFound } from 'next/navigation';
+import { requireAdminPage } from '@/lib/auth';
 import { getConceptForEdit, getConceptGraph, getTargets } from '@/lib/data';
 import { updateConceptAction, deleteConceptAction } from '@/lib/actions';
 import Header from '@/components/Header';
@@ -16,8 +16,7 @@ export default async function EditConceptPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const { slug } = await params;
   const [data, { concepts }, { claims, bridges }] = await Promise.all([

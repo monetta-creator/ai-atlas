@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getCalibration } from '@/lib/data';
 import { snapshotAction } from '@/lib/actions';
 import Header from '@/components/Header';
@@ -13,8 +12,7 @@ export const metadata = { title: 'Calibration · The AI Atlas' };
 // Admin-only: the confidence history is the personal layer made legible. Every move
 // already writes a snapshot + rationale (moveConfidence); this is the reader.
 export default async function CalibrationPage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const data = await getCalibration();
 

@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import {
   getScoutVerticals, getScoutQueue, getScoutRuns,
   getScoutPrefs, getScoutQueueIds, getScoutAgentSummary,
@@ -24,8 +23,7 @@ export const metadata = { title: 'Scout console · The AI Atlas' };
 // history. The reading surface lives at /scout. Every server action re-checks
 // requireAdmin().
 export default async function ScoutConsolePage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const [verticals, queue, runs, prefs, queueIds, agentSummary] = await Promise.all([
     getScoutVerticals(true), getScoutQueue(), getScoutRuns(),

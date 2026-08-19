@@ -1,6 +1,5 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getSignalsPage, getDedupeScan, getActiveDraftIds, reconcileDedupeScan } from '@/lib/data';
 import Header from '@/components/Header';
 import DraftQueue from '@/components/DraftQueue';
@@ -13,8 +12,7 @@ export const metadata = { title: 'Draft queue · The AI Atlas' };
 // Admin-only working queue of UNPUBLISHED signals, with a manual duplicate scan. Separate
 // from the public published feed at /signals so neither page is one long scroll.
 export default async function DraftsPage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const [active, archived, persisted, activeIds] = await Promise.all([
     getSignalsPage({ admin: true, status: 'unpublished' }),

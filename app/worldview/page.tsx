@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getWorldview, getNodeOptions } from '@/lib/data';
 import {
   createPositionAction,
@@ -19,8 +18,7 @@ import type { NodeOption } from '@/lib/types';
 export const dynamic = 'force-dynamic';
 
 export default async function WorldviewPage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const [{ spine, positions }, nodes] = await Promise.all([getWorldview(), getNodeOptions()]);
 

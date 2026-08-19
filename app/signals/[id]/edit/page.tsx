@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { redirect, notFound } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { notFound } from 'next/navigation';
+import { requireAdminPage } from '@/lib/auth';
 import { getSignal, getTargets, getSources } from '@/lib/data';
 import { updateSignalAction } from '@/lib/actions';
 import Header from '@/components/Header';
@@ -11,8 +11,7 @@ export const metadata = { title: 'Edit signal · The AI Atlas' };
 
 export default async function EditSignalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   // `admin` is guaranteed true here (the redirect above gates non-admins); derive the
   // personal flag from it rather than hardcoding, so the edit view never out-lives its gate.

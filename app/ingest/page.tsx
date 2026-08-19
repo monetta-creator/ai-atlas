@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import Header from '@/components/Header';
 import SourceForm from '@/components/SourceForm';
 import WorkspaceTabs, { SOURCES_TABS } from '@/components/WorkspaceTabs';
@@ -11,8 +10,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export default async function IngestPage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   return (
     <>

@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getCostDashboard } from '@/lib/data';
 import Header from '@/components/Header';
 import CostsDashboard from '@/components/CostsDashboard';
@@ -11,8 +10,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'AI costs · The AI Atlas' };
 
 export default async function CostsPage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const data = await getCostDashboard();
 

@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { buildReportData } from '@/lib/report';
 import { listSavedReports } from '@/lib/data';
 import { SIGNAL_LENS_SLUGS } from '@/lib/format';
@@ -25,8 +24,7 @@ export default async function PeriodReportPage({
 }: {
   searchParams: Promise<{ from?: string; to?: string; lenses?: string }>;
 }) {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
   const sp = await searchParams;
 
   // Default range: the last 90 days (so the preview is populated on first load).

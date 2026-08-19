@@ -1,6 +1,6 @@
-import { redirect, notFound } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getSource, getTargets } from '@/lib/data';
 import { setPriorAction, reassignEvidenceAction, deleteEvidenceAction } from '@/lib/actions';
 import { DOMAIN_LABEL, directionLabel, directionColor } from '@/lib/format';
@@ -25,8 +25,7 @@ export default async function SourcePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const data = await getSource(id);
   if (!data) notFound();

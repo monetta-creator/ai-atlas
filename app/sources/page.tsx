@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { isAdmin } from '@/lib/auth';
+import { requireAdminPage } from '@/lib/auth';
 import { getSourcesWithCounts, getEvidenceGraph } from '@/lib/data';
 import Header from '@/components/Header';
 import SourcesHub from '@/components/SourcesHub';
@@ -9,8 +8,7 @@ import WorkspaceTabs, { SOURCES_TABS } from '@/components/WorkspaceTabs';
 export const dynamic = 'force-dynamic';
 
 export default async function SourcesPage() {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
 
   const [sources, graph] = await Promise.all([getSourcesWithCounts(), getEvidenceGraph()]);
 

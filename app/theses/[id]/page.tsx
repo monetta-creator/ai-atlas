@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { notFound } from 'next/navigation';
+import { requireAdminPage } from '@/lib/auth';
 import {
   getTargets, getThesis, getThesisReportsMeta, getThesisTreeData,
   resolvePeriodTouches, reconcileArgumentGapScan,
@@ -22,8 +22,7 @@ export const metadata = { title: 'Thesis · The AI Atlas' };
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
 export default async function ThesisPage({ params }: { params: Promise<{ id: string }> }) {
-  const admin = await isAdmin();
-  if (!admin) redirect('/login');
+  const admin = await requireAdminPage();
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
 
