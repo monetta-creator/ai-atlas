@@ -7,7 +7,7 @@ This version (16.2.6) has breaking changes — APIs, conventions, and file struc
 
 # Maintainer note
 
-The session-by-session build journal lives in `private/SESSION-LOG.md` (untracked; the `private/` folder holds all maintainer-only material). Read it at session start; append a summary of each working session there, not here.
+The session-by-session build journal lives in `private/SESSION-LOG.md` (untracked; the `private/` folder holds all maintainer-only material). Read it at session start; append a summary of each working session there, not here. The living backlog is `private/docs/TODO.md`; its top item is the immediate next step (as of 2026-08-19: an ultra code review of this tree, run by the maintainer; the session after it triages the findings).
 
 ---
 
