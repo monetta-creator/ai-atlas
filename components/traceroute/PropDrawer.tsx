@@ -12,7 +12,7 @@ import { RISK_DOT_VAR, RISK_LABEL, type RiskLevel } from '@/lib/supply-chain/map
 //
 // One component serves both, via a discriminated target: a physical prop carries a place and
 // the supply-chain nodes that make it, an architecture part carries a parameter count. Modelled
-// on components/SupplyChainDrawer.tsx (escape to close, focus on open, renders null when shut)
+// on the retired /supply-chain drawer (escape to close, focus on open, renders null when shut)
 // but without that component's admin editors and supply-chain crumb, neither of which belongs
 // on a public explainer.
 
