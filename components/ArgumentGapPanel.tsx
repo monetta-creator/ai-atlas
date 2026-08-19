@@ -69,7 +69,9 @@ export default function ArgumentGapPanel({
     setRanEmpty(false);
     try {
       await clear();
-    } catch {}
+    } catch {
+      // worst case the cleared scan reappears on refresh — the scan is the source of truth
+    }
   }
 
   return (

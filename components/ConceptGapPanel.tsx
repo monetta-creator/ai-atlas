@@ -51,7 +51,9 @@ export default function ConceptGapPanel({ initial }: { initial: ConceptGapScan |
     setRanEmpty(false);
     try {
       await clearConceptGapScanAction();
-    } catch {}
+    } catch {
+      // worst case the cleared scan reappears on refresh — the scan is the source of truth
+    }
   }
 
   return (
