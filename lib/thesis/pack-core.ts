@@ -10,15 +10,16 @@ import type {
 //
 // Query access is INJECTED (`Q`) rather than imported from lib/db so the
 // determinism test (scripts/test-thesis.mjs) can drive the exact production SQL
-// from plain Node. Only type-only imports are allowed in this module: it is loaded
-// by Node's type stripping at test time, where a runtime import would not resolve.
+// from plain Node. Only type-only imports plus other pure modules (extensioned,
+// for Node's type-stripping test loader) may be imported here.
 //
 // GUEST-SAFE BY CONSTRUCTION: a saved report is publicly shareable, so nothing in
 // the personal layer may enter the pack. The queries below never select
 // confidence, confidence_label, rationales, evidence.note, or reliability_prior.
 // (evidence.excerpt and touch directions are public on claim pages already.)
 
-export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
+import { domainOfUrl, quarterBuckets } from '../pack-shared.ts';
+import type { Q } from '../pack-shared.ts';
 
 export interface ThesisInput {
   id: string;
@@ -67,15 +68,6 @@ interface EvRow {
   signal_id: string | null;
 }
 
-export function domainOfUrl(url: string | null): string | null {
-  if (!url) return null;
-  try {
-    return new URL(url).hostname.toLowerCase().replace(/^www\./, '') || null;
-  } catch {
-    return null;
-  }
-}
-
 // Signal-level rollup of its per-mapped-claim directions.
 export function stanceOf(directions: Record<string, Direction>): ThesisPackSignal['stance'] {
   const vals = Object.values(directions);
@@ -86,28 +78,6 @@ export function stanceOf(directions: Record<string, Direction>): ThesisPackSigna
   if (sup) return 'supports';
   if (con) return 'contradicts';
   return 'neutral';
-}
-
-// 'YYYY Qn' quarter buckets over the matched signals' published dates, zero-filled
-// across the span so the timeline reads continuously.
-export function quarterBuckets(dates: (string | null)[]): { bucket: string; n: number }[] {
-  const qs = dates
-    .filter((d): d is string => !!d && /^\d{4}-\d{2}/.test(d))
-    .map((d) => {
-      const y = Number(d.slice(0, 4));
-      const quarter = Math.floor((Number(d.slice(5, 7)) - 1) / 3) + 1;
-      return y * 4 + (quarter - 1);
-    });
-  if (!qs.length) return [];
-  const counts = new Map<number, number>();
-  for (const k of qs) counts.set(k, (counts.get(k) ?? 0) + 1);
-  const min = Math.min(...qs);
-  const max = Math.max(...qs);
-  const out: { bucket: string; n: number }[] = [];
-  for (let k = min; k <= max; k++) {
-    out.push({ bucket: `${Math.floor(k / 4)} Q${(k % 4) + 1}`, n: counts.get(k) ?? 0 });
-  }
-  return out;
 }
 
 // The deterministic coverage statement. Plain sentences built from the numbers

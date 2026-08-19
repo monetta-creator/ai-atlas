@@ -18,8 +18,9 @@ config({ path: '.env.local' });
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import {
-  buildThesisPackCore, computeDelta, stanceOf, quarterBuckets,
+  buildThesisPackCore, computeDelta, stanceOf,
 } from '../lib/thesis/pack-core.ts';
+import { quarterBuckets } from '../lib/pack-shared.ts';
 
 const client = process.env.DATABASE_URL
   ? new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })

@@ -2,7 +2,7 @@ import type { DatasetOpts, DatasetRow, Q } from './core';
 // Explicit .ts extension: this chain is loaded by plain Node in
 // scripts/test-datasets.mjs (type stripping), which resolves no extensionless
 // specifiers. The bundler resolves it identically.
-import { domainOfUrl } from '../thesis/pack-core.ts';
+import { domainOfUrl } from '../pack-shared.ts';
 
 // Dataset builders. See core.ts for the contract: injected Q, deterministic
 // ordering, guest-safe by construction (no personal-layer column ever appears in

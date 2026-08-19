@@ -3,6 +3,8 @@ import type {
   LensSheetCode, LensSheetPack, Relation, Resolvability, SheetEvidence, SheetScope, SheetSignal,
   SheetSignalStats, Significance, SignalLens, SignalOrigin, Weight,
 } from '../types';
+import { domainOfUrl, quarterBuckets } from '../pack-shared.ts';
+import type { Q } from '../pack-shared.ts';
 
 // The deterministic core of the Report Portal's generated reports: retrieval +
 // stats, zero AI, zero randomness. Same corpus + same inputs = the same pack
@@ -18,7 +20,6 @@ import type {
 // or signals.touch_details reasons, and signal-anchored evidence rows are
 // included only when their signal is published.
 
-export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 
 const CLAIM_EVIDENCE_CAP = 40;
 const CLAIM_SIGNAL_CAP = 30;
@@ -62,38 +63,6 @@ interface EvRow {
 
 export function hrefFor(type: 'claim' | 'bridge_claim', code: string): string {
   return type === 'bridge_claim' ? `/bridge/${code}` : `/claim/${encodeURIComponent(code)}`;
-}
-
-// (Duplicated from lib/thesis/pack-core.ts rather than imported: Node's
-// type-stripping test loader needs extensioned relative imports, which tsc
-// rejects without allowImportingTsExtensions. Two tiny pure helpers.)
-export function domainOfUrl(url: string | null): string | null {
-  if (!url) return null;
-  try {
-    return new URL(url).hostname.toLowerCase().replace(/^www\./, '') || null;
-  } catch {
-    return null;
-  }
-}
-
-export function quarterBuckets(dates: (string | null)[]): { bucket: string; n: number }[] {
-  const qs = dates
-    .filter((d): d is string => !!d && /^\d{4}-\d{2}/.test(d))
-    .map((d) => {
-      const y = Number(d.slice(0, 4));
-      const quarter = Math.floor((Number(d.slice(5, 7)) - 1) / 3) + 1;
-      return y * 4 + (quarter - 1);
-    });
-  if (!qs.length) return [];
-  const counts = new Map<number, number>();
-  for (const k of qs) counts.set(k, (counts.get(k) ?? 0) + 1);
-  const min = Math.min(...qs);
-  const max = Math.max(...qs);
-  const out: { bucket: string; n: number }[] = [];
-  for (let k = min; k <= max; k++) {
-    out.push({ bucket: `${Math.floor(k / 4)} Q${(k % 4) + 1}`, n: counts.get(k) ?? 0 });
-  }
-  return out;
 }
 
 // Scope filter over a 'YYYY-MM-DD' date (null dates fail a bounded scope).
