@@ -29,7 +29,7 @@ export function enforceCitations(
   const clean = sanitizeHtml(html, {
     ...HTML_OPTS,
     transformTags: {
-      a: (tagName, attribs): sanitizeHtml.Tag => {
+      a: (_tagName, attribs): sanitizeHtml.Tag => {
         const href = attribs.href ?? '';
         if (!allow.hrefs.has(href)) {
           dropped.add(href || '(no href)');
