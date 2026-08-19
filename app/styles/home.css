@@ -1,0 +1,162 @@
+/* ============================================================
+   AI ATLAS · HOME — the Console Broadsheet layer
+   Scope: EVERYTHING here applies only inside `.bs` (app/page.tsx
+   wraps the home page in it). No other page is affected.
+
+   How to tweak: sizes and weights that you're most likely to nudge
+   live in the :root tweakables block right below — change them there
+   before reaching into individual rules. Class map:
+     .bs-masthead / .bs-brand / .bs-motto / .bs-date   masthead line
+     .bs-rule2                                          heavy double rule
+     .bs-index / .bs-index-cell / -n / -l               almanac stat strip
+     .bs-lead / .bs-hed / .bs-dek / .bs-cta             lead story
+     .bs-cols / .bs-colhead                             two editorial columns
+     .bs-row / .bs-code / .bs-rowhed / .bs-tags         ruled list rows
+     .bs-fig / .bs-fig-n / .bs-split                    right-aligned figures
+     .bs-wire-date / .bs-sigdot / .bs-lensdots          signal wire row parts
+     .bs-chart-title / .bs-chart-sub                    editorial chart titles
+     .bs-pct                                            big Anton percentages
+   Plus a legacy reskin at the bottom: `.bs .ls-card` (flattened) and
+   `.bs .section-label` (the divider font — Schibsted bold caps, not mono).
+   ============================================================ */
+
+:root {
+  --bs-hed-size: clamp(42px, 6.6vw, 72px);  /* lead headline */
+  --bs-index-n-size: clamp(22px, 3.2vw, 32px); /* almanac numerals */
+  --bs-pct-size: 34px;                      /* pipeline rate numerals */
+  --bs-fig-size: 22px;                      /* list-row figures */
+  --bs-rule-heavy: 3px;                     /* masthead double-rule weight */
+  --bs-kicker-tracking: 0.12em;
+}
+
+/* ---- masthead: the brand lives in the site nav; this line carries the motto,
+        date, and issue number above the heavy rule ---- */
+.bs-masthead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap; padding: 18px 0 10px;
+}
+.bs-motto { font-size: 12.5px; color: var(--faint-ink); font-style: italic; }
+.bs-date {
+  font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink);
+  letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
+}
+.bs-rule2 {
+  border-top: var(--bs-rule-heavy) solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  height: 3px;
+}
+
+/* ---- the almanac index strip (replaces the six stat tiles) ---- */
+.bs-index {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  border-bottom: 1px solid var(--ink-faint);
+  overflow: hidden;
+}
+.bs-index-cell {
+  display: flex; flex-direction: column; gap: 6px; align-items: center;
+  padding: 14px 6px 12px; text-align: center;
+  border-left: 1px solid var(--line); margin-left: -1px;
+  color: var(--ink); text-decoration: none;
+}
+a.bs-index-cell:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); }
+.bs-index-n {
+  font-family: var(--font-headline); font-weight: 400;
+  font-size: var(--bs-index-n-size); line-height: 1;
+  letter-spacing: 0.01em; font-variant-numeric: tabular-nums;
+}
+.bs-index-l {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--faint-ink);
+}
+
+/* ---- lead story ---- */
+.bs-lead { padding: 26px 0 30px; border-bottom: 1px solid var(--ink-faint); display: block; color: var(--ink); }
+.bs-lead:hover .bs-cta { text-decoration: underline; }
+.bs-lead .section-label { margin: 0 0 4px; }
+.bs-hed {
+  font-family: var(--font-headline); font-weight: 400;
+  font-size: var(--bs-hed-size); line-height: 1.02; letter-spacing: 0.005em;
+  margin: 12px 0 14px; text-wrap: balance; color: var(--ink);
+}
+.bs-dek {
+  font-size: clamp(15.5px, 1.8vw, 18px); color: var(--dim);
+  max-width: 58ch; margin: 0 0 12px; line-height: 1.55;
+}
+.bs-cta { font-weight: 600; font-size: 15px; color: var(--accent); }
+
+/* ---- two editorial columns (claims ledger + signal wire) ---- */
+.bs-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 44px; align-items: start; }
+@media (max-width: 880px) { .bs-cols { grid-template-columns: 1fr; } }
+.bs-colhead a { order: 2; font-size: 11px; letter-spacing: 0.08em; font-weight: 600; }
+.bs-colhead::after { order: 1; }
+
+.bs-list { list-style: none; margin: 0; padding: 0; }
+.bs-list > li { border-bottom: 1px solid var(--line); }
+.bs-list > li:last-child { border-bottom: none; }
+.bs-row { display: flex; gap: 14px; padding: 13px 0; align-items: baseline; color: var(--ink); }
+.bs-row:hover .bs-rowhed { text-decoration: underline; text-decoration-color: var(--line-strong, var(--ink-faint)); }
+.bs-code { font-family: var(--font-mono); font-size: 12px; color: var(--accent); min-width: 34px; flex: none; }
+.bs-rowbody { flex: 1; min-width: 0; }
+.bs-rowhed { display: block; font-weight: 600; font-size: 15px; line-height: 1.38; }
+.bs-tags {
+  display: block; font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint-ink); margin-top: 5px;
+}
+.bs-fig { text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+.bs-fig-n { font-family: var(--font-headline); font-weight: 400; font-size: var(--bs-fig-size); line-height: 1; display: block; }
+.bs-split { font-family: var(--font-mono); font-size: 10.5px; margin-top: 4px; display: inline-flex; gap: 5px; }
+.bs-split .s { color: var(--supports); }
+.bs-split .c { color: var(--contradicts); }
+.bs-split .n { color: var(--faint-ink); }
+
+/* signal wire specifics */
+.bs-wire-date {
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--faint-ink);
+  min-width: 44px; flex: none; font-variant-numeric: tabular-nums;
+}
+.bs-sigdot { width: 8px; height: 8px; border-radius: 50%; align-self: center; flex: none; }
+.bs-lensdots { display: inline-flex; gap: 4px; margin-right: 6px; vertical-align: baseline; }
+.bs-lensdots i { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+/* ---- editorial chart titling (the business-section voice) ---- */
+.bs-chart-title {
+  font-family: var(--font-headline); font-weight: 400; text-align: center;
+  font-size: clamp(24px, 3.2vw, 34px); line-height: 1.08;
+  margin: 14px 0 4px; text-wrap: balance;
+}
+.bs-chart-sub {
+  text-align: center; font-family: var(--font-mono); font-size: 11px;
+  color: var(--faint-ink); letter-spacing: 0.04em; margin-bottom: 16px;
+}
+.bs-pct {
+  font-family: var(--font-headline); font-weight: 400;
+  font-size: var(--bs-pct-size); line-height: 1; letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   Legacy reskin — the deep dashboard components (pipeline analytics,
+   confidence moves, candidate archive) keep their markup; inside .bs
+   their card chrome flattens to ruled sections and their mono section
+   labels take the editorial kicker voice. ViewData's modal uses its
+   own .modal-* classes, so it is untouched by these rules.
+   ============================================================ */
+.bs .ls-card {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid var(--ink-faint);
+  padding: 16px 0 14px;
+  box-shadow: none;
+}
+/* (.section-label's Broadsheet divider voice is now global — see base.css.) */
+
+/* ---- thesis tracker (front page, under the lead story) ---- */
+.bs-theses-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 44px; align-items: start; }
+@media (max-width: 880px) { .bs-theses-grid { grid-template-columns: 1fr; } }
+.bs-thesis {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 2px 0 16px; color: var(--ink);
+}
+.bs-thesis:hover .bs-thesis-stmt { text-decoration: underline; text-decoration-color: var(--ink-faint); }
+.bs-thesis-stmt { font-weight: 600; font-size: 16.5px; line-height: 1.38; text-wrap: pretty; }

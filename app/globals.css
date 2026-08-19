@@ -1,0 +1,254 @@
+@import "tailwindcss";
+
+/* The AI Atlas — Console design system.
+   The visual language lives in three stylesheets, loaded in this order
+   (later files layer on earlier ones):
+     tokens.css      → palette, type, density & motion easings (light + dark)
+     base.css        → reset + structural layout + heat scale + map
+     components.css  → buttons, inputs, badges + interaction/highlight rules
+   See design-system/README.md. */
+@import "./styles/tokens.css";
+@import "./styles/base.css";
+@import "./styles/components.css";
+@import "./styles/home.css"; /* Console Broadsheet layer — scoped to .bs (the home page) */
+@import "./styles/traceroute.css"; /* Traceroute explainer — scoped to .tr (/traceroute) */
+
+/* Re-base the app's semantic Tailwind color/font utilities onto the design
+   tokens so any utility usage (layout helpers, admin tooling, etc.) stays
+   on-brand and flips with the theme. The design components themselves are
+   styled by the three stylesheets above. */
+@theme {
+  --color-surface:      var(--surface);
+  --color-surface-sub:  var(--bg);
+  --color-ink:          var(--ink);
+  --color-ink-soft:     var(--dim);
+  --color-ink-faint:    var(--faint-ink);
+  --color-line:         var(--line);
+  --color-line-strong:  var(--ink-faint);
+  --color-accent:       var(--accent);
+  --color-bridge:       var(--accent);
+  --color-supports:     var(--supports);
+  --color-contradicts:  var(--contradicts);
+  --color-depends:      var(--heat-against);
+
+  /* confidence words map onto the cool→warm heat scale (warmer = more committed) */
+  --color-thin:      var(--heat-0);
+  --color-contested: var(--heat-2);
+  --color-leaning:   var(--heat-3);
+  --color-settled:   var(--heat-4);
+
+  --font-sans: var(--font-body);
+}
+
+html { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
+
+/* Default hairline border color for utility-driven borders. */
+*, ::before, ::after { border-color: var(--line); }
+
+/* The faint plotting-grid field. tokens.css sets this on <body>, but base.css's
+   `background: var(--bg)` shorthand (imported after) resets background-image —
+   so re-assert the grid here, after every import, to guarantee it survives. */
+body {
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--ink-faint) 0.9px, transparent 0.9px);
+  background-size: 26px 26px;
+  background-position: -13px -13px;
+  background-attachment: fixed;
+}
+
+/* Overflow-wrap safety net (all viewports): author/DB/source text — titles,
+   URLs, claim tests, codes, rationales — lands in narrow columns on phones, so
+   a single long unbreakable token must wrap rather than force page-wide
+   horizontal scroll. `anywhere` (not `break-word`) also lets flex/grid children
+   shrink below their content's intrinsic width. */
+body { overflow-wrap: anywhere; }
+
+/* true hairlines on retina (kept for residual utility usage) */
+.hairline   { border-width: 0.5px; }
+.hairline-t { border-top-width: 0.5px; }
+.hairline-b { border-bottom-width: 0.5px; }
+.hairline-l { border-left-width: 0.5px; }
+.hairline-r { border-right-width: 0.5px; }
+
+/* ============================================================
+   APP GLUE — compositions the design system documents but doesn't
+   ship as named classes. Built strictly from the design tokens.
+   ============================================================ */
+
+/* Claim rows on the question page are links into the claim detail. */
+.claims a.claim { cursor: pointer; text-decoration: none; }
+.claims a.claim:hover .ct { color: var(--accent); }
+.claim .cmeta {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin-top: 10px; font-size: 11px; color: var(--faint-ink);
+}
+.claim .cmeta .tag {
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--dim);
+}
+
+/* Bridge-claims-connecting-out band (compact form of the full .bridge panel). */
+.bridge-band { display: flex; flex-direction: column; gap: 10px; }
+.bridge-link {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; border-radius: var(--radius);
+  border: 1px solid color-mix(in oklab, var(--accent) 28%, var(--line));
+  border-left: 2.5px solid var(--accent);
+  background: color-mix(in oklab, var(--accent) 5%, var(--surface));
+  transition: background .2s, transform .2s var(--ease-soft), box-shadow .25s var(--ease-soft);
+}
+.bridge-link:hover {
+  transform: translateY(-1px);
+  background: color-mix(in oklab, var(--accent) 9%, var(--surface));
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--accent) 12%, transparent);
+}
+.bridge-link .bl-code { font-family: var(--font-mono); font-size: 12px; font-weight: 500; color: var(--accent); white-space: nowrap; }
+.bridge-link .bl-statement { flex: 1; font-size: 14px; line-height: 1.4; color: var(--ink); }
+.bridge-link:hover .bl-statement { color: var(--accent); }
+.bridge-link .bl-domains {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.05em;
+  color: var(--dim); white-space: nowrap;
+}
+
+/* Mono section label without the filling rule (for headers with right-aligned
+   content, e.g. evidence counts). Mirrors .section-label's text treatment. */
+.lbl {
+  font-family: var(--font-mono);
+  text-transform: uppercase; letter-spacing: 0.16em; font-size: 11px;
+  color: var(--faint-ink);
+}
+
+/* Prominent falsifiable-test panel (claim & bridge detail). */
+.test-panel {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  padding: 16px var(--card-pad);
+}
+.test-panel .tlabel {
+  display: block; font-family: var(--font-mono); font-size: 10px;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint-ink);
+  margin-bottom: 7px;
+}
+.test-panel p { margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink); }
+
+/* "fed by" / "bears on" relation lists (claim & bridge detail). */
+.rel-list { display: flex; flex-direction: column; gap: 10px; }
+.rel-list .rel-item { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.5; }
+.rel-list .rel-kind {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  padding-top: 3px; white-space: nowrap;
+}
+
+/* Rationale history (admin) — append-only audit of confidence moves. */
+.rationale { border-left: 2px solid var(--line); padding: 2px 0 2px 14px; }
+.rationale .delta { font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink); }
+.rationale p { margin: 3px 0 0; font-size: 14px; color: var(--dim); line-height: 1.5; }
+
+/* AI source dossier — provenance (basis) badges; web-verified is visually
+   distinct from training-memory, per the design doc's UI obligation. */
+.basis {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap;
+}
+.basis::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.basis.web { color: var(--supports); border-color: color-mix(in oklab, var(--supports) 35%, var(--line)); }
+.basis.mem { color: var(--heat-2); border-color: color-mix(in oklab, var(--heat-2) 35%, var(--line)); opacity: .85; }
+.basis.doc { color: var(--faint-ink); }
+
+.dclaim { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; padding: 9px 0; border-top: 1px solid var(--line); }
+.dclaim:first-child { border-top: none; }
+.dclaim .df { font-size: 12px; color: var(--faint-ink); min-width: 110px; }
+.dclaim .dv { flex: 1; min-width: 160px; font-size: 13.5px; color: var(--ink); line-height: 1.5; }
+
+/* ============================================================
+   MOBILE REFINEMENTS (≤720px)
+   Layered on the design system to fix horizontal overflow, condense
+   the nav, and trim desktop-scale vertical spacing on phones. globals.css
+   imports after tokens/base/components, so these win the cascade.
+   ============================================================ */
+@media (max-width: 720px) {
+  /* Condense the sticky nav: brand on the first row, links wrap neatly below
+     instead of overflowing (admin has ~6 items that can't fit one phone row). */
+  .nav { padding: 12px 16px; gap: 12px; flex-wrap: wrap; }
+  .brand .tag { display: none; }
+  .navlinks { flex-wrap: wrap; gap: 8px 12px; }
+
+  /* Trim desktop-scale vertical spacing so pages aren't needlessly long. */
+  .pagehead { padding: 28px 0 18px; }
+  .crumbs { padding: 20px 0 14px; }
+  .section-label { margin: 28px 0 14px; }
+  .qhead { padding-bottom: 22px; }
+  .qcard { min-height: 0; }      /* size to content; shortens the home grid */
+  .map { gap: 18px; }
+  .legend { gap: 8px 14px; }
+
+  /* Bridge-band rows: let the statement take its own line so the
+     code + statement + domains + badge row can't overflow. */
+  .bridge-link { flex-wrap: wrap; }
+  .bridge-link .bl-statement { flex-basis: 100%; }
+  .bridge-link .bl-domains { white-space: normal; }
+
+  /* A fixed background janks / misrenders the dot grid on iOS — pin to scroll. */
+  body { background-attachment: scroll; }
+
+  /* ---- Form controls: prevent iOS Safari focus-zoom ----
+     Safari zooms the page when a focused input/select/textarea is < 16px. Many
+     controls drop to 12–13px (sources filters, evidence reassign, landscape
+     picker) via class or inline style — force 16px on phones only. !important
+     beats the inline font-size on those selects. */
+  .input, select.input, textarea.input, .ls-select { font-size: 16px !important; }
+  /* A <select> grows to its widest <option> (long question titles / claim text),
+     which blows past a 390px viewport — cap it to its container and let it shrink. */
+  select.input, .ls-select { max-width: 100%; min-width: 0; }
+
+  /* ---- Long-token overflow on flex relation rows ----
+     "bears on" / "fed by" / "organizes" + lens stance rows: flex children won't
+     shrink below content width, so a long statement/URL forces horizontal scroll.
+     Let them wrap and break (.rel-kind stays nowrap — it's a short label). */
+  .rel-list .rel-item { flex-wrap: wrap; }
+  .rel-list .rel-item > span { min-width: 0; overflow-wrap: anywhere; }
+
+  /* ---- Worldview spine rows ----
+     The 4-col grid (code | statement | domains | badge) can't fit a phone — give
+     the statement its own full-width row and let the rest wrap below. */
+  .wv-bridge { grid-template-columns: 1fr auto; gap: 6px 10px; padding: 14px 16px; }
+  .wv-bridge__statement { grid-column: 1 / -1; }
+  .wv-bridge__code, .wv-bridge__domains { white-space: normal; }
+  /* Position card header: stack the statement above its Edit button. */
+  .wv-statement { flex-direction: column; align-items: stretch; }
+
+  /* ---- Media-landscape density: tighten the outlet table + coverage strip so
+     names keep room and more months fit before the inner horizontal scroll. ---- */
+  .ls-outlet { gap: 8px; }
+  .ls-cols { gap: 8px; }
+  .ls-col { min-width: 32px; }
+
+  /* ---- Bridge panels: reclaim side padding on the narrow column. ---- */
+  .bridge { padding: 20px 16px; }
+
+  /* ---- About sub-nav: left-align + tighten so it reads as a nav, not a
+     centered, ragged word-cloud. ---- */
+  .about-nav { gap: 6px 16px; padding: 14px 0 12px; justify-content: flex-start; }
+
+  /* ---- Touch targets (toward the ~44px minimum) ----
+     Lift wrapped nav links, editor Save/Cancel, lens chips, and the chip-remove
+     button; reveal the inline-edit pencil (there is no hover on touch). */
+  .navlinks a, .about-nav a { padding: 6px 2px; line-height: 1.1; }
+  .toggle, .navlinks .btn--sm, .editable-actions .btn { min-height: 40px; padding-top: 9px; padding-bottom: 9px; }
+  .lenschip { padding: 8px 13px; font-size: 13px; }
+  .wv-chip__remove button { padding: 6px 8px; font-size: 16px; }
+  .editable-pencil { opacity: .55; }
+
+  /* ---- Cap the sticky admin nav so a 5–6 row wrap can't eat the screen; it
+     scrolls internally in the rare case it exceeds half the viewport. ---- */
+  .nav { max-height: 50vh; overflow-y: auto; }
+}
+
+/* No real hover on touch — neutralize the lift transforms so a tap doesn't leave
+   a card/node "stuck" raised (reads as a glitch on the single-column mobile map). */
+@media (hover: none) {
+  .qcard:hover, .node:hover, .bridge-link:hover { transform: none !important; }
+  .dir-console .qcard:hover { box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 6px 20px rgba(15,23,42,.05); }
+}

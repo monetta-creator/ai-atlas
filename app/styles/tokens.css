@@ -1,0 +1,85 @@
+/* ============================================================
+   AI ATLAS · TOKENS  (Console theme — canonical)
+   Palette, type, density, motion easings. Light + dark.
+   Load order:  tokens.css → base.css → components.css
+   ============================================================ */
+
+:root {
+  /* ---- type ----
+     --font-schibsted / --font-jetbrains are injected by next/font (see app/layout.tsx);
+     the named families are the no-JS / fallback path. */
+  --font-display: var(--font-schibsted), "Schibsted Grotesk", system-ui, sans-serif;
+  --font-body:    var(--font-schibsted), "Schibsted Grotesk", system-ui, sans-serif;
+  --font-mono:    var(--font-jetbrains), "JetBrains Mono", ui-monospace, monospace;
+  /* Broadsheet headline voice (home + editorial surfaces): single weight, never bolded. */
+  --font-headline: var(--font-anton), "Anton", "Arial Narrow", sans-serif;
+
+  /* ---- surface palette (light) ---- */
+  --bg:        #f5f7fb;   /* app background (carries the plotting-grid dots) */
+  --surface:   #ffffff;   /* cards, nodes, panels                           */
+  --ink:       #0f172a;   /* primary text                                   */
+  --dim:       #5b6675;   /* secondary text                                 */
+  --faint-ink: #95a0b1;   /* tertiary text / mono codes                     */
+  --line:      rgba(15,23,42,0.10);  /* hairline borders + dividers         */
+  --ink-faint: rgba(15,23,42,0.22);  /* strong hairline / empty heat chip   */
+  --accent:    #2d5bff;   /* signature cobalt — links, active, bridge       */
+
+  /* ---- confidence heat scale (cool = open → warm = committed) ----
+     Theme-neutral on purpose: tuned to read on both light and dark. */
+  --heat-0: #5286c4;  /* open      */
+  --heat-1: #4fae9f;  /* leaning   */
+  --heat-2: #c2a24f;  /* moderate  */
+  --heat-3: #d8893a;  /* likely    */
+  --heat-4: #c8512f;  /* committed */
+  --heat-against: #8a8f98;          /* resolved-against / dormant */
+
+  /* ---- relation colors (claims↔stances edges) ---- */
+  --supports:    #3f9b6e;
+  --contradicts: #c0573f;
+
+  /* ---- Signal Board lens identity colors (theme-neutral, like the heat scale) ----
+     One stable hue per Signal Board lens. Used only as a calm accent (a left stripe
+     or a small dot / tinted badge), never as a fill — the cards stay neutral. */
+  --siglens-market:      #2d5bff;  /* cobalt — Market & Valuation     */
+  --siglens-labor:       #3f9b6e;  /* green  — Labor & Knowledge Work  */
+  --siglens-geopolitics: #c0573f;  /* clay   — Geopolitics & Security  */
+  --siglens-regulatory:  #9b59b6;  /* violet — Regulatory & Legal      */
+  --siglens-capability:  #4fae9f;  /* teal   — Technical Capability    */
+  --siglens-society:     #d8893a;  /* amber  — Societal & Cultural     */
+
+  /* ---- density (override per-host via Tweaks) ---- */
+  --maxw:     1180px;
+  --gap:      20px;
+  --card-pad: 24px;
+  /* Broadsheet: square corners everywhere — cards are framed plates, not pills. */
+  --radius:   0px;
+  /* The plate frame: the crisp ink hairline that replaced the soft grey card border. */
+  --frame: color-mix(in oklab, var(--ink) 55%, transparent);
+
+  /* ---- motion ---- */
+  --ease:      cubic-bezier(.7,0,.2,1);   /* decisive — zoom / view-swap */
+  --ease-soft: cubic-bezier(.2,.7,.2,1);  /* gentle — entrances / hover  */
+}
+
+[data-theme="dark"] {
+  --bg:        #0a1120;
+  --surface:   #111a2c;
+  --ink:       #e7edf7;
+  --dim:       rgba(231,237,247,0.58);
+  --faint-ink: rgba(231,237,247,0.42);
+  --line:      rgba(231,237,247,0.11);
+  --ink-faint: rgba(231,237,247,0.26);
+  --accent:    #5b82ff;
+}
+
+/* ---- Console surface treatment: faint plotting-grid field ---- */
+body {
+  background-image: radial-gradient(var(--ink-faint) 0.9px, transparent 0.9px);
+  background-size: 26px 26px;
+  background-position: -13px -13px;
+  background-attachment: fixed;
+}
+
+/* sticky nav gains a shadow once the page is scrolled (JS adds .scrolled) */
+.nav { background: color-mix(in oklab, var(--bg) 80%, transparent); transition: box-shadow .3s ease, background .35s ease; }
+.nav.scrolled { box-shadow: 0 1px 0 var(--line), 0 8px 24px rgba(15,23,42,.06); }
