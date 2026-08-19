@@ -1,0 +1,171 @@
+/* ============================== concepts (the semantic scaffold) ===========
+   The /concepts layered graph, its tooltip, the detail page's settled/contested
+   panel, and the authoring form's status toggle + AI-suggestion rows. */
+
+.concept-legend {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+  font-size: 11.5px; color: var(--faint-ink); margin: 0 0 12px;
+}
+.concept-legend-key { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.concept-legend-key i {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  border: 1.4px solid var(--line); background: var(--surface); margin-left: 8px;
+}
+.concept-legend-key i[data-status="contested"] {
+  border-style: dashed;
+  border-color: color-mix(in oklab, var(--heat-4) 60%, var(--line));
+}
+
+.concept-canvas { position: relative; overflow-x: auto; padding-bottom: 4px; }
+
+.concept-graph { display: block; }
+.concept-graph .cedge {
+  fill: none; stroke: var(--line); stroke-width: 1.4;
+  transition: stroke .18s, opacity .18s;
+}
+.concept-graph .cedge.hot { stroke: var(--accent); stroke-width: 1.8; }
+.concept-graph .cedge.faded { opacity: .22; }
+
+.concept-node { cursor: pointer; outline: none; }
+.concept-node rect {
+  fill: var(--surface); stroke: var(--line); stroke-width: 1.3;
+  transition: stroke .18s, filter .2s, opacity .18s;
+}
+.concept-node text {
+  fill: var(--ink); font-size: 12.5px; font-weight: 520;
+  pointer-events: none; user-select: none;
+}
+.concept-node:hover rect, .concept-node.hot rect, .concept-node:focus-visible rect {
+  stroke: var(--accent); stroke-width: 1.6;
+}
+.concept-node.dim { opacity: .32; }
+.concept-node[data-status="contested"] rect {
+  stroke-dasharray: 5 3;
+  stroke: color-mix(in oklab, var(--heat-4) 55%, var(--line));
+}
+.concept-node[data-status="contested"]:hover rect,
+.concept-node[data-status="contested"].hot rect { stroke: var(--heat-4); }
+.concept-node .cmark { fill: var(--heat-4); }
+
+.concept-tip {
+  position: absolute; z-index: 6; width: 250px; transform: translateX(-50%);
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, .14);
+  pointer-events: none;
+}
+.concept-tip-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.concept-tip-head strong { font-size: 13px; color: var(--ink); font-weight: 620; }
+.concept-tip-status {
+  font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase;
+  letter-spacing: .08em; white-space: nowrap; color: var(--heat-1);
+}
+.concept-tip-status[data-status="contested"] { color: var(--heat-4); }
+.concept-tip p { margin: 5px 0 0; font-size: 12px; line-height: 1.5; color: var(--dim); }
+
+/* narrow-screen fallback: layers as rows of chips, most advanced first */
+.concept-layers { display: flex; flex-direction: column; gap: 14px; }
+.concept-layer { display: flex; flex-direction: column; gap: 6px; }
+.concept-layer-label {
+  font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--faint-ink);
+}
+.concept-layer-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.concept-chip {
+  display: inline-flex; align-items: center; padding: 7px 12px;
+  border: 1.3px solid var(--line); border-radius: 9px; background: var(--surface);
+  font-size: 12.5px; color: var(--ink); text-decoration: none;
+  transition: border-color .18s, transform .18s;
+}
+.concept-chip:hover { border-color: var(--accent); transform: translateY(-1px); }
+.concept-chip[data-status="contested"] {
+  border-style: dashed;
+  border-color: color-mix(in oklab, var(--heat-4) 55%, var(--line));
+}
+
+/* detail page: the settled/contested panel */
+.concept-status-panel {
+  display: flex; flex-direction: column; gap: 4px;
+  border: 1px solid var(--line); border-left: 3px solid var(--heat-1);
+  border-radius: var(--radius); background: var(--surface);
+  padding: 13px 16px; margin-bottom: 8px;
+}
+.concept-status-panel .clabel {
+  font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--heat-1);
+}
+.concept-status-panel p { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--dim); }
+.concept-status-panel[data-status="contested"] {
+  border-left-color: var(--heat-4);
+  background: color-mix(in oklab, var(--heat-4) 4%, var(--surface));
+}
+.concept-status-panel[data-status="contested"] .clabel { color: var(--heat-4); }
+
+/* authoring form: status toggle + AI-suggestion rows */
+.concept-status-btn {
+  padding: 8px 16px; border: 1.3px solid var(--line); border-radius: 9px;
+  background: var(--surface); color: var(--dim); font-size: 13px; cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.concept-status-btn[data-kind="contested"] { border-style: dashed; }
+.concept-status-btn[data-on][data-kind="settled"] {
+  color: var(--heat-1);
+  border-color: color-mix(in oklab, var(--heat-1) 55%, var(--line));
+  background: color-mix(in oklab, var(--heat-1) 9%, var(--surface));
+}
+.concept-status-btn[data-on][data-kind="contested"] {
+  color: var(--heat-4);
+  border-color: color-mix(in oklab, var(--heat-4) 55%, var(--line));
+  background: color-mix(in oklab, var(--heat-4) 9%, var(--surface));
+}
+
+.concept-recs {
+  display: flex; flex-direction: column; gap: 6px;
+  border: 1px dashed var(--line); border-radius: var(--radius);
+  padding: 10px 12px; margin: 2px 0 6px;
+}
+.concept-rec { display: flex; align-items: baseline; gap: 10px; }
+.concept-rec .btn { flex-shrink: 0; }
+.concept-rec-name { font-family: var(--font-mono); font-size: 12px; color: var(--ink); white-space: nowrap; }
+.concept-rec-reason { font-size: 12px; color: var(--faint-ink); line-height: 1.45; }
+.concept-rec-empty { margin: 0; font-size: 12.5px; color: var(--faint-ink); font-style: italic; }
+
+/* gap diagnosis panel (/concepts, admin) */
+.gap-panel {
+  border: 1px dashed var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: 16px 18px; margin: 0 0 26px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.gap-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.gap-panel-head .section-label::after { display: none; }
+.gap-panel-sub { margin: 6px 0 0; font-size: 12.5px; color: var(--faint-ink); line-height: 1.5; max-width: 56ch; }
+.gap-meta { margin: 0; font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink); }
+.gap-empty { margin: 0; font-size: 13px; color: var(--dim); font-style: italic; }
+.gap-list { display: flex; flex-direction: column; gap: 10px; }
+.gap-rec {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 7px;
+}
+.gap-rec-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.gap-rec-head strong { font-size: 14.5px; color: var(--ink); font-weight: 620; }
+.gap-slug { font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink); }
+.gap-def { margin: 0; font-size: 13px; color: var(--dim); line-height: 1.55; }
+.gap-argument {
+  margin: 0; font-size: 12.5px; color: var(--dim); line-height: 1.55;
+  border-left: 2px solid color-mix(in oklab, var(--accent) 45%, var(--line));
+  padding-left: 10px;
+}
+.gap-argument-label {
+  font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--accent); margin-right: 6px;
+}
+.gap-wiring { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: var(--faint-ink); }
+.gap-chip { font-family: var(--font-mono); font-size: 11px; color: var(--ink); }
+a.gap-chip:hover { color: var(--accent); }
+.gap-kind {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--faint-ink);
+}
+.gap-kind[data-kind="bridge"] {
+  color: var(--accent); border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
+}
+

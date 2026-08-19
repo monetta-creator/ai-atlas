@@ -1,0 +1,349 @@
+/* ============================================================
+   SITE NAV — collapsing structure: primary links + Explore/Admin
+   dropdowns on desktop, a hamburger sheet on mobile.
+   ============================================================ */
+.sitenav-desktop { display: flex; align-items: center; gap: 24px; }
+/* flex-shrink:0 so the mobile cluster (theme toggle + hamburger) is never the item that
+   gets squeezed/clipped when the row is tight — the brand yields instead (see ≤760 below). */
+.sitenav-mobile { display: none; align-items: center; gap: 10px; flex-shrink: 0; }
+
+.navlink {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  color: var(--dim); letter-spacing: 0.08em;
+  white-space: nowrap; text-decoration: none; transition: color .18s;
+}
+.navlink:hover { color: var(--ink); }
+.navlink[data-active] {
+  color: var(--ink);
+  text-decoration: underline; text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px; text-underline-offset: 7px;
+}
+
+.navmenu { position: relative; display: inline-flex; }
+.navmenu-trigger {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: var(--font-body); font-size: 12px; font-weight: 700;
+  text-transform: uppercase; color: var(--dim);
+  background: none; border: none; padding: 0; cursor: pointer;
+  letter-spacing: 0.08em; white-space: nowrap; transition: color .18s;
+}
+.navmenu-trigger:hover,
+.navmenu-trigger[data-active],
+.navmenu-trigger[data-open] { color: var(--ink); }
+.navmenu-trigger .caret { font-size: 10px; color: var(--faint-ink); transition: transform .2s var(--ease-soft), color .18s; }
+.navmenu-trigger[data-open] .caret { transform: rotate(180deg); color: var(--dim); }
+.navmenu-trigger[data-accent] { color: var(--ink); }
+.navmenu-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+
+.navmenu-panel {
+  position: absolute; top: calc(100% + 12px); left: 0; z-index: 30;
+  min-width: 196px; display: flex; flex-direction: column; gap: 2px;
+  padding: 7px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--line);
+  box-shadow: 0 4px 12px rgba(15,23,42,.06), 0 14px 36px rgba(15,23,42,.12);
+  animation: navmenu-in .14s var(--ease-soft);
+}
+.navmenu-panel--right { left: auto; right: 0; }
+@keyframes navmenu-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+.navmenu-item {
+  display: block; width: 100%; text-align: left;
+  font-family: var(--font-body); font-size: 13.5px; color: var(--dim);
+  text-decoration: none; white-space: nowrap; cursor: pointer;
+  padding: 8px 11px; border-radius: 8px; background: none; border: none;
+  transition: background .15s, color .15s;
+}
+.navmenu-item:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); color: var(--ink); }
+.navmenu-item[data-active] { color: var(--accent); }
+.navmenu-item--plain { padding: 0; }
+.navmenu-item--plain:hover { background: none; }
+
+.navmenu-label {
+  font-family: var(--font-mono, var(--font-body));
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.13em;
+  color: var(--faint-ink); padding: 8px 11px 4px;
+}
+.navmenu-sep { height: 1px; background: var(--line); margin: 5px 4px; }
+.navmenu-panel form, .nav-mobile-panel form { margin: 0; }
+
+.nav-burger {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 10px; line-height: 1;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink);
+  font-size: 17px; cursor: pointer;
+}
+
+.nav-mobile-panel {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px; border-top: 1px solid var(--line); background: var(--surface);
+  box-shadow: 0 16px 36px rgba(15,23,42,.12);
+  animation: navmenu-in .16s var(--ease-soft);
+}
+.nav-mobile-panel .navmenu-item { font-size: 15px; padding: 11px 12px; }
+
+@media (max-width: 760px) {
+  .sitenav-desktop { display: none; }
+  .sitenav-mobile { display: flex; }
+  .nav .brand .tag { display: none; }
+  /* Let the wordmark yield space (and clip if it must) so the hamburger is always on-screen,
+     and keep the mobile row compact: icon-only theme toggle. Together with the page-level
+     overflow-x:clip guard, the hamburger can't be pushed off the edge in portrait. */
+  .nav .brand { min-width: 0; flex-shrink: 1; overflow: hidden; }
+  .sitenav-mobile .theme-label { display: none; }
+}
+
+/* Report document — rendered markdown for the generated report sections (ReportDocument).
+   Mirrors .about-prose rhythm; scoped so the model's markdown reads as analyst prose. */
+.report-prose { color: var(--dim); font-size: 14.5px; line-height: 1.65; }
+.report-prose > :first-child { margin-top: 0; }
+.report-prose > :last-child { margin-bottom: 0; }
+.report-prose p { margin: 0 0 10px; }
+.report-prose ul, .report-prose ol { margin: 0 0 10px; padding-left: 20px; }
+.report-prose li { margin: 3px 0; }
+.report-prose li::marker { color: var(--faint-ink); }
+.report-prose strong { color: var(--ink); }
+/* Links must stand out in running prose (base.css resets a to inherit/none):
+   accent color + a soft always-on underline, full-strength on hover. Covers both
+   the period reports and the thesis reports (same class). */
+.report-prose a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--accent) 45%, transparent);
+  text-underline-offset: 2px;
+}
+.report-prose a:hover { text-decoration-color: var(--accent); }
+.report-prose h1, .report-prose h2, .report-prose h3 {
+  font-family: var(--font-display); color: var(--ink); margin: 14px 0 6px; line-height: 1.3;
+}
+.report-prose h1 { font-size: 17px; }
+.report-prose h2 { font-size: 15.5px; }
+.report-prose h3 { font-size: 14.5px; }
+.report-prose blockquote {
+  margin: 0 0 10px; padding-left: 12px; border-left: 2px solid var(--line); color: var(--faint-ink);
+}
+.report-prose code {
+  font-family: var(--font-mono); font-size: 0.92em;
+  background: var(--surface-2, var(--surface)); padding: 1px 4px; border-radius: 4px;
+}
+
+/* Phase 3 — rich-text editing of the report narrative. .report-editable is a
+   contentEditable field (inherits .report-prose typography); the shared .editor-toolbar
+   drives formatting via execCommand. */
+.report-editable {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: 12px 14px; min-height: 64px; outline: none;
+}
+.report-editable:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.report-editable a { color: var(--accent); }
+.editor-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface);
+}
+.editor-link-row { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 240px; }
+.editor-link-row .input { height: 30px; padding: 2px 8px; font-size: 13px; }
+
+/* Per-section callout editor (Phase 3): the takeaway that becomes a PDF callout box. */
+.callout-edit { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.callout-edit-tag {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
+  color: #fff; background: #000099; padding: 2px 7px; border-radius: 4px; white-space: nowrap;
+}
+.callout-edit .input { height: 30px; padding: 2px 10px; font-size: 13px; flex: 1; }
+
+/* Read-view callout grid (screen): the per-lens callouts as a 3-up grid of #000099 boxes.
+   grid-auto-rows:1fr sizes every box to the tallest; flex centers the text within it. */
+.callout-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 10px; }
+.callout-box {
+  background: #000099; border-radius: var(--radius); padding: 12px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.callout-box-lens {
+  color: #fff; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+  opacity: 0.85; text-align: center; margin-bottom: 6px;
+}
+.callout-box-text { color: #fff; font-weight: 700; font-size: 14px; text-align: center; line-height: 1.35; }
+@media (max-width: 720px) { .callout-grid { grid-template-columns: 1fr 1fr; } }
+
+/* ---- Phase 4: PDF export via the browser print engine ----------------------
+   ReportPrint is portaled to <body> and hidden on screen; @media print isolates it and
+   applies the report design system. The print engine preserves <a href> as clickable
+   links in the PDF. */
+.report-print { display: none; }
+
+@media print {
+  /* Print ONLY the report layout (a direct child of <body> via portal). */
+  body > *:not(.report-print) { display: none !important; }
+  html, body { background: #fff !important; }
+  .report-print { display: block !important; }
+
+  /* Clean margins; a tight bottom band holds the fixed footer near the page edge. */
+  @page { margin: 14mm 14mm 12mm; }
+
+  .report-print {
+    font-family: Arial, Helvetica, sans-serif; color: #000; font-size: 11pt; line-height: 1.5;
+  }
+  .report-print a { color: #000099; text-decoration: underline; }
+
+  .print-header { margin-bottom: 10pt; }
+  .print-deco {  /* the only #FFE512 — a small decorative shape */
+    display: inline-block; width: 12pt; height: 12pt; background: #FFE512; margin-right: 8pt; vertical-align: middle;
+  }
+  .print-title { font-family: Arial; font-weight: bold; color: #000099; font-size: 20pt; vertical-align: middle; }
+  .print-sub { color: #000; font-size: 9.5pt; margin: 5pt 0 0; }
+
+  .print-divider { border: none; border-top: 2px solid #000099; margin: 14pt 0; }
+  .print-page { break-before: page; page-break-before: always; }  /* each lens / appendices on its own page */
+  .print-h { font-family: Arial; font-weight: bold; color: #000099; font-size: 14pt; margin: 0 0 6pt; }
+  .print-h3 { font-family: Arial; font-weight: bold; color: #000099; font-size: 12pt; margin: 10pt 0 4pt; }
+
+  .print-body { font-family: Arial; font-weight: normal; color: #000; }
+  .print-body p { margin: 0 0 6pt; }
+  .print-body ul, .print-body ol { margin: 0 0 6pt; padding-left: 18pt; }
+  .print-body li { margin: 2pt 0; }
+  .print-body strong { font-weight: bold; }
+  .print-body h1, .print-body h2, .print-body h3 {
+    font-family: Arial; font-weight: bold; color: #000099; font-size: 12pt; margin: 8pt 0 4pt;
+  }
+
+  /* Callout box: the single key takeaway of a section. */
+  .print-callout {
+    background: #003a6f; color: #fff; font-family: Arial; font-weight: bold; text-align: center;
+    padding: 10pt 14pt; margin: 8pt 0 10pt; font-size: 12pt; break-inside: avoid;
+  }
+  .print-callout a { color: #fff; }
+
+  /* Summary-page grid of per-lens callouts (3 columns → 3×2 for six lenses). */
+  .print-callout-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 8pt; margin: 14pt 0; }
+  .print-callout-cell {
+    background: #003a6f; border-radius: 2pt; padding: 9pt 8pt; break-inside: avoid;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .print-callout-lens {
+    color: #fff; font-family: Arial; font-size: 7.5pt; text-transform: uppercase;
+    letter-spacing: 0.04em; text-align: center; opacity: 0.85; margin-bottom: 4pt;
+  }
+  .print-callout-text { color: #fff; font-family: Arial; font-weight: bold; font-size: 10.5pt; text-align: center; line-height: 1.3; }
+
+  .print-lens { margin-bottom: 8pt; break-inside: avoid; }
+  .print-appendix { margin-bottom: 8pt; }
+  .print-table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 4pt 0 8pt; }
+  .print-table th, .print-table td { border: 1px solid #000099; padding: 3pt 6pt; text-align: left; }
+  .print-table th { font-weight: bold; color: #000099; }
+  .print-list { margin: 2pt 0 8pt; padding-left: 18pt; }
+  .print-list li { margin: 2pt 0; }
+
+  /* Footer on every page. */
+  .report-print-footer {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    font-family: Arial; font-size: 8pt; color: #000; text-align: center;
+    padding: 4pt 0; border-top: 1px solid #000099; background: #fff;
+  }
+}
+
+/* ------------------------------------------------------------
+   VIEW-DATA MODAL  (.modal-* + .viewdata-table)
+   The transparency panel behind a chart's "View data" button. Reuses surface/line/radius
+   tokens so it adapts to dark mode; sits above the nav (navmenu-panel is z-index 30).
+   ------------------------------------------------------------ */
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: color-mix(in oklab, var(--ink) 38%, transparent);
+  animation: modal-fade .14s var(--ease-soft);
+}
+@keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.modal-panel {
+  display: flex; flex-direction: column; gap: 10px;
+  width: min(760px, 100%); max-height: 86vh; padding: 20px 22px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(15,23,42,.10), 0 24px 60px rgba(15,23,42,.22);
+  animation: modal-in .16s var(--ease-soft);
+}
+@keyframes modal-in { from { opacity: 0; transform: translateY(6px) scale(.985); } to { opacity: 1; transform: none; } }
+
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.modal-head h2 {
+  margin: 0; font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--ink);
+}
+.modal-close {
+  background: none; border: none; cursor: pointer; line-height: 1;
+  font-size: 15px; color: var(--faint-ink); padding: 4px 6px; border-radius: 6px;
+}
+.modal-close:hover { color: var(--ink); background: color-mix(in oklab, var(--ink) 5%, transparent); }
+.modal-close:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 32%, transparent); }
+
+.modal-note { margin: 0; font-size: 12.5px; color: var(--dim); line-height: 1.5; }
+.modal-meta {
+  margin: 0; display: flex; gap: 8px; flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink);
+}
+.modal-meta span + span::before { content: "·"; margin-right: 8px; color: var(--line); }
+
+.modal-scroll { overflow: auto; margin: 2px -4px; padding: 0 4px; }
+
+.viewdata-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.viewdata-table th, .viewdata-table td {
+  padding: 6px 12px; border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.viewdata-table thead th {
+  position: sticky; top: 0; background: var(--surface); z-index: 1;
+  text-align: right; font-weight: 500; color: var(--faint-ink);
+  text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px;
+}
+.viewdata-table thead th:first-child { text-align: left; }
+.viewdata-table td.vd-num { text-align: right; font-family: var(--font-mono); color: var(--ink); }
+.viewdata-table td.vd-label { text-align: left; color: var(--ink); }
+.viewdata-table tbody tr:last-child td { border-bottom: none; }
+
+/* IN-CONTEXT TABLE  (components/RelatedSignalsTable.tsx)
+   A compact, scannable list of other signals touching the same claims. */
+.related-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.related-table th, .related-table td {
+  padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle;
+}
+.related-table thead th {
+  font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 10px; font-weight: 500; color: var(--faint-ink);
+}
+.related-table tbody tr:last-child td { border-bottom: none; }
+.related-table tbody tr:hover td { background: color-mix(in oklab, var(--accent) 5%, transparent); }
+.related-table .rt-title a { color: var(--ink); text-decoration: none; }
+.related-table .rt-title a:hover { color: var(--accent); }
+.related-table .rt-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-right: 9px; vertical-align: middle; flex: none;
+}
+.related-table .rt-sig, .related-table th:nth-child(2) { white-space: nowrap; }
+.related-table .rt-date {
+  color: var(--faint-ink); font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap;
+}
+
+.modal-defs {
+  margin: 0; display: grid; gap: 4px 14px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  font-size: 11px; color: var(--dim);
+  border-top: 1px solid var(--line); padding-top: 10px;
+}
+.modal-defs > div { display: flex; gap: 6px; }
+.modal-defs dt { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.modal-defs dd { margin: 0; }
+
+.modal-actions {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
+  border-top: 1px solid var(--line); padding-top: 12px;
+}
+
+@media (max-width: 560px) {
+  .modal-backdrop { padding: 12px; align-items: flex-start; }
+  .modal-panel { max-height: 92vh; }
+  .modal-actions { justify-content: stretch; }
+  .modal-actions .btn { flex: 1; justify-content: center; }
+}
+

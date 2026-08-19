@@ -1,0 +1,173 @@
+/* ============================================================
+   THE SHOWCASE (/showcase) — the unlisted in-app slide deck.
+   Broadsheet identity: Anton headlines, mono kickers, the
+   double rule, live stat bands. One slide fills the viewport;
+   the client controller paginates.
+   ============================================================ */
+.show-page { min-height: 100dvh; background: var(--bg); }
+.show-stage {
+  position: relative; min-height: 100dvh;
+  display: flex; align-items: center; justify-content: center;
+  padding: 48px 24px 72px; overflow: hidden;
+}
+.show-slide {
+  width: 100%; max-width: min(1160px, 94vw);
+  display: flex; flex-direction: column; gap: 16px;
+  animation: showIn .35s var(--ease);
+}
+@keyframes showIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.show-kicker {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--accent);
+}
+.show-rule { border-top: 3px solid var(--ink); border-bottom: 1px solid var(--ink); height: 6px; }
+.show-slide h2 {
+  font-family: var(--font-headline); font-weight: 400;
+  font-size: clamp(34px, 6.2vw, 62px); line-height: 1.04;
+  letter-spacing: 0.004em; margin: 0; text-wrap: balance;
+}
+.show-slide p { font-size: 16px; line-height: 1.65; color: var(--dim); margin: 0; max-width: 680px; }
+.show-slide p strong { color: var(--ink); }
+.show-lede { font-size: 17.5px; }
+.show-list {
+  margin: 0; padding-left: 20px;
+  display: flex; flex-direction: column; gap: 12px;
+  font-size: 15.5px; line-height: 1.6; color: var(--dim); max-width: 680px;
+}
+.show-list strong { color: var(--ink); }
+.show-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px; margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--line);
+}
+.show-stat { display: flex; flex-direction: column; gap: 4px; }
+.show-stat-n {
+  font-family: var(--font-headline); font-weight: 400; font-size: clamp(30px, 4vw, 44px);
+  line-height: 1; font-variant-numeric: tabular-nums;
+}
+.show-stat-l {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--faint-ink);
+}
+.show-links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.show-count {
+  position: absolute; top: 18px; right: 22px;
+  font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink);
+  font-variant-numeric: tabular-nums;
+}
+.show-tap {
+  position: absolute; top: 0; bottom: 64px; width: 11%;
+  background: none; border: none; cursor: pointer; z-index: 3;
+}
+.show-tap--left { left: 0; }
+.show-tap--right { right: 0; }
+.show-dots {
+  position: absolute; bottom: 26px; left: 0; right: 0;
+  display: flex; justify-content: center; gap: 8px;
+}
+.show-dot {
+  width: 8px; height: 8px; border-radius: 50%; padding: 0;
+  border: 1px solid var(--faint-ink); background: transparent; cursor: pointer;
+  transition: background .18s, border-color .18s;
+}
+.show-dot[data-active] { background: var(--accent); border-color: var(--accent); }
+/* feature slides: bullets beside a framed screen grab */
+.show-cols {
+  display: grid; grid-template-columns: 5fr 7fr; gap: 30px; align-items: center;
+}
+@media (max-width: 900px) { .show-cols { grid-template-columns: minmax(0, 1fr); } }
+.show-cols .show-list { padding-left: 18px; }
+.show-shot {
+  border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 22px 48px -24px color-mix(in oklab, var(--ink) 45%, transparent);
+}
+.show-shot-bar {
+  height: 22px; display: flex; align-items: center; gap: 5px; padding: 0 10px;
+  background: var(--bg); border-bottom: 1px solid var(--line);
+}
+.show-shot-bar i {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: color-mix(in oklab, var(--faint-ink) 55%, transparent);
+}
+.show-shot img {
+  display: block; width: 100%; height: auto;
+  max-height: 58vh; object-fit: cover; object-position: top;
+}
+/* feature slides run a step smaller so the visual keeps the room */
+.show-h2--sm { font-size: clamp(26px, 4.2vh, 42px) !important; }
+
+/* pipeline flow diagrams: plates, accent arrows, the human gate lit */
+.show-flow {
+  display: flex; align-items: stretch; justify-content: center; flex-wrap: wrap;
+  gap: 8px; margin: 6px 0 2px;
+}
+.show-flow-node {
+  display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  padding: 10px 14px; min-width: 118px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+}
+.show-flow-node[data-gate] {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 7%, var(--surface));
+}
+.show-flow-k {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--faint-ink);
+}
+.show-flow-node[data-gate] .show-flow-k { color: var(--accent); }
+.show-flow-t { font-size: 13px; font-weight: 600; line-height: 1.35; }
+.show-flow-arrow { align-self: center; color: var(--accent); font-size: 16px; }
+.show-flow-note {
+  font-family: var(--font-mono); font-size: 11px; line-height: 1.7; color: var(--faint-ink);
+  text-align: center; border-top: 1px dashed var(--line); padding-top: 10px; margin: 4px 0 0;
+}
+
+/* the search / chatbots / atlas comparison */
+.show-compare {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 6px;
+}
+@media (max-width: 900px) { .show-compare { grid-template-columns: minmax(0, 1fr); } }
+.show-compare-col {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;
+}
+.show-compare-col[data-hero] {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 6%, var(--surface));
+  box-shadow: 0 14px 34px -20px color-mix(in oklab, var(--accent) 55%, transparent);
+}
+.show-compare-h {
+  font-family: var(--font-display); font-weight: 600; font-size: 16px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--line);
+}
+.show-compare-col[data-hero] .show-compare-h { color: var(--accent); border-bottom-color: color-mix(in oklab, var(--accent) 40%, transparent); }
+.show-compare-row { display: flex; flex-direction: column; gap: 2px; }
+.show-compare-k {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--faint-ink);
+}
+.show-compare-row span:last-child { font-size: 13.5px; line-height: 1.5; color: var(--dim); }
+.show-compare-col[data-hero] .show-compare-row span:last-child { color: var(--ink); }
+
+.show-hint {
+  font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink);
+  letter-spacing: 0.06em;
+}
+
+.show-overview {
+  min-height: 100dvh; padding: 40px 24px;
+  display: flex; flex-direction: column; gap: 14px;
+  max-width: 980px; margin: 0 auto;
+}
+.show-overview-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px;
+}
+.show-overview-card {
+  display: flex; flex-direction: column; gap: 8px; text-align: left;
+  padding: 14px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); font-size: 14px; cursor: pointer;
+  font-family: var(--font-display); transition: border-color .18s;
+}
+.show-overview-card:hover, .show-overview-card[data-active] { border-color: var(--accent); }
+.show-overview-n { font-family: var(--font-mono); font-size: 10.5px; color: var(--accent); }
+

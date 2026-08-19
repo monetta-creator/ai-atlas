@@ -1,0 +1,95 @@
+/* ============================================================
+   THE PORTAL RAIL — the site's left sidebar nav on desktop:
+   full height, Home + the six portals + Explore (nested flyout)
+   + Ask, with About pinned at the bottom in its own island.
+   Name tooltips on hover. Content clears it via the body:has
+   padding below; pages without a Header (the showcase) stay
+   full-bleed. Under 761px the hamburger sheet is the whole nav.
+   ============================================================ */
+.portal-rail {
+  position: fixed; left: 0; top: 0; bottom: 0; width: 56px; z-index: 30;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 14px 0 12px;
+  background: var(--surface); border-right: 1px solid var(--line);
+}
+@media (min-width: 761px) {
+  body:has(.portal-rail) { padding-left: 56px; }
+}
+@media (max-width: 760px) {
+  .portal-rail { display: none; }
+}
+@media print {
+  .portal-rail { display: none; }
+  body { padding-left: 0 !important; }
+}
+.portal-rail-item { position: relative; }
+.portal-rail-link {
+  position: relative; display: flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border: 1px solid transparent; border-radius: var(--radius);
+  background: transparent; color: var(--dim); cursor: pointer;
+  transition: color .18s, border-color .18s, background .18s, box-shadow .18s;
+}
+.portal-rail-link svg { width: 17px; height: 17px; }
+.portal-rail-link:hover {
+  color: var(--accent); border-color: var(--accent);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--accent) 55%, transparent),
+    0 0 18px -2px color-mix(in oklab, var(--accent) 55%, transparent);
+}
+.portal-rail-link[data-active] {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 45%, transparent);
+  background: color-mix(in oklab, var(--accent) 8%, var(--surface));
+  box-shadow: 0 0 14px -4px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+.portal-rail-link::after {
+  content: attr(data-tip);
+  position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%);
+  white-space: nowrap; padding: 4px 10px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink);
+  font-size: 11.5px; line-height: 1.4; z-index: 60;
+  opacity: 0; pointer-events: none; transition: opacity .15s;
+  box-shadow: 0 6px 18px -10px color-mix(in oklab, var(--ink) 40%, transparent);
+}
+.portal-rail-link:hover::after, .portal-rail-link:focus-visible::after { opacity: 1; }
+/* the flyout replaces the tooltip while open */
+.portal-rail-item[data-open] .portal-rail-link::after { display: none; }
+.portal-rail-fly {
+  position: absolute; left: calc(100% + 12px); top: -4px; z-index: 70;
+  min-width: 170px; padding: 6px;
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, .12);
+  animation: navmenu-in .16s var(--ease-soft);
+}
+/* About's island at the foot of the rail */
+.portal-rail-bottom {
+  margin-top: auto; padding: 4px;
+  display: flex; flex-direction: column; gap: 5px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--bg);
+}
+
+/* ============================================================
+   ROUTE TRANSITIONS (app/loading.tsx) — the instant paint every
+   force-dynamic navigation shows while the server renders. The
+   label fades in late so fast navigations show only the bar.
+   ============================================================ */
+.route-loading {
+  min-height: 60vh; display: flex; align-items: center; justify-content: center;
+}
+.route-loading-bar {
+  position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 200;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  background-size: 40% 100%; background-repeat: no-repeat;
+  animation: routeBar 1s linear infinite;
+}
+@keyframes routeBar { from { background-position: -60% 0; } to { background-position: 160% 0; } }
+.route-loading-label {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--faint-ink);
+  opacity: 0; animation: routeLabelIn .2s ease .3s forwards;
+}
+@keyframes routeLabelIn { to { opacity: 1; } }
+

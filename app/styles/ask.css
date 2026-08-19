@@ -1,0 +1,183 @@
+/* ---- Ask workspace (/ask) — the app's one viewport-height shell ------------
+   The page root (.ask-page) is a 100dvh flex column with the sticky Header as
+   its first child, so the shell takes the remainder structurally: no magic nav
+   heights, immune to nav wrapping. Everything else on the site stays a
+   scrolling document; this layout is scoped to /ask. */
+.ask-page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+/* The single explicit row is load-bearing: without it the shell's implicit
+   auto row grows to the tallest column's content height (a long conversation),
+   the thread's own 1fr row inherits that height, and nothing ever scrolls —
+   the overflow just gets clipped at the page root. */
+.ask-shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 264px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.ask-shell[data-peek] { grid-template-columns: 264px minmax(0, 1fr) minmax(320px, 400px); }
+
+.ask-rail {
+  border-right: 1px solid var(--line); overflow-y: auto;
+  padding: 16px 12px; display: flex; flex-direction: column; gap: 4px;
+  background: var(--surface);
+}
+.ask-rail-brand {
+  font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--faint-ink); padding: 0 8px 10px;
+}
+.ask-convo {
+  display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+  border: 1px solid transparent; border-radius: var(--radius); cursor: pointer;
+  font-size: 13px; color: var(--dim); text-align: left; background: none; min-width: 0;
+}
+.ask-convo[data-active] {
+  color: var(--ink); border-color: var(--line);
+  background: color-mix(in oklab, var(--ink) 4%, var(--surface));
+}
+.ask-convo-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ask-convo-del { opacity: 0; font-size: 11px; color: var(--faint-ink); background: none; border: none; cursor: pointer; }
+.ask-convo:hover .ask-convo-del, .ask-convo:focus-within .ask-convo-del { opacity: 1; }
+
+.ask-main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; }
+/* Explicit row placement: the topbar is display:none on desktop, and a
+   hidden element generates NO grid item, so auto-placement was sliding the
+   thread into the auto row and stretching the composer across the 1fr (the
+   white-box bug the short empty-state hero exposed). Pinning rows makes the
+   mapping immune to which children exist. */
+.ask-topbar { grid-row: 1; }
+.ask-main > .ask-thread { grid-row: 2; }
+.ask-main > .ask-composer { grid-row: 3; }
+.ask-topbar { display: none; }
+.ask-thread { overflow-y: auto; padding: 26px clamp(16px, 4vw, 48px) 12px; }
+.ask-thread-inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+/* user turns get a quiet bubble; assistant turns are full-width prose */
+.ask-msg--user {
+  align-self: flex-end; max-width: 85%; padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: color-mix(in oklab, var(--ink) 4%, var(--surface));
+  font-size: 14px; line-height: 1.6; white-space: pre-wrap;
+}
+.ask-msg--assistant { font-size: 14.5px; line-height: 1.68; color: var(--ink); white-space: pre-wrap; }
+.ask-msg-actions { display: flex; gap: 12px; margin-top: 2px; }
+
+.ask-cite {
+  display: inline; font-family: var(--font-mono); font-size: .92em; color: var(--accent);
+  background: none; border: none; padding: 0 1px; cursor: pointer; text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--accent) 40%, transparent);
+}
+.ask-cite:hover { text-decoration-color: var(--accent); }
+
+/* The composer is the lobby launch box, verbatim: same ink-bordered plate,
+   same resting accent caret, floating on the page ground (no white band, no
+   top rule). The box is the inner element; the outer is just spacing. */
+.ask-composer { padding: 10px clamp(16px, 4vw, 48px) 14px; background: transparent; }
+.ask-composer-inner {
+  position: relative; max-width: 760px; margin: 0 auto;
+  display: flex; gap: 8px; align-items: flex-end;
+  border: 1px solid var(--ink); background: var(--surface);
+  padding: 6px 6px 6px 16px;
+}
+.ask-composer-inner:focus-within { border-color: var(--accent); }
+.ask-composer-inner:focus-within .lobby-ask-caret { display: none; }
+.ask-composer textarea {
+  flex: 1; resize: none; max-height: 200px; line-height: 1.5;
+  border: none; background: transparent; border-radius: 0; box-shadow: none;
+  padding: 10px 0; font-size: 15px; color: var(--ink); outline: none;
+  caret-color: var(--accent);
+}
+.ask-composer-hint {
+  max-width: 760px; margin: 6px auto 0; font-size: 11px;
+  font-family: var(--font-mono); color: var(--faint-ink);
+}
+.ask-composer-foot {
+  max-width: 760px; margin: 6px auto 0;
+  display: flex; align-items: baseline; gap: 12px;
+}
+.ask-composer-foot .ask-composer-hint { margin: 0; }
+.ask-deep-toggle {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em;
+  padding: 2px 10px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: transparent; color: var(--faint-ink); cursor: pointer; white-space: nowrap;
+  transition: border-color .18s, color .18s;
+}
+.ask-deep-toggle:hover { border-color: var(--accent); color: var(--dim); }
+.ask-deep-toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.ask-deep-toggle:disabled { opacity: 0.5; cursor: default; }
+
+/* the deep-research trail: live list while researching, collapsed details on
+   the stored message */
+.ask-steps {
+  margin: 0 0 10px; padding-left: 12px; border-left: 2px solid var(--line);
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6; color: var(--faint-ink);
+}
+.ask-steps summary { cursor: pointer; user-select: none; }
+.ask-steps ol { margin: 4px 0 0; padding-left: 18px; list-style: decimal; }
+.ask-steps--live li:last-child { color: var(--dim); }
+
+/* the verification strip under an answer: summary line + per-problem flags */
+.ask-verify {
+  margin: 8px 0 12px; padding: 6px 10px; border-left: 2px solid var(--line);
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6;
+  color: var(--faint-ink); display: grid; gap: 3px;
+}
+.ask-verify--flagged { border-left-color: var(--heat-4); }
+.ask-verify-line { margin: 0; }
+.ask-verify-flag { margin: 0; color: var(--heat-4); }
+
+/* empty state */
+.ask-hero { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 7vh 0 0; text-align: center; }
+.ask-hero h1 { font-family: var(--font-headline); font-weight: 400; font-size: clamp(28px, 3.6vw, 44px); margin: 0; }
+
+/* citation peek panel: desktop third column, mobile right sheet (one instance;
+   the media block below repositions it). Backdrop exists only on mobile. */
+.ask-peek {
+  border-left: 1px solid var(--line); overflow-y: auto; padding: 20px 22px 40px;
+  display: flex; flex-direction: column; gap: 14px; background: var(--surface);
+}
+.ask-peek-backdrop { display: none; }
+
+/* the document viewer inside the peek panel (admin/portal): the retained
+   article text with question-term highlights. The panel is the scroll
+   container; the head bleeds to its edges and stays stuck at the top. */
+.ask-doc { display: flex; flex-direction: column; gap: 12px; }
+.ask-doc-head {
+  position: sticky; top: 0; z-index: 2;
+  margin: -20px -22px 0; padding: 14px 22px 12px;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.ask-doc-meta { font-family: var(--font-mono); font-size: 11px; line-height: 1.6; color: var(--faint-ink); }
+.ask-doc-text {
+  font-size: 13px; line-height: 1.78; color: var(--dim);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.ask-doc-text mark {
+  background: color-mix(in oklab, var(--accent) 24%, transparent);
+  color: var(--ink); border-radius: 2px; padding: 0 1px;
+}
+
+/* ≤760px: the rail and peek become sheets (the .sc-drawer idiom, ask-scoped) */
+@media (max-width: 760px) {
+  .ask-shell, .ask-shell[data-peek] { grid-template-columns: minmax(0, 1fr); }
+  .ask-rail { display: none; }
+  .ask-peek {
+    position: fixed; top: 0; right: 0; height: 100dvh; width: min(440px, 92vw); z-index: 90;
+    animation: scDrawerIn .3s var(--ease);
+  }
+  .ask-peek-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 80;
+    background: color-mix(in oklab, var(--ink) 22%, transparent);
+    animation: scBackdropIn .2s var(--ease-soft);
+  }
+  .ask-topbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+  .ask-drawer-backdrop {
+    position: fixed; inset: 0; z-index: 80;
+    background: color-mix(in oklab, var(--ink) 22%, transparent);
+    animation: scBackdropIn .2s var(--ease-soft);
+  }
+  .ask-drawer {
+    position: fixed; top: 0; height: 100dvh; width: min(440px, 92vw); z-index: 90;
+    background: var(--surface); overflow-y: auto; padding: 20px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .ask-drawer--left { left: 0; border-right: 1px solid var(--line); animation: askDrawerInL .3s var(--ease); }
+  .ask-drawer--right { right: 0; border-left: 1px solid var(--line); animation: scDrawerIn .3s var(--ease); }
+}
+@keyframes askDrawerInL { from { transform: translateX(-100%); } to { transform: none; } }
+

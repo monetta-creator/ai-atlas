@@ -1,0 +1,38 @@
+/* ============================================================
+   PAPER READER (.pv-*) — the arXiv PDF in a right-side drawer on
+   /research/[id] (the ask-panel pattern on the original document;
+   arXiv PDFs carry no frame-ancestors, unlike its abs pages).
+   Reuses the sc drawer keyframes.
+   ============================================================ */
+.pv-backdrop {
+  position: fixed; inset: 0; z-index: 88;
+  background: color-mix(in oklab, var(--ink) 40%, transparent);
+  animation: scBackdropIn .2s var(--ease);
+}
+.pv-drawer {
+  position: fixed; top: 0; right: 0; height: 100dvh; width: min(800px, 94vw);
+  z-index: 89; background: var(--surface); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  animation: scDrawerIn .3s var(--ease);
+}
+.pv-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-bottom: 1px solid var(--line);
+}
+.pv-title {
+  flex: 1; min-width: 0; font-size: 13px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pv-frame { flex: 1; width: 100%; border: none; background: #3c4048; }
+@media (prefers-reduced-motion: reduce) {
+  .pv-backdrop, .pv-drawer { animation: none; }
+}
+.pv-toggle { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.pv-toggle button {
+  font: inherit; font-size: 11.5px; padding: 4px 11px; cursor: pointer;
+  border: none; background: var(--surface); color: var(--dim);
+}
+.pv-toggle button[data-on] {
+  background: color-mix(in oklab, var(--accent) 10%, var(--surface));
+  color: var(--accent);
+}

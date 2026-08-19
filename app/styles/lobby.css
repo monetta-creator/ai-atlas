@@ -1,0 +1,131 @@
+/* ============================================================
+   THE LOBBY (/) — AlphaSense-style front door: Anton greeting,
+   the chat launcher (rides ?q= into /ask), six live tiles as
+   the premier navigation, and the admin desk row.
+   ============================================================ */
+/* One-viewport lobby: the page is a 100dvh column, the section fills the
+   remainder under the header and centers its content; every vertical space
+   below compresses via clamp so a laptop viewport never scrolls. */
+.lobby-page { min-height: 100dvh; display: flex; flex-direction: column; }
+.lobby-wrap {
+  flex: 1; display: flex; flex-direction: column; justify-content: center;
+  width: 100%; padding-top: 6px; padding-bottom: clamp(12px, 3vh, 28px);
+}
+.lobby-hero {
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(8px, 1.6vh, 14px);
+  padding: clamp(8px, 3vh, 30px) 0 clamp(10px, 2.6vh, 26px);
+  text-align: center;
+}
+.lobby-greeting {
+  font-family: var(--font-headline); font-weight: 400;
+  font-size: clamp(32px, 4.5vh, 52px); line-height: 1.05;
+  letter-spacing: 0.005em; margin: 0; text-wrap: balance;
+}
+.lobby-sub { font-size: 14.5px; line-height: 1.5; color: var(--dim); margin: 0; }
+.lobby-launch {
+  width: 100%; display: flex; flex-direction: column; align-items: center;
+  gap: 14px; margin-top: 10px;
+}
+.lobby-ask {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; max-width: 640px;
+  border: 1px solid var(--ink); background: var(--surface);
+  padding: 6px 6px 6px 16px;
+}
+.lobby-ask:focus-within { border-color: var(--accent); }
+.lobby-ask input {
+  flex: 1; min-width: 0; border: none; background: transparent;
+  font-family: inherit; font-size: 15px; color: var(--ink);
+  padding: 10px 0; outline: none; caret-color: var(--accent);
+}
+.lobby-ask input::placeholder { color: var(--faint-ink); }
+/* the resting invitation: a blinking accent caret while the box is empty and
+   unfocused. Absolutely positioned at the input's exact text origin and sized
+   to its line, so it occupies no layout space and the real (accent) caret
+   that takes over on focus appears in the same spot at the same size. */
+.lobby-ask-caret {
+  position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+  width: 1.5px; height: 18px; background: var(--accent);
+  animation: lobbyBlink 1.1s steps(1) infinite; pointer-events: none;
+}
+.lobby-ask:focus-within .lobby-ask-caret { display: none; }
+@keyframes lobbyBlink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
+
+/* the rotating example-question pill under the launch box: small, quiet,
+   one question at a time; the question crossfades on each rotation */
+.lobby-eg {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  max-width: min(640px, 100%); padding: 7px 16px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); cursor: pointer;
+  font-family: inherit; font-size: 12.5px; color: var(--dim);
+  transition: border-color .18s, color .18s;
+}
+.lobby-eg:hover { border-color: var(--accent); color: var(--ink); }
+.lobby-eg-kicker {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--faint-ink); flex: none;
+}
+.lobby-eg-q {
+  display: inline-flex; align-items: baseline; min-height: 1.2em;
+  overflow: hidden; white-space: nowrap;
+}
+.lobby-eg-caret {
+  flex: none; width: 1.5px; height: 1.05em; margin-left: 2px;
+  background: var(--accent); align-self: center;
+  animation: lobbyBlink 1.1s steps(1) infinite;
+}
+
+.lobby-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: clamp(10px, 1.8vh, 18px);
+}
+@media (max-width: 980px) { .lobby-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px) { .lobby-grid { grid-template-columns: 1fr; } }
+.lobby-tile {
+  background: var(--surface); border: 1px solid var(--frame);
+  padding: clamp(12px, 2vh, 18px) 20px; min-height: clamp(104px, 15vh, 136px);
+  display: flex; flex-direction: column; gap: 8px;
+  color: var(--ink);
+  transition: border-color .15s, transform .18s var(--ease), box-shadow .18s var(--ease);
+  animation: lobbyTileIn .45s var(--ease) backwards;
+}
+.lobby-tile:hover {
+  border-color: var(--accent); text-decoration: none;
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--accent) 55%, transparent),
+    0 8px 24px -12px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+.lobby-tile:hover .lobby-tile-name { color: var(--accent); }
+@keyframes lobbyTileIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .lobby-tile { animation: none; }
+  .lobby-tile:hover { transform: none; box-shadow: none; }
+  .lobby-ask-caret, .lobby-eg-caret { animation: none; }
+}
+.lobby-tile-head { display: flex; align-items: center; gap: 10px; }
+.lobby-tile-head svg { width: 18px; height: 18px; color: var(--accent); flex: none; }
+.lobby-tile-name {
+  font-family: var(--font-display); font-weight: 600; font-size: 16.5px;
+  letter-spacing: -0.01em;
+}
+.lobby-tile-desc { font-size: 13.5px; line-height: 1.55; color: var(--dim); flex: 1; }
+.lobby-admin { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 6px; }
+.lobby-upload {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  margin-top: clamp(12px, 2.4vh, 24px); text-align: center;
+}
+.lobby-upload-note { font-size: 12.5px; color: var(--faint-ink); margin: 0; }
+
+/* the wordmark's stage tag */
+.brand-beta {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--accent);
+  border: 1px solid color-mix(in oklab, var(--accent) 55%, transparent);
+  border-radius: 999px; padding: 2.5px 8px 2px; margin-left: 10px;
+  align-self: center; line-height: 1;
+}
+
