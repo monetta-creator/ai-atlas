@@ -25,7 +25,7 @@ export interface RawGapRec {
 
 export const GAP_RELATIONS = ['supports', 'contradicts', 'depends_on']; // organizes is frame-only
 export const GAP_DOMAINS = ['capability', 'economics', 'build_out', 'market', 'labor'];
-export const GAP_RESOLVABILITIES = ['clean', 'slow', 'qualitative'];
+const GAP_RESOLVABILITIES = ['clean', 'slow', 'qualitative'];
 export const GAP_NODE_CODE_RE = /^[A-Za-z0-9][A-Za-z0-9.\-]{0,31}$/;
 
 // Novelty normalization: paraphrase-duplicates of an existing statement are rejected.
@@ -33,7 +33,7 @@ export function normStatement(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-export interface GapValidationCtx {
+interface GapValidationCtx {
   liveCodes: Set<string>;                 // claim + bridge codes (collision bar)
   stanceCodes: Set<string>;
   bridgeCodes: Set<string>;

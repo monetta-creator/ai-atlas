@@ -86,11 +86,7 @@ export type MaterialKey =
 /** Stable, deep-linkable prop identifier, e.g. 'board.package'. */
 export type PropId = string;
 
-export function isStopId(v: string): v is StopId {
-  return (STOP_ORDER as string[]).includes(v);
-}
-
-export function stopIndex(id: StopId): number {
+function stopIndex(id: StopId): number {
   return STOP_ORDER.indexOf(id);
 }
 

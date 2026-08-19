@@ -39,7 +39,7 @@ export type PhaseId =
 export type FlowKind = 'data' | 'weights' | 'loop';
 export type PoseKey = 'input' | 'block' | 'attention' | 'mlp' | 'stack' | 'head' | 'loop';
 
-export interface PhaseSpec {
+interface PhaseSpec {
   /** Parts lit at full strength this step. */
   focus: ArchPartId[];
   /** Connectors that pulse this step. */

@@ -13,14 +13,14 @@ export const PORTAL_FEATURE = 'portal_ask';
 // Every feature slug that draws on the portal's daily budget. Portal-triggered
 // scout research (intel sweeps, document reads) all log as 'portal_scout';
 // per-tool granularity lives in ai_cost_log.metadata.tool.
-export const PORTAL_FEATURES = ['portal_ask', 'portal_scout'];
+const PORTAL_FEATURES = ['portal_ask', 'portal_scout'];
 
 function envNumber(name: string, fallback: number): number {
   const v = Number(process.env[name]);
   return Number.isFinite(v) && v >= 0 ? v : fallback;
 }
 
-export interface PortalBudget {
+interface PortalBudget {
   ok: boolean;
   spentUsd: number;
   calls: number;

@@ -10,7 +10,7 @@ export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 
 export type PeekKind = 'claim' | 'bridge' | 'stance' | 'question' | 'concept' | 'signal' | 'paper' | 'thread';
 
-export interface PeekEvidence {
+interface PeekEvidence {
   direction: string;
   excerpt: string;
   source_title: string | null;

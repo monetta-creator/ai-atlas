@@ -369,7 +369,7 @@ export interface SignalTouch {
 
 // The AI's proposed draft for a signal (model proposes; the human edits + commits).
 // Every field is a suggestion the admin can overwrite before saving.
-export interface ProposedSignal {
+interface ProposedSignal {
   title: string;
   summary: string;
   significance: Significance;
@@ -561,7 +561,7 @@ export interface PipelineAnalytics {
 // SAFETY: a dataset must be built ONLY from the props a component already received — never a
 // re-fetch — so the personal layer stays stripped server-side for guests (see lib/data.ts
 // strip/stripClaim/getEvidenceFor). v1 sources are public pipeline aggregates (no personal data).
-export interface ViewDataColumn {
+interface ViewDataColumn {
   key: string;
   label: string;
   def?: string;   // one-line gloss of what the column means (shown in the panel)
@@ -674,7 +674,7 @@ export interface ReportTouch {
 // the DISCOVERY COHORT: candidates with retrieved_at in range. `published` is the
 // publish-state of THIS cohort's drafts (may include publications dated after `to` — see
 // ReportMetrics). Rates are derived from these ints in code (never in SQL).
-export interface ReportFunnelCounts {
+interface ReportFunnelCounts {
   candidates: number;      // count(*) of the in-range cohort
   approved: number;        // triage_status='approved'
   rejected: number;        // triage_status='rejected' AND analysis_status<>'discarded'
@@ -712,7 +712,7 @@ export interface ReportMetrics {
 // generation. A signal tagged with N (in-scope) lenses appears under each of them
 // (intentional: each lens section narrates every signal relevant to it). Only lenses in
 // the report's selected set are present.
-export interface ReportLensGroup {
+interface ReportLensGroup {
   lens: SignalLens;
   signals: Signal[];
 }
@@ -721,7 +721,7 @@ export interface ReportLensGroup {
 // (server-side, via `marked`) before it reaches the client — so these slots hold HTML,
 // the format the Phase-3 rich-text editor edits and Phase 4 renders to PDF. A failed lens
 // is left null (the report still assembles).
-export interface ReportNarrative {
+interface ReportNarrative {
   macroSurvey: string | null;               // synthesis: the cross-lens macro/executive survey (HTML)
   perLens: Record<string, string | null>;   // keyed by SignalLens slug; per-lens analyst narrative (HTML)
   claimsRecap: string | null;               // synthesis: recap of the claims/bridges touched (HTML)
@@ -950,7 +950,7 @@ export interface ArgumentGapEdge {
 // One grounding citation: the recent report/signals that motivate the proposal.
 // This is the evidence the human judges — a recommendation that cannot cite recent
 // evidence is not proposed (the anti-bloat bar).
-export interface ArgumentGroundingRef {
+interface ArgumentGroundingRef {
   report_id: string | null;     // a saved report this leans on, or null
   report_title: string | null;
   signal_ids: string[];         // recent signals this leans on (resolved to ids)
@@ -1000,7 +1000,7 @@ export interface BridgeFeederRecommendation {
 // The arXiv intake + research library. Papers carry ADVISORY claim touches only:
 // nothing here writes evidence — promotion to a signal (papers.signal_id) and the
 // publish gate remain the only road into the Argument Map.
-export type PaperOrigin = 'arxiv' | 'manual';
+type PaperOrigin = 'arxiv' | 'manual';
 export type PaperTriageStatus = 'pending' | 'kept' | 'rejected';
 export type PaperReviewStatus = 'pending' | 'noted' | 'tracked' | 'dismissed';
 export type ThreadStatus = 'open' | 'settled' | 'dormant';
@@ -1342,7 +1342,7 @@ export interface SheetEvidence {
   noted_on: string;                 // evidence.created_at, 'YYYY-MM-DD'
 }
 
-export interface SheetNodeCore {
+interface SheetNodeCore {
   code: string;
   type: 'claim' | 'bridge_claim';
   statement: string;
@@ -1356,7 +1356,7 @@ export interface SheetNodeCore {
   lenses: Lens[];                                         // map lens tags (claims only)
 }
 
-export interface SheetStanceLink {
+interface SheetStanceLink {
   relation: Relation;
   stance_code: string;
   stance_title: string;
@@ -1364,16 +1364,16 @@ export interface SheetStanceLink {
   q_title: string;
 }
 
-export interface SheetNodeLink {
+interface SheetNodeLink {
   relation: Relation;
   code: string;
   statement: string;
   href: string;
 }
 
-export interface SheetConceptLink { slug: string; name: string; status: ConceptStatus; href: string }
+interface SheetConceptLink { slug: string; name: string; status: ConceptStatus; href: string }
 
-export interface SheetThesisLink { id: string; statement: string; latest_report_id: string | null }
+interface SheetThesisLink { id: string; statement: string; latest_report_id: string | null }
 
 export interface SheetSignalStats {
   total: number;
@@ -1422,7 +1422,7 @@ export interface LensSheetCode {
   directions: { supports: number; contradicts: number; neutral: number };
 }
 
-export interface LensSheetStats {
+interface LensSheetStats {
   signals: SheetSignalStats;
   codes: number;
   oneSidedCodes: string[];          // codes whose in-lens direction data is one-sided
@@ -1442,7 +1442,7 @@ export interface LensSheetPack {
   stats: LensSheetStats;
 }
 
-export interface AtlasSheetStance {
+interface AtlasSheetStance {
   code: string;
   title: string;
   claims_supporting: number;        // structural: claim -> stance supports edges
@@ -1544,7 +1544,7 @@ export type CompanyStatus = 'queued' | 'tracked' | 'dismissed' | 'archived';
 export type CompanyStage = 'pre_seed' | 'seed' | 'series_a' | 'series_b' | 'later' | 'unknown';
 export type ScoutVerdict = 'pursue' | 'watch' | 'pass';
 export type CompanyEventKind = 'funding' | 'launch' | 'news' | 'milestone' | 'note';
-export type CompanyOrigin = 'discovery' | 'manual';
+type CompanyOrigin = 'discovery' | 'manual';
 
 export interface ScoutVertical {
   slug: string;

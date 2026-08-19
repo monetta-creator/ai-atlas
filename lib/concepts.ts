@@ -6,7 +6,7 @@ import { runStructured } from './dossier';
 //  - which existing concepts a new/edited concept depends on (prerequisite edges)
 //  - which argument-map claims/bridges the concept is relevant to (claim wiring)
 
-export interface ConceptForAI {
+interface ConceptForAI {
   name: string;
   short_definition: string;
   explanation: string;

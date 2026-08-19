@@ -56,7 +56,7 @@ export function skeletonBlock(ctx: AskNamespace): string {
 
 // The map namespace plus the dataset catalog one-liners. The registry is
 // static per deploy, so this block caches exactly like the skeleton.
-export function fullSkeletonBlock(ctx: AskNamespace): string {
+function fullSkeletonBlock(ctx: AskNamespace): string {
   const list = DATASETS
     .map((d) => `[dataset ${d.slug}] ${d.title}: ${d.description}`)
     .join('\n');
@@ -129,12 +129,12 @@ export function deepConversationMessages(
   return out;
 }
 
-export function deepQueryBlock(query: string): string {
+function deepQueryBlock(query: string): string {
   return `QUESTION:\n${query}\n\nResearch this with your tools first: search the Atlas for the relevant records, fetch the ones that matter in full, and check the article text when the primary wording matters. Then answer using only what your tools returned and the map above, citing every record you use by its bracketed ID.`;
 }
 
 // The matched deep detail plus the question. Volatile, sent uncached and last.
-export function queryBlock(query: string, ctx: AskContext): string {
+function queryBlock(query: string, ctx: AskContext): string {
   const records = ctx.detail
     ? `RELEVANT RECORDS, deeper detail on what your question matched:\n\n${ctx.detail}`
     : 'RELEVANT RECORDS: none matched beyond the map above.';

@@ -22,7 +22,7 @@ export const USER_TURN_CAP = 2000;
 export const ASSISTANT_TURN_CAP = 2500;
 export const MAX_MESSAGES = 12;
 export const CHAR_BUDGET = 8000;
-export const RETRIEVAL_QUERY_CAP = 1200;
+const RETRIEVAL_QUERY_CAP = 1200;
 
 // Accepts the new { messages } shape or the legacy { query } shape (kept
 // indefinitely: it is three lines and keeps curl testing trivial). Returns null

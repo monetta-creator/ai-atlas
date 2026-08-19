@@ -60,17 +60,6 @@ export const MOVEMENTS: Movement[] = [
   },
 ];
 
-export const MOVEMENT_BY_ID: ReadonlyMap<MovementId, Movement> = new Map(
-  MOVEMENTS.map((m) => [m.id, m])
-);
-
-/** Which movement a camera stop belongs to. The 3D rig needs this to light the rail. */
-export const MOVEMENT_OF_STOP: ReadonlyMap<StopId, MovementId> = (() => {
-  const m = new Map<StopId, MovementId>();
-  for (const mv of MOVEMENTS) for (const s of mv.stops) m.set(s, mv.id);
-  return m;
-})();
-
 if (process.env.NODE_ENV !== 'production') {
   const seen = new Set<StopId>();
   for (const mv of MOVEMENTS) {

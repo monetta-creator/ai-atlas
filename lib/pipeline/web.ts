@@ -32,7 +32,7 @@ export function domainOf(url: string): string {
 // returns '' for PDF dates, and without one triage can't enforce the recency window —
 // which is how year-old papers sailed into a 7-day run. First-of-month is precise
 // enough for window enforcement; a model-provided full date always wins.
-export function inferPublishedDate(url: string, modelDate: string): string {
+function inferPublishedDate(url: string, modelDate: string): string {
   if (/^\d{4}-\d{2}-\d{2}/.test(modelDate)) return modelDate;
   const m = /arxiv\.org\/(?:abs|pdf|html)\/(\d{2})(\d{2})\./i.exec(url);
   if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) return `20${m[1]}-${m[2]}-01`;
@@ -161,7 +161,7 @@ CRITICAL: Do NOT evaluate significance or quality. Do NOT summarize. Do NOT filt
     }));
 }
 
-export interface SweepCandidate extends RawCandidate {
+interface SweepCandidate extends RawCandidate {
   lens: SignalLens;
 }
 
@@ -377,7 +377,7 @@ async function extractReadable(bytes: Uint8Array, contentType: string, maxChars:
 // terminal/transient, so the caller can decide between flagging and retrying. The default
 // 20s budget assumes the caller runs in its own invocation (hydrate); the analysis-time
 // backstop passes a tighter one.
-export async function fetchReadableText(
+async function fetchReadableText(
   url: string,
   opts: { maxChars?: number; timeoutMs?: number } = {}
 ): Promise<string> {
@@ -422,7 +422,7 @@ export async function fetchReadableText(
   return extractReadable(bytes, res.headers.get('content-type') ?? '', maxChars);
 }
 
-export interface FetchedText {
+interface FetchedText {
   text: string;
   via: 'direct' | 'jina';
 }

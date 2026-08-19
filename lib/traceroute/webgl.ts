@@ -35,7 +35,7 @@ export function prefersReducedMotion(): boolean {
  * Tokens are authored as hex in one theme and rgb()/rgba() in the other (--dim and
  * --faint-ink flip), and THREE.Color cannot parse the alpha form. Normalise both.
  */
-export function cssColor(raw: string, fallback: string): THREE.Color {
+function cssColor(raw: string, fallback: string): THREE.Color {
   const value = raw.trim() || fallback;
   const rgb = value.match(/rgba?\(([^)]+)\)/i);
   if (rgb) {

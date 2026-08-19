@@ -52,7 +52,7 @@ const PROMPT_SIGNAL_CAP = 80;   // prompt-size bound; the stats always cover ALL
 
 // Serialize the pack for the model. Deterministic: pack order is preserved, caps are
 // fixed, and any truncation is stated explicitly (no silent caps).
-export function fmtPack(pack: ThesisPack): string {
+function fmtPack(pack: ThesisPack): string {
   const s = pack.stats;
   const lines: string[] = [];
   lines.push(`THESIS: ${pack.statement}`);

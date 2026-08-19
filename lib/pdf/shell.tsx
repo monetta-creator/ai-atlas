@@ -14,7 +14,7 @@ import type { ReactNode } from 'react';
 export const COBALT = '#2d5bff';
 export const INK = '#0f172a';
 export const DIM = '#5b6675';
-export const FAINT = '#95a0b1';
+const FAINT = '#95a0b1';
 export const LINE = '#d9dee7';
 
 const FONT_DIR = path.join(process.cwd(), 'lib', 'pdf', 'fonts');
@@ -110,7 +110,7 @@ export const DIRECTION_COLOR: Record<string, string> = {
 
 // ---------------------------------------------------------------- shared parts
 
-export function DoubleRule(): ReactNode {
+function DoubleRule(): ReactNode {
   return (
     <View>
       <View style={s.ruleHeavy} />

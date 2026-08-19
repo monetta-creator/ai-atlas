@@ -59,7 +59,3 @@ export function nearestRun(prompt: string): ScriptedRun {
     return d < bd ? r : best;
   }, RUNS[0]);
 }
-
-export function isCuratedPrompt(prompt: string): boolean {
-  return RUNS.some((r) => normalize(r.prompt) === normalize(prompt));
-}

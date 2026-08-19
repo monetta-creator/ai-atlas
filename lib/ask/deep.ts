@@ -16,7 +16,7 @@ export const RESULT_CAP = 1500;
 export const INPUT_TOKEN_CAP = 40_000;
 
 // S = signal tags, P = paper tags; one shared counter mints both (see retrieve.ts).
-export const TAG_RE = /^[SP]\d{1,4}$/i;
+const TAG_RE = /^[SP]\d{1,4}$/i;
 const CODE_RE = /^[A-Za-z0-9.\-]{1,20}$/;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,79}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -26,7 +26,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // ...) is minted server-side. The deep route seeds the minter with the tags
 // the client already holds, so a signal rediscovered in a later turn keeps its
 // original tag and fetch_record can resolve tags cited turns ago.
-export interface SignalTagger {
+interface SignalTagger {
   tagFor(id: string): string;
   paperTagFor(id: string): string;
   idFor(tag: string): string | null;
@@ -89,9 +89,9 @@ export function parseSignalMap(v: unknown): Record<string, string> {
 // ---------------------------------------------------------------- tools
 // Questions are absent from search_atlas on purpose: they have no search_tsv
 // column (0020 skipped them) and all seven are always in the skeleton.
-export const SEARCH_KINDS = ['claim', 'bridge', 'stance', 'concept', 'signal', 'paper', 'thread'] as const;
-export const FETCH_KINDS = ['claim', 'bridge', 'stance', 'question', 'concept', 'signal', 'paper', 'thread'] as const;
-export type FetchKind = (typeof FETCH_KINDS)[number];
+const SEARCH_KINDS = ['claim', 'bridge', 'stance', 'concept', 'signal', 'paper', 'thread'] as const;
+const FETCH_KINDS = ['claim', 'bridge', 'stance', 'question', 'concept', 'signal', 'paper', 'thread'] as const;
+type FetchKind = (typeof FETCH_KINDS)[number];
 
 export const DEEP_TOOLS: Anthropic.Tool[] = [
   {
@@ -146,7 +146,7 @@ export const DEEP_TOOLS: Anthropic.Tool[] = [
 // Each parser returns the typed input or an error STRING the route feeds back
 // to the model as an is_error tool result (so a malformed call self-corrects).
 
-export interface SearchAtlasInput {
+interface SearchAtlasInput {
   query: string;
   kinds: PeekKind[];
   limit: number;
@@ -169,7 +169,7 @@ export function parseSearchAtlasInput(v: unknown): SearchAtlasInput | string {
   return { query, kinds, limit };
 }
 
-export interface FetchRecordInput {
+interface FetchRecordInput {
   kind: FetchKind;
   id: string;
 }
@@ -291,7 +291,7 @@ export function renderRecord(p: PeekPayload, id: string, tagFor: (uuid: string) 
 // NDJSON, one JSON object per line: status lines while researching, delta
 // lines for the streamed answer, one terminal done line carrying the full
 // tag -> uuid signal map (the deep-mode replacement for X-Ask-Signals).
-export const ndLine = (o: object): string => `${JSON.stringify(o)}\n`;
+const ndLine = (o: object): string => `${JSON.stringify(o)}\n`;
 export const ndStatus = (text: string): string => ndLine({ type: 'status', text });
 export const ndDelta = (text: string): string => ndLine({ type: 'delta', text });
 export const ndError = (text: string): string => ndLine({ type: 'error', text });

@@ -9,7 +9,7 @@ import * as m from '../mutations';
 const BATCH_URL = 'https://api.semanticscholar.org/graph/v1/paper/batch?fields=citationCount,authors.hIndex';
 const BATCH_SIZE = 500;
 
-export interface Pedigree {
+interface Pedigree {
   citations: number | null;
   // Highest h-index among the paper's authors — the day-zero quality PRIOR. null =
   // paper not in S2 yet; a low value can also mean S2 hasn't disambiguated the

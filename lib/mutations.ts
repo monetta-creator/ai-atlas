@@ -59,10 +59,6 @@ export async function saveContentOverride(key: string, value: string): Promise<v
   );
 }
 
-export async function resetContentOverride(key: string): Promise<void> {
-  await exec(`delete from content_blocks where key = $1`, [key]);
-}
-
 export async function setDossier(sourceId: string, dossier: Dossier): Promise<void> {
   await exec(`update sources set dossier = $1::jsonb, updated_at = now() where id = $2`, [
     JSON.stringify(dossier),
@@ -138,30 +134,6 @@ export async function createQuestionSummary(
   await exec(
     `insert into question_summaries (question_id, summary, metrics) values ($1, $2::jsonb, $3::jsonb)`,
     [questionId, JSON.stringify(summary), JSON.stringify(metrics)]
-  );
-}
-
-export async function addEvidence(input: {
-  source_id: string;
-  target_type: 'claim' | 'bridge_claim';
-  target_id: string;
-  direction: Direction;
-  weight: Weight;
-  excerpt?: string;
-  note?: string;
-}): Promise<void> {
-  await exec(
-    `insert into evidence (source_id, target_type, target_id, direction, weight, excerpt, note)
-     values ($1,$2,$3,$4,$5,$6,$7)`,
-    [
-      input.source_id,
-      input.target_type,
-      input.target_id,
-      input.direction,
-      input.weight,
-      input.excerpt || null,
-      input.note || null,
-    ]
   );
 }
 
@@ -297,7 +269,7 @@ export async function removeNodeLens(
 // so they are validated against this registry (a fixed set of string literals)
 // before interpolation; value and id are always parameterized.
 type FieldSpec = { required?: boolean; frameAware?: boolean };
-export const DOMAIN_FIELDS: Record<string, Record<string, FieldSpec>> = {
+const DOMAIN_FIELDS: Record<string, Record<string, FieldSpec>> = {
   questions: { title: { required: true }, summary: {} },
   stances: { title: { required: true }, holder: {}, summary: {}, test: { required: true } },
   claims: { statement: { required: true }, test: { frameAware: true }, domain_note: {} },
@@ -462,6 +434,9 @@ export async function createSignal(
 // (`for update`) and the claim guarded by `signal_id is null`. So a retried OR concurrent
 // analyze call can never produce a duplicate draft: the loser sees the candidate already
 // claimed and returns null (its own insert rolls back). Returns the new signal id, or null.
+// Candidate↔signal linking must always go through this function: a bare UPDATE of
+// signal_candidates.signal_id would skip the lock, the analysis_status write, and the
+// duplicate-draft guard.
 export async function createDraftForCandidate(
   input: SignalInput & { origin?: SignalOrigin },
   candidateId: string
@@ -846,10 +821,6 @@ export async function setAnalysisStatus(
   );
 }
 
-export async function attachSignalToCandidate(candidateId: string, signalId: string): Promise<void> {
-  await exec(`update signal_candidates set signal_id = $1, updated_at = now() where id = $2`, [signalId, candidateId]);
-}
-
 // Reuse an existing source row for a URL, or create a bare one. Returns the source id
 // so a pipeline-created signal can link to it (admin sets the reliability prior later).
 export async function ensureSource(
@@ -933,7 +904,7 @@ export async function addRateCard(input: {
 // status='confirmed'. Links are replaced wholesale inside the transaction so the
 // form's state is the single source of truth for a concept's wiring.
 
-export interface ConceptWrite {
+interface ConceptWrite {
   slug: string;
   name: string;
   short_definition: string;
@@ -1056,13 +1027,13 @@ export async function saveConceptGapScan(scan: ConceptGapScan | null): Promise<v
 
 const NEUTRAL_CONFIDENCE = 0.5;
 
-export interface ClaimEdgeInput {
+interface ClaimEdgeInput {
   target_type: 'stance' | 'bridge_claim';
   target_code: string;
   relation: Relation;          // supports | contradicts | depends_on (organizes is frame-only)
 }
 
-export interface CreateClaimInput {
+interface CreateClaimInput {
   code: string;
   statement: string;
   test: string;
@@ -1115,9 +1086,9 @@ export async function createClaimWithEdges(input: CreateClaimInput): Promise<{ i
   });
 }
 
-export interface BridgeFeedInput { claim_code: string; relation: Relation; }  // claim -> bridge
+interface BridgeFeedInput { claim_code: string; relation: Relation; }  // claim -> bridge
 
-export interface CreateBridgeInput {
+interface CreateBridgeInput {
   code: string;
   statement: string;
   domain_from: Domain;
@@ -1716,48 +1687,6 @@ export async function deleteGeneratedReport(id: string): Promise<void> {
   await exec(`delete from generated_reports where id = $1`, [id]);
 }
 
-// Append claim touches to an EXISTING signal and re-materialize its evidence.
-// Additive by design: codes the signal already touches keep their original
-// direction/reason (human-reviewed at publish time; never clobbered). Used by the
-// labor backfill (0028) and safe for any future retro-tagging: the evidence
-// re-sync runs in the same transaction, so the Signal Board and the Argument Map
-// can never disagree.
-export async function addSignalTouches(
-  signalId: string,
-  touches: { code: string; direction: Direction; reason: string }[]
-): Promise<{ added: string[] }> {
-  return withTx(async (c) => {
-    const sig = (
-      await c.query(
-        `select claim_touches, touch_details, is_published from signals where id = $1 for update`,
-        [signalId]
-      )
-    ).rows[0] as
-      | { claim_touches: string[]; touch_details: Record<string, unknown> | null; is_published: boolean }
-      | undefined;
-    if (!sig) throw new Error('Signal not found.');
-
-    const codes = new Set(sig.claim_touches ?? []);
-    const details: Record<string, unknown> = { ...(sig.touch_details ?? {}) };
-    const added: string[] = [];
-    for (const t of touches) {
-      if (codes.has(t.code)) continue;   // existing touch: human-reviewed, keep as is
-      codes.add(t.code);
-      details[t.code] = { direction: t.direction, reason: t.reason };
-      added.push(t.code);
-    }
-    if (added.length) {
-      await c.query(
-        `update signals set claim_touches = $2::text[], touch_details = $3::jsonb, updated_at = now()
-          where id = $1`,
-        [signalId, [...codes], JSON.stringify(details)]
-      );
-      await syncSignalEvidence(c, signalId, sig.is_published);
-    }
-    return { added };
-  });
-}
-
 // ---- Tickets — the public feedback box (migration 0032) ---------------------
 // createTicket is the ONE public write path in this module: it is called by the
 // allow-listed POST /api/tickets route after validation (length caps, email
@@ -2003,7 +1932,7 @@ export async function setCompanyRawContent(id: string, text: string, via: string
   );
 }
 
-export interface CompanyFactsFill {
+interface CompanyFactsFill {
   one_liner: string | null;
   ai_tech: string | null;
   founded_year: number | null;

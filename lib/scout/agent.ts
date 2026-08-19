@@ -13,7 +13,7 @@ import type { ScoutVerdict } from '../types';
 // the active verticals, and a digest of past human decisions (revealed taste).
 // Nothing here writes status: the human tracks or dismisses, per row or in bulk.
 
-export const SCOUT_CHUNK = 10;
+const SCOUT_CHUNK = 10;
 
 export const DEFAULT_RUBRIC = [
   'The acquirer is a large enterprise in the middle of an AI transformation, buying AI technology and teams rather than revenue. Score every company 1 to 5 on five dimensions:',
@@ -100,7 +100,7 @@ async function buildSystem(): Promise<string> {
   return parts.join('\n');
 }
 
-export interface ScoutChunkResult {
+interface ScoutChunkResult {
   processed: number;
   pursue: number;
   watch: number;

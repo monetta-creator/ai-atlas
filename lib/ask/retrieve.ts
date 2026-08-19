@@ -20,7 +20,7 @@ import type { ValidIdsPlain } from '@/lib/ask/verify';
 // it only ever surfaces text through a published signal or a publicly cited
 // source, so it is guest-safe in either mode.
 
-export interface ValidIdSet {
+interface ValidIdSet {
   claims: Set<string>;
   bridges: Set<string>;
   stances: Set<string>;

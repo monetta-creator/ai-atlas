@@ -37,7 +37,7 @@ const LOOK_ROOM: LookBounds = { yaw: [-0.7, 0.7], pitch: [-0.45, 0.35], dolly: [
 const LOOK_TIGHT: LookBounds = { yaw: [-0.5, 0.5], pitch: [-0.35, 0.3], dolly: [0.75, 1.4] };
 const LOOK_WIDE: LookBounds = { yaw: [-1.1, 1.1], pitch: [-0.5, 0.3], dolly: [0.6, 2.2] };
 
-export const STOPS: Stop[] = [
+const STOPS: Stop[] = [
   {
     id: 'desk', scene: 'world', kicker: 'STOP 00', title: 'The client',
     blurb: 'A client machine and a prompt about to be submitted. Everything after this happens elsewhere.',
@@ -141,11 +141,6 @@ export const STOPS: Stop[] = [
 ];
 
 export const STOP_BY_ID: ReadonlyMap<StopId, Stop> = new Map(STOPS.map((s) => [s.id, s]));
-
-export function stopAt(index: number): Stop | null {
-  const id = STOP_ORDER[index];
-  return id ? STOP_BY_ID.get(id) ?? null : null;
-}
 
 // Integrity guard, dev only, mirroring lib/supply-chain/map.ts. A stop that names a slug
 // which no longer exists in the supply-chain map should be a loud startup failure, not a

@@ -54,10 +54,6 @@ export const SIGNAL_LENS_COLOR: Record<SignalLens, string> = {
   society: 'var(--siglens-society)',
 };
 
-export function signalLensLabel(lens: SignalLens): string {
-  return SIGNAL_LENS_LABEL[lens] ?? lens;
-}
-
 export function signalLensColor(lens: SignalLens): string {
   return SIGNAL_LENS_COLOR[lens] ?? 'var(--accent)';
 }
@@ -76,10 +72,6 @@ export const CONCEPT_STATUS_LABEL: Record<ConceptStatus, string> = {
   settled: 'Settled',
   contested: 'Contested',
 };
-
-export function conceptStatusColor(s: ConceptStatus): string {
-  return s === 'contested' ? 'var(--heat-4)' : 'var(--heat-1)';
-}
 
 export const SIGNIFICANCE_LABEL: Record<Significance, string> = {
   high: 'High',
@@ -104,26 +96,6 @@ export function confidenceBand(c: number | null): ConfidenceLabel {
   if (c < 0.60) return 'contested';
   if (c < 0.80) return 'leaning';
   return 'settled';
-}
-
-export function confidenceColor(label: ConfidenceLabel): string {
-  switch (label) {
-    case 'settled': return 'text-settled';
-    case 'leaning': return 'text-leaning';
-    case 'contested': return 'text-contested';
-    case 'thin': return 'text-thin';
-    default: return 'text-ink-faint';
-  }
-}
-
-export function confidenceDot(label: ConfidenceLabel): string {
-  switch (label) {
-    case 'settled': return 'bg-settled';
-    case 'leaning': return 'bg-leaning';
-    case 'contested': return 'bg-contested';
-    case 'thin': return 'bg-thin';
-    default: return 'bg-ink-faint';
-  }
 }
 
 // The cool→warm confidence heat scale (Console design system). The four stored
@@ -153,13 +125,6 @@ export function relationColor(rel: Relation): string {
   }
 }
 
-export function relationStroke(rel: Relation): string {
-  switch (rel) {
-    case 'supports': return 'var(--color-supports)';
-    case 'contradicts': return 'var(--color-contradicts)';
-    default: return 'var(--color-depends)';
-  }
-}
 
 export function directionLabel(d: Direction): string {
   return d === 'supports' ? 'Supports' : d === 'contradicts' ? 'Contradicts' : 'Neutral';
@@ -202,7 +167,7 @@ export function formatDateRange(from: string, to: string): string {
 // Cost-log feature slugs → human labels for the /costs dashboard. The slug (written by
 // lib/cost.ts recordApiCall) is the source of truth; an unknown slug prettifies its own text.
 // Lives here (not in the server-only lib/cost.ts) so the client dashboard can import it.
-export const FEATURE_LABEL: Record<string, string> = {
+const FEATURE_LABEL: Record<string, string> = {
   dossier: 'Source dossier',
   pdf_metadata: 'PDF metadata',
   claim_recommendations: 'Claim recommendations',

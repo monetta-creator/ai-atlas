@@ -112,7 +112,7 @@ export function quarterBuckets(dates: (string | null)[]): { bucket: string; n: n
 
 // The deterministic coverage statement. Plain sentences built from the numbers
 // (never an em dash: rendered UI copy).
-export function corpusNoteFor(s: Omit<ThesisStats, 'corpusNote'>, hasCodes: boolean): string {
+function corpusNoteFor(s: Omit<ThesisStats, 'corpusNote'>, hasCodes: boolean): string {
   const parts: string[] = [];
   parts.push(
     `${s.matched} of ${s.scanned} published signals in the Atlas matched this thesis ` +

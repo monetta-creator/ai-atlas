@@ -13,7 +13,7 @@ import {
 // and signal-record appendices. Renders the SAVED, sanitized Report object (the same
 // shape the /reports/[id] read view renders); the route re-sanitizes before calling in.
 
-export interface SavedPeriodReport {
+interface SavedPeriodReport {
   id: string;
   title: string;
   report: Report;

@@ -55,7 +55,7 @@ function buildSchema(codes: string[], concepts: string[], threads: string[]) {
   };
 }
 
-export interface ResearchTriageResult {
+interface ResearchTriageResult {
   processed: number;
   kept: number;
   rejected: number;

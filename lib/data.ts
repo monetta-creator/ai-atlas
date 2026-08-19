@@ -39,7 +39,7 @@ function stripClaim(c: Claim, personal: boolean): Claim {
   return { ...c, confidence: null, confidence_label: null, domain_note: null };
 }
 
-export interface EvidenceCounts {
+interface EvidenceCounts {
   supports: number;
   contradicts: number;
   neutral: number;
@@ -124,7 +124,7 @@ export async function getQuestions(personal: boolean): Promise<QuestionStats[]> 
 }
 
 // ---------------------------------------------------------------- question map
-export interface QuestionView {
+interface QuestionView {
   question: Question;
   stances: Stance[];
   claims: Claim[];
@@ -210,11 +210,11 @@ export async function getQuestion(slug: string, personal: boolean): Promise<Ques
 }
 
 // ---------------------------------------------------------------- claim / frame detail
-export interface StanceLink {
+interface StanceLink {
   relation: string; note: string | null; stance_code: string; stance_title: string;
   q_slug: string; q_title: string;
 }
-export interface BridgeLink {
+interface BridgeLink {
   relation: string; note: string | null; bridge_code: string; bridge_statement: string;
 }
 
@@ -267,7 +267,7 @@ export async function getClaim(code: string, personal: boolean) {
 }
 
 // ---------------------------------------------------------------- bridge detail
-export interface FedByLink {
+interface FedByLink {
   relation: string; note: string | null; claim_code: string; claim_statement: string;
 }
 
@@ -309,7 +309,7 @@ export async function getBridges(personal: boolean) {
 // ---------------------------------------------------------------- data editor (admin)
 // Raw, un-stripped rows for the /data editor. That page is admin-only (it redirects
 // guests), so the route guard is the personal-layer firewall here, not strip().
-export interface DomainRows {
+interface DomainRows {
   questions: Question[];
   stances: Stance[];
   claims: Claim[];
@@ -358,7 +358,7 @@ export async function getSources(): Promise<Source[]> {
   return q<Source>(`select * from sources order by created_at desc`);
 }
 
-export interface SourceEvidenceRow extends Evidence {
+interface SourceEvidenceRow extends Evidence {
   target_code: string | null;
   target_statement: string | null;
 }
@@ -381,10 +381,6 @@ export async function getSource(id: string) {
     [id]
   );
   return { source, evidence };
-}
-
-export async function getLastSnapshot(): Promise<{ taken_at: string } | null> {
-  return one<{ taken_at: string }>(`select taken_at from snapshots order by taken_at desc limit 1`);
 }
 
 // The "as of" date for the share view: the most recent moment the author touched the
@@ -510,11 +506,11 @@ export async function getCalibration(): Promise<CalibrationData> {
 }
 
 // ---------------------------------------------------------------- question state summaries
-export interface SummaryInputClaim {
+interface SummaryInputClaim {
   code: string; statement: string; domain: string | null; test: string | null;
   confidence_label: string | null; supports: number; contradicts: number; neutral: number;
 }
-export interface SummaryInputBridge extends SummaryInputClaim {
+interface SummaryInputBridge extends SummaryInputClaim {
   domain_from: string; domain_to: string;
 }
 export interface SummaryInput {
@@ -805,53 +801,12 @@ export async function getLensIndex(): Promise<{
   return { counts, questions };
 }
 
-export interface LensView {
-  claims: Claim[];
-  stances: (Stance & { q_slug: string; q_title: string })[];
-  bridges: BridgeClaim[];
-  questions: { slug: string; title: string }[];
-}
-
-// The map seen through one lens: every node tagged with it, grouped by type. Public
-// (the personal layer is stripped for guests, like every other public read).
-export async function getLens(lens: Lens, personal: boolean): Promise<LensView> {
-  const claims = await q<Claim>(
-    `select c.* from claims c
-       join node_lenses nl on nl.target_type = 'claim' and nl.target_id = c.id
-      where nl.lens = $1 and c.is_frame = false order by c.code`,
-    [lens]
-  );
-  const stances = await q<Stance & { q_slug: string; q_title: string }>(
-    `select s.*, qn.slug as q_slug, qn.title as q_title from stances s
-       join node_lenses nl on nl.target_type = 'stance' and nl.target_id = s.id
-       join questions qn on qn.id = s.question_id
-      where nl.lens = $1 order by qn.sort_order, s.sort_order`,
-    [lens]
-  );
-  const bridges = await q<BridgeClaim>(
-    `select b.* from bridge_claims b
-       join node_lenses nl on nl.target_type = 'bridge_claim' and nl.target_id = b.id
-      where nl.lens = $1 order by b.code`,
-    [lens]
-  );
-  const questions = await q<{ slug: string; title: string }>(
-    `select slug, title from questions where primary_lens = $1 order by sort_order`,
-    [lens]
-  );
-  return {
-    claims: claims.map((c) => stripClaim(c, personal)),
-    stances: stances.map((s) => strip(s, personal)),
-    bridges: bridges.map((b) => strip(b, personal)),
-    questions,
-  };
-}
-
 // ---- Signal Board ----------------------------------------------------------
 // The public feed IS the share view: guests/public see published signals only;
 // the author also sees drafts. Filters (since/lenses/significance) are accepted at
 // the data layer from the start so the future digest job can reuse this read.
 
-export interface SignalQuery {
+interface SignalQuery {
   admin?: boolean;             // the author sees drafts too
   publishedOnly?: boolean;     // force published-only regardless of admin (digests)
   since?: string;              // ISO timestamp — published_at >= since
@@ -903,7 +858,7 @@ export async function getSignals(opts: SignalQuery = {}): Promise<Signal[]> {
   );
 }
 
-export interface SignalPageQuery {
+interface SignalPageQuery {
   admin?: boolean;                                      // server-set; drafts visible only when true
   status?: 'published' | 'unpublished' | 'archived';   // honored only when admin
   lenses?: SignalLens[];
@@ -1152,7 +1107,7 @@ export interface ReportFunnelRow {
 }
 
 // One resolved touched code with its in-range signal count (input shape for the union).
-export interface ReportTouchCountRow {
+interface ReportTouchCountRow {
   code: string;
   type: 'claim' | 'bridge_claim';
   statement: string;
@@ -1557,7 +1512,7 @@ export async function getApprovedCandidates(runId: string): Promise<SignalCandid
 // (pending excluded) so a run can never bias against a domain it just discovered.
 // "approved" counts the original triage decision: candidates later flagged
 // 'unanalyzable:' were approved first, then flipped to rejected by the give-up path.
-export interface DomainStat {
+interface DomainStat {
   domain: string;
   seen: number;
   approved: number;
@@ -1955,7 +1910,7 @@ export function reconcileConceptGapScan(
 // Every stance the author can wire a new claim to, with its owning question's slug
 // (for routing a claim draft to /q/<slug>/claim/new) and sort order (for code
 // suggestion). The non-frame claim picker reuses getTargets(); bridges too.
-export interface StanceOption {
+interface StanceOption {
   id: string;
   code: string;
   title: string;
@@ -2405,7 +2360,7 @@ export async function getThesisReport(id: string): Promise<SavedThesisReport | n
 // surfaced on claim/bridge pages). Guest-safe: statements are already public via
 // the tracker and reports; the mapping itself carries nothing personal. Guests
 // link the latest public report; only admins link /theses/[id].
-export interface ThesisForTarget {
+interface ThesisForTarget {
   id: string;
   statement: string;
   latest_report_id: string | null;
@@ -2590,7 +2545,7 @@ export async function getTicketImage(id: string): Promise<{ content_type: string
 
 // One cheap round trip for the lobby's live tile stats. Counts only, guest-safe
 // by construction (nothing here touches the personal layer).
-export interface LobbyStats {
+interface LobbyStats {
   claims: number;
   signalsPublished: number;
   signalsWeek: number;

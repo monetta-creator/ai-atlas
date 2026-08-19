@@ -101,7 +101,7 @@ const DOSSIER_SCHEMA = {
   required: ['document_internal', 'external_claims', 'for_the_analyst'],
 };
 
-export interface DossierSource {
+interface DossierSource {
   title: string | null;
   author: string | null;
   outlet: string | null;
@@ -312,7 +312,7 @@ export async function extractSourceMetadata(text: string): Promise<SourceMetadat
 }
 
 // Change 2 — recommend which claims a source is good evidence for (advisory only).
-export interface RecommendSource {
+interface RecommendSource {
   text: string;
   title: string | null;
   author: string | null;

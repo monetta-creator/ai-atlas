@@ -18,10 +18,10 @@
 
 export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 
-export type DatasetCell = string | number | null;
+type DatasetCell = string | number | null;
 export type DatasetRow = Record<string, DatasetCell>;
 
-export type DatasetCategory =
+type DatasetCategory =
   | 'argument-graph'
   | 'signals'
   | 'evidence'
@@ -32,7 +32,7 @@ export type DatasetCategory =
 
 // `longtext` marks prose columns the explorer should truncate and the schema
 // table should flag; `enum` values are closed sets named in the column def.
-export type DatasetColumnType = 'text' | 'number' | 'date' | 'enum' | 'longtext';
+type DatasetColumnType = 'text' | 'number' | 'date' | 'enum' | 'longtext';
 
 export interface DatasetColumn {
   key: string;            // stable machine name; the CSV header (snake_case)

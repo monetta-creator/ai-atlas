@@ -16,7 +16,7 @@ export interface SignalAnalysisTouch {
   direction: Direction | null;
 }
 
-export interface SignalAnalysisInput {
+interface SignalAnalysisInput {
   title: string;
   summary: string | null;
   source_title: string | null;
@@ -24,7 +24,7 @@ export interface SignalAnalysisInput {
   touches: SignalAnalysisTouch[];
 }
 
-export interface SignalAnalysis {
+interface SignalAnalysis {
   brief: SignalBrief;
   counterpoint: SignalCounterpoint;
 }

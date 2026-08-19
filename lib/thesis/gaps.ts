@@ -16,12 +16,12 @@ import { GAP_DOMAINS, GAP_RELATIONS } from '@/lib/gaps-core';
 // matched-signal citations strengthen a recommendation but are not required
 // (the validator runs with requireRef: false).
 
-export interface ThesisGapThesis {
+interface ThesisGapThesis {
   statement: string;
   mappedClaims: { code: string; kind: 'claim' | 'bridge'; statement: string; test: string | null }[];
 }
 
-export interface ThesisGapSignal {
+interface ThesisGapSignal {
   label: string;      // the pack's S-tag, so citations resolve to real signal ids
   title: string;
   summary: string;

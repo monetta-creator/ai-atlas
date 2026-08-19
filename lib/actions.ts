@@ -130,34 +130,6 @@ export async function createSourceAction(formData: FormData) {
   redirect(`/source/${id}`);
 }
 
-export async function addEvidenceAction(formData: FormData) {
-  await requireAdmin();
-  const sourceId = str(formData, 'source_id');
-  const target = str(formData, 'target'); // "claim:<id>" | "bridge_claim:<id>"
-  const sep = target.indexOf(':');
-  const target_type = target.slice(0, sep);
-  const target_id = target.slice(sep + 1);
-  if (target_type !== 'claim' && target_type !== 'bridge_claim') throw new Error('Invalid target.');
-  if (!target_id) throw new Error('No target selected.');
-
-  const direction = str(formData, 'direction');
-  const weight = str(formData, 'weight');
-  if (!DIRECTIONS.includes(direction as Direction)) throw new Error('Invalid direction.');
-  if (!WEIGHTS.includes(weight as Weight)) throw new Error('Invalid weight.');
-
-  await m.addEvidence({
-    source_id: sourceId,
-    target_type,
-    target_id,
-    direction: direction as Direction,
-    weight: weight as Weight,
-    excerpt: str(formData, 'excerpt'),
-    note: str(formData, 'note'),
-  });
-  revalidatePath('/', 'layout');
-  redirect(`/source/${sourceId}`);
-}
-
 export async function moveConfidenceAction(formData: FormData) {
   await requireAdmin();
   const reason = str(formData, 'reason');
@@ -214,18 +186,6 @@ export async function saveContentAction(
     return { ok: false, error: `Text must be 1 to ${CONTENT_MAX_VALUE_LEN} characters.` };
   }
   await m.saveContentOverride(key, value);
-  revalidatePath('/', 'layout');
-  return { ok: true };
-}
-
-export async function resetContentAction(
-  _prev: SaveContentState,
-  formData: FormData
-): Promise<SaveContentState> {
-  await requireAdmin();
-  const key = str(formData, 'key');
-  if (!isValidContentKey(key)) return { ok: false, error: 'Invalid content key.' };
-  await m.resetContentOverride(key);
   revalidatePath('/', 'layout');
   return { ok: true };
 }

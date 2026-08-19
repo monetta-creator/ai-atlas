@@ -27,7 +27,7 @@ export interface GapMapContext {
   bridges: { code: string; statement: string; domain_from: string; domain_to: string }[];
 }
 
-export interface GapGrounding {
+interface GapGrounding {
   reports: { label: string; title: string; text: string }[];
   signals: { label: string; title: string; summary: string; touches: string[] }[];
 }

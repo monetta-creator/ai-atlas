@@ -14,7 +14,7 @@ import { q } from '../db';
 // a digest of past human decisions (revealed taste). Nothing here writes
 // review_status: the human accepts, per row or in bulk.
 
-export const AGENT_CHUNK = 12;
+const AGENT_CHUNK = 12;
 const ABSTRACT_CLIP = 1000;
 
 const AGENT_SYSTEM_HEAD = [
@@ -84,7 +84,7 @@ async function buildSystem(): Promise<string> {
   return parts.join('\n');
 }
 
-export interface AgentChunkResult {
+interface AgentChunkResult {
   processed: number;
   tracked: number;
   noted: number;

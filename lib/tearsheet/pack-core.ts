@@ -20,10 +20,10 @@ import type {
 
 export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 
-export const CLAIM_EVIDENCE_CAP = 40;
-export const CLAIM_SIGNAL_CAP = 30;
-export const LENS_SIGNAL_CAP = 60;
-export const ATLAS_SIGNAL_CAP = 12;
+const CLAIM_EVIDENCE_CAP = 40;
+const CLAIM_SIGNAL_CAP = 30;
+const LENS_SIGNAL_CAP = 60;
+const ATLAS_SIGNAL_CAP = 12;
 
 const SIG_COLS = `
   s.id, s.title, s.summary, s.significance::text as significance,

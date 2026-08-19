@@ -1,9 +1,9 @@
 // The AI economy supply chain, as a static layered graph.
 //
-// This is the structural source of truth for the /supply-chain surface: the layers,
-// the nodes (curated from docs/ai-supply-chain-map.md), and the cross-layer dependency
-// edges. It is intentionally dependency-free (no DB, no 'use server') so it can be
-// imported by both the server read layer and, indirectly, the client renderer.
+// This is the structural source of truth for the supply-chain data (today consumed by
+// /traceroute): the layers, the curated nodes, and the cross-layer dependency edges.
+// It is intentionally dependency-free (no DB, no 'use server') so it can be imported
+// by both the server read layer and, indirectly, the client renderer.
 //
 // The HYBRID model: this file owns the immutable structure; the database owns only the
 // mutable overlay (per-node risk_level + admin_note) and node->signal links, keyed by
@@ -19,7 +19,7 @@ export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 // The vertical spine (layers 0-15) reads upstream to downstream. The cross-cutting
 // band sits apart because those concerns touch every tier (representing that as edges
 // would be a hairball), so they carry no inter-tier flow.
-export type Band = 'spine' | 'crosscutting';
+type Band = 'spine' | 'crosscutting';
 
 export interface ScLayer {
   index: number; // matches ScNode.layer
@@ -27,7 +27,7 @@ export interface ScLayer {
   title: string; // shown as the tier band label, e.g. "Memory"
 }
 
-export interface ScNode {
+interface ScNode {
   slug: string; // stable key, kebab-case, globally unique (also the DB overlay/link key)
   layer: number; // 0-15 for the spine; 16 for the cross-cutting band
   band: Band;
@@ -508,12 +508,6 @@ export const RISK_DOT_VAR: Record<RiskLevel, string> = {
   high: 'var(--heat-3)',
   critical: 'var(--heat-4)',
 };
-
-// The Phase-1 view: effective risk = riskDefault, no signals yet. The DB read layer
-// (lib/supply-chain/data.ts) returns the same shape with the overlay and signals folded in.
-export function defaultNodeViews(): ScNodeView[] {
-  return SC_NODES.map((n) => ({ ...n, risk: n.riskDefault, signalCount: 0, hasRecentSignal: false }));
-}
 
 // Fail fast in development if the static graph is malformed: duplicate slugs or an edge
 // pointing at a node that does not exist would silently drop boxes or lines. This never

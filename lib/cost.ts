@@ -11,7 +11,7 @@ import type { RateCard } from './types';
 
 // The minimal shape we read off an Anthropic message's `usage`. Cache fields and the
 // server-tool block are optional/nullable depending on the call.
-export interface ApiUsage {
+interface ApiUsage {
   input_tokens?: number | null;
   output_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
@@ -27,7 +27,7 @@ const num = (v: number | null | undefined): number => (typeof v === 'number' && 
 // The active card for a model is the one with the latest effective_date that is on-or-before
 // `asOf` (default: today). A card with a FUTURE effective date is not active yet. Returns
 // null when no card covers the model (recordApiCall then logs the call with cost 0).
-export async function getActiveRateCard(model: string, asOf?: string): Promise<RateCard | null> {
+async function getActiveRateCard(model: string, asOf?: string): Promise<RateCard | null> {
   const cutoff = asOf ? '$2::date' : 'current_date';
   return one<RateCard>(
     `select id, model, effective_date::text as effective_date,
@@ -42,7 +42,7 @@ export async function getActiveRateCard(model: string, asOf?: string): Promise<R
 }
 
 // Pure: cost in USD for one call. Rates are per MILLION tokens.
-export function computeCostUsd(
+function computeCostUsd(
   t: { input: number; output: number; cacheWrite: number; cacheRead: number },
   rate: RateCard
 ): number {

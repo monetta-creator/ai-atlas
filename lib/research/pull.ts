@@ -9,9 +9,9 @@ import * as m from '../mutations';
 
 // Hard ceiling on how deep a single run pages (docs/research-section.md: ~3,000
 // papers ≈ a full 14-day window across the three categories).
-export const MAX_PULL = 3000;
+const MAX_PULL = 3000;
 
-export interface PullPageResult {
+interface PullPageResult {
   scanned: number;    // entries examined on this page
   inserted: number;   // new papers added to the library
   done: boolean;      // the window is exhausted (or the ceiling hit)

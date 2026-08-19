@@ -98,10 +98,3 @@ export const PHASE_COPY: Record<PhaseId, (c: CaptionCtx) => string> = {
   done: (c) =>
     `${c.run.outputs.length} tokens, ${c.run.outputs.length} passes through all ${nLayers} blocks. That loop is the entire trick.`,
 };
-
-/** The short label shown on the cycle rail. */
-export function cycleLabel(cycle: number, run: ScriptedRun): string {
-  if (cycle < 0) return 'Prompt';
-  const t = run.outputs[cycle]?.token;
-  return t ? `Token ${cycle + 1} · ${t.text.trim() || t.display}` : `Token ${cycle + 1}`;
-}

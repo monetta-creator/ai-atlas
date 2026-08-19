@@ -18,7 +18,7 @@ const THREAD_RELATIONS: ThreadRelation[] = ['supports', 'complicates', 'contradi
 
 // ---- hydrate ----------------------------------------------------------------
 
-export interface HydrateResult {
+interface HydrateResult {
   skipped?: boolean;    // text already cached
   via?: string;         // 'html' | 'direct' | 'jina' | 'source'
 }
@@ -130,7 +130,7 @@ interface RawExtraction extends PaperExtraction {
   concept_slugs: string[];
 }
 
-export interface AnalyzePaperResult {
+interface AnalyzePaperResult {
   extraction: PaperExtraction;
   claim_touches: string[];
   suggested_concepts: string[];

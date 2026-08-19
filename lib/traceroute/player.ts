@@ -117,11 +117,6 @@ export function overallProgress(s: PlayerState, tl: Timeline): number {
   return clampIndex(s.index, tl) / (tl.steps.length - 1);
 }
 
-export function cycleOf(s: PlayerState, tl: Timeline): number | null {
-  const step = currentStep(s, tl);
-  return step ? step.cycle : null;
-}
-
 /**
  * Everything the renderer needs for this instant, derived and never stored.
  * The single contract between the player and any view, 3D or DOM.

@@ -36,7 +36,7 @@ export interface ParsedCode {
   href: string | null;
 }
 
-export interface CitationSpan {
+interface CitationSpan {
   start: number;
   end: number;
   raw: string; // the full matched "[...]"

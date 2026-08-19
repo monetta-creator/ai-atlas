@@ -30,14 +30,14 @@ export interface Candidate {
 }
 
 /** Sparse by construction: only the links worth drawing, never a full N x N matrix. */
-export interface AttentionSlice {
+interface AttentionSlice {
   layer: number;
   head: number;
   /** One weight per prior position, aligned to the context so far. Sums to about 1. */
   weights: number[];
 }
 
-export interface OutputStep {
+interface OutputStep {
   index: number;
   /** The token actually emitted this cycle. */
   token: TokenRec;
@@ -63,11 +63,8 @@ export interface ScriptedRun {
   sourceNote: string;
 }
 
-/** The seam. Static files are one implementation of this. */
-export type RunSource = (promptOrId: string) => Promise<ScriptedRun>;
-
 /** Whitespace made visible, so a leading space is legible in the token strip. */
-export function displayOf(text: string): string {
+function displayOf(text: string): string {
   return text.replace(/ /g, '·').replace(/\n/g, '↵');
 }
 
@@ -79,10 +76,6 @@ export function makeToken(id: number, text: string): TokenRec {
 export function contextAt(run: ScriptedRun, cycle: number): TokenRec[] {
   if (cycle < 0) return run.promptTokens;
   return [...run.promptTokens, ...run.outputs.slice(0, cycle).map((o) => o.token)];
-}
-
-export function fullText(run: ScriptedRun): string {
-  return run.prompt + run.outputs.map((o) => o.token.text).join('');
 }
 
 export const PROVENANCE_COPY: Record<Provenance, string> = {

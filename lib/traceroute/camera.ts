@@ -38,14 +38,8 @@ export function lerpPose(a: Pose, b: Pose, t: number): Pose {
   };
 }
 
-/** Matches --ease, the design system's decisive curve, used for view changes. */
-export function easeDecisive(t: number): number {
-  const k = Math.max(0, Math.min(1, t));
-  return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
-}
-
 /** Matches --ease-soft, used for settling and recovery. */
-export function easeSoft(t: number): number {
+function easeSoft(t: number): number {
   const k = Math.max(0, Math.min(1, t));
   return 1 - Math.pow(1 - k, 3);
 }

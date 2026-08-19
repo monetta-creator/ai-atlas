@@ -15,7 +15,7 @@ export const MAX_SEARCH_USES = 2;
 // year silently went stale every January, and a bare year made queries EVERGREEN: web
 // search matched the SEO listicles titled with those exact phrases instead of the week's
 // news (the July 2026 Kimi K3 miss). {month} pulls results toward current coverage.
-export const LENS_QUERIES: Record<SignalLens, string[]> = {
+const LENS_QUERIES: Record<SignalLens, string[]> = {
   market: [
     'AI hyperscaler capex guidance analyst estimate revision {year}',
     'AI infrastructure power cooling networking memory data center earnings {year}',
@@ -112,7 +112,7 @@ export const COVERAGE_QUERIES: string[] = [
 // five rejected community-blog posts, which would have hidden the platform where every
 // open-weight release actually lands. Curated LOW_QUALITY_DOMAINS is human judgment and
 // is not filtered through this.
-export const NEVER_AUTO_BLOCK_DOMAINS: string[] = [
+const NEVER_AUTO_BLOCK_DOMAINS: string[] = [
   'arxiv.org', 'huggingface.co', 'github.com', 'reuters.com', 'apnews.com',
   'bloomberg.com', 'ft.com', 'wsj.com', 'nytimes.com', 'economist.com',
   'oecd.org', 'imf.org', 'worldbank.org', 'bis.org', 'nber.org', 'ssrn.com',
@@ -137,7 +137,7 @@ export const LOW_QUALITY_DOMAINS: string[] = [
 ];
 
 // Split a lens's queries into <=QUERIES_PER_BATCH chunks (one discovery invocation each).
-export function batchQueries(queries: string[], size = QUERIES_PER_BATCH): string[][] {
+function batchQueries(queries: string[], size = QUERIES_PER_BATCH): string[][] {
   const out: string[][] = [];
   for (let i = 0; i < queries.length; i += size) out.push(queries.slice(i, i + size));
   return out;

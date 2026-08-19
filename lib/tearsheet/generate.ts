@@ -52,7 +52,7 @@ const VOICE =
 
 // ---------------------------------------------------------------- allowlists
 
-export function allowlistForSheet(pack: SheetPack): CitationAllowlist {
+function allowlistForSheet(pack: SheetPack): CitationAllowlist {
   const hrefs = new Set<string>();
   const tagByHref = new Map<string, string>();
   for (const s of pack.signals) {
@@ -240,7 +240,7 @@ function fmtAtlasPack(pack: AtlasSheetPack): string {
   return lines.join('\n');
 }
 
-export function fmtSheetPack(pack: SheetPack): string {
+function fmtSheetPack(pack: SheetPack): string {
   if (pack.kind === 'lens') return fmtLensPack(pack);
   if (pack.kind === 'atlas') return fmtAtlasPack(pack);
   return fmtClaimPack(pack);

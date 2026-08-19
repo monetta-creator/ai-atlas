@@ -3,8 +3,8 @@
 // action at a time), which also satisfies arXiv's ~1 request / 3s politeness rule.
 // No AI cost anywhere in this file: listing a day's submissions is plain XML.
 
-export const ARXIV_CATEGORIES = ['cs.AI', 'cs.LG', 'cs.CL'];
-export const ARXIV_PAGE_SIZE = 100;
+const ARXIV_CATEGORIES = ['cs.AI', 'cs.LG', 'cs.CL'];
+const ARXIV_PAGE_SIZE = 100;
 
 export interface ArxivEntry {
   arxiv_id: string;        // versionless, e.g. '2607.07708'
@@ -20,7 +20,7 @@ export interface ArxivEntry {
   updated: string;         // YYYY-MM-DD (latest version date)
 }
 
-export interface ArxivPage {
+interface ArxivPage {
   entries: ArxivEntry[];
   totalResults: number;
 }
@@ -36,7 +36,7 @@ export function parseArxivRef(input: string): string | null {
   return m ? m[1] : null;
 }
 
-export function arxivAbsUrl(arxivId: string): string {
+function arxivAbsUrl(arxivId: string): string {
   return `https://arxiv.org/abs/${arxivId}`;
 }
 

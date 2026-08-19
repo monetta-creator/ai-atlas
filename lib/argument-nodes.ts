@@ -8,7 +8,7 @@ import type { Relation } from './types';
 
 const REL_ENUM: Relation[] = ['supports', 'contradicts', 'depends_on']; // organizes is frame-only
 
-export interface ClaimEdgeRec {
+interface ClaimEdgeRec {
   target_type: 'stance' | 'bridge_claim';
   code: string;
   relation: Relation;
@@ -77,7 +77,7 @@ export async function recommendClaimEdges(
   });
 }
 
-export interface BridgeFeederRec {
+interface BridgeFeederRec {
   code: string;
   relation: Relation;
   reason: string;

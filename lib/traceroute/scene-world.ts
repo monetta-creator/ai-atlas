@@ -37,7 +37,7 @@ export interface WorldScene {
   stop: StopId;
 }
 
-export interface WorldPaint {
+interface WorldPaint {
   hover: PropId | null;
   /** 0 assembled, 1 fully exploded. */
   explode: number;

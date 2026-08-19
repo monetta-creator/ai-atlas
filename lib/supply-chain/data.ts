@@ -10,7 +10,7 @@ import { SC_LAYERS, SC_EDGES, SC_NODES, SC_NODE_BY_SLUG } from '@/lib/supply-cha
 import type { RiskLevel, ScEdge, ScLayer, ScNodeView } from '@/lib/supply-chain/map';
 import type { Signal } from '@/lib/types';
 
-export interface SupplyChainData {
+interface SupplyChainData {
   layers: ScLayer[];
   nodes: ScNodeView[];
   edges: ScEdge[];

@@ -60,7 +60,7 @@ function buildSchema(codes: string[]) {
   };
 }
 
-export interface AnalysisResult {
+interface AnalysisResult {
   signalId: string;
   analysis: AnalyzedSignal;
 }

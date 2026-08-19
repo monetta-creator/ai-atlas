@@ -20,7 +20,7 @@ import {
 } from './phases';
 import { contextAt, type Candidate, type ScriptedRun, type TokenRec } from './run-types';
 
-export interface StepPanel {
+interface StepPanel {
   kind: 'topk' | 'attention' | 'dims' | 'tokens';
   /** topk */
   candidates?: Candidate[];
@@ -64,7 +64,7 @@ export interface Timeline {
   condensed: boolean;
 }
 
-export interface CompileOpts {
+interface CompileOpts {
   /**
    * Cycles at or after this index are condensed. Default 1, so the first generated token
    * gets the full twenty-beat pass and everything after it is the short form. Pass
@@ -73,7 +73,7 @@ export interface CompileOpts {
   condenseAfterCycle?: number;
 }
 
-const { dModel, dFF, vocab, nLayers, nHeads, dHead } = MODEL_SPEC.dims;
+const { dModel, dFF, vocab, nHeads, dHead } = MODEL_SPEC.dims;
 
 function dimsFor(phase: PhaseId, contextLen: number): { label: string; value: string }[] {
   switch (phase) {
@@ -245,6 +245,3 @@ export function compileRun(run: ScriptedRun, opts: CompileOpts = {}): Timeline {
     condensed: condenseAfter <= run.outputs.length,
   };
 }
-
-/** Total number of layers the stack sweep stands in for. Used by the caption and the rail. */
-export const REPEATED_BLOCKS = nLayers - 1;

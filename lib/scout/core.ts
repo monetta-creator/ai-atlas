@@ -32,7 +32,7 @@ export function parseFoundedHint(hint: string): number | null {
 
 // Scout's own batch size: 2 web searches per invocation (~30s), the same
 // headroom math as the pipeline's QUERIES_PER_BATCH without importing it.
-export const SCOUT_QUERIES_PER_BATCH = 2;
+const SCOUT_QUERIES_PER_BATCH = 2;
 
 export function scoutBatches(queries: string[], size = SCOUT_QUERIES_PER_BATCH): string[][] {
   const out: string[][] = [];
@@ -112,7 +112,7 @@ export function mergeDossier(
 
 // ---- Event dedupe (the research tools log timeline events) -------------------
 
-export function normalizeEventTitle(title: string): string {
+function normalizeEventTitle(title: string): string {
   return String(title ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 

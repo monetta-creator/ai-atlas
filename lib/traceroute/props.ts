@@ -19,7 +19,7 @@
 import type { PropDetail } from './geometry';
 import type { Anchor, MaterialKey, PropId, StopId } from './types';
 
-export type PropKind = 'box' | 'slab' | 'disc' | 'cylinder' | 'extrude' | 'grid';
+type PropKind = 'box' | 'slab' | 'disc' | 'cylinder' | 'extrude' | 'grid';
 
 export interface Prop {
   id: PropId;
@@ -354,18 +354,6 @@ export const PROP_BY_ID: ReadonlyMap<PropId, Prop> = new Map(PROPS.map((p) => [p
 export const PROPS_BY_STOP: ReadonlyMap<StopId, Prop[]> = (() => {
   const m = new Map<StopId, Prop[]>();
   for (const p of PROPS) {
-    const list = m.get(p.stop);
-    if (list) list.push(p);
-    else m.set(p.stop, [p]);
-  }
-  return m;
-})();
-
-/** Props on the power path, for the energy overlay. */
-export const ENERGY_PROPS: ReadonlyMap<StopId, Prop[]> = (() => {
-  const m = new Map<StopId, Prop[]>();
-  for (const p of PROPS) {
-    if (!p.energy) continue;
     const list = m.get(p.stop);
     if (list) list.push(p);
     else m.set(p.stop, [p]);

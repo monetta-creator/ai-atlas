@@ -24,12 +24,12 @@ export function isValidContentValue(value: string): boolean {
 
 // One query per request, memoized so the About layout, the page, and Prose can all
 // resolve overrides without an N+1 of identical lookups.
-export const getOverrides = cache(async (): Promise<Map<string, string>> => {
+const getOverrides = cache(async (): Promise<Map<string, string>> => {
   const rows = await q<{ key: string; value: string }>(`select key, value from content_blocks`);
   return new Map(rows.map((r) => [r.key, r.value]));
 });
 
-export type EditContext = {
+type EditContext = {
   admin: boolean;
   editing: boolean;
   txt: (key: string, fallback: string) => string;

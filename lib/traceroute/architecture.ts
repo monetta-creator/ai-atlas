@@ -74,7 +74,7 @@ export type ArchPartId = (typeof ARCH_PART_IDS)[number];
 
 export type ArchRole = 'io' | 'stream' | 'weights' | 'activation' | 'cache';
 
-export interface ArchPart {
+interface ArchPart {
   id: ArchPartId;
   label: string;
   /** One or two sentences. No em dashes. */
@@ -251,10 +251,6 @@ export const BLOCK_LATTICE = {
   to: 12.2,
   count: MODEL_SPEC.dims.nLayers - 1,
 } as const;
-
-export function isArchPartId(v: string): v is ArchPartId {
-  return (ARCH_PART_IDS as readonly string[]).includes(v);
-}
 
 if (process.env.NODE_ENV !== 'production') {
   const seen = new Set<string>();

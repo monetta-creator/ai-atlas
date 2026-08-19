@@ -5,7 +5,7 @@ import { getSignal, getSource, getTestsByCodes } from './data';
 // far cheaper than the whole-Atlas /ask retrieval. The route streams Haiku over this.
 // Admin-only (the route enforces it), so we read with personal = true.
 
-export interface SignalAskContext {
+interface SignalAskContext {
   system: string;
   user: string;
   found: boolean; // false when the id does not resolve to a signal
