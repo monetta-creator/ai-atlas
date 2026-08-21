@@ -1,5 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { ArticleHit, AtlasSearchHit, PeekKind, PeekPayload } from './search';
+import type { AskCostReport, AskWebSource } from './history';
 
 // Pure helpers for the deep-research loop behind /api/ask/deep: the signal-tag
 // minter, the tool definitions and their input validation, tool-result
@@ -297,6 +298,8 @@ export const ndDelta = (text: string): string => ndLine({ type: 'delta', text })
 export const ndError = (text: string): string => ndLine({ type: 'error', text });
 export const ndDone = (signals: Record<string, string>): string => ndLine({ type: 'done', signals });
 export const ndVerify = (report: VerifyReport): string => ndLine({ type: 'verify', report });
+export const ndCost = (report: AskCostReport): string => ndLine({ type: 'cost', report });
+export const ndWebSources = (sources: AskWebSource[]): string => ndLine({ type: 'web_sources', sources });
 
 export const STATUS_START = 'Reading the question and the map';
 export const STATUS_WRITING = 'Writing the answer';
@@ -323,6 +326,13 @@ export interface VerifyReport {
   quotesMissing: string[];
   numbersChecked: number;
   numbersMissing: string[];
+  // Sentences that declare an overall verdict without the "One reading:" label
+  // (stance-taking made visible: the reader judges, the check only points).
+  verdictLanguage?: string[];
+  // Web search ran this turn: missing quotes/figures may live in web content
+  // the deterministic layer cannot see (search results arrive encrypted), so
+  // the UI softens those lines instead of flagging them.
+  webSearched?: boolean;
 }
 
 const normText = (s: string): string =>
@@ -407,19 +417,27 @@ export const VERIFY_TOOL: Anthropic.Tool = {
           required: ['excerpt', 'issue'],
         },
       },
+      verdict_language: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'Sentences in the answer that declare an overall verdict, winner, or lean (for example "the evidence leans toward") WITHOUT labeling themselves "One reading:". Quote each by its first words, at most 120 characters. Empty if the answer stays neutral or labels every lean.',
+      },
     },
     required: ['checked', 'flags'],
   },
 };
 
-export const VERIFY_INSTRUCTION = `Now act as the verifier. Recheck the ANSWER against the records provided in this conversation, statement by statement. For every statement that cites a record, judge whether the cited record actually supports it as written: the figures, the direction of the finding, and who or what it is attributed to. Faithful paraphrase is fine. Unsupported content, a wrong figure, a misattributed citation, or a claim the record does not make are flags. Quoted text must appear in the records. Report through submit_verification: how many citation-bearing statements you checked, and one flag per problem with the statement's first words and a one-sentence issue. If everything is supported, submit an empty flags list. Do not rewrite the answer.`;
+export const VERIFY_INSTRUCTION = `Now act as the verifier. Recheck the ANSWER against the records provided in this conversation, statement by statement. For every statement that cites a record, judge whether the cited record actually supports it as written: the figures, the direction of the finding, and who or what it is attributed to. Faithful paraphrase is fine. Unsupported content, a wrong figure, a misattributed citation, or a claim the record does not make are flags. Quoted text must appear in the records. A statement attributed in prose to a web outlet is checked against the web results in this conversation, not the Atlas records; do not flag it merely for being absent from the records. Separately, list in verdict_language any sentence that declares an overall verdict or lean (for example "the evidence leans toward") without labeling itself "One reading:". Report through submit_verification: how many citation-bearing statements you checked, one flag per problem with the statement's first words and a one-sentence issue, and the verdict sentences if any. If everything is supported, submit an empty flags list. Do not rewrite the answer.`;
 
 // System prompt for the standalone verify endpoint (deep mode reuses its own
 // conversation and only appends VERIFY_INSTRUCTION).
 export const VERIFY_SYSTEM = `You are the verifier for "Ask the Atlas". You are given Atlas records, a question, and an answer that cites those records. Your only job is to judge whether the answer is faithful to the records: statements must match what the cited record says (figures, direction, attribution), and quoted text must appear in the records. You never rewrite the answer, never add information of your own, and never use an em dash. Report only through the submit_verification tool.`;
 
 // The verifier's own output is untrusted model output: clamp it.
-export function parseVerifyOutput(v: unknown): { checked: number; flags: VerifyReport['flags'] } | null {
+export function parseVerifyOutput(
+  v: unknown
+): { checked: number; flags: VerifyReport['flags']; verdictLanguage: string[] } | null {
   if (!v || typeof v !== 'object') return null;
   const o = v as Record<string, unknown>;
   const n = Math.floor(Number(o.checked));
@@ -434,16 +452,33 @@ export function parseVerifyOutput(v: unknown): { checked: number; flags: VerifyR
       if (excerpt && issue) flags.push({ excerpt, issue });
     }
   }
-  return { checked, flags };
+  const verdictLanguage: string[] = [];
+  if (Array.isArray(o.verdict_language)) {
+    for (const raw of o.verdict_language.slice(0, 4)) {
+      if (typeof raw !== 'string') continue;
+      const t = raw.trim().slice(0, 140);
+      if (t) verdictLanguage.push(t);
+    }
+  }
+  return { checked, flags, verdictLanguage };
 }
 
 // ---------------------------------------------------------------- system
-// Appended to ASK_SYSTEM by the deep route. Never an em dash in any of this.
-export const DEEP_ADDENDUM = `You are in deep research mode. Before answering, investigate with your tools:
+// Appended to the system prompt by the deep route (which since the 2026-08-21
+// rework is the DEFAULT admin chat, not a toggle). Never an em dash in any of
+// this.
+export const DEEP_ADDENDUM = `You research every question before answering. Your tools:
 - search_atlas finds records by topic across claims, bridges, stances, concepts, and signals.
 - fetch_record pulls one record in full: evidence rows, falsifying tests, touching signals, the article source behind a signal.
 - search_articles searches the retained full text of the articles behind published signals, for primary-source language.
 
-Work in rounds: search broadly first, then fetch the records that look load-bearing, then check article text when the exact wording matters. Results are capped, so make each call count; a handful of well-chosen calls beats many shallow ones. When you have enough, stop calling tools and write the final answer following every rule above. Cite only IDs that appear in the map or in your tool results, exactly as labeled there. Signal tags like S3 stay valid across the whole conversation.
+Work in rounds: search broadly first, then fetch the records that look load-bearing, then check article text when the exact wording matters. Results are capped, so make each call count; a handful of well-chosen calls beats many shallow ones. When you have enough, stop calling tools and write the final answer following every rule above. Cite only IDs that appear in the map or in your tool results, exactly as labeled there. Signal tags like S3 stay valid across the whole conversation. When a claim's story runs through tracked developments, cite the touching signals by tag alongside the claim, not just the claim.
 
-Write the final answer as plain prose paragraphs with inline citations. Never use markdown headings, bold, tables, or bullet markers: the answer is rendered as plain text and markdown shows up as raw symbols.`;
+The reader asks one question and expects the full picture in one answer. Write it comprehensive, pinpoint, and self-contained: never ask a follow-up question, never defer material to a next turn, and never pad. If you state which way the records lean, open that sentence with "One reading:" and name the strongest record on the other side in the same paragraph; never present a lean as the Atlas's verdict.
+
+Write the final answer as prose paragraphs with inline citations. Structure a long answer with short bold section headers, each written as **Header** on its own line. Use no other markdown: no # headings, no bullet markers, no tables, no links.`;
+
+// Appended after DEEP_ADDENDUM when the composer's web toggle is on (the
+// system half also swaps in via askSystem(true), so no records-only rule
+// contradicts this).
+export const DEEP_WEB_ADDENDUM = `The web_search tool reaches the live web. The Atlas tools stay primary: research the records first, then search the web when a current development or an outside figure would sharpen the answer, or when the records leave a gap. Attribute web material in prose by naming the outlet or site; never put a web source in brackets, and never let a web result overwrite what a record says. Do not add a source list: the application renders your web sources automatically. Never narrate your process ("let me search", "now I have a picture"); after searching, write the answer directly.`;

@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { Fragment, useState } from 'react';
 import type { SignalMap, ValidIdsPlain } from '@/lib/ask/verify';
+import { extractCostReport, type AskCostReport } from '@/lib/ask/history';
 import { renderAnswer } from '@/components/ask/answer';
+import AskCost from '@/components/ask/AskCost';
 import AskDatasetCard, { type DatasetSuggestionMeta } from '@/components/datasets/AskDatasetCard';
 
 // The single-shot Ask widget (kept for the per-signal ask on /signals/[id];
@@ -36,6 +38,7 @@ export default function AskAtlas({
   const [answer, setAnswer] = useState('');
   const [signalMap, setSignalMap] = useState<SignalMap>({});
   const [status, setStatus] = useState<Status>('idle');
+  const [cost, setCost] = useState<AskCostReport | null>(null);
 
   const streaming = status === 'streaming';
 
@@ -44,6 +47,7 @@ export default function AskAtlas({
     if (!qq || streaming) return;
     setAnswer('');
     setSignalMap({});
+    setCost(null);
     setStatus('streaming');
     try {
       const res = await fetch(endpoint, {
@@ -68,8 +72,13 @@ export default function AskAtlas({
         const { done, value } = await reader.read();
         if (done) break;
         acc += dec.decode(value, { stream: true });
-        setAnswer(acc);
+        // The per-turn cost line rides a trailing sentinel; keep it out of
+        // the visible answer.
+        setAnswer(extractCostReport(acc).text);
       }
+      const parsed = extractCostReport(acc);
+      setAnswer(parsed.text);
+      setCost(parsed.cost);
       setStatus('done');
     } catch {
       setAnswer('Something went wrong. Please try again.');
@@ -136,6 +145,8 @@ export default function AskAtlas({
           {streaming && <span aria-hidden="true" style={{ color: 'var(--faint-ink)' }}>▍</span>}
         </div>
       )}
+
+      {status === 'done' && cost && <AskCost cost={cost} />}
 
       {status === 'done' && suggested.length > 0 && datasets && (
         <AskDatasetCard slugs={suggested} datasets={datasets} />

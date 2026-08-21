@@ -250,13 +250,35 @@ check('parseVerifyOutput: clamps and drops junk', () => {
   assert.equal(p.flags[0].excerpt.length, 140);
   assert.equal(p.flags[1].issue.length, 280);
   assert.equal(parseVerifyOutput(null), null);
-  assert.deepEqual(parseVerifyOutput({}), { checked: 0, flags: [] });
+  assert.deepEqual(parseVerifyOutput({}), { checked: 0, flags: [], verdictLanguage: [] });
 });
 check('ndVerify: parseable line with report', () => {
   const line = ndVerify({ checked: 3, flags: [], quotesChecked: 1, quotesMissing: [], numbersChecked: 2, numbersMissing: [] });
   const ev = JSON.parse(line);
   assert.equal(ev.type, 'verify');
   assert.equal(ev.report.checked, 3);
+});
+check('ndCost + ndWebSources: parseable lines', () => {
+  const cost = JSON.parse(deep.ndCost({
+    cost_usd: 0.02, input_tokens: 40000, output_tokens: 1800,
+    cache_read_tokens: 30000, searches: 2, rounds: 5, model: 'claude-haiku-4-5',
+  }));
+  assert.equal(cost.type, 'cost');
+  assert.equal(cost.report.searches, 2);
+  const ws = JSON.parse(deep.ndWebSources([{ url: 'https://a.com/x', title: 'A' }]));
+  assert.equal(ws.type, 'web_sources');
+  assert.equal(ws.sources[0].url, 'https://a.com/x');
+});
+check('parseVerifyOutput: verdict_language clamped, absent -> empty', () => {
+  const out = parseVerifyOutput({
+    checked: 4, flags: [],
+    verdict_language: ['the evidence leans toward', 42, 'x'.repeat(400), 'a', 'b', 'c'],
+  });
+  // The raw array is sliced to 4 entries first, then non-strings drop.
+  assert.equal(out.verdictLanguage.length, 3);
+  assert.equal(out.verdictLanguage[0], 'the evidence leans toward');
+  assert.equal(out.verdictLanguage[1].length, 140);
+  assert.deepEqual(parseVerifyOutput({ checked: 1, flags: [] }).verdictLanguage, []);
 });
 
 // ---- guards + house style ----------------------------------------------------
@@ -268,7 +290,7 @@ check('guards: the plan numbers', () => {
 });
 check('house style: no em dash in any model- or user-facing string', () => {
   const strings = [
-    DEEP_ADDENDUM, STATUS_START, STATUS_WRITING, STATUS_VERIFYING,
+    DEEP_ADDENDUM, deep.DEEP_WEB_ADDENDUM, STATUS_START, STATUS_WRITING, STATUS_VERIFYING,
     VERIFY_INSTRUCTION, VERIFY_SYSTEM, VERIFY_TOOL.description ?? '',
     statusSearch('x', 2), statusRead('[claim 2.3]'), statusArticles('x', 1),
     ...DEEP_TOOLS.map((t) => t.description ?? ''),

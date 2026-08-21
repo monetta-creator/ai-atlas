@@ -11,7 +11,7 @@ import type { RateCard } from './types';
 
 // The minimal shape we read off an Anthropic message's `usage`. Cache fields and the
 // server-tool block are optional/nullable depending on the call.
-interface ApiUsage {
+export interface ApiUsage {
   input_tokens?: number | null;
   output_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
@@ -55,6 +55,33 @@ function computeCostUsd(
   );
 }
 
+// Server-tool web searches bill ~$10 per 1,000 requests ON TOP of tokens; the token rate
+// card can't price them, so a flat per-search surcharge folds into the frozen cost.
+const WEB_SEARCH_USD = 0.01;
+
+// Price a usage total WITHOUT logging it: the per-turn cost report the Ask
+// surfaces show the reader. Same rate-card math as recordApiCall (pricing is
+// linear, so a summed usage across several calls prices identically to pricing
+// each call). NEVER throws; returns 0 when no rate card covers the model.
+export async function priceUsage(model: string, usage: ApiUsage | null | undefined): Promise<number> {
+  try {
+    const u = usage ?? {};
+    const rate = await getActiveRateCard(model);
+    const tokens = {
+      input: num(u.input_tokens),
+      output: num(u.output_tokens),
+      cacheWrite: num(u.cache_creation_input_tokens),
+      cacheRead: num(u.cache_read_input_tokens),
+    };
+    return (
+      (rate ? computeCostUsd(tokens, rate) : 0) +
+      num(u.server_tool_use?.web_search_requests) * WEB_SEARCH_USD
+    );
+  } catch {
+    return 0;
+  }
+}
+
 // Price + log one Anthropic call. NEVER throws — any failure (no rate card, DB down, bad
 // usage) is swallowed so the AI feature is unaffected. Awaited by callers so the row lands
 // before the serverless function returns; the insert is one cheap pooled round-trip.
@@ -73,10 +100,8 @@ export async function recordApiCall(opts: {
     const cacheWrite = num(u.cache_creation_input_tokens);
     const cacheRead = num(u.cache_read_input_tokens);
 
-    // Server-tool web searches bill ~$10 per 1,000 requests ON TOP of tokens;
-    // the token rate card can't price them, so a flat per-search surcharge
-    // folds into the frozen cost (and thereby into the portal's daily budget).
-    const WEB_SEARCH_USD = 0.01;
+    // Web-search surcharge folds into the frozen cost (and thereby into the
+    // portal's daily budget); see WEB_SEARCH_USD above.
     const webSearches = num(u.server_tool_use?.web_search_requests);
     const rate = await getActiveRateCard(opts.model);
     const cost =

@@ -1,11 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { isAdmin } from '@/lib/auth';
-import { recordApiCall } from '@/lib/cost';
+import { priceUsage, recordApiCall } from '@/lib/cost';
 import { buildAskContext } from '@/lib/ask/retrieve';
-import { ASK_SYSTEM, WEB_ADDENDUM, conversationMessages } from '@/lib/ask/prompt';
+import { askSystem, conversationMessages } from '@/lib/ask/prompt';
 import {
   clampHistory, clampSignalOffset, parseAskBody, retrievalQuery,
-  collectWebSources, encodeWebSources,
+  collectWebSources, encodeCostReport, encodeWebSources,
 } from '@/lib/ask/history';
 
 // "Ask the Atlas" streaming endpoint, admin mode (personal layer allowed in
@@ -73,12 +73,12 @@ export async function POST(req: Request): Promise<Response> {
         const params = {
           model: MODEL,
           max_tokens: 1500,
-          system: [{ type: 'text', text: webOn ? ASK_SYSTEM + WEB_ADDENDUM : ASK_SYSTEM, cache_control: { type: 'ephemeral' } }],
-          messages: conversationMessages(msgs, ctx),
+          system: [{ type: 'text', text: askSystem(webOn), cache_control: { type: 'ephemeral' } }],
+          messages: conversationMessages(msgs, ctx, { web: webOn }),
           // The raw web-search tool object is not in the SDK Tool union, hence
           // the double-cast below (the lib/pipeline/web.ts pattern).
           ...(webOn
-            ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 2 }] }
+            ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] }
             : {}),
         };
         const ms = client.messages.stream(
@@ -118,6 +118,26 @@ export async function POST(req: Request): Promise<Response> {
         // slips one in despite the prompt). En dashes (ranges, nulls) are left alone.
         ms.on('text', (delta) => controller.enqueue(enc.encode(delta.replace(/\s*—\s*/g, ', '))));
         const final = await ms.finalMessage();
+        // The per-turn cost line rides a trailing sentinel BEFORE the
+        // web-sources one (extractWebSources parses to end of string, so its
+        // line must stay last); the client strips both.
+        const usage = final.usage as {
+          input_tokens?: number | null; output_tokens?: number | null;
+          cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null;
+          server_tool_use?: { web_search_requests?: number | null } | null;
+        };
+        const searches = Math.max(usage.server_tool_use?.web_search_requests ?? 0, 0);
+        const costUsd = await priceUsage(MODEL, final.usage);
+        controller.enqueue(enc.encode(encodeCostReport({
+          cost_usd: costUsd,
+          input_tokens:
+            (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
+          output_tokens: usage.output_tokens ?? 0,
+          cache_read_tokens: usage.cache_read_input_tokens ?? 0,
+          searches,
+          rounds: 1,
+          model: MODEL,
+        })));
         if (webOn) {
           // Belt and braces: merge anything a future SDK's accumulator sees.
           for (const s of collectWebSources(final)) addSource({ type: 'web_search_result_location', ...s });

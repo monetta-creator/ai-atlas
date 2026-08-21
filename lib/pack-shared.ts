@@ -8,6 +8,13 @@
 // The injected query seam: production passes lib/db's q(), the tests a pg client.
 export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 
+// The shared FTS query fragment ($1 = the user's text). websearch_to_tsquery
+// ANDs every term, so a long natural-language question rarely matches any
+// single record. OR-combine the lexemes (ts_rank still ranks records matching
+// more of them first) so general questions actually retrieve. One definition
+// for every FTS surface (ask retrieval, deep search, thesis packs).
+export const ORQ = "replace(websearch_to_tsquery('english', $1)::text, '&', '|')::tsquery";
+
 export function domainOfUrl(url: string | null): string | null {
   if (!url) return null;
   try {

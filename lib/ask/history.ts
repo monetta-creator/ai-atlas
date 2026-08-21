@@ -77,17 +77,44 @@ export function clampHistory(messages: AskWireMessage[]): AskWireMessage[] {
   return [...kept, latest];
 }
 
+// Vocabulary translation for retrieval: the Atlas writes in its own terms
+// ("open-weight", "parity", "commoditize") and a question phrased in street
+// vocabulary ("open source", "beating", "cheap") matches none of them through
+// pure lexical FTS. Each rule appends the Atlas-side terms when the question
+// uses the street-side ones; expansion only ever ADDS recall (the OR-combined
+// tsquery ranks multi-term matches first, so extra lexemes cannot hide a
+// direct hit). Pure and dependency-free for scripts/test-ask.mjs.
+const VOCAB_RULES: [RegExp, string][] = [
+  [/\bopen[ -]?sourced?\b|\blocal (?:models?|llms?)\b|\bopen (?:models?|llms?)\b/i, 'open-weight open weights'],
+  [/\bbeat(?:s|ing|en)?\b|\bcatch(?:ing|es)? up\b|\bcaught up\b|\bclos(?:e|ing) the gap\b|\bahead of\b|\bkeep(?:ing)? up\b/i, 'parity lag catch-up'],
+  [/\bcheap(?:er|est)?\b|\bprice war\b|\brace to the bottom\b|\baffordable\b/i, 'price-performance cost commoditize'],
+  [/\bmoats?\b|\bdefensib(?:le|ility)\b|\bcompetitive advantage\b/i, 'rents commoditize durable'],
+  [/\bjobs?\b|\blayoffs?\b|\bworkforce\b|\bhiring\b/i, 'labor employment'],
+  [/\bchips?\b|\bgpus?\b|\bsemiconductors?\b/i, 'silicon compute hardware'],
+  [/\bbest models?\b|\btop models?\b|\bsmartest\b|\bstate of the art\b|\bsota\b/i, 'frontier benchmark capability'],
+];
+
+export function expandVocabulary(query: string): string {
+  const extra: string[] = [];
+  for (const [re, terms] of VOCAB_RULES) {
+    if (re.test(query)) extra.push(terms);
+  }
+  return extra.length ? `${query} ${extra.join(' ')}` : query;
+}
+
 // The per-turn retrieval query: the latest user turn plus the immediately
 // preceding user turn. Deterministic and cheap; the FTS layer OR-combines
 // lexemes with rank favoring multi-term matches, so broadening with the prior
 // turn improves recall on anaphoric follow-ups ("what contradicts that?")
 // without hurting precision, and code detection keeps explicitly named codes
-// from the prior turn in scope.
+// from the prior turn in scope. Vocabulary expansion is appended AFTER the cap
+// so a long question can never truncate its own translation terms.
 export function retrievalQuery(messages: AskWireMessage[]): string {
   const users = messages.filter((m) => m.role === 'user');
   const latest = users[users.length - 1]?.content ?? '';
   const prev = users[users.length - 2]?.content ?? '';
-  return `${latest} ${prev}`.trim().slice(0, RETRIEVAL_QUERY_CAP);
+  const base = `${latest} ${prev}`.trim().slice(0, RETRIEVAL_QUERY_CAP);
+  return expandVocabulary(base);
 }
 
 export function clampSignalOffset(v: unknown): number {
@@ -131,6 +158,64 @@ export function extractWebSources(acc: string): { text: string; sources: AskWebS
     // torn line: drop the sources, keep the answer
   }
   return { text, sources };
+}
+
+// ---- Per-turn cost report ----------------------------------------------------
+// What one Ask turn cost, shown to the reader under the answer. Rides the same
+// trailing-sentinel channel as the web sources on the plain-text stream (the
+// deep route sends it as its own NDJSON event instead). Emission order on the
+// plain stream is cost line THEN web-sources line, so extractWebSources'
+// parse-to-end-of-string stays valid and extractCostReport parses only its own
+// line. Both extractors are tolerant: a missing or torn sentinel yields null.
+
+export interface AskCostReport {
+  cost_usd: number;
+  input_tokens: number;      // total context processed, cache reads included
+  output_tokens: number;
+  cache_read_tokens: number; // the part of input_tokens re-read from cache
+  searches: number;          // web searches run this turn
+  rounds: number;            // model calls this turn (1 for a quick answer)
+  model: string;
+}
+
+export const COST_MARKER = '@@ASK_COST@@';
+
+export function encodeCostReport(r: AskCostReport): string {
+  return `\n${COST_MARKER}${JSON.stringify(r)}`;
+}
+
+const cnum = (v: unknown): number => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+};
+
+export function parseCostReport(v: unknown): AskCostReport | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  return {
+    cost_usd: cnum(o.cost_usd),
+    input_tokens: Math.floor(cnum(o.input_tokens)),
+    output_tokens: Math.floor(cnum(o.output_tokens)),
+    cache_read_tokens: Math.floor(cnum(o.cache_read_tokens)),
+    searches: Math.floor(cnum(o.searches)),
+    rounds: Math.floor(cnum(o.rounds)),
+    model: typeof o.model === 'string' ? o.model.slice(0, 60) : '',
+  };
+}
+
+export function extractCostReport(acc: string): { text: string; cost: AskCostReport | null } {
+  const i = acc.lastIndexOf(COST_MARKER);
+  if (i < 0) return { text: acc, cost: null };
+  const lineEnd = acc.indexOf('\n', i);
+  const jsonEnd = lineEnd < 0 ? acc.length : lineEnd;
+  let cost: AskCostReport | null = null;
+  try {
+    cost = parseCostReport(JSON.parse(acc.slice(i + COST_MARKER.length, jsonEnd)));
+  } catch {
+    // torn line: drop the report, keep the answer
+  }
+  const text = (acc.slice(0, i) + acc.slice(jsonEnd)).trimEnd();
+  return { text, cost };
 }
 
 // Distinct cited web sources from a finished Anthropic message, in citation

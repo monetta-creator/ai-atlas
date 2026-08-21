@@ -1,4 +1,5 @@
 import { q } from '@/lib/db';
+import { ORQ } from '@/lib/pack-shared';
 import type { ValidIdsPlain } from '@/lib/ask/verify';
 
 // Server-only retrieval for "Ask the Atlas". Hybrid lexical + structural, no
@@ -48,13 +49,16 @@ export interface AskContext extends AskNamespace {
   signalRefs: { tag: string; id: string }[];
 }
 
-const MAX_DETAIL = 6500; // char budget for the deep-detail blob
+const MAX_DETAIL = 11000; // char budget for the deep-detail blob
 const FIELD_CAP = 600; // per long field, keeps any one record bounded
 
-// websearch_to_tsquery ANDs every term, so a long natural-language question
-// rarely matches any single record. OR-combine the lexemes (ts_rank still ranks
-// records matching more of them first) so general questions actually retrieve.
-const ORQ = "replace(websearch_to_tsquery('english', $1)::text, '&', '|')::tsquery";
+// ts_rank normalization flag for the LONG-document legs (signals with full
+// briefs, papers, evidence, retained article text): 1 divides rank by
+// 1 + log(document length), so a long generic brief that says "model" fifteen
+// times stops outranking a short, exactly-on-topic record. The short-record
+// legs (claims, stances, concepts) keep the default: their lengths are uniform
+// and the correction would only add noise. (ORQ itself: lib/pack-shared.ts.)
+const RANK_NORM = 1;
 
 const clip = (s: string | null | undefined, n = FIELD_CAP): string => {
   const t = (s ?? '').trim();
@@ -402,16 +406,47 @@ export async function buildAskContext(
   // keeps the signals a claim-shaped question is really asking for.
   const ftsTouch = [...ftsClaimCodes, ...ftsBridgeCodes].filter((c) => !touchCodes.includes(c));
   if (ftsTouch.length) {
+    // Relevance first (how many of the matched claims a signal touches), then
+    // recency: a signal squarely about the retrieved claims beats whatever
+    // happened to publish last.
     const sig = await q<{ id: string; title: string; summary: string | null; claim_touches: string[]; is_published: boolean }>(
       `select id, title, summary, claim_touches, is_published from signals
         where claim_touches && $1::text[]
           ${mode === 'portal' ? 'and is_published = true' : ''}
-        order by published_at desc limit 6`,
+        order by (select count(*) from unnest(claim_touches) t where t = any($1::text[])) desc,
+                 published_at desc nulls last
+        limit 6`,
       [ftsTouch]
     );
     for (const s of sig) {
       push(`sig:${s.id}`,
         `[signal ${tagFor(s.id)}] "${s.title}"${s.is_published ? '' : ' (draft)'} ${clip(s.summary, 300)} (touches ${s.claim_touches.join(', ')})`);
+    }
+    // One-hop evidence for FTS-matched claims, mirroring the explicit-code
+    // path: a claim retrieved by text carries its evidence rows, so the model
+    // sees the substitution stories and not just the claim statement.
+    const ftsClaimOnly = ftsClaimCodes.filter((c) => !ids.claims.includes(c));
+    if (ftsClaimOnly.length) {
+      const ev = await q<{ code: string; direction: string; excerpt: string | null; note: string | null }>(
+        mode === 'admin'
+          ? `select c.code, e.direction, e.excerpt, e.note
+               from evidence e join claims c on c.id = e.target_id
+              where e.target_type = 'claim' and c.code = any($1::text[])
+                and (e.excerpt is not null or e.note is not null)
+              order by e.created_at desc limit 8`
+          : `select c.code, e.direction, e.excerpt, null::text as note
+               from evidence e join claims c on c.id = e.target_id
+              where e.target_type = 'claim' and c.code = any($1::text[])
+                and e.excerpt is not null
+                and (e.signal_id is null
+                     or exists (select 1 from signals g where g.id = e.signal_id and g.is_published))
+              order by e.created_at desc limit 8`,
+        [ftsClaimOnly]
+      );
+      for (const e of ev) {
+        push(`ev:claim:${e.code}:${clip(e.excerpt ?? e.note, 40)}`,
+          `Evidence for [claim ${e.code}] (${e.direction}): ${clip(e.excerpt ?? e.note, 300)}`);
+      }
     }
   }
 
@@ -434,6 +469,10 @@ export async function buildAskContext(
     ids.questions.length + ids.threads.length > 0;
   let ordered = blocks;
   if (!explicit) {
+    // Signals and evidence carry the concrete developments and substitution
+    // stories a broad question is really after, so they draw two slots per
+    // cycle; every other kind draws one.
+    const CYCLE_WEIGHTS: Record<string, number> = { sig: 2, ev: 2 };
     const groups = new Map<string, Block[]>();
     for (const b of blocks) {
       const kind = b.key.split(':')[0];
@@ -441,13 +480,21 @@ export async function buildAskContext(
       if (g) g.push(b);
       else groups.set(kind, [b]);
     }
-    const queues = [...groups.values()];
+    const queues = [...groups.entries()];
     ordered = [];
-    for (let i = 0; ordered.length < blocks.length; i++) {
-      const queue = queues[i % queues.length];
-      const next = queue.shift();
-      if (next) ordered.push(next);
-      if (queues.every((s) => s.length === 0)) break;
+    while (ordered.length < blocks.length) {
+      let pushedAny = false;
+      for (const [kind, queue] of queues) {
+        const slots = CYCLE_WEIGHTS[kind] ?? 1;
+        for (let j = 0; j < slots; j++) {
+          const next = queue.shift();
+          if (next) {
+            ordered.push(next);
+            pushedAny = true;
+          }
+        }
+      }
+      if (!pushedAny) break;
     }
   }
   let detail = '';
@@ -528,7 +575,7 @@ async function ftsSignals(query: string, push: (k: string, t: string) => void, t
     `select id, title, summary, claim_touches, is_published from signals
       where search_tsv @@ ${ORQ}
         ${mode === 'portal' ? 'and is_published = true' : ''}
-      order by ts_rank(search_tsv, ${ORQ}) desc limit 5`,
+      order by ts_rank(search_tsv, ${ORQ}, ${RANK_NORM}) desc limit 8`,
     [query]
   );
   for (const r of rows) {
@@ -565,7 +612,7 @@ async function ftsPapers(query: string, push: (k: string, t: string) => void, pt
        from papers
       where triage_status = 'kept' and review_status <> 'dismissed'
         and search_tsv @@ ${ORQ}
-      order by (review_status in ('tracked', 'noted')) desc, ts_rank(search_tsv, ${ORQ}) desc
+      order by (review_status in ('tracked', 'noted')) desc, ts_rank(search_tsv, ${ORQ}, ${RANK_NORM}) desc
       limit 4`,
     [query]
   );
@@ -588,7 +635,7 @@ async function ftsEvidence(query: string, push: (k: string, t: string) => void, 
         and coalesce(c.code, b.code) is not null
         ${mode === 'portal' ? `and e.excerpt is not null
         and (e.signal_id is null or exists (select 1 from signals g where g.id = e.signal_id and g.is_published))` : ''}
-      order by ts_rank(e.search_tsv, ${ORQ}) desc limit 6`,
+      order by ts_rank(e.search_tsv, ${ORQ}, ${RANK_NORM}) desc limit 8`,
     [query]
   );
   for (const e of rows) {
@@ -616,7 +663,7 @@ async function ftsArticles(query: string, push: (k: string, t: string) => void, 
        ) sig on true
       where s.search_tsv @@ ${ORQ} and s.raw_text is not null
         and (sig.id is not null or exists (select 1 from evidence e where e.source_id = s.id))
-      order by ts_rank(s.search_tsv, ${ORQ}) desc, s.id limit 3`,
+      order by ts_rank(s.search_tsv, ${ORQ}, ${RANK_NORM}) desc, s.id limit 3`,
     [query]
   );
   for (const r of srcRows) {
@@ -630,7 +677,7 @@ async function ftsArticles(query: string, push: (k: string, t: string) => void, 
        from signal_candidates sc
        join signals g on g.id = sc.signal_id and g.is_published = true
       where sc.search_tsv @@ ${ORQ}
-      order by ts_rank(sc.search_tsv, ${ORQ}) desc, sc.id limit 3`,
+      order by ts_rank(sc.search_tsv, ${ORQ}, ${RANK_NORM}) desc, sc.id limit 3`,
     [query]
   );
   for (const r of candRows) {

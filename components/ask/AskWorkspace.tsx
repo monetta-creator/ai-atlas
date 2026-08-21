@@ -9,7 +9,7 @@ import {
   appendMessage, createConvo, deleteConvo, dropLastAssistant, getConvo,
   maxSignalSuffix, mergedSignalMap, setMessageVerify, useAskConvos,
 } from '@/components/ask/store';
-import { extractWebSources } from '@/lib/ask/history';
+import { extractCostReport, extractWebSources, parseCostReport, type AskCostReport, type AskWebSource } from '@/lib/ask/history';
 import AskRail from '@/components/ask/AskRail';
 import AskThread from '@/components/ask/AskThread';
 import AskComposer from '@/components/ask/AskComposer';
@@ -39,7 +39,6 @@ export default function AskWorkspace({
   const [draft, setDraft] = useState('');
   const [draftMap, setDraftMap] = useState<SignalMap>({});
   const [draftSteps, setDraftSteps] = useState<string[]>([]);
-  const [deepOn, setDeepOn] = useState(false);
   const [webOn, setWebOn] = useState(false);
   const [verifyingIndex, setVerifyingIndex] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
@@ -50,7 +49,9 @@ export default function AskWorkspace({
   const seededRef = useRef(false);
 
   const endpoint = mode === 'admin' ? '/api/ask' : '/api/portal/ask';
-  const deepAvailable = mode === 'admin'; // admin-first; portal deep comes with a call multiplier
+  // The admin chat always researches (the deep loop is the default engine
+  // since 2026-08-21); the portal stays on the quick route for budget reasons.
+  const researchMode = mode === 'admin';
   const webAvailable = mode !== 'locked'; // admin + portal key; each search is budget-metered
   const locked = mode === 'locked';
   const active = activeId ? convos.find((c) => c.id === activeId) ?? null : null;
@@ -110,10 +111,9 @@ export default function AskWorkspace({
 
   function extractDatasets(text: string): { clean: string; slugs: string[] } {
     const slugs: string[] = [];
-    // Also drop markdown bold markers: answers render as plain text, and deep
-    // mode's Haiku slips them in as section labels despite the prompt.
+    // Bold markers stay in the text: the renderer turns **span** into a real
+    // <strong> (the answer's section headers) since the 2026-08-21 rework.
     const clean = text
-      .replace(/\*\*/g, '')
       .replace(DATASET_TOKEN, (m, slug: string) => {
         if (datasets.some((d) => d.slug === slug)) {
           if (!slugs.includes(slug)) slugs.push(slug);
@@ -127,7 +127,7 @@ export default function AskWorkspace({
   }
 
   async function run(convoId: string) {
-    if (deepAvailable && deepOn) return runDeep(convoId);
+    if (researchMode) return runDeep(convoId);
     return runPlain(convoId);
   }
 
@@ -172,11 +172,12 @@ export default function AskWorkspace({
         const { done, value } = await reader.read();
         if (done) break;
         acc += dec.decode(value, { stream: true });
-        // The web-sources sentinel arrives in the final chunk; keep it out of
-        // the visible draft.
-        setDraft(extractWebSources(acc).text);
+        // The cost and web-sources sentinels arrive in the final chunks; keep
+        // both out of the visible draft.
+        setDraft(extractCostReport(extractWebSources(acc).text).text);
       }
-      const { text: bodyText, sources } = extractWebSources(acc);
+      const { text: withCost, sources } = extractWebSources(acc);
+      const { text: bodyText, cost } = extractCostReport(withCost);
       const { clean, slugs } = extractDatasets(bodyText);
       appendMessage(convoId, {
         role: 'assistant',
@@ -184,17 +185,20 @@ export default function AskWorkspace({
         signalMap: mergedMap,
         datasets: slugs.length ? slugs : undefined,
         webSources: sources.length ? sources : undefined,
+        cost: cost ?? undefined,
         error: clean ? undefined : true,
       });
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
-        const { text: bodyText, sources } = extractWebSources(acc);
+        const { text: withCost, sources } = extractWebSources(acc);
+        const { text: bodyText, cost } = extractCostReport(withCost);
         const { clean, slugs } = extractDatasets(bodyText);
         if (clean) {
           appendMessage(convoId, {
             role: 'assistant', content: clean, signalMap: mergedMap,
             datasets: slugs.length ? slugs : undefined,
             webSources: sources.length ? sources : undefined,
+            cost: cost ?? undefined,
             stopped: true,
           });
         }
@@ -210,9 +214,10 @@ export default function AskWorkspace({
     }
   }
 
-  // Deep research: NDJSON from /api/ask/deep. Status lines build the research
-  // trail (persisted on the message as `steps`), delta lines build the answer,
-  // and the terminal done line carries the full signal tag map.
+  // The research chat: NDJSON from /api/ask/deep. Status lines build the
+  // research trail (persisted on the message as `steps`), delta lines build
+  // the answer, web_sources / verify / cost lines attach their payloads, and
+  // the terminal done line carries the full signal tag map.
   async function runDeep(convoId: string) {
     const convo = getConvo(convoId);
     if (!convo || streaming) return;
@@ -230,9 +235,11 @@ export default function AskWorkspace({
     let steps: string[] = [];
     let errText = '';
     let verifyReport: VerifyReport | undefined;
+    let costReport: AskCostReport | undefined;
+    let webSources: AskWebSource[] | undefined;
     const handleLine = (line: string) => {
       if (!line.trim()) return;
-      let ev: { type?: string; text?: unknown; signals?: unknown; report?: unknown };
+      let ev: { type?: string; text?: unknown; signals?: unknown; report?: unknown; sources?: unknown };
       try {
         ev = JSON.parse(line) as typeof ev;
       } catch {
@@ -249,6 +256,14 @@ export default function AskWorkspace({
         setDraftMap(mergedMap);
       } else if (ev.type === 'verify' && ev.report && typeof ev.report === 'object') {
         verifyReport = ev.report as VerifyReport;
+      } else if (ev.type === 'cost' && ev.report && typeof ev.report === 'object') {
+        costReport = parseCostReport(ev.report) ?? undefined;
+      } else if (ev.type === 'web_sources' && Array.isArray(ev.sources)) {
+        const list = (ev.sources as AskWebSource[])
+          .filter((s) => !!s && typeof s.url === 'string' && /^https?:\/\//i.test(s.url))
+          .map((s) => ({ url: s.url.slice(0, 600), title: String(s.title ?? '').slice(0, 200) || s.url }))
+          .slice(0, 8);
+        webSources = list.length ? list : undefined;
       } else if (ev.type === 'error' && typeof ev.text === 'string') {
         errText = ev.text;
       }
@@ -258,7 +273,10 @@ export default function AskWorkspace({
       const res = await fetch('/api/ask/deep', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: wire, signalOffset: maxSignalSuffix(convo), signalMap: priorMap }),
+        body: JSON.stringify({
+          messages: wire, signalOffset: maxSignalSuffix(convo), signalMap: priorMap,
+          web: webAvailable && webOn,
+        }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
@@ -303,6 +321,8 @@ export default function AskWorkspace({
         datasets: slugs.length ? slugs : undefined,
         steps: steps.length ? steps : undefined,
         verify: verifyReport,
+        cost: costReport,
+        webSources,
         stopped: errText ? true : undefined, // cut short server-side; partial stands
       });
     } catch (e) {
@@ -314,6 +334,8 @@ export default function AskWorkspace({
             datasets: slugs.length ? slugs : undefined, stopped: true,
             steps: steps.length ? steps : undefined,
             verify: verifyReport,
+            cost: costReport,
+            webSources,
           });
         }
         // An abort before any text leaves the user turn trailing; the thread
@@ -455,9 +477,7 @@ export default function AskWorkspace({
             streaming={streaming}
             onSend={send}
             onStop={stop}
-            deepAvailable={deepAvailable}
-            deep={deepOn}
-            onToggleDeep={() => setDeepOn((v) => !v)}
+            researchMode={researchMode}
             webAvailable={webAvailable}
             web={webOn}
             onToggleWeb={() => setWebOn((v) => !v)}

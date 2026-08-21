@@ -6,6 +6,10 @@
 // concession is ROW visibility: draft signals resolve for admins (their
 // answers can cite drafts) while staying 404 for everyone else.
 
+// Extensioned import so scripts/test-deep.mjs can load this module under plain
+// Node type stripping (the pack-core pattern; pack-shared is pure, zero-import).
+import { ORQ } from '../pack-shared.ts';
+
 export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 
 export type PeekKind = 'claim' | 'bridge' | 'stance' | 'question' | 'concept' | 'signal' | 'paper' | 'thread';
@@ -297,9 +301,10 @@ export interface ArticleHit {
   excerpt: string;
 }
 
-// websearch_to_tsquery ANDs terms; OR-combine so natural phrasing retrieves
-// (ts_rank still puts multi-term matches first). Same trick as lib/ask/retrieve.
-const ORQ = "replace(websearch_to_tsquery('english', $1)::text, '&', '|')::tsquery";
+// RANK_NORM mirrors lib/ask/retrieve.ts: log-length damping on the long-document
+// legs (signals, papers, article text) so verbose records stop winning on bulk.
+// (ORQ, the shared OR-combined tsquery, is imported from lib/pack-shared at top.)
+const RANK_NORM = 1;
 
 const snip = (s: string | null | undefined, n = 200): string => {
   const t = (s ?? '').trim().replace(/\s+/g, ' ');
@@ -390,7 +395,7 @@ export async function searchAtlas(
               extraction->>'headline_claim' as headline, triage_summary as summary, claim_touches
          from papers
         where triage_status = 'kept' and review_status <> 'dismissed' and search_tsv @@ ${ORQ}
-        order by (review_status in ('tracked', 'noted')) desc, ts_rank(search_tsv, ${ORQ}) desc, id
+        order by (review_status in ('tracked', 'noted')) desc, ts_rank(search_tsv, ${ORQ}, ${RANK_NORM}) desc, id
         limit ${lim}`,
       [query]
     );
@@ -408,7 +413,7 @@ export async function searchAtlas(
     const rows = await q<{ id: string; title: string; summary: string | null; claim_touches: string[]; is_published: boolean }>(
       `select id::text as id, title, summary, claim_touches, is_published from signals
         where search_tsv @@ ${ORQ} ${opts.admin ? '' : 'and is_published = true'}
-        order by ts_rank(search_tsv, ${ORQ}) desc, id limit ${lim}`,
+        order by ts_rank(search_tsv, ${ORQ}, ${RANK_NORM}) desc, id limit ${lim}`,
       [query]
     );
     for (const r of rows) {
@@ -449,7 +454,7 @@ export async function searchArticles(
        ) sig on true
       where s.search_tsv @@ ${ORQ} and s.raw_text is not null
         and (sig.id is not null or exists (select 1 from evidence e where e.source_id = s.id))
-      order by ts_rank(s.search_tsv, ${ORQ}) desc, s.id limit ${lim}`,
+      order by ts_rank(s.search_tsv, ${ORQ}, ${RANK_NORM}) desc, s.id limit ${lim}`,
     [query]
   );
   for (const r of srcRows) {
@@ -467,7 +472,7 @@ export async function searchArticles(
        from signal_candidates sc
        join signals g on g.id = sc.signal_id and g.is_published = true
       where sc.search_tsv @@ ${ORQ}
-      order by ts_rank(sc.search_tsv, ${ORQ}) desc, sc.id limit ${lim}`,
+      order by ts_rank(sc.search_tsv, ${ORQ}, ${RANK_NORM}) desc, sc.id limit ${lim}`,
     [query]
   );
   for (const r of candRows) {

@@ -7,6 +7,7 @@ import type { AskConvo } from '@/components/ask/store';
 import { renderAnswer } from '@/components/ask/answer';
 import AskStarters from '@/components/ask/AskStarters';
 import AskVerify from '@/components/ask/AskVerify';
+import AskCost from '@/components/ask/AskCost';
 import AskDatasetCard, { type DatasetSuggestionMeta } from '@/components/datasets/AskDatasetCard';
 
 const DATASET_TOKEN = /\[dataset\s+([a-z0-9-]+)\]/gi;
@@ -63,8 +64,8 @@ export default function AskThread({
 
   // Strip verified dataset tokens from the live draft so they never flash as
   // raw text; unknown slugs stay visible (they read as prose and get flagged).
-  // Markdown bold markers are dropped too (answers render as plain text).
-  const liveDraft = draft.replace(/\*\*/g, '').replace(DATASET_TOKEN, (m, slug: string) =>
+  // Bold markers stay: the renderer turns **span** into <strong>.
+  const liveDraft = draft.replace(DATASET_TOKEN, (m, slug: string) =>
     datasets.some((d) => d.slug === slug) ? '' : m
   );
 
@@ -110,7 +111,7 @@ export default function AskThread({
               <div key={i}>
                 {m.steps && m.steps.length > 0 && (
                   <details className="ask-steps">
-                    <summary>Deep research · {m.steps.length} step{m.steps.length === 1 ? '' : 's'}</summary>
+                    <summary>Research · {m.steps.length} step{m.steps.length === 1 ? '' : 's'}</summary>
                     <ol>
                       {m.steps.map((s, j) => <li key={j}>{s}</li>)}
                     </ol>
@@ -143,6 +144,7 @@ export default function AskThread({
                   </p>
                 )}
                 {m.verify && <AskVerify report={m.verify} />}
+                {m.cost && <AskCost cost={m.cost} />}
                 {/* Web-informed answers skip the Atlas faithfulness check: web
                     facts are outside the corpus and would flag as unfound. */}
                 {canVerify && !m.verify && !m.error && !streaming && !m.webSources?.length && (

@@ -1,27 +1,30 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { isAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
-import { recordApiCall } from '@/lib/cost';
+import { priceUsage, recordApiCall, type ApiUsage } from '@/lib/cost';
 import { loadNamespace } from '@/lib/ask/retrieve';
-import { ASK_SYSTEM, deepConversationMessages } from '@/lib/ask/prompt';
-import { clampHistory, clampSignalOffset, parseAskBody } from '@/lib/ask/history';
+import { askSystem, deepConversationMessages } from '@/lib/ask/prompt';
+import { clampHistory, clampSignalOffset, parseAskBody, type AskWebSource } from '@/lib/ask/history';
 import { fetchRecord, searchArticles, searchAtlas } from '@/lib/ask/search';
 import {
-  DEEP_ADDENDUM, DEEP_TOOLS, INPUT_TOKEN_CAP, MAX_CALLS_PER_ROUND, MAX_ROUNDS,
+  DEEP_ADDENDUM, DEEP_TOOLS, DEEP_WEB_ADDENDUM, INPUT_TOKEN_CAP, MAX_CALLS_PER_ROUND, MAX_ROUNDS,
   VERIFY_INSTRUCTION, VERIFY_TOOL, type VerifyReport,
-  citeToken, createTagger, ndDelta, ndDone, ndError, ndStatus, ndVerify,
+  citeToken, createTagger, ndCost, ndDelta, ndDone, ndError, ndStatus, ndVerify, ndWebSources,
   parseFetchRecordInput, parseSearchArticlesInput, parseSearchAtlasInput, parseSignalMap,
   parseVerifyOutput, renderArticleHits, renderRecord, renderSearchHits, runDeterministicChecks,
   STATUS_START, STATUS_VERIFYING, STATUS_WRITING, statusArticles, statusRead, statusRound, statusSearch,
 } from '@/lib/ask/deep';
 
-// "Ask the Atlas" deep research: an agentic tool-use loop over the Atlas
-// (search_atlas / fetch_record / search_articles, all backed by lib/ask/search)
-// followed by a forced streamed answer. Admin-first; the portal gets it later
-// with a call multiplier against the daily budget.
+// "Ask the Atlas" research chat: an agentic tool-use loop over the Atlas
+// (search_atlas / fetch_record / search_articles, all backed by lib/ask/search),
+// optionally the web_search server tool (the composer's web toggle), followed
+// by a forced streamed answer. Since the 2026-08-21 rework this is the DEFAULT
+// admin chat behind /ask, not a toggle; the quick route stays for the portal
+// and the per-signal widget.
 //
 // The response is NDJSON (lib/ask/deep.ts): status lines while researching,
-// delta lines for the answer, a terminal done line with the signal tag map.
+// delta lines for the answer, web_sources / verify / cost lines, and a
+// terminal done line with the signal tag map.
 //
 // maxDuration 300 is the measured Fluid Compute ceiling (see /api/probe/duration
 // and docs/data-portal-upgrade-paths.md), not the old assumed 60. The loop
@@ -50,8 +53,9 @@ export async function POST(req: Request): Promise<Response> {
   const parsed = parseAskBody(body);
   if (!parsed) return new Response('Empty query', { status: 400 });
   const msgs = clampHistory(parsed);
-  const b = body as { signalOffset?: unknown; signalMap?: unknown };
+  const b = body as { signalOffset?: unknown; signalMap?: unknown; web?: unknown };
   const tagger = createTagger(parseSignalMap(b?.signalMap), clampSignalOffset(b?.signalOffset));
+  const webOn = Boolean(b?.web);
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return new Response('AI is not configured.', { status: 500 });
@@ -59,9 +63,20 @@ export async function POST(req: Request): Promise<Response> {
 
   const ns = await loadNamespace();
   const system: Anthropic.TextBlockParam[] = [
-    { type: 'text', text: `${ASK_SYSTEM}\n\n${DEEP_ADDENDUM}`, cache_control: { type: 'ephemeral' } },
+    {
+      type: 'text',
+      text: `${askSystem(webOn)}\n\n${DEEP_ADDENDUM}${webOn ? `\n\n${DEEP_WEB_ADDENDUM}` : ''}`,
+      cache_control: { type: 'ephemeral' },
+    },
   ];
-  const convo: Anthropic.MessageParam[] = deepConversationMessages(msgs, ns);
+  const convo: Anthropic.MessageParam[] = deepConversationMessages(msgs, ns, { web: webOn });
+  // The web_search server tool is not in the pinned SDK's Tool union, hence the
+  // cast (the lib/pipeline/web.ts pattern). One tools array for every call.
+  const tools = (
+    webOn
+      ? [...DEEP_TOOLS, { type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]
+      : DEEP_TOOLS
+  ) as unknown as Anthropic.Tool[];
 
   const enc = new TextEncoder();
   const t0 = Date.now();
@@ -120,15 +135,64 @@ export async function POST(req: Request): Promise<Response> {
 
       let rounds = 0;
       let toolCalls = 0;
+      let modelCalls = 0;
       let answered = false;
       let streamedAny = false;
       let answerText = '';
       // Everything the model was shown, for the deterministic quote/figure
-      // checks: the skeleton plus every successful tool result.
+      // checks: the skeleton plus every successful tool result (web result
+      // titles too; the searched page text itself arrives encrypted and never
+      // reaches us, which is why the verify report carries webSearched).
       const corpus: string[] = [ns.skeleton];
       // Rolling cache anchor: only the LATEST tool-result block carries a
       // breakpoint (plus system + skeleton), staying under the 4-block limit.
       let lastAnchor: Anthropic.ToolResultBlockParam | null = null;
+
+      // Per-turn totals for the reader-facing cost report (priced once at the
+      // end; pricing is linear so summed usage prices like per-call usage).
+      const totals: ApiUsage & { server_tool_use: { web_search_requests: number } } = {
+        input_tokens: 0, output_tokens: 0,
+        cache_creation_input_tokens: 0, cache_read_input_tokens: 0,
+        server_tool_use: { web_search_requests: 0 },
+      };
+      const addUsage = (u: ApiUsage | null | undefined) => {
+        if (!u) return;
+        totals.input_tokens = (totals.input_tokens ?? 0) + (u.input_tokens ?? 0);
+        totals.output_tokens = (totals.output_tokens ?? 0) + (u.output_tokens ?? 0);
+        totals.cache_creation_input_tokens =
+          (totals.cache_creation_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+        totals.cache_read_input_tokens =
+          (totals.cache_read_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+        const w = u.server_tool_use?.web_search_requests;
+        if (typeof w === 'number' && w > 0) totals.server_tool_use.web_search_requests += w;
+      };
+
+      // Cited web sources, from server-tool result blocks (non-streamed loop
+      // rounds) and raw stream events (the final leg): the pinned SDK's stream
+      // accumulator predates server-tool blocks, so nothing here relies on it.
+      const webSources: AskWebSource[] = [];
+      const seenSrc = new Set<string>();
+      const addSource = (url?: string, title?: string | null) => {
+        if (!url || seenSrc.has(url)) return;
+        seenSrc.add(url);
+        webSources.push({ url: url.slice(0, 600), title: String(title ?? '').slice(0, 200) || url });
+      };
+      const captureServerBlocks = (content: unknown[]): boolean => {
+        let found = false;
+        for (const blk of content) {
+          const cb = blk as { type?: string; content?: unknown };
+          if (cb.type !== 'web_search_tool_result' || !Array.isArray(cb.content)) continue;
+          for (const r of cb.content.slice(0, 5)) {
+            const rr = r as { type?: string; url?: string; title?: string | null };
+            if (rr?.type === 'web_search_result' && rr.url) {
+              found = true;
+              addSource(rr.url, rr.title);
+              corpus.push(`${String(rr.title ?? '')} ${rr.url}`);
+            }
+          }
+        }
+        return found;
+      };
 
       try {
         emit(ndStatus(STATUS_START));
@@ -144,21 +208,49 @@ export async function POST(req: Request): Promise<Response> {
             model: MODEL,
             max_tokens: 1200,
             system,
-            tools: DEEP_TOOLS,
+            tools,
             messages: convo,
           });
           rounds = round;
+          modelCalls++;
+          addUsage(res.usage as ApiUsage);
           await recordApiCall({
             feature: FEATURE, model: MODEL, usage: res.usage, wallMs: Date.now() - t, metadata: { round },
           });
+          if (webOn && captureServerBlocks(res.content as unknown[])) {
+            emit(ndStatus('Searched the web'));
+          }
 
           const toolUses = res.content.filter((c): c is Anthropic.ToolUseBlock => c.type === 'tool_use');
           if (!toolUses.length) {
-            // The model answered without (more) research; its text is the answer.
+            // Server-side web searches run INSIDE one API turn, so the turn's
+            // text can be narration + search + answer. Only text after the
+            // last search-result block is the answer; the earlier text is
+            // pre-search narration ("let me search...") and drops.
+            const blocks = res.content as { type?: string }[];
+            let from = 0;
+            for (let i = 0; i < blocks.length; i++) {
+              if (blocks[i].type === 'web_search_tool_result') from = i + 1;
+            }
             answerText = res.content
+              .slice(from)
               .filter((c): c is Anthropic.TextBlock => c.type === 'text')
               .map((c) => c.text)
               .join('');
+            // A turn that ran only server-side web searches (or paused mid
+            // server tool) is not an answer: continue the conversation so the
+            // model can use what it found. Role alternation allows a trailing
+            // assistant turn; the API treats it as a continuation.
+            const serverOnly = (res.content as { type?: string }[]).some(
+              (c) => c.type === 'server_tool_use' || c.type === 'web_search_tool_result'
+            );
+            const paused = (res as { stop_reason?: string | null }).stop_reason === 'pause_turn';
+            if ((paused || (!answerText.trim() && serverOnly)) && round < MAX_ROUNDS) {
+              convo.push({ role: 'assistant', content: res.content as unknown as Anthropic.ContentBlockParam[] });
+              answerText = '';
+              continue;
+            }
+            // The model answered without (more) research; its text is the answer.
             if (answerText.trim()) {
               emit(ndDelta(scrub(answerText)));
               streamedAny = true;
@@ -224,12 +316,36 @@ export async function POST(req: Request): Promise<Response> {
               model: MODEL,
               max_tokens: 2000,
               system,
-              tools: DEEP_TOOLS,
+              tools,
               tool_choice: { type: 'none' },
               messages: convo,
             },
             { timeout: 55_000, maxRetries: 0 }
           );
+          if (webOn) {
+            // Raw wire events, never the accumulator: citations when the model
+            // quotes, plus the result blocks themselves as the fallback.
+            ms.on('streamEvent', (ev) => {
+              const e = ev as {
+                type?: string;
+                content_block?: { type?: string; content?: { type?: string; url?: string; title?: string | null }[] };
+                delta?: { type?: string; citation?: { type?: string; url?: string; title?: string | null } };
+              };
+              if (e.type === 'content_block_delta' && e.delta?.type === 'citations_delta'
+                  && e.delta.citation?.type === 'web_search_result_location') {
+                addSource(e.delta.citation.url, e.delta.citation.title);
+              }
+              if (e.type === 'content_block_start' && e.content_block?.type === 'web_search_tool_result'
+                  && Array.isArray(e.content_block.content)) {
+                for (const r of e.content_block.content.slice(0, 5)) {
+                  if (r?.type === 'web_search_result' && r.url) {
+                    addSource(r.url, r.title);
+                    corpus.push(`${String(r.title ?? '')} ${r.url}`);
+                  }
+                }
+              }
+            });
+          }
           ms.on('text', (delta) => {
             streamedAny = true;
             emit(ndDelta(scrub(delta)));
@@ -239,10 +355,16 @@ export async function POST(req: Request): Promise<Response> {
             .filter((c): c is Anthropic.TextBlock => c.type === 'text')
             .map((c) => c.text)
             .join('');
+          modelCalls++;
+          addUsage(final.usage as ApiUsage);
           await recordApiCall({
             feature: FEATURE, model: MODEL, usage: final.usage, wallMs: Date.now() - t,
             metadata: { round: 'final', rounds, tool_calls: toolCalls },
           });
+        }
+
+        if (webSources.length && !req.signal.aborted) {
+          emit(ndWebSources(webSources.slice(0, 8)));
         }
 
         // Verification, both layers. Layer 1 (quotes + figures vs the corpus)
@@ -252,6 +374,7 @@ export async function POST(req: Request): Promise<Response> {
         // if it fails, in which case the deterministic results still ship.
         if (answerText.trim() && !req.signal.aborted) {
           let report: VerifyReport = { flags: [], ...runDeterministicChecks(answerText, corpus) };
+          if (webOn && totals.server_tool_use.web_search_requests > 0) report.webSearched = true;
           if (Date.now() < deadline - 25_000) {
             emit(ndStatus(STATUS_VERIFYING));
             try {
@@ -263,12 +386,14 @@ export async function POST(req: Request): Promise<Response> {
                   model: MODEL,
                   max_tokens: 700,
                   system,
-                  tools: [...DEEP_TOOLS, VERIFY_TOOL],
+                  tools: [...tools, VERIFY_TOOL],
                   tool_choice: { type: 'tool', name: VERIFY_TOOL.name },
                   messages: convo,
                 },
                 { timeout: 25_000, maxRetries: 0 }
               );
+              modelCalls++;
+              addUsage(vres.usage as ApiUsage);
               await recordApiCall({
                 feature: FEATURE, model: MODEL, usage: vres.usage, wallMs: Date.now() - t,
                 metadata: { round: 'verify', rounds, tool_calls: toolCalls },
@@ -276,13 +401,31 @@ export async function POST(req: Request): Promise<Response> {
               const tu = vres.content.find(
                 (c): c is Anthropic.ToolUseBlock => c.type === 'tool_use' && c.name === VERIFY_TOOL.name
               );
-              const parsed = tu ? parseVerifyOutput(tu.input) : null;
-              if (parsed) report = { ...report, ...parsed };
+              const parsedV = tu ? parseVerifyOutput(tu.input) : null;
+              if (parsedV) report = { ...report, ...parsedV };
             } catch {
               // model leg unavailable; the deterministic report still ships
             }
           }
           emit(ndVerify(report));
+        }
+
+        // The reader-facing cost line: every model call this turn, priced on
+        // the frozen rate card, web-search surcharge included.
+        if (!req.signal.aborted) {
+          const costUsd = await priceUsage(MODEL, totals);
+          emit(ndCost({
+            cost_usd: costUsd,
+            input_tokens:
+              (totals.input_tokens ?? 0) +
+              (totals.cache_creation_input_tokens ?? 0) +
+              (totals.cache_read_input_tokens ?? 0),
+            output_tokens: totals.output_tokens ?? 0,
+            cache_read_tokens: totals.cache_read_input_tokens ?? 0,
+            searches: totals.server_tool_use.web_search_requests,
+            rounds: modelCalls,
+            model: MODEL,
+          }));
         }
 
         if (!streamedAny && !req.signal.aborted) {

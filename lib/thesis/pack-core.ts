@@ -18,7 +18,7 @@ import type {
 // confidence, confidence_label, rationales, evidence.note, or reliability_prior.
 // (evidence.excerpt and touch directions are public on claim pages already.)
 
-import { domainOfUrl, quarterBuckets } from '../pack-shared.ts';
+import { domainOfUrl, quarterBuckets, ORQ } from '../pack-shared.ts';
 import type { Q } from '../pack-shared.ts';
 
 export interface ThesisInput {
@@ -33,10 +33,8 @@ export interface PrevRun {
   signal_ids: string[];
 }
 
-// websearch_to_tsquery ANDs every term; a full thesis sentence would rarely match
-// any record. OR-combine the lexemes (ts_rank still ranks records matching more of
-// them first) — same trick as lib/ask/retrieve.ts.
-const ORQ = "replace(websearch_to_tsquery('english', $1)::text, '&', '|')::tsquery";
+// ORQ (the OR-combined tsquery shared with the ask retrieval legs) now comes
+// from pack-shared, so all three FTS surfaces stay in sync.
 
 const TEXT_LIMIT = 60;   // text-match cap; claim-matched signals are never capped
 

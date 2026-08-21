@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { isAdmin } from '@/lib/auth';
-import { recordApiCall } from '@/lib/cost';
+import { priceUsage, recordApiCall } from '@/lib/cost';
+import { encodeCostReport } from '@/lib/ask/history';
 import { buildSignalAskContext } from '@/lib/signal-ask';
 
 // "Ask this signal" streaming endpoint, scoped to one signal. Node runtime (default) is
@@ -54,6 +55,18 @@ export async function POST(
         // Enforce the house no-em-dash rule on live output (Haiku occasionally slips one in).
         ms.on('text', (delta) => controller.enqueue(enc.encode(delta.replace(/\s*—\s*/g, ', '))));
         const final = await ms.finalMessage();
+        // The per-turn cost line rides a trailing sentinel; AskAtlas strips it.
+        const u = final.usage;
+        controller.enqueue(enc.encode(encodeCostReport({
+          cost_usd: await priceUsage(MODEL, final.usage),
+          input_tokens:
+            (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0),
+          output_tokens: u.output_tokens ?? 0,
+          cache_read_tokens: u.cache_read_input_tokens ?? 0,
+          searches: 0,
+          rounds: 1,
+          model: MODEL,
+        })));
         await recordApiCall({
           feature: 'signal_ask', model: MODEL, usage: final.usage, wallMs: Date.now() - t0,
           metadata: { signal_id: id },

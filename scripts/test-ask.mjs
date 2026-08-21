@@ -18,7 +18,8 @@ globalThis.localStorage = {
 globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
 
 const {
-  parseAskBody, clampHistory, retrievalQuery, clampSignalOffset,
+  parseAskBody, clampHistory, retrievalQuery, clampSignalOffset, expandVocabulary,
+  encodeCostReport, extractCostReport, parseCostReport, COST_MARKER,
   USER_TURN_CAP, ASSISTANT_TURN_CAP, MAX_MESSAGES, CHAR_BUDGET,
 } = await import('../lib/ask/history.ts');
 const { parseCitations } = await import('../lib/ask/verify.ts');
@@ -116,7 +117,21 @@ check('retrievalQuery: latest plus prior user turn, capped', () => {
     { role: 'user', content: 'what contradicts that?' },
   ]);
   assert.ok(q.startsWith('what contradicts that? first question about capex'));
-  assert.ok(retrievalQuery([{ role: 'user', content: 'x'.repeat(3000) }]).length <= 1200);
+  // The base is capped at 1200; vocabulary expansion appends after the cap.
+  const long = retrievalQuery([{ role: 'user', content: 'x'.repeat(3000) }]);
+  assert.ok(long.length <= 1200);
+});
+check('expandVocabulary: street terms gain Atlas terms, direct hits pass through', () => {
+  const q = expandVocabulary('are frontier models still beating open source?');
+  assert.ok(q.includes('parity'), 'beating -> parity');
+  assert.ok(q.includes('open-weight'), 'open source -> open-weight');
+  assert.ok(q.startsWith('are frontier models still beating open source?'), 'original text kept first');
+  assert.equal(expandVocabulary('what is the capex thesis?'), 'what is the capex thesis?');
+});
+check('retrievalQuery: expansion terms ride along', () => {
+  const q = retrievalQuery([{ role: 'user', content: 'is open source catching up?' }]);
+  assert.ok(q.includes('open-weight'));
+  assert.ok(q.includes('parity'));
 });
 check('clampSignalOffset: clamps and defaults', () => {
   assert.equal(clampSignalOffset(undefined), 0);
@@ -220,6 +235,42 @@ check('collectWebSources: dedupes by url, skips non-text blocks', () => {
     { url: 'https://a.com/x', title: 'A' },
     { url: 'https://b.com/y', title: 'https://b.com/y' },
   ]);
+});
+
+// ---- cost report sentinel ----------------------------------------------------
+check('cost report: encode/extract round-trip', () => {
+  const report = {
+    cost_usd: 0.0231, input_tokens: 41200, output_tokens: 2100,
+    cache_read_tokens: 30000, searches: 2, rounds: 5, model: 'claude-haiku-4-5',
+  };
+  const { text, cost } = extractCostReport(`The answer.${encodeCostReport(report)}`);
+  assert.equal(text, 'The answer.');
+  assert.deepEqual(cost, report);
+});
+check('cost report: missing or torn sentinel yields null, answer kept', () => {
+  assert.deepEqual(extractCostReport('Plain answer.'), { text: 'Plain answer.', cost: null });
+  const torn = extractCostReport(`Answer.\n${COST_MARKER}{"cost_usd": 0.1`);
+  assert.equal(torn.text, 'Answer.');
+  assert.equal(torn.cost, null);
+});
+check('cost report: cost line before web-sources line, both extract', () => {
+  const report = {
+    cost_usd: 0.004, input_tokens: 9000, output_tokens: 800,
+    cache_read_tokens: 0, searches: 1, rounds: 1, model: 'claude-haiku-4-5',
+  };
+  const acc = `Answer.${encodeCostReport(report)}${encodeWebSources([{ url: 'https://a.com/x', title: 'A' }])}`;
+  const w = extractWebSources(acc);
+  assert.equal(w.sources.length, 1);
+  const c = extractCostReport(w.text);
+  assert.equal(c.text, 'Answer.');
+  assert.deepEqual(c.cost, report);
+});
+check('parseCostReport: clamps junk', () => {
+  assert.equal(parseCostReport(null), null);
+  const p = parseCostReport({ cost_usd: -1, input_tokens: 'nope', model: 42 });
+  assert.equal(p.cost_usd, 0);
+  assert.equal(p.input_tokens, 0);
+  assert.equal(p.model, '');
 });
 
 // ---- house style -------------------------------------------------------------
