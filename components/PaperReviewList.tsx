@@ -63,26 +63,8 @@ export default function PaperReviewList({ papers }: { papers: Paper[] }) {
           style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
         >
           <div className="flex items-center flex-wrap gap-2 text-xs" style={{ marginBottom: 4 }}>
-            <span style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>
-              {p.arxiv_id ?? p.origin}
-            </span>
+            <span style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>paper</span>
             {p.published_at && <span style={{ color: 'var(--faint-ink)' }}>· {p.published_at}</span>}
-            {p.categories.length > 0 && (
-              <span style={{ color: 'var(--faint-ink)' }}>· {p.categories.slice(0, 4).join(', ')}</span>
-            )}
-            {p.author_hindex != null && (
-              <span
-                style={{ color: p.author_hindex >= 20 ? 'var(--supports)' : 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}
-                title="Highest author h-index (Semantic Scholar). A track-record prior, not a verdict: fresh papers may show low until S2 links the authors."
-              >
-                · h-max {p.author_hindex}
-              </span>
-            )}
-            {p.comments && (
-              <span style={{ color: 'var(--heat-2)' }} title={p.comments}>
-                · {p.comments.slice(0, 80)}
-              </span>
-            )}
           </div>
 
           <div className="flex items-baseline gap-2 flex-wrap">
@@ -129,9 +111,9 @@ export default function PaperReviewList({ papers }: { papers: Paper[] }) {
             </div>
           )}
 
-          {(p.claim_touches.length > 0 || p.suggested_threads.length > 0 || p.suggested_concepts.length > 0) && (
+          {(p.touches.length > 0 || p.suggested_threads.length > 0 || p.suggested_concepts.length > 0) && (
             <div className="flex items-center flex-wrap gap-2 text-xs" style={{ marginTop: 6, color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>
-              {p.claim_touches.map((c) => <span key={`c-${c}`}>[{c}]</span>)}
+              {p.touches.map((c: string) => <span key={`c-${c}`}>[{c}]</span>)}
               {p.suggested_threads.map((t) => <span key={`t-${t}`}>thread:{t}</span>)}
               {p.suggested_concepts.map((s) => <span key={`s-${s}`}>concept:{s}</span>)}
             </div>

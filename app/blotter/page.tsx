@@ -1,22 +1,20 @@
 import Link from 'next/link';
 import { isAdmin, isPreview } from '@/lib/auth';
 import {
-  getTopClaims, getTopSignals, getMapHealth, getPipelineAnalytics, getCandidateArchive, getCalibration,
-  getLatestSavedReport, getLatestThesisReports,
+  getTopHypotheses, getTopSignals, getMapHealth, getCandidateArchive, getCalibration,
+  getLatestSavedReport, getLatestHypothesisReports,
 } from '@/lib/data';
-import { formatDateRange } from '@/lib/format';
+import { formatDateRange, dateLabel } from '@/lib/format';
 import Header from '@/components/Header';
-import TopClaimsPanel from '@/components/dashboard/TopClaimsPanel';
+import TopHypothesesPanel from '@/components/dashboard/TopHypothesesPanel';
 import TopSignalsPanel from '@/components/dashboard/TopSignalsPanel';
 import MapHealthStrip from '@/components/dashboard/MapHealthStrip';
-import ConfidenceMovementPanel from '@/components/dashboard/ConfidenceMovementPanel';
-import PipelineAnalyticsView from '@/components/dashboard/PipelineAnalytics';
+import ConvictionMovementPanel from '@/components/dashboard/ConvictionMovementPanel';
 import CandidateArchive from '@/components/dashboard/CandidateArchive';
-import ThesisTracker from '@/components/dashboard/ThesisTracker';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // hosts the candidate-archive read action
-export const metadata = { title: 'News Blotter · The AI Atlas' };
+export const metadata = { title: 'News Blotter · The Strategy Atlas' };
 
 // The News Blotter: the editor's desk, set in the Console Broadsheet voice
 // (app/styles/home.css, everything scoped under .bs). This WAS the home page until
@@ -30,15 +28,14 @@ export default async function Blotter() {
   const preview = await isPreview();
   const personal = admin && !preview;
 
-  const [topClaims, topSignals, health, pipeline, archive, calibration, latest, theses] = await Promise.all([
-    getTopClaims(personal, 6),
+  const [topHypotheses, topSignals, health, archive, calibration, latest, hypothesisReports] = await Promise.all([
+    getTopHypotheses(personal, 6),
     getTopSignals(6),
     getMapHealth(personal),
-    getPipelineAnalytics(),
     getCandidateArchive({ page: 1, pageSize: 25 }),
     personal ? getCalibration() : Promise.resolve(null),
     getLatestSavedReport(),
-    getLatestThesisReports(2),
+    getLatestHypothesisReports(2),
   ]);
 
   // The lead story's dek: a short plain-text preview of the latest report's period summary.
@@ -48,7 +45,7 @@ export default async function Blotter() {
     return plain.length > 260 ? `${plain.slice(0, 260).trimEnd()}…` : plain;
   })();
   // Legacy auto-titles fall back to a dated name, like ReportReadView.
-  const leadHed = latest && !latest.title.startsWith('AI Atlas')
+  const leadHed = latest && !latest.title.startsWith('Strategy Atlas')
     ? latest.title
     : latest ? `The Fortnight In Signals` : null;
 
@@ -81,31 +78,35 @@ export default async function Blotter() {
           </Link>
         )}
 
-        <ThesisTracker entries={theses} admin={personal} />
-
-        <div className="bs-cols" style={{ marginTop: 4 }}>
-          <TopClaimsPanel claims={topClaims} personal={personal} />
-          <TopSignalsPanel signals={topSignals} />
-        </div>
-
-        {/* The personal-layer pulse: recent confidence moves (admin-only). */}
-        {personal && calibration && (
-          <div style={{ marginTop: 'var(--gap)' }}>
-            <ConfidenceMovementPanel moves={calibration.moves} />
+        {/* Latest hypothesis reports */}
+        {hypothesisReports.length > 0 && (
+          <div style={{ margin: '10px 0 14px' }}>
+            <div className="section-label">Hypothesis reports</div>
+            <div className="flex flex-col gap-1.5">
+              {hypothesisReports.map((t) => (
+                <Link key={t.report_id} href={`/hypothesis-report/${t.report_id}`} className="bs-row" style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+                  <span className="bs-rowhed" style={{ flex: 1 }}>{t.statement}</span>
+                  <span className="bs-tags">
+                    {t.matched} matched · {t.supports}s/{t.contradicts}c
+                    {dateLabel(t.generated_at) ? ` · ${dateLabel(t.generated_at)}` : ''}
+                  </span>
+                </Link>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* DEFERRED additional dashboard proposals — supported by existing tables, but each
-            reads as an empty grid until the corpus grows, so they're held back for now:
-            B — Snapshot band trend (snapshots): admin distribution of confidence bands across
-                recent snapshots. Source: getCalibration().snapshots. Exists once moves accumulate.
-            D — Lens coverage of the map (node_lenses): how many nodes carry each argument-map
-                lens — where the map is thin by lens. Source: getLensIndex(). Exists today.
-            E — Significance × lens heat grid (signals): a 3×6 grid of published-signal counts by
-                significance × audience lens. Source: getSignals(). Meaningful after more signals. */}
+        <div className="bs-cols" style={{ marginTop: 4 }}>
+          <TopHypothesesPanel hypotheses={topHypotheses} personal={personal} />
+          <TopSignalsPanel signals={topSignals} />
+        </div>
 
-        <div className="section-label">Discovery pipeline</div>
-        <PipelineAnalyticsView data={pipeline} />
+        {/* The personal-layer pulse: recent conviction moves (admin-only). */}
+        {personal && calibration && (
+          <div style={{ marginTop: 'var(--gap)' }}>
+            <ConvictionMovementPanel moves={calibration.moves} />
+          </div>
+        )}
 
         <div className="section-label">Candidate archive</div>
         <CandidateArchive initial={archive} admin={personal} />

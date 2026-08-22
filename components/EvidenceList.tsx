@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Evidence } from '@/lib/types';
-import { directionLabel, directionColor, SIGNAL_LENS_LABEL } from '@/lib/format';
+import { directionLabel, directionColor } from '@/lib/format';
 
 export default function EvidenceList({
   evidence,
@@ -24,7 +24,7 @@ export default function EvidenceList({
             <span className={`font-medium ${directionColor(ev.direction)}`}>
               {directionLabel(ev.direction)}
             </span>
-            <span style={{ color: 'var(--faint-ink)' }}>· weight {ev.weight}</span>
+            <span style={{ color: 'var(--faint-ink)' }}>· confidence {ev.confidence}</span>
             {ev.source_title && (
               <span style={{ color: 'var(--faint-ink)' }}>
                 · {ev.source_title}
@@ -38,9 +38,6 @@ export default function EvidenceList({
                   {ev.signal_title}
                 </Link>
               </span>
-            )}
-            {ev.lens && (
-              <span style={{ color: 'var(--faint-ink)' }}>· {SIGNAL_LENS_LABEL[ev.lens]}</span>
             )}
             {admin && ev.reliability_prior != null && (
               <span style={{ color: 'var(--faint-ink)' }}>· prior {ev.reliability_prior}</span>

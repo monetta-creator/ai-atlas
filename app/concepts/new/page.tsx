@@ -7,9 +7,9 @@ import Header from '@/components/Header';
 import ConceptForm from '@/components/ConceptForm';
 
 export const dynamic = 'force-dynamic';
-// Hosts the AI recommend actions (prerequisites + claim wiring).
+// Hosts the AI recommend actions (prerequisites + hypothesis wiring).
 export const maxDuration = 60;
-export const metadata = { title: 'New concept · The AI Atlas' };
+export const metadata = { title: 'New concept · The Strategy Atlas' };
 
 export default async function NewConceptPage({
   searchParams,
@@ -19,7 +19,7 @@ export default async function NewConceptPage({
   const admin = await requireAdminPage();
 
   const { gap } = await searchParams;
-  const [{ concepts }, { claims, bridges }] = await Promise.all([getConceptGraph(), getTargets()]);
+  const [{ concepts }, { hypotheses }] = await Promise.all([getConceptGraph(), getTargets()]);
 
   // ?gap=<slug> pre-fills the form from the persisted gap scan (the recommendation
   // lives server-side, so the link stays tiny and nothing is trusted from the URL
@@ -27,7 +27,7 @@ export default async function NewConceptPage({
   let initial:
     | {
         name: string; slug: string; short_definition: string; explanation: string;
-        status: ConceptStatus; prerequisite_ids: string[]; claim_codes: string[];
+        status: ConceptStatus; prerequisite_ids: string[]; codes: string[];
       }
     | undefined;
   let fromGap = false;
@@ -45,7 +45,7 @@ export default async function NewConceptPage({
         prerequisite_ids: rec.prerequisite_slugs
           .map((s) => idBySlug.get(s))
           .filter((id): id is string => !!id),
-        claim_codes: rec.claim_codes,
+        codes: rec.hypothesis_codes,
       };
       fromGap = true;
     }
@@ -63,7 +63,7 @@ export default async function NewConceptPage({
           <p className="lede" style={{ fontSize: 14, marginTop: 8 }}>
             {fromGap
               ? 'Pre-filled from the gap diagnosis: the definition, explanation, and wiring below are the model’s draft. Review and edit everything before creating.'
-              : 'Define the term, then wire it in: which concepts a reader must understand first, and which claims on the map lean on it. The AI suggests both; you confirm each one.'}
+              : 'Define the term, then wire it in: which concepts a reader must understand first, and which hypotheses lean on it. The AI suggests both; you confirm each one.'}
           </p>
         </header>
 
@@ -73,8 +73,7 @@ export default async function NewConceptPage({
           concepts={concepts.map((c) => ({
             id: c.id, slug: c.slug, name: c.name, short_definition: c.short_definition,
           }))}
-          claims={claims}
-          bridges={bridges}
+          hypotheses={hypotheses}
           initial={initial}
         />
       </section>

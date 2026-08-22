@@ -2,20 +2,16 @@
 
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import type { EvidenceGraphSource, EvidenceGraphClaim, EvidenceGraphBridge, EvidenceGraphEdge } from '@/lib/data';
+import type { EvidenceGraphSource, EvidenceGraphHypothesis, EvidenceGraphEdge } from '@/lib/data';
 
-// Bipartite sources ↔ claims connector (same measured-anchor technique as
-// QuestionMap): sources on the left, claims (grouped by question) + bridges on
-// the right, evidence as green/red edges. Hover a node to trace its links;
-// claims/bridges with no incoming edge are flagged as gaps. Receives an
-// already-filtered subgraph and just renders it.
+// Bipartite sources ↔ hypotheses connector (measured-anchor technique): sources
+// on the left, hypotheses on the right, evidence as green/red edges. Hover a
+// node to trace its links; hypotheses with no incoming edge are flagged as gaps.
+// Receives an already-filtered subgraph and just renders it.
 
 type Rel = 'support' | 'contradict' | 'depends';
 function relOf(d: string): Rel {
   return d === 'supports' ? 'support' : d === 'contradicts' ? 'contradict' : 'depends';
-}
-function targetKey(e: EvidenceGraphEdge) {
-  return `${e.target_type === 'bridge_claim' ? 'bridge' : 'claim'}:${e.target_id}`;
 }
 function truncate(s: string, n = 90) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
@@ -23,13 +19,11 @@ function truncate(s: string, n = 90) {
 
 export default function SourceEvidenceMap({
   sources,
-  claims,
-  bridges,
+  hypotheses,
   edges,
 }: {
   sources: EvidenceGraphSource[];
-  claims: EvidenceGraphClaim[];
-  bridges: EvidenceGraphBridge[];
+  hypotheses: EvidenceGraphHypothesis[];
   edges: EvidenceGraphEdge[];
 }) {
   const router = useRouter();
@@ -44,37 +38,30 @@ export default function SourceEvidenceMap({
     () => sources.filter((s) => sourceIdsWithEdges.has(s.id)),
     [sources, sourceIdsWithEdges]
   );
-  const targetsWithEdges = useMemo(() => new Set(edges.map(targetKey)), [edges]);
-
-  // claims grouped by question (claims arrive pre-sorted by q_sort, code)
-  const groups = useMemo(() => {
-    const g: { q_slug: string; q_title: string; claims: EvidenceGraphClaim[] }[] = [];
-    for (const c of claims) {
-      let grp = g[g.length - 1];
-      if (!grp || grp.q_slug !== c.q_slug) {
-        grp = { q_slug: c.q_slug, q_title: c.q_title, claims: [] };
-        g.push(grp);
-      }
-      grp.claims.push(c);
-    }
-    return g;
-  }, [claims]);
+  const targetsWithEdges = useMemo(
+    () => new Set(edges.map((e) => `hyp:${e.hypothesis_id}`)),
+    [edges]
+  );
 
   const mapEdges = useMemo(
-    () => edges.map((e, i) => ({ id: `${e.source_id}-${i}`, from: `source:${e.source_id}`, to: targetKey(e), rel: relOf(e.direction) })),
+    () => edges.map((e, i) => ({
+      id: `${e.source_id}-${i}`,
+      from: `source:${e.source_id}`,
+      to: `hyp:${e.hypothesis_id}`,
+      rel: relOf(e.direction),
+    })),
     [edges]
   );
 
   // Mobile fallback data: the SVG connectors are hidden at <=820px (and the two
-  // columns stack), so the source↔claim links would be invisible. Precompute, per
-  // source, the codes it bears on + their relation, rendered as relation chips
+  // columns stack), so the source↔hypothesis links would be invisible. Precompute,
+  // per source, the codes it bears on + their relation, rendered as relation chips
   // inside each source node (shown only when the curves are hidden — see .relchips).
   const codeOf = useMemo(() => {
     const m = new Map<string, string>();
-    for (const c of claims) m.set(`claim:${c.id}`, c.code);
-    for (const b of bridges) m.set(`bridge:${b.id}`, b.code);
+    for (const h of hypotheses) m.set(`hyp:${h.id}`, h.code);
     return m;
-  }, [claims, bridges]);
+  }, [hypotheses]);
   const sourceRels = useMemo(() => {
     const m = new Map<string, { code: string; rel: Rel }[]>();
     for (const e of mapEdges) {
@@ -170,8 +157,10 @@ export default function SourceEvidenceMap({
     </div>
   );
 
-  const targetNode = (key: string, code: string, statement: string, href: string) => {
+  const hypothesisNode = (h: EvidenceGraphHypothesis) => {
+    const key = `hyp:${h.id}`;
     const gap = !targetsWithEdges.has(key);
+    const href = `/hypothesis/${encodeURIComponent(h.code)}`;
     return (
       <div
         key={key}
@@ -187,9 +176,9 @@ export default function SourceEvidenceMap({
         onClick={() => router.push(href)}
         onKeyDown={(e) => { if (e.key === 'Enter') router.push(href); }}
       >
-        <span className="cnum">{code}</span>
+        <span className="cnum">{h.code}</span>
         <div>
-          <div className="ctxt">{truncate(statement)}</div>
+          <div className="ctxt">{truncate(h.statement)}</div>
           {gap && <div className="relchips"><span className="relchip" style={{ color: 'var(--faint-ink)' }}>no evidence</span></div>}
         </div>
       </div>
@@ -224,18 +213,8 @@ export default function SourceEvidenceMap({
         </div>
 
         <div className="map-col">
-          {groups.map((g) => (
-            <div key={g.q_slug}>
-              <div className="col-label">{g.q_title}</div>
-              {g.claims.map((c) => targetNode(`claim:${c.id}`, c.code, c.statement, `/claim/${encodeURIComponent(c.code)}`))}
-            </div>
-          ))}
-          {bridges.length > 0 && (
-            <div>
-              <div className="col-label">Bridge-claims</div>
-              {bridges.map((b) => targetNode(`bridge:${b.id}`, b.code, b.statement, `/bridge/${b.code}`))}
-            </div>
-          )}
+          <div className="col-label">Hypotheses</div>
+          {hypotheses.map(hypothesisNode)}
         </div>
       </div>
     </div>

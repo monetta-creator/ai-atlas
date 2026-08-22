@@ -26,8 +26,8 @@ const anton = Anton({
 });
 
 export const metadata: Metadata = {
-  title: "The AI Atlas",
-  description: "A structured map for staying oriented in the AI economy debate.",
+  title: "The Strategy Atlas",
+  description: "A structured board for tracking strategic hypotheses, evidence, and conviction.",
 };
 
 // Without this, mobile browsers assume a ~980px layout viewport and shrink-to-fit —

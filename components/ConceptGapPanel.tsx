@@ -114,7 +114,7 @@ export default function ConceptGapPanel({ initial }: { initial: ConceptGapScan |
                 <p className="gap-argument">
                   <span className="gap-argument-label">why</span> {r.argument}
                 </p>
-                {(r.prerequisite_slugs.length > 0 || r.claim_codes.length > 0) && (
+                {(r.prerequisite_slugs.length > 0 || r.hypothesis_codes.length > 0) && (
                   <div className="gap-wiring">
                     {r.prerequisite_slugs.length > 0 && (
                       <span>
@@ -127,10 +127,10 @@ export default function ConceptGapPanel({ initial }: { initial: ConceptGapScan |
                         ))}
                       </span>
                     )}
-                    {r.claim_codes.length > 0 && (
+                    {r.hypothesis_codes.length > 0 && (
                       <span>
                         leaned on by:{' '}
-                        {r.claim_codes.map((c, i) => (
+                        {r.hypothesis_codes.map((c: string, i: number) => (
                           <span key={c}>
                             {i > 0 && ', '}
                             <span className="gap-chip">{c}</span>

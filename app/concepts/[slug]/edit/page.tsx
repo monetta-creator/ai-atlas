@@ -7,9 +7,9 @@ import Header from '@/components/Header';
 import ConceptForm from '@/components/ConceptForm';
 
 export const dynamic = 'force-dynamic';
-// Hosts the AI recommend actions (prerequisites + claim wiring).
+// Hosts the AI recommend actions (prerequisites + hypothesis wiring).
 export const maxDuration = 60;
-export const metadata = { title: 'Edit concept · The AI Atlas' };
+export const metadata = { title: 'Edit concept · The Strategy Atlas' };
 
 export default async function EditConceptPage({
   params,
@@ -19,13 +19,13 @@ export default async function EditConceptPage({
   const admin = await requireAdminPage();
 
   const { slug } = await params;
-  const [data, { concepts }, { claims, bridges }] = await Promise.all([
+  const [data, { concepts }, { hypotheses }] = await Promise.all([
     getConceptForEdit(decodeURIComponent(slug)),
     getConceptGraph(),
     getTargets(),
   ]);
   if (!data) notFound();
-  const { concept, prerequisite_ids, claim_codes } = data;
+  const { concept, prerequisite_ids, codes } = data;
 
   return (
     <>
@@ -46,8 +46,7 @@ export default async function EditConceptPage({
           concepts={concepts
             .filter((c) => c.id !== concept.id)
             .map((c) => ({ id: c.id, slug: c.slug, name: c.name, short_definition: c.short_definition }))}
-          claims={claims}
-          bridges={bridges}
+          hypotheses={hypotheses}
           initial={{
             name: concept.name,
             slug: concept.slug,
@@ -55,7 +54,7 @@ export default async function EditConceptPage({
             explanation: concept.explanation ?? '',
             status: concept.status,
             prerequisite_ids,
-            claim_codes,
+            codes,
           }}
         />
 
@@ -65,7 +64,7 @@ export default async function EditConceptPage({
             Delete concept
           </button>
           <p className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 8 }}>
-            Removes the concept, its dependency edges, and its claim links. Concepts that listed it
+            Removes the concept, its dependency edges, and its hypothesis links. Concepts that listed it
             as a prerequisite stay; they just lose this edge.
           </p>
         </form>

@@ -2,23 +2,19 @@
 
 import { useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { addEvidenceBulkAction, recommendClaimsAction } from '@/lib/actions';
-import type { ClaimRecommendation, Direction, Weight } from '@/lib/types';
+import { addEvidenceBulkAction, recommendHypothesesAction } from '@/lib/actions';
+import type { HypothesisRecommendation, Direction, Weight } from '@/lib/types';
 
 interface TargetOption {
   id: string;
   code: string;
   statement: string;
-  type: 'claim' | 'bridge_claim';
 }
 interface Sel {
   direction: Direction;
-  weight: Weight;
+  confidence: Weight;
 }
 
-function keyOf(t: TargetOption) {
-  return `${t.type}:${t.id}`;
-}
 function truncate(s: string, n = 110) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
@@ -32,38 +28,36 @@ function AttachButton({ count }: { count: number }) {
       disabled={pending || count === 0}
       style={pending || count === 0 ? { opacity: 0.5, cursor: pending ? 'wait' : 'not-allowed' } : undefined}
     >
-      {pending ? 'Attaching…' : count === 0 ? 'Select claims to attach' : `Attach to ${count} claim${count === 1 ? '' : 's'}`}
+      {pending ? 'Attaching…' : count === 0 ? 'Select hypotheses to attach' : `Attach to ${count} hypothes${count === 1 ? 'is' : 'es'}`}
     </button>
   );
 }
 
 export default function EvidenceForm({
   sourceId,
-  claims,
-  bridges,
+  hypotheses,
 }: {
   sourceId: string;
-  claims: TargetOption[];
-  bridges: TargetOption[];
+  hypotheses: TargetOption[];
 }) {
   const [sel, setSel] = useState<Record<string, Sel>>({});
-  const [reasons, setReasons] = useState<Record<string, string>>({}); // targetKey -> reason
+  const [reasons, setReasons] = useState<Record<string, string>>({}); // hypothesis id -> reason
   const [recommending, setRecommending] = useState(false);
   const [recStatus, setRecStatus] = useState('');
   const [recError, setRecError] = useState(false);
 
-  const claimByCode = Object.fromEntries(claims.map((c) => [c.code, c]));
+  const byCode = Object.fromEntries(hypotheses.map((h) => [h.code, h]));
 
   function toggle(t: TargetOption, on: boolean, seed?: Sel) {
     setSel((prev) => {
       const next = { ...prev };
-      if (on) next[keyOf(t)] = seed ?? next[keyOf(t)] ?? { direction: 'supports', weight: 'medium' };
-      else delete next[keyOf(t)];
+      if (on) next[t.id] = seed ?? next[t.id] ?? { direction: 'supports', confidence: 'medium' };
+      else delete next[t.id];
       return next;
     });
   }
   function update(t: TargetOption, patch: Partial<Sel>) {
-    setSel((prev) => (prev[keyOf(t)] ? { ...prev, [keyOf(t)]: { ...prev[keyOf(t)], ...patch } } : prev));
+    setSel((prev) => (prev[t.id] ? { ...prev, [t.id]: { ...prev[t.id], ...patch } } : prev));
   }
 
   async function recommend() {
@@ -71,22 +65,22 @@ export default function EvidenceForm({
     setRecError(false);
     setRecStatus('Analyzing…');
     try {
-      const recs: ClaimRecommendation[] = await recommendClaimsAction(sourceId);
+      const recs: HypothesisRecommendation[] = await recommendHypothesesAction(sourceId);
       if (!recs.length) {
-        setRecStatus('No strong claim matches found. Pick manually below.');
+        setRecStatus('No strong hypothesis matches found. Pick manually below.');
         return;
       }
       const nextSel: Record<string, Sel> = {};
       const nextReasons: Record<string, string> = {};
       for (const r of recs) {
-        const c = claimByCode[r.claim_code];
-        if (!c) continue;
-        nextSel[keyOf(c)] = { direction: r.direction, weight: r.weight };
-        nextReasons[keyOf(c)] = r.reason;
+        const h = byCode[r.code];
+        if (!h) continue;
+        nextSel[h.id] = { direction: r.direction, confidence: r.confidence };
+        nextReasons[h.id] = r.reason;
       }
       setSel((prev) => ({ ...nextSel, ...prev })); // keep anything already selected
       setReasons((prev) => ({ ...prev, ...nextReasons }));
-      setRecStatus(`Recommended ${recs.length} claim${recs.length === 1 ? '' : 's'} (pre-checked below).`);
+      setRecStatus(`Recommended ${recs.length} hypothes${recs.length === 1 ? 'is' : 'es'} (pre-checked below).`);
     } catch (err) {
       setRecError(true);
       const msg = err instanceof Error ? err.message : 'error';
@@ -98,24 +92,25 @@ export default function EvidenceForm({
 
   const count = Object.keys(sel).length;
   const payload = JSON.stringify(
-    Object.entries(sel).map(([target, v]) => ({ target, direction: v.direction, weight: v.weight }))
+    Object.entries(sel).map(([hypothesis_id, v]) => ({
+      hypothesis_id, direction: v.direction, confidence: v.confidence,
+    }))
   );
 
-  // recommended claims float to the top
-  const sortedClaims = [...claims].sort((a, b) => {
-    const ra = reasons[keyOf(a)] ? 0 : 1;
-    const rb = reasons[keyOf(b)] ? 0 : 1;
+  // recommended hypotheses float to the top
+  const sorted = [...hypotheses].sort((a, b) => {
+    const ra = reasons[a.id] ? 0 : 1;
+    const rb = reasons[b.id] ? 0 : 1;
     return ra - rb;
   });
 
   const row = (t: TargetOption) => {
-    const k = keyOf(t);
-    const checked = !!sel[k];
-    const s = sel[k];
-    const reason = reasons[k];
+    const checked = !!sel[t.id];
+    const s = sel[t.id];
+    const reason = reasons[t.id];
     return (
       <div
-        key={k}
+        key={t.id}
         className="border rounded-[var(--radius)] p-2.5"
         style={{
           borderColor: reason ? 'color-mix(in oklab, var(--accent) 35%, var(--line))' : 'var(--line)',
@@ -149,8 +144,8 @@ export default function EvidenceForm({
             <select
               className="input"
               style={{ width: 'auto', padding: '4px 8px', fontSize: 12 }}
-              value={s.weight}
-              onChange={(e) => update(t, { weight: e.target.value as Weight })}
+              value={s.confidence}
+              onChange={(e) => update(t, { confidence: e.target.value as Weight })}
             >
               <option value="high">high</option>
               <option value="medium">medium</option>
@@ -166,7 +161,7 @@ export default function EvidenceForm({
     <div>
       <div className="flex items-center gap-3 flex-wrap" style={{ marginBottom: 12 }}>
         <button type="button" className="btn btn--ghost btn--sm" onClick={recommend} disabled={recommending} style={recommending ? { opacity: 0.6, cursor: 'wait' } : undefined}>
-          {recommending ? 'Recommending…' : '★ Recommend claims (AI)'}
+          {recommending ? 'Recommending…' : '★ Recommend hypotheses (AI)'}
         </button>
         {recStatus && (
           <span className="text-xs" role="status" aria-live="polite" style={{ color: recError ? 'var(--heat-4)' : 'var(--faint-ink)' }}>
@@ -180,13 +175,7 @@ export default function EvidenceForm({
         <input type="hidden" name="payload" value={payload} />
 
         <div className="flex flex-col gap-2" style={{ maxHeight: 360, overflowY: 'auto', paddingRight: 4 }}>
-          {sortedClaims.map(row)}
-          {bridges.length > 0 && (
-            <>
-              <div className="lbl" style={{ marginTop: 6 }}>Bridge-claims</div>
-              {bridges.map(row)}
-            </>
-          )}
+          {sorted.map(row)}
         </div>
 
         <div className="field">

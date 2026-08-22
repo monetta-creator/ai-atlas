@@ -2,31 +2,24 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { DOMAIN_LABEL, dateLabel } from '@/lib/format';
+import { dateLabel, RESOLVABILITY_LABEL } from '@/lib/format';
+import { createHypothesisAction } from '@/lib/actions';
 import type { ArgumentGapScan, ArgumentGapRecommendation } from '@/lib/types';
 
-const relLabel = (r: string) => (r === 'depends_on' ? 'depends on' : r);
-
-function draftHref(r: ArgumentGapRecommendation, thesisId?: string): string {
-  const thesisParam = thesisId ? `&thesis=${encodeURIComponent(thesisId)}` : '';
-  return r.kind === 'bridge'
-    ? `/bridge/new?gap=${encodeURIComponent(r.code)}${thesisParam}`
-    : `/q/${r.question_slug}/claim/new?gap=${encodeURIComponent(r.code)}${thesisParam}`;
-}
-
-// Admin-only gap-diagnosis panel with two homes: the map-wide scan on /map and
-// the per-thesis scan on /theses/[id]. The three server actions arrive as PROPS
-// (bind the thesis id in the server page), so one component serves both scans.
-// Recommend-only — "Start draft" opens the authoring form pre-filled from the
-// persisted scan; nothing here writes.
+// Admin-only gap-diagnosis panel with two homes: the atlas-wide scan on /map and
+// the per-hypothesis scan on /hypothesis/[code]. The three server actions arrive
+// as PROPS (bind the hypothesis id in the server page), so one component serves
+// both scans. Recommend-only — "Create hypothesis" is an explicit form submit
+// that commits the proposed statement/test through the normal create action
+// (which also consumes the rec from the persisted scan); Dismiss discards it.
 export default function ArgumentGapPanel({
-  initial, diagnose, dismiss: dismissAction, clear, thesisId, title, explainer, emptyCopy,
+  initial, diagnose, dismiss: dismissAction, clear, hypothesisId, title, explainer, emptyCopy,
 }: {
   initial: ArgumentGapScan | null;
   diagnose: () => Promise<ArgumentGapScan>;
   dismiss: (code: string) => Promise<void>;
   clear: () => Promise<void>;
-  thesisId?: string;
+  hypothesisId?: string;
   title?: string;
   explainer?: string;
   emptyCopy?: string;
@@ -74,6 +67,17 @@ export default function ArgumentGapPanel({
     }
   }
 
+  const createForm = (r: ArgumentGapRecommendation) => (
+    <form action={createHypothesisAction} style={{ display: 'inline' }}>
+      <input type="hidden" name="statement" value={r.statement} />
+      <input type="hidden" name="test" value={r.test} />
+      {r.resolvability && <input type="hidden" name="resolvability" value={r.resolvability} />}
+      <input type="hidden" name="gap_code" value={r.code} />
+      {hypothesisId && <input type="hidden" name="from_hypothesis_id" value={hypothesisId} />}
+      <button type="submit" className="btn btn--primary btn--sm">Create hypothesis</button>
+    </form>
+  );
+
   return (
     <div className="gap-panel">
       <div className="gap-panel-head">
@@ -81,7 +85,7 @@ export default function ArgumentGapPanel({
           <span className="section-label" style={{ margin: 0 }}>{title ?? 'Gap diagnosis'}</span>
           <p className="gap-panel-sub">
             {explainer ??
-              'The model reads recent reports and signals against the map and argues for the few claims or bridges recent evidence demands. It cites its grounding, and recommending nothing is a normal outcome. Nothing is created until you submit the form.'}
+              'The model reads recent reports and signals against the board and argues for the few hypotheses recent evidence demands. It cites its grounding, and recommending nothing is a normal outcome. Nothing is created until you commit a recommendation.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -99,7 +103,7 @@ export default function ArgumentGapPanel({
       {error && <p className="editable-error">{error}</p>}
       {ranEmpty && !scan && (
         <p className="gap-empty">
-          {emptyCopy ?? 'No gaps. The map already covers what recent reports and signals surface.'}
+          {emptyCopy ?? 'No gaps. The board already covers what recent reports and signals surface.'}
         </p>
       )}
 
@@ -108,23 +112,21 @@ export default function ArgumentGapPanel({
           <p className="gap-meta">
             Scanned {dateLabel(scan.generatedAt) ?? scan.generatedAt} ·{' '}
             {scan.recommendations.length} recommendation{scan.recommendations.length === 1 ? '' : 's'}.
-            Persists until cleared, dismissed, or re-run.
+            Persists until cleared, dismissed, or created.
           </p>
           <div className="gap-list">
             {scan.recommendations.map((r) => (
               <div key={r.code} className="gap-rec">
                 <div className="gap-rec-head">
                   <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="gap-kind" data-kind={r.kind}>{r.kind === 'bridge' ? 'bridge-claim' : 'claim'}</span>
+                    <span className="gap-kind">hypothesis</span>
                     <span className="gap-slug">{r.code}</span>
-                    <span className="gap-slug">
-                      {r.kind === 'bridge'
-                        ? `${DOMAIN_LABEL[r.domain_from!]} → ${DOMAIN_LABEL[r.domain_to!]}`
-                        : DOMAIN_LABEL[r.domain!]}
-                    </span>
+                    {r.resolvability && (
+                      <span className="gap-slug">{RESOLVABILITY_LABEL[r.resolvability]} to resolve</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <Link href={draftHref(r, thesisId)} className="btn btn--primary btn--sm">Start draft</Link>
+                    {createForm(r)}
                     <button type="button" className="btn btn--quiet btn--sm" onClick={() => dismiss(r.code)}>
                       Dismiss
                     </button>
@@ -154,21 +156,6 @@ export default function ArgumentGapPanel({
                         <span key={id}>
                           {(i > 0 || r.grounding.report_id) && ', '}
                           <Link href={`/signals/${id}`} className="gap-chip">signal {i + 1}</Link>
-                        </span>
-                      ))}
-                    </span>
-                  </div>
-                )}
-
-                {r.edges.length > 0 && (
-                  <div className="gap-wiring">
-                    <span>
-                      {r.kind === 'bridge' ? 'fed by:' : 'bears on:'}{' '}
-                      {r.edges.map((e, i) => (
-                        <span key={e.code}>
-                          {i > 0 && ', '}
-                          <span className="gap-chip">{e.code}</span>{' '}
-                          <span style={{ color: 'var(--faint-ink)' }}>({relLabel(e.relation)})</span>
                         </span>
                       ))}
                     </span>

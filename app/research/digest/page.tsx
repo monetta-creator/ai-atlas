@@ -49,8 +49,7 @@ export default async function ResearchDigestPage({
                 <div style={{ fontSize: 14, color: 'var(--ink)' }}>
                   {p.title}
                   <span style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)', fontSize: 11, marginLeft: 8 }}>
-                    {p.arxiv_id ?? 'manual'}{p.published_at ? ` · ${p.published_at}` : ''}
-                    {p.citation_count != null ? ` · ${p.citation_count} citations` : ''}
+                    {p.published_at ?? ''}
                   </span>
                 </div>
                 {p.headline && (

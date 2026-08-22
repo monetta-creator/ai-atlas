@@ -11,7 +11,7 @@ export default function Brand() {
           <circle cx="10" cy="10" r="3.4" />
           <path d="M10 1.5v4M10 14.5v4M1.5 10h4M14.5 10h4" strokeLinecap="round" />
         </svg>
-        The AI Atlas
+        The Strategy Atlas
       </Link>
       <span className="brand-beta">Beta</span>
     </div>

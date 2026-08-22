@@ -1,5 +1,4 @@
 import type { Dossier, BasisClaim, Basis } from '@/lib/types';
-import { DOMAIN_LABEL, LENS_LABEL } from '@/lib/format';
 
 const BASIS_META: Record<Basis, { cls: string; label: string }> = {
   web_verified: { cls: 'web', label: 'web' },
@@ -101,14 +100,6 @@ export default function DossierView({ dossier }: { dossier: Dossier }) {
           <p style={{ margin: '4px 0 0', fontSize: 14, lineHeight: 1.55, color: 'var(--ink)' }}>{fa.bias_to_model}</p>
         </div>
         <Bullets label="Questions to verify (most load-bearing first)" items={fa.questions_unverified} />
-        <div className="flex items-center flex-wrap gap-2" style={{ marginTop: 4 }}>
-          <span className="lbl" style={{ fontSize: 9.5 }}>Suggested</span>
-          <span className="badge badge--accent">domain: {DOMAIN_LABEL[fa.suggested_domain_tag]}</span>
-          {fa.suggested_lenses.map((l) => (
-            <span key={l} className="badge">{LENS_LABEL[l]}</span>
-          ))}
-          <span className="text-[11px]" style={{ color: 'var(--faint-ink)' }}>not applied automatically</span>
-        </div>
       </Panel>
     </div>
   );

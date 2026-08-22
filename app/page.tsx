@@ -7,7 +7,7 @@ import LobbyAsk from '@/components/lobby/LobbyAsk';
 import { PORTAL_ICONS } from '@/components/portal-icons';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'The AI Atlas' };
+export const metadata = { title: 'The Strategy Atlas' };
 
 // The lobby (2026-08-13 redesign, AlphaSense direction): a greeting, the chat
 // launcher, then six live tiles as the premier navigation. The broadsheet
@@ -52,25 +52,25 @@ export default async function Lobby() {
       href: '/signals',
       icon: ICONS.signals,
       name: 'Signal Board',
-      desc: 'Tracked AI developments, sorted by audience lens and tied to the claims they touch.',
+      desc: 'Tracked internal and external developments, tied to the hypotheses they touch.',
     },
     {
       href: '/blotter',
       icon: ICONS.blotter,
       name: 'News Blotter',
-      desc: 'The editor’s desk: the fortnight report, claims ledger, signal wire, and pipeline analytics.',
+      desc: 'The editor’s desk: the period report, hypothesis ledger, signal wire, and candidate archive.',
     },
     {
       href: '/map',
       icon: ICONS.claims,
-      name: 'Claims & Theses',
-      desc: 'The argument map: open questions, falsifiable claims, and the standing theses they test.',
+      name: 'Hypotheses',
+      desc: 'The hypothesis board: falsifiable statements, their evidence, and the conviction committed to each.',
     },
     {
       href: '/reports',
       icon: ICONS.reports,
       name: 'Report Portal',
-      desc: 'Saved period reports and thesis reports, published read-only from the corpus.',
+      desc: 'Saved period reports and hypothesis reports, published read-only from the corpus.',
     },
     {
       href: '/datasets',
@@ -82,7 +82,7 @@ export default async function Lobby() {
       href: '/research',
       icon: ICONS.research,
       name: 'Research Portal',
-      desc: 'The latest AI research from arXiv, triaged against the Atlas and synthesized into threads.',
+      desc: 'Research papers and long documents, read deeply against the Atlas and synthesized into threads.',
     },
   ];
 

@@ -197,6 +197,50 @@ export async function getSourcesWithCounts(): Promise<SourceWithCounts[]> {
   );
 }
 
+// ---- the evidence map (sources ↔ hypotheses bipartite graph) ----------------
+// Admin-only surface (/sources): which sources feed which hypotheses, with the
+// per-link direction. Source-anchored evidence only (signal-materialized rows
+// without a source stay off this source-centric view).
+
+export interface EvidenceGraphSource {
+  id: string;
+  title: string | null;
+  outlet: string | null;
+  reliability_prior: number | null;
+}
+export interface EvidenceGraphHypothesis {
+  id: string;
+  code: string;
+  statement: string;
+}
+export interface EvidenceGraphEdge {
+  source_id: string;
+  hypothesis_id: string;
+  direction: Evidence['direction'];
+}
+export interface EvidenceGraph {
+  sources: EvidenceGraphSource[];
+  hypotheses: EvidenceGraphHypothesis[];
+  edges: EvidenceGraphEdge[];
+}
+
+export async function getEvidenceGraph(): Promise<EvidenceGraph> {
+  const [sources, hypotheses, edges] = await Promise.all([
+    q<EvidenceGraphSource>(
+      `select id, title, outlet, reliability_prior from sources order by created_at desc`
+    ),
+    q<EvidenceGraphHypothesis>(
+      `select id, code, statement from hypotheses where status = 'active'
+        order by substring(code from 2)::int nulls last, code`
+    ),
+    q<EvidenceGraphEdge>(
+      `select distinct ev.source_id, ev.hypothesis_id, ev.direction
+         from evidence ev where ev.source_id is not null`
+    ),
+  ]);
+  return { sources, hypotheses, edges };
+}
+
 export async function getAsOf(): Promise<string | null> {
   const row = await one<{ at: string | null }>(
     `select greatest(

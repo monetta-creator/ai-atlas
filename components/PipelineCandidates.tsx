@@ -3,8 +3,8 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { overrideTriageAction, setCandidateArchivedAction } from '@/lib/actions';
-import { SIGNAL_LENS_LABEL, SIGNAL_LENS_SLUGS } from '@/lib/format';
-import type { SignalCandidate, SignalLens, TriageStatus } from '@/lib/types';
+import { SIGNAL_CONTEXT_LABEL, SIGNAL_CONTEXT_SLUGS } from '@/lib/format';
+import type { SignalCandidate, SignalContext, TriageStatus } from '@/lib/types';
 
 const STATUS_COLOR: Record<TriageStatus, string> = {
   pending: 'var(--faint-ink)',
@@ -31,13 +31,13 @@ const STATUS_OPTS: { value: StatusFilter; label: string }[] = [
 const PAGE_SIZES = [25, 50, 100] as const;
 
 // Filterable, paginated candidate review for the latest run. The list can run to hundreds
-// of rows, so it filters (status / lens / text) and pages in the client; the Approve/Reject
+// of rows, so it filters (status / context / text) and pages in the client; the Approve/Reject
 // overrides stay server actions (revalidate refreshes the data, state here persists).
 export default function PipelineCandidates({
   candidates, runId,
 }: { candidates: SignalCandidate[]; runId: string }) {
   const [status, setStatus] = useState<StatusFilter>('all');
-  const [lens, setLens] = useState<'all' | SignalLens>('all');
+  const [context, setContext] = useState<'all' | SignalContext>('all');
   const [query, setQuery] = useState('');
   const [pageSize, setPageSize] = useState<number>(50); // 0 = show all
   const [page, setPage] = useState(1);
@@ -45,7 +45,7 @@ export default function PipelineCandidates({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return candidates.filter((c) => {
-      if (lens !== 'all' && c.lens !== lens) return false;
+      if (context !== 'all' && c.context !== context) return false;
       // Archived candidates are set aside: shown ONLY under the 'archived' filter, hidden everywhere else.
       const archived = !!c.archived_at;
       if (status === 'archived') {
@@ -63,7 +63,7 @@ export default function PipelineCandidates({
       }
       return true;
     });
-  }, [candidates, status, lens, query]);
+  }, [candidates, status, context, query]);
 
   const showAll = pageSize === 0;
   const totalPages = showAll ? 1 : Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -89,13 +89,13 @@ export default function PipelineCandidates({
           </select>
         </div>
         <div className="field" style={{ minWidth: 150 }}>
-          <label htmlFor="cand-lens">Lens</label>
+          <label htmlFor="cand-context">Context</label>
           <select
-            id="cand-lens" className="input" value={lens}
-            onChange={(e) => { setLens(e.target.value as 'all' | SignalLens); reset(); }}
+            id="cand-context" className="input" value={context}
+            onChange={(e) => { setContext(e.target.value as 'all' | SignalContext); reset(); }}
           >
-            <option value="all">All lenses</option>
-            {SIGNAL_LENS_SLUGS.map((l) => <option key={l} value={l}>{SIGNAL_LENS_LABEL[l]}</option>)}
+            <option value="all">All contexts</option>
+            {SIGNAL_CONTEXT_SLUGS.map((c) => <option key={c} value={c}>{SIGNAL_CONTEXT_LABEL[c]}</option>)}
           </select>
         </div>
         <div className="field" style={{ flex: 1, minWidth: 180 }}>
@@ -137,7 +137,7 @@ export default function PipelineCandidates({
             >
               <div className="flex items-center flex-wrap gap-2 text-xs" style={{ marginBottom: 4 }}>
                 <span style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>
-                  {SIGNAL_LENS_LABEL[c.lens as SignalLens]}
+                  {SIGNAL_CONTEXT_LABEL[c.context]}
                 </span>
                 <span style={{ color: STATUS_COLOR[c.triage_status], fontFamily: 'var(--font-mono)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                   · {c.triage_status}

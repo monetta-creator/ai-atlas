@@ -4,7 +4,7 @@ import { isAdmin, isPreview } from '@/lib/auth';
 import { getConcept, getAsOf, getPapersForConcept } from '@/lib/data';
 import { CONCEPT_STATUS_LABEL } from '@/lib/format';
 import Header from '@/components/Header';
-import ConfidenceBadge from '@/components/ConfidenceBadge';
+import ConvictionBadge from '@/components/ConvictionBadge';
 import ShareNotice from '@/components/ShareNotice';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +20,7 @@ export default async function ConceptPage({
   const personal = admin && !preview;
   const data = await getConcept(decodeURIComponent(slug), personal);
   if (!data) notFound();
-  const { concept, prerequisites, dependents, claims } = data;
+  const { concept, prerequisites, dependents, hypotheses } = data;
   const asOf = await getAsOf();
   // Recent research is part of the admin-first research surface (/research is gated),
   // so the pane renders for the admin only until that surface goes public.
@@ -109,27 +109,22 @@ export default async function ConceptPage({
           </section>
         )}
 
-        {claims.length > 0 && (
+        {hypotheses.length > 0 && (
           <section>
-            <div className="section-label">On the Argument Map</div>
+            <div className="section-label">On the Atlas</div>
             <div className="rel-list">
-              {claims.map((c) => (
-                <Link key={`${c.type}:${c.code}`} href={c.href} className="rel-item">
-                  <span
-                    className="rel-kind"
-                    style={{ color: c.type === 'bridge_claim' ? 'var(--accent)' : 'var(--faint-ink)' }}
-                  >
-                    {c.type === 'bridge_claim' ? `⤧ ${c.code}` : c.code}
-                  </span>
+              {hypotheses.map((c) => (
+                <Link key={c.code} href={c.href} className="rel-item">
+                  <span className="rel-kind" style={{ color: 'var(--faint-ink)' }}>{c.code}</span>
                   <span style={{ color: 'var(--dim)' }}>{c.statement}</span>
                   {personal && c.unresolved && (
                     <span className="badge badge--dashed" style={{ fontSize: 10, marginLeft: 6 }}>
                       unresolved
                     </span>
                   )}
-                  {personal && c.confidence_label && (
+                  {personal && c.conviction_label && (
                     <span style={{ marginLeft: 'auto' }}>
-                      <ConfidenceBadge label={c.confidence_label} />
+                      <ConvictionBadge label={c.conviction_label} />
                     </span>
                   )}
                 </Link>
@@ -144,9 +139,7 @@ export default async function ConceptPage({
             <div className="rel-list">
               {papers.map((p) => (
                 <Link key={p.id} href={`/research/${p.id}`} className="rel-item">
-                  <span className="rel-kind" style={{ color: 'var(--faint-ink)' }}>
-                    {p.arxiv_id ?? 'paper'}
-                  </span>
+                  <span className="rel-kind" style={{ color: 'var(--faint-ink)' }}>paper</span>
                   <span style={{ color: 'var(--dim)' }}>
                     {p.headline ?? p.title}
                   </span>

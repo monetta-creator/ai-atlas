@@ -2,30 +2,30 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import type { CalibrationData, ConfidenceLabel } from '@/lib/types';
-import { heatVar, confidenceBand } from '@/lib/format';
+import type { CalibrationData, ConvictionLabel } from '@/lib/types';
+import { heatVar, convictionBand } from '@/lib/format';
 
 // Warm→cool order so the stacked bar reads settled (committed) → thin (unsure).
-const BANDS: { key: 'settled' | 'leaning' | 'contested' | 'thin'; label: ConfidenceLabel }[] = [
+const BANDS: { key: 'settled' | 'leaning' | 'contested' | 'thin'; label: ConvictionLabel }[] = [
   { key: 'settled', label: 'settled' },
   { key: 'leaning', label: 'leaning' },
   { key: 'contested', label: 'contested' },
   { key: 'thin', label: 'thin' },
 ];
 
-// A tiny confidence-over-time line (no chart dep — hand-rolled SVG like QuestionMap).
-function Sparkline({ points }: { points: { confidence: number }[] }) {
+// A tiny conviction-over-time line (no chart dep — hand-rolled SVG like QuestionMap).
+function Sparkline({ points }: { points: { conviction: number }[] }) {
   const w = 132, h = 30, pad = 4;
   const n = points.length;
   const x = (i: number) => pad + (n <= 1 ? 0 : (i / (n - 1)) * (w - 2 * pad));
   const y = (c: number) => pad + (1 - c) * (h - 2 * pad);
-  const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(p.confidence).toFixed(1)}`).join(' ');
+  const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i).toFixed(1)} ${y(p.conviction).toFixed(1)}`).join(' ');
   return (
-    <svg width={w} height={h} role="img" aria-label="confidence over time" style={{ flexShrink: 0 }}>
+    <svg width={w} height={h} role="img" aria-label="conviction over time" style={{ flexShrink: 0 }}>
       <line x1={pad} y1={y(0.5)} x2={w - pad} y2={y(0.5)} stroke="var(--line)" strokeDasharray="2 3" />
       {n > 1 && <path d={d} fill="none" stroke="var(--accent)" strokeWidth={1.5} strokeLinejoin="round" />}
       {points.map((p, i) => (
-        <circle key={i} cx={x(i)} cy={y(p.confidence)} r={2.6} fill={heatVar(confidenceBand(p.confidence))} />
+        <circle key={i} cx={x(i)} cy={y(p.conviction)} r={2.6} fill={heatVar(convictionBand(p.conviction))} />
       ))}
     </svg>
   );
@@ -50,7 +50,7 @@ export default function CalibrationView({ data }: { data: CalibrationData }) {
         <div className="section-label">Confidence distribution over time</div>
         {snapshots.length === 0 ? (
           <p style={{ color: 'var(--faint-ink)', fontSize: 14 }}>
-            No snapshots yet. Capture one above, or make a confidence move. Each writes one.
+            No snapshots yet. Capture one above, or make a conviction move. Each writes one.
           </p>
         ) : (
           <>
@@ -99,10 +99,10 @@ export default function CalibrationView({ data }: { data: CalibrationData }) {
 
       {/* per-node trajectories — only things that actually moved */}
       <section>
-        <div className="section-label">Confidence trajectories · {trajectories.length} moved</div>
+        <div className="section-label">Conviction trajectories · {trajectories.length} moved</div>
         {trajectories.length === 0 ? (
           <p style={{ color: 'var(--faint-ink)', fontSize: 14 }}>
-            Nothing has moved across snapshots yet. As you commit confidence moves, each node’s path charts here.
+            Nothing has moved across snapshots yet. As you commit conviction moves, each hypothesis’s path charts here.
           </p>
         ) : (
           <div className="flex flex-col gap-2.5">
@@ -122,9 +122,9 @@ export default function CalibrationView({ data }: { data: CalibrationData }) {
                   </Link>
                 </div>
                 <div className="text-xs flex items-center gap-2" style={{ whiteSpace: 'nowrap' }}>
-                  <span style={{ color: heatVar(confidenceBand(t.first)) }}>{t.first.toFixed(2)}</span>
+                  <span style={{ color: heatVar(convictionBand(t.first)) }}>{t.first.toFixed(2)}</span>
                   <span style={{ color: 'var(--faint-ink)' }}>→</span>
-                  <span style={{ color: heatVar(confidenceBand(t.current)) }}>{t.current.toFixed(2)}</span>
+                  <span style={{ color: heatVar(convictionBand(t.current)) }}>{t.current.toFixed(2)}</span>
                   <span style={{ color: 'var(--faint-ink)' }}>· {t.moves} move{t.moves === 1 ? '' : 's'}</span>
                 </div>
               </div>
@@ -138,7 +138,7 @@ export default function CalibrationView({ data }: { data: CalibrationData }) {
         <div className="section-label">Movement log</div>
         {moves.length === 0 ? (
           <p style={{ color: 'var(--faint-ink)', fontSize: 14 }}>
-            No confidence moves recorded yet. Every move you commit (with its required rationale) lands here.
+            No conviction moves recorded yet. Every move you commit (with its required rationale) lands here.
           </p>
         ) : (
           <div className="flex flex-col gap-3">
@@ -151,7 +151,7 @@ export default function CalibrationView({ data }: { data: CalibrationData }) {
                     <span>{mv.label.slice(0, 44)}</span>
                   )}
                   <span className="delta">
-                    {mv.old_confidence?.toFixed(2) ?? '–'} → {mv.new_confidence?.toFixed(2) ?? '–'}
+                    {mv.old_conviction?.toFixed(2) ?? '–'} → {mv.new_conviction?.toFixed(2) ?? '–'}
                   </span>
                   <span style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>· {mv.at}</span>
                 </div>

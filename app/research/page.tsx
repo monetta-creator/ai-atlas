@@ -113,7 +113,7 @@ export default async function ResearchPage() {
                     </Link>
                     <span className="text-xs" style={{ color: 'var(--faint-ink)' }}>tracked</span>
                     <span className="text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>
-                      {p.arxiv_id ?? 'manual'}{p.reviewed_at ? ` · ${timeAgo(p.reviewed_at)}` : ''}
+                      {p.reviewed_at ? timeAgo(p.reviewed_at) : ''}
                     </span>
                   </div>
                   {p.headline && (
@@ -217,9 +217,7 @@ export default async function ResearchPage() {
                         </Link>
                       )}
                       <span className="text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>
-                        {p.author_hindex != null ? `h-max ${p.author_hindex} · ` : ''}
-                        {p.citation_count != null ? `${p.citation_count}× · ` : ''}
-                        {p.arxiv_id ?? 'manual'}{p.published_at ? ` · ${p.published_at}` : ''}
+                        {p.published_at ?? ''}
                       </span>
                     </div>
                     {note && (
@@ -248,7 +246,7 @@ export default async function ResearchPage() {
                     {p.title}
                   </Link>
                   <span className="text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>
-                    {p.arxiv_id ?? p.origin}{p.published_at ? ` · ${p.published_at}` : ''}
+                    {p.published_at ?? ''}
                   </span>
                 </div>
               ))}

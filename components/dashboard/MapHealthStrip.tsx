@@ -21,7 +21,7 @@ function Cell({ label, value, href, tone }: { label: string; value: number; href
 export default function MapHealthStrip({ health }: { health: MapHealth }) {
   return (
     <div className="bs-index">
-      <Cell label="Claims" value={health.claims} href="/map" />
+      <Cell label="Hypotheses" value={health.hypotheses} href="/map" />
       <Cell label="Evidence items" value={health.evidence} />
       <Cell label="Published signals" value={health.signalsPublished} href="/signals" />
       <Cell label="Uncovered" value={health.uncovered} tone={health.uncovered ? 'var(--heat-3)' : undefined} />

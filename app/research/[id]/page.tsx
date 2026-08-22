@@ -6,18 +6,17 @@ import {
   getTargets,
 } from '@/lib/data';
 import { setPaperRigorAction } from '@/lib/actions';
-import { SIGNAL_LENS_LABEL } from '@/lib/format';
 import Header from '@/components/Header';
 import PaperAnalysisButton from '@/components/PaperAnalysisButton';
 import PaperReviewControls from '@/components/PaperReviewControls';
 import PaperLinksPanel, { type SuggestedThreadPlacement } from '@/components/PaperLinksPanel';
 import PromotePaperButton from '@/components/PromotePaperButton';
-import type { SignalLens, ThreadRelation } from '@/lib/types';
+import type { ThreadRelation } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 // Hosts the hydrate/analyze/promotion server actions; each must fit the 60s cap.
 export const maxDuration = 60;
-export const metadata = { title: 'Paper · The AI Atlas' };
+export const metadata = { title: 'Paper · The Strategy Atlas' };
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -42,13 +41,10 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
 
   const conceptName = new Map(conceptDigest.map((c) => [c.slug, c.name]));
   const threadTitle = new Map(threadDigest.map((t) => [t.slug, t.title]));
-  const statementByCode = new Map(
-    [...targets.claims, ...targets.bridges].map((t) => [t.code, t.statement])
+  const statementByCode = new Map(targets.hypotheses.map((t) => [t.code, t.statement]));
+  const hrefByCode = new Map<string, string>(
+    targets.hypotheses.map((t) => [t.code, `/hypothesis/${encodeURIComponent(t.code)}`] as const)
   );
-  const hrefByCode = new Map<string, string>([
-    ...targets.claims.map((t) => [t.code, `/claim/${t.code}`] as const),
-    ...targets.bridges.map((t) => [t.code, `/bridge/${t.code}`] as const),
-  ]);
 
   const confirmedConceptSlugs = new Set(concepts.map((c) => c.slug));
   const suggestedConcepts = paper.suggested_concepts
@@ -75,7 +71,7 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
         { label: 'Effect size & scope', value: x.effect_size },
         { label: 'Limitations', value: x.limitations },
         { label: 'Counterpoint', value: x.counterpoint },
-        { label: 'Economy implication', value: x.econ_implication },
+        { label: 'Strategy implication', value: x.strategy_implication },
       ].filter((r) => r.value)
     : [];
 
@@ -94,16 +90,9 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
           <div className="text-xs flex items-center gap-2 flex-wrap" style={{ color: 'var(--faint-ink)' }}>
             <a href={paper.url} target="_blank" rel="noopener noreferrer" className="hover:underline"
               style={{ fontFamily: 'var(--font-mono)' }}>
-              {paper.arxiv_id ?? paper.url} ↗
+              {paper.url} ↗
             </a>
             {paper.published_at && <span>· {paper.published_at}</span>}
-            {paper.categories.length > 0 && <span>· {paper.categories.join(', ')}</span>}
-            {paper.author_hindex != null && (
-              <span title="Highest author h-index (Semantic Scholar), a track-record prior, not a verdict">
-                · h-max {paper.author_hindex}
-              </span>
-            )}
-            {paper.citation_count != null && <span>· {paper.citation_count} citations</span>}
             {personal && paper.rigor_prior != null && <span>· rigor {paper.rigor_prior}/100</span>}
             {paper.signal_id && (
               <Link href={`/signals/${paper.signal_id}`} className="hover:underline" style={{ color: 'var(--supports)' }}>
@@ -115,9 +104,6 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
             <p className="text-xs" style={{ color: 'var(--dim)', marginTop: 6 }}>
               {paper.authors.slice(0, 12).join(', ')}{paper.authors.length > 12 ? ` +${paper.authors.length - 12}` : ''}
             </p>
-          )}
-          {paper.comments && (
-            <p className="text-xs" style={{ color: 'var(--heat-2)', marginTop: 4 }}>{paper.comments}</p>
           )}
         </header>
 
@@ -158,19 +144,6 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
                     <p className="text-sm" style={{ color: 'var(--ink)', margin: 0 }}>{r.value}</p>
                   </div>
                 ))}
-                {(x?.who_cares?.length ?? 0) > 0 && (
-                  <div>
-                    <div className="lbl" style={{ marginBottom: 2 }}>Who this matters for</div>
-                    {x!.who_cares.map((w) => (
-                      <p key={w.lens} className="text-sm" style={{ color: 'var(--ink)', margin: '2px 0' }}>
-                        <span style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>
-                          {SIGNAL_LENS_LABEL[w.lens as SignalLens] ?? w.lens}:
-                        </span>{' '}
-                        {w.note}
-                      </p>
-                    ))}
-                  </div>
-                )}
                 {personal && x?.proposed_rigor != null && (
                   <p className="text-xs" style={{ color: 'var(--faint-ink)', margin: 0 }}>
                     Model-suggested rigor: {x.proposed_rigor}/100 (a suggestion only, set the prior below)
@@ -181,11 +154,11 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
           </div>
         </section>
 
-        {paper.claim_touches.length > 0 && (
+        {paper.touches.length > 0 && (
           <section style={{ marginTop: 8 }}>
             <div className="section-label">Bears on (advisory · papers never write evidence)</div>
             <div className="flex flex-col gap-1">
-              {paper.claim_touches.map((code) => {
+              {paper.touches.map((code: string) => {
                 const href = hrefByCode.get(code);
                 return (
                   <div key={code} className="text-sm rounded-[var(--radius)] border p-2.5"
@@ -197,7 +170,7 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
                     ) : (
                       <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--faint-ink)' }}>[{code}]</span>
                     )}{' '}
-                    <span style={{ color: 'var(--dim)' }}>{statementByCode.get(code) ?? 'no longer on the map'}</span>
+                    <span style={{ color: 'var(--dim)' }}>{statementByCode.get(code) ?? 'no longer on the board'}</span>
                   </div>
                 );
               })}

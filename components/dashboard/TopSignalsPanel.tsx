@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import type { Signal, Significance } from '@/lib/types';
-import { signalLensColor, SIGNAL_LENS_LABEL, SIGNIFICANCE_LABEL } from '@/lib/format';
+import { signalContextColor, SIGNAL_CONTEXT_LABEL, SIGNIFICANCE_LABEL } from '@/lib/format';
 
 // The signal wire (Console Broadsheet, right column): latest published signals as
-// dated ruled rows — tabular date, significance dot, headline, lens dots + touch
+// dated ruled rows — tabular date, significance dot, headline, context dot + touch
 // count. The Snacks daily-list pattern in the Atlas's own vocabulary (heat and
-// lens colors instead of emoji). Styles: .bs-wire* / .bs-row* in home.css.
+// context colors instead of emoji). Styles: .bs-wire* / .bs-row* in home.css.
 
 const SIG_TONE: Record<Significance, string> = {
   high: 'var(--heat-4)',
@@ -33,7 +33,7 @@ export default function TopSignalsPanel({ signals }: { signals: Signal[] }) {
       ) : (
         <ol className="bs-list">
           {signals.map((s) => {
-            const n = s.claim_touches.length;
+            const n = s.touches.length;
             return (
               <li key={s.id}>
                 <Link href={`/signals/${s.id}`} className="bs-row">
@@ -47,12 +47,10 @@ export default function TopSignalsPanel({ signals }: { signals: Signal[] }) {
                     <span className="bs-rowhed">{s.title}</span>
                     <span className="bs-tags">
                       <span className="bs-lensdots">
-                        {s.lenses.map((l) => (
-                          <i key={l} style={{ background: signalLensColor(l) }} title={SIGNAL_LENS_LABEL[l]} />
-                        ))}
+                        <i style={{ background: signalContextColor(s.context) }} title={SIGNAL_CONTEXT_LABEL[s.context]} />
                       </span>
                       <span style={{ color: n ? 'var(--accent)' : undefined }}>
-                        {n} claim{n === 1 ? '' : 's'} touched
+                        {n} hypothes{n === 1 ? 'is' : 'es'} touched
                       </span>
                     </span>
                   </span>

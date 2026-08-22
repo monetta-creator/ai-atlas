@@ -30,19 +30,16 @@ export function proxy(req: NextRequest) {
     // generator/editor lives at /report (singular) and stays gated.
     pathname === '/reports' ||
     pathname.startsWith('/reports/') ||
-    // Public read-only thesis reports (the share links the /theses console mints).
-    // The admin console at /theses stays gated.
-    pathname.startsWith('/thesis-report/') ||
-    // Public reader surface — the Argument Map and everything it links into. These
-    // pages already strip the personal layer server-side for non-admins (guest mode
-    // IS the share view: `personal = isAdmin() && !preview`), so they're safe to serve
-    // without a session, and none of them self-redirect to /login. Admin-only work
-    // (confidence moves, AI generation) lives in actions that each re-check requireAdmin().
-    // The admin summary timeline (/q/<slug>/summary) is excluded so it stays gated.
+    // Public read-only hypothesis reports (the share links the console mints).
+    pathname.startsWith('/hypothesis-report/') ||
+    // Public reader surface — the Hypothesis Board and everything it links into.
+    // These pages already strip the personal layer server-side for non-admins
+    // (guest mode IS the share view: `personal = isAdmin() && !preview`), so
+    // they're safe to serve without a session, and none of them self-redirect to
+    // /login. Admin-only work (conviction moves, AI generation) lives in actions
+    // that each re-check requireAdmin().
     pathname === '/map' ||
-    pathname === '/bridges' ||
-    // /bridge/<code> is public; the admin authoring page /bridge/new stays gated.
-    (pathname.startsWith('/bridge/') && pathname !== '/bridge/new') ||
+    pathname.startsWith('/hypothesis/') ||
     // Concepts (the semantic scaffold) is public like the rest of the reader surface;
     // the admin authoring pages (/concepts/new, /concepts/<slug>/edit) stay gated here,
     // matching the pages' own isAdmin() redirects.
@@ -77,10 +74,7 @@ export function proxy(req: NextRequest) {
     // The public ticket intake (bug reports / feature requests from the rail
     // dialogs). The route validates everything; the admin image route stays off
     // this list (admins carry the cookie).
-    pathname === '/api/tickets' ||
-    pathname.startsWith('/claim/') ||
-    // /q/<slug> is public; the admin summary timeline and the claim authoring page stay gated.
-    (pathname.startsWith('/q/') && !pathname.endsWith('/summary') && !pathname.endsWith('/claim/new'));
+    pathname === '/api/tickets';
 
   if (!entered && !isPublic) {
     const url = req.nextUrl.clone();

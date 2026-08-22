@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { requireAdminPage } from '@/lib/auth';
 import { getSource, getTargets } from '@/lib/data';
 import { setPriorAction, reassignEvidenceAction, deleteEvidenceAction } from '@/lib/actions';
-import { DOMAIN_LABEL, directionLabel, directionColor } from '@/lib/format';
+import { directionLabel, directionColor } from '@/lib/format';
 import Header from '@/components/Header';
 import EvidenceForm from '@/components/EvidenceForm';
 import DossierView from '@/components/DossierView';
@@ -30,7 +30,7 @@ export default async function SourcePage({
   const data = await getSource(id);
   if (!data) notFound();
   const { source, evidence } = data;
-  const { claims, bridges } = await getTargets();
+  const { hypotheses } = await getTargets();
 
   return (
     <>
@@ -48,7 +48,6 @@ export default async function SourcePage({
           <p className="lede" style={{ fontSize: 14.5, marginTop: 8 }}>
             {[source.outlet, source.author].filter(Boolean).join(' · ') || '–'}
             {source.published_at ? ` · ${source.published_at}` : ''}
-            {source.domain_tag ? ` · ${DOMAIN_LABEL[source.domain_tag]}` : ''}
           </p>
           {source.url && (
             <a
@@ -127,7 +126,7 @@ export default async function SourcePage({
 
         <section className="mb-8">
           <div className="section-label">Attach evidence</div>
-          <EvidenceForm sourceId={source.id} claims={claims} bridges={bridges} />
+          <EvidenceForm sourceId={source.id} hypotheses={hypotheses} />
         </section>
 
         {/* Signal Board — turn this source into a tracked signal via the same pipeline steps. */}
@@ -159,17 +158,13 @@ export default async function SourcePage({
                     <span className={`font-medium ${directionColor(ev.direction)}`}>
                       {directionLabel(ev.direction)}
                     </span>
-                    <span style={{ color: 'var(--faint-ink)' }}>· weight {ev.weight} ·</span>
+                    <span style={{ color: 'var(--faint-ink)' }}>· confidence {ev.confidence} ·</span>
                     <Link
-                      href={
-                        ev.target_type === 'bridge_claim'
-                          ? `/bridge/${ev.target_code}`
-                          : `/claim/${encodeURIComponent(ev.target_code ?? '')}`
-                      }
+                      href={`/hypothesis/${encodeURIComponent(ev.code)}`}
                       style={{ color: 'var(--dim)' }}
                       className="hover:underline"
                     >
-                      {ev.target_code} · {ev.target_statement}
+                      {ev.code} · {ev.statement}
                     </Link>
                   </div>
                   {ev.excerpt && (
@@ -183,23 +178,14 @@ export default async function SourcePage({
                       <input type="hidden" name="evidence_id" value={ev.id} />
                       <input type="hidden" name="source_id" value={source.id} />
                       <select
-                        name="target"
-                        defaultValue={`${ev.target_type}:${ev.target_id}`}
+                        name="hypothesis_id"
+                        defaultValue={ev.hypothesis_id}
                         className="input"
                         style={{ width: 'auto', padding: '4px 8px', fontSize: 12 }}
                       >
-                        <optgroup label="Claims">
-                          {claims.map((c) => (
-                            <option key={c.id} value={`claim:${c.id}`}>{c.code} · {truncate(c.statement)}</option>
-                          ))}
-                        </optgroup>
-                        {bridges.length > 0 && (
-                          <optgroup label="Bridge-claims">
-                            {bridges.map((b) => (
-                              <option key={b.id} value={`bridge_claim:${b.id}`}>{b.code} · {truncate(b.statement)}</option>
-                            ))}
-                          </optgroup>
-                        )}
+                        {hypotheses.map((h) => (
+                          <option key={h.id} value={h.id}>{h.code} · {truncate(h.statement)}</option>
+                        ))}
                       </select>
                       <button type="submit" className="btn btn--ghost btn--sm">Reassign</button>
                     </form>

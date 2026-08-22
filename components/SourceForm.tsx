@@ -3,18 +3,9 @@
 import { useRef, useState } from 'react';
 import { createSourceAction, extractSourceMetadataAction } from '@/lib/actions';
 
-const DOMAIN_OPTIONS: [string, string][] = [
-  ['', '–'],
-  ['capability', 'Capability'],
-  ['economics', 'Economics'],
-  ['build_out', 'Build-out'],
-  ['market', 'Market'],
-  ['labor', 'Labor'],
-];
-
 // Controlled add-source form. Picking a PDF extracts its text in-browser (unpdf)
 // and then asks the server for bibliographic metadata, auto-filling any blank
-// fields (title/author/url/date/domain). Everything stays editable; the form
+// fields (title/author/url/date). Everything stays editable; the form
 // still submits to the createSourceAction server action.
 export default function SourceForm() {
   const [title, setTitle] = useState('');
@@ -22,7 +13,6 @@ export default function SourceForm() {
   const [author, setAuthor] = useState('');
   const [url, setUrl] = useState('');
   const [published, setPublished] = useState('');
-  const [domain, setDomain] = useState('');
   const [text, setText] = useState('');
   const [status, setStatus] = useState('');
   const [error, setError] = useState(false);
@@ -58,10 +48,9 @@ export default function SourceForm() {
       setAuthor((v) => v || meta.author);
       setUrl((v) => v || meta.url);
       setPublished((v) => v || meta.published_at);
-      setDomain((v) => v || meta.domain_tag);
       const filled = [
         meta.title && 'title', meta.author && 'author', meta.url && 'URL',
-        meta.published_at && 'date', meta.domain_tag && 'domain',
+        meta.published_at && 'date',
       ].filter(Boolean);
       setStatus(
         filled.length
@@ -122,14 +111,6 @@ export default function SourceForm() {
         <div className="field">
           <label htmlFor="published_at">Published</label>
           <input id="published_at" name="published_at" type="date" className="input" value={published} onChange={(e) => setPublished(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="domain_tag">Domain (suggested)</label>
-          <select id="domain_tag" name="domain_tag" className="input" value={domain} onChange={(e) => setDomain(e.target.value)}>
-            {DOMAIN_OPTIONS.map(([v, label]) => (
-              <option key={v} value={v}>{label}</option>
-            ))}
-          </select>
         </div>
       </div>
 

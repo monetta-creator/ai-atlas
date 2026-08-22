@@ -4,10 +4,10 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import type {
   CandidateArchiveResult, CandidateArchiveFilters, CandidateArchiveRow,
-  SignalLens, TriageStatus,
+  SignalContext, TriageStatus,
 } from '@/lib/types';
 import { getCandidateArchiveAction } from '@/lib/actions';
-import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL, signalLensColor, dateLabel } from '@/lib/format';
+import { SIGNAL_CONTEXT_SLUGS, SIGNAL_CONTEXT_LABEL, signalContextColor, dateLabel } from '@/lib/format';
 
 // Section 3 — the browsable candidate archive. A dense audit trail over every discovered
 // candidate. Filtering/search/pagination run through a public read server action so they
@@ -26,7 +26,7 @@ function host(url: string): string {
 }
 
 export default function CandidateArchive({ initial, admin }: { initial: CandidateArchiveResult; admin: boolean }) {
-  const [lens, setLens] = useState<SignalLens | ''>('');
+  const [context, setContext] = useState<SignalContext | ''>('');
   const [status, setStatus] = useState<TriageStatus | ''>('');
   const [dateField, setDateField] = useState<'retrieved_at' | 'published_date'>('retrieved_at');
   const [from, setFrom] = useState('');
@@ -49,7 +49,7 @@ export default function CandidateArchive({ initial, admin }: { initial: Candidat
   useEffect(() => {
     if (firstRender.current) { firstRender.current = false; return; }
     const filters: CandidateArchiveFilters = {
-      lens: lens || undefined,
+      context: context || undefined,
       triage_status: status || undefined,
       dateField,
       from: from || undefined,
@@ -61,13 +61,13 @@ export default function CandidateArchive({ initial, admin }: { initial: Candidat
       const r = await getCandidateArchiveAction(filters);
       setResult(r);
     });
-  }, [lens, status, dateField, from, to, debounced, page]);
+  }, [context, status, dateField, from, to, debounced, page]);
 
   const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize));
-  const anyFilter = !!(lens || status || from || to || search || dateField !== 'retrieved_at');
+  const anyFilter = !!(context || status || from || to || search || dateField !== 'retrieved_at');
 
   function clearAll() {
-    setLens(''); setStatus(''); setDateField('retrieved_at');
+    setContext(''); setStatus(''); setDateField('retrieved_at');
     setFrom(''); setTo(''); setSearch(''); setDebounced(''); setPage(1);
   }
 
@@ -76,19 +76,19 @@ export default function CandidateArchive({ initial, admin }: { initial: Candidat
       {/* Filters */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div className="lens-chip-row">
-          {SIGNAL_LENS_SLUGS.map((l) => {
-            const on = lens === l;
-            const color = signalLensColor(l);
+          {SIGNAL_CONTEXT_SLUGS.map((c) => {
+            const on = context === c;
+            const color = signalContextColor(c);
             return (
               <button
-                key={l}
+                key={c}
                 type="button"
                 className="lenschip"
                 data-on={on ? '' : undefined}
-                onClick={() => { setLens(on ? '' : l); setPage(1); }}
+                onClick={() => { setContext(on ? '' : c); setPage(1); }}
                 style={on ? { color, borderColor: `color-mix(in oklab, ${color} 45%, var(--line))`, background: `color-mix(in oklab, ${color} 12%, var(--surface))` } : undefined}
               >
-                {SIGNAL_LENS_LABEL[l]}
+                {SIGNAL_CONTEXT_LABEL[c]}
               </button>
             );
           })}
@@ -161,7 +161,7 @@ export default function CandidateArchive({ initial, admin }: { initial: Candidat
 }
 
 function ArchiveRow({ row, admin }: { row: CandidateArchiveRow; admin: boolean }) {
-  const lensColor = signalLensColor(row.lens);
+  const contextColor = signalContextColor(row.context);
   const linkSignal = !!row.signal_id && (admin || row.signal_published === true);
   return (
     <div
@@ -186,7 +186,7 @@ function ArchiveRow({ row, admin }: { row: CandidateArchiveRow; admin: boolean }
           {row.headline || host(row.url)}
         </a>
         <span className="flex items-center gap-2 flex-wrap" style={{ marginTop: 3, fontSize: 11, color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>
-          <span style={{ color: lensColor }}>{SIGNAL_LENS_LABEL[row.lens]}</span>
+          <span style={{ color: contextColor }}>{SIGNAL_CONTEXT_LABEL[row.context]}</span>
           <span>· {row.source_domain || host(row.url)}</span>
           <span>· {dateLabel(row.retrieved_at)}</span>
           {row.analysis_status !== 'pending' && <span>· {row.analysis_status}</span>}

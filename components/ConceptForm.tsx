@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { recommendConceptPrereqsAction, recommendConceptClaimsAction } from '@/lib/actions';
+import { recommendConceptPrereqsAction, recommendConceptHypothesesAction } from '@/lib/actions';
 import { CONCEPT_STATUS_LABEL } from '@/lib/format';
 import type {
-  ConceptStatus, ConceptPrereqRecommendation, ConceptClaimRecommendation,
+  ConceptStatus, ConceptPrereqRecommendation, ConceptHypothesisRecommendation,
 } from '@/lib/types';
 import type { TargetOption } from '@/lib/data';
 
@@ -28,7 +28,7 @@ interface InitialValues {
   explanation?: string;
   status?: ConceptStatus;
   prerequisite_ids?: string[];
-  claim_codes?: string[];
+  codes?: string[];
 }
 
 function SubmitRow({ mode }: { mode: 'create' | 'edit' }) {
@@ -47,13 +47,12 @@ function SubmitRow({ mode }: { mode: 'create' | 'edit' }) {
 // to this form as data, the admin adds the ones they agree with to the selection,
 // and nothing touches the database until the form itself is submitted.
 export default function ConceptForm({
-  action, mode, concepts, claims, bridges, initial = {}, conceptId,
+  action, mode, concepts, hypotheses, initial = {}, conceptId,
 }: {
   action: (formData: FormData) => void | Promise<void>;
   mode: 'create' | 'edit';
   concepts: ConceptOption[];      // prerequisite picker (self already excluded)
-  claims: TargetOption[];
-  bridges: TargetOption[];
+  hypotheses: TargetOption[];
   initial?: InitialValues;
   conceptId?: string;
 }) {
@@ -64,14 +63,14 @@ export default function ConceptForm({
   const [explanation, setExplanation] = useState(initial.explanation ?? '');
   const [status, setStatus] = useState<ConceptStatus>(initial.status ?? 'settled');
   const [prereqIds, setPrereqIds] = useState<Set<string>>(new Set(initial.prerequisite_ids ?? []));
-  const [claimCodes, setClaimCodes] = useState<Set<string>>(new Set(initial.claim_codes ?? []));
+  const [codes, setCodes] = useState<Set<string>>(new Set(initial.codes ?? []));
 
   const [prereqRecs, setPrereqRecs] = useState<ConceptPrereqRecommendation[] | null>(null);
   const [prereqBusy, setPrereqBusy] = useState(false);
   const [prereqError, setPrereqError] = useState<string | null>(null);
-  const [claimRecs, setClaimRecs] = useState<ConceptClaimRecommendation[] | null>(null);
-  const [claimBusy, setClaimBusy] = useState(false);
-  const [claimError, setClaimError] = useState<string | null>(null);
+  const [hypRecs, setHypRecs] = useState<ConceptHypothesisRecommendation[] | null>(null);
+  const [hypBusy, setHypBusy] = useState(false);
+  const [hypError, setHypError] = useState<string | null>(null);
 
   const canAsk = name.trim().length > 0 && shortDefinition.trim().length > 0;
 
@@ -97,18 +96,18 @@ export default function ConceptForm({
     }
   }
 
-  async function suggestClaims() {
-    setClaimBusy(true);
-    setClaimError(null);
+  async function suggestHypotheses() {
+    setHypBusy(true);
+    setHypError(null);
     try {
-      const recs = await recommendConceptClaimsAction({
+      const recs = await recommendConceptHypothesesAction({
         name, short_definition: shortDefinition, explanation,
       });
-      setClaimRecs(recs);
+      setHypRecs(recs);
     } catch (e) {
-      setClaimError(e instanceof Error ? e.message : 'Could not get suggestions.');
+      setHypError(e instanceof Error ? e.message : 'Could not get suggestions.');
     } finally {
-      setClaimBusy(false);
+      setHypBusy(false);
     }
   }
 
@@ -121,7 +120,7 @@ export default function ConceptForm({
       {mode === 'edit' && conceptId && <input type="hidden" name="id" value={conceptId} />}
       <input type="hidden" name="status" value={status} />
       <input type="hidden" name="prerequisite_ids" value={JSON.stringify([...prereqIds])} />
-      <input type="hidden" name="claim_codes" value={JSON.stringify([...claimCodes])} />
+      <input type="hidden" name="codes" value={JSON.stringify([...codes])} />
 
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="field">
@@ -260,35 +259,35 @@ export default function ConceptForm({
         )}
       </div>
 
-      {/* claim wiring */}
+      {/* hypothesis wiring */}
       <div className="field">
         <div className="flex items-center justify-between gap-3">
-          <label style={{ margin: 0 }}>Argument Map: claims &amp; bridge-claims this concept is relevant to</label>
+          <label style={{ margin: 0 }}>Hypotheses this concept is relevant to</label>
           <button
             type="button"
             className="btn btn--ghost btn--sm"
-            onClick={suggestClaims}
-            disabled={claimBusy || !canAsk}
+            onClick={suggestHypotheses}
+            disabled={hypBusy || !canAsk}
             title={canAsk ? undefined : 'Add a name and short definition first'}
           >
-            {claimBusy ? 'Asking…' : '✦ AI suggest'}
+            {hypBusy ? 'Asking…' : '✦ AI suggest'}
           </button>
         </div>
-        {claimError && <p className="editable-error">{claimError}</p>}
-        {claimRecs && (
+        {hypError && <p className="editable-error">{hypError}</p>}
+        {hypRecs && (
           <div className="concept-recs">
-            {claimRecs.length === 0 ? (
-              <p className="concept-rec-empty">No claims recommended. Nothing on the map leans on this concept.</p>
+            {hypRecs.length === 0 ? (
+              <p className="concept-rec-empty">No hypotheses recommended. Nothing on the board leans on this concept.</p>
             ) : (
-              claimRecs.map((r) => (
+              hypRecs.map((r) => (
                 <div key={r.code} className="concept-rec">
                   <button
                     type="button"
                     className="btn btn--ghost btn--sm"
-                    disabled={claimCodes.has(r.code)}
-                    onClick={() => setClaimCodes((prev) => new Set(prev).add(r.code))}
+                    disabled={codes.has(r.code)}
+                    onClick={() => setCodes((prev) => new Set(prev).add(r.code))}
                   >
-                    {claimCodes.has(r.code) ? '✓ Added' : '+ Add'}
+                    {codes.has(r.code) ? '✓ Added' : '+ Add'}
                   </button>
                   <span className="concept-rec-name">{r.code}</span>
                   <span className="concept-rec-reason">{r.reason}</span>
@@ -298,28 +297,16 @@ export default function ConceptForm({
           </div>
         )}
         <div className="touch-picker">
-          {claims.length > 0 && <div className="touch-group-label">Claims</div>}
-          {claims.map((c) => (
-            <label key={c.id} className="touch-option">
+          {hypotheses.length > 0 && <div className="touch-group-label">Hypotheses</div>}
+          {hypotheses.map((h) => (
+            <label key={h.id} className="touch-option">
               <input
                 type="checkbox"
-                checked={claimCodes.has(c.code)}
-                onChange={() => setClaimCodes((prev) => toggleIn(prev, c.code))}
+                checked={codes.has(h.code)}
+                onChange={() => setCodes((prev) => toggleIn(prev, h.code))}
               />
-              <span className="touch-code">{c.code}</span>
-              <span className="touch-stmt">{truncate(c.statement)}</span>
-            </label>
-          ))}
-          {bridges.length > 0 && <div className="touch-group-label">Bridge-claims</div>}
-          {bridges.map((b) => (
-            <label key={b.id} className="touch-option">
-              <input
-                type="checkbox"
-                checked={claimCodes.has(b.code)}
-                onChange={() => setClaimCodes((prev) => toggleIn(prev, b.code))}
-              />
-              <span className="touch-code">{b.code}</span>
-              <span className="touch-stmt">{truncate(b.statement)}</span>
+              <span className="touch-code">{h.code}</span>
+              <span className="touch-stmt">{truncate(h.statement)}</span>
             </label>
           ))}
         </div>

@@ -105,7 +105,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ slug: s
                             {p.title}
                           </Link>
                           <span className="text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>
-                            {p.arxiv_id ?? 'manual'}{p.published_at ? ` · ${p.published_at}` : ''}
+                            {p.published_at ?? ''}
                             {p.review_status === 'tracked' ? ' · ★' : ''}
                           </span>
                         </div>

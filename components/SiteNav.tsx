@@ -30,7 +30,7 @@ export interface NavCounts {
 // its own top-level slot), then the map-family reader pages beneath a rule.
 const EXPLORE_VIEWS = [
   { href: '/blotter', label: 'News Blotter' },
-  { href: '/map', label: 'Claims & Theses' },
+  { href: '/map', label: 'Hypotheses' },
   { href: '/reports', label: 'Report Portal' },
   { href: '/datasets', label: 'Data Portal' },
   { href: '/research', label: 'Research Portal' },
@@ -51,10 +51,8 @@ interface AdminItem {
 const ADMIN_ITEMS: AdminItem[] = [
   { href: '/pipeline', label: 'Pipeline', badge: 'pipeline' },
   { href: '/signals/drafts', label: 'Drafts', badge: 'drafts' },
-  { href: '/theses', label: 'Theses' },
   { href: '/research/console', label: 'Papers', badge: 'papers' },
   { href: '/sources', label: 'Sources', also: ['/ingest', '/source'] },
-  { href: '/worldview', label: 'Map editor', also: ['/data'] },
   { href: '/tickets', label: 'Tickets', badge: 'tickets' },
   { href: '/costs', label: 'Costs', also: ['/calibration'] },
 ];
