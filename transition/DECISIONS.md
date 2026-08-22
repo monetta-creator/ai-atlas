@@ -126,3 +126,24 @@ tag/theme column on hypotheses is the first move, not a resurrected tier.
 - The hypothesis page shows evidence grouped by conviction with a display-only rollup
   line. The rollup never writes confidence; the operator moves confidence through the
   gate (rationale + snapshot) as always.
+
+## D-015 · 2026-08-22 · The prime directive: preserve the machinery, change the objects
+
+**DECIDED (operator's words, paraphrased).** "The logic and brilliance of the tool must
+remain; we are changing some of the analysis objects and focusing the tool for a v0."
+This is the test every cut has to pass. Concretely, the following are the tool's logic
+and are untouchable through the transition:
+
+- The human gate and everything that enforces it (rationale-required moves, post-commit
+  snapshots, draft→publish, publish-materializes-evidence).
+- The recommend-only posture of every AI feature (the model proposes, the human commits).
+- The retrieval architecture (FTS corpus, /ask with citations, peek panels, verify).
+- The candidate → triage → analyze → draft → review spine.
+- The calibration history, the cost meter, the report/pack machinery.
+- The console design system and the word-not-number display philosophy.
+
+Cuts are amputations of *objects and intake paths* (stances, bridges, web discovery,
+scout), never of the mechanisms above. Where a mechanism is currently expressed through
+a dying object (e.g. the tear-sheet's stance rollup, the QuestionMap SVG), the mechanism
+is re-expressed against hypotheses, not deleted. "Focused v0" means fewer objects and
+fewer surfaces, not a lobotomized engine.
