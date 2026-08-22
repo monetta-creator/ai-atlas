@@ -6,17 +6,18 @@ at `OPEN-QUESTIONS.md` rather than pretending to be settled.
 ## 1. The object model
 
 ```
-Question (grouping tier, fate = OQ-3)
-  └── HYPOTHESIS            the top-line unit: a strategic statement under test
-        ├── statement       what we believe / are testing
-        ├── test            what evidence would move it (falsifiability, kept from claims)
-        ├── confidence      0..1, human-committed only, word-labeled (thin/contested/leaning/settled)
-        ├── status          active / retired / resolved
-        └── EVIDENCE LINKS  n per hypothesis
-              ├── conviction   the operator's weight on THIS item bearing on THIS hypothesis
-              ├── direction    supports / cuts against / complicates
-              ├── note         why it bears
-              └── → SIGNAL or SOURCE (provenance)
+HYPOTHESIS                  the top-line unit: a strategic statement under test
+                            (flat list in v0; no question/grouping tier, D-013)
+  ├── statement       what we believe / are testing
+  ├── test            what evidence would move it (falsifiability, kept from claims)
+  ├── confidence      0..1, human-committed only, word-labeled (thin/contested/leaning/settled)
+  ├── status          active / retired / resolved
+  └── EVIDENCE LINKS  n per hypothesis
+        ├── conviction   low / medium / high, set at attach time, editable (D-014)
+        ├── direction    supports / cuts against / complicates
+        ├── note         why it bears
+        ├── actor        who attached it (multi-user hedge, D-012)
+        └── → SIGNAL or SOURCE (provenance)
 
 SIGNAL   a tracked development, published by a human
   ├── context: INTERNAL | EXTERNAL      (replaces the audience-lens enum as the primary axis)
@@ -43,12 +44,13 @@ had (a `test`, a confidence under the gate, evidence bearing directly on it). Th
 `claims` as a separate tier is **OQ-1**; the leading option is that hypotheses absorb
 them and evidence attaches directly to hypotheses.
 
-### Conviction mechanics (D-006)
+### Conviction mechanics (D-006, D-014)
 
 - Conviction lives on the evidence link, not on the evidence item: the same document can
   bear strongly on one hypothesis and weakly on another.
-- Scale: keep it coarse and human (e.g. 1-5 or low/medium/high). Precision theater is a
-  known failure mode; the AI Atlas already learned this with confidence words.
+- Scale: **low / medium / high**, chosen at attach time, editable after. Coarse and
+  human on purpose; precision theater is a known failure mode and the AI Atlas already
+  learned this with confidence words.
 - Display: a hypothesis page shows its evidence sorted by conviction × recency, with a
   rollup (e.g. "weighted balance leans supportive, driven by 2 high-conviction items").
 - The rollup NEVER writes confidence. The operator reads it, then moves confidence
@@ -111,8 +113,15 @@ panels, the citation-tag machinery, cost metering. Changed:
   every outbound call; the corporate build must pass "zero external requests" with the
   LLM endpoint as the sole configured exception. Fonts local, no CDN, no external
   iframes (the arXiv PaperReader iframe dies with the research portal decision, OQ-6).
-- **Auth:** unchanged for v0 (admin HMAC cookie + guest flag). Single operator.
-  Colleague access model is OQ-7.
+- **Hosting candidate: Posit Connect (OQ-13).** Connect supports Node.js content
+  (2026.x); the fit is `output: 'standalone'` + a Connect vanity URL baked into
+  `basePath`, deployed pre-built via rsconnect-python. If it pans out it also supplies
+  the multi-user gate (D-012) via Connect auth. Plain `next start` on a sanctioned
+  host remains the fallback; the code assumes neither.
+- **Auth:** v0 keeps the admin HMAC cookie + gated read view; that is already a
+  two-tier multi-user read model. Multi-user is the destination (D-012): writes carry
+  an actor from day one, and if Posit Connect hosts the app, its authenticated-user
+  headers are the likely successor to the password login (OQ-7/OQ-13).
 
 ## 5. Roadmap after day one
 

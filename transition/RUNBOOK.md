@@ -3,6 +3,11 @@
 Goal: from an unzipped repo to a running Strategy Atlas on a corporate machine, with
 zero outbound network traffic except (optionally) the LLM endpoint.
 
+This runbook targets the basic path: run it locally first, prove the app works, then
+pursue **Posit Connect** as the real host if available. The Connect checklist is in
+OPEN-QUESTIONS OQ-13; do the local bring-up below either way, since it is also the
+development loop.
+
 ## 0. Prerequisites
 
 - Node 20+ (`node -v`). Next.js 16 requires it.
@@ -79,8 +84,11 @@ Log in with `ADMIN_PASSWORD` at `/login`.
 - [ ] Read `transition/` end to end.
 - [ ] Walk the DB ladder; record the rung in `DECISIONS.md` (OQ-11).
 - [ ] Run §3 and §4; fix anything environment-specific and log it.
-- [ ] With the operator: resolve OQ-1 (claims tier) and OQ-3 (questions tier) if the
-      remodel left them open; they gate the baseline schema's final shape.
+- [ ] With the operator: resolve OQ-1 (claims tier) if the remodel left it open; it
+      gates the baseline schema's final shape.
+- [ ] If Posit Connect is available: walk the OQ-13 checklist (Connect version, Node
+      runtimes, vanity URL / basePath, user-identity headers, timeouts) and record the
+      verdict in DECISIONS.md.
 - [ ] Ask the operator for the OQ-2 samples (encoding-system output, a real CSV).
 - [ ] Set up whatever session-journal convention the operator wants inside the walls
       (the old repo kept `private/SESSION-LOG.md`, untracked; it did not travel).

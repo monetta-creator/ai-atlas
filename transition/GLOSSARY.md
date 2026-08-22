@@ -11,7 +11,7 @@ concept has no successor.
 | Stance | dropped | D-004. |
 | Bridge claim | dropped | D-004. |
 | Frame (claim with `is_frame`) | (follows OQ-1) | Organizing-only nodes; likely dropped with the stance layer. |
-| Question | (OQ-3) | Possible grouping tier above hypotheses ("strategic questions"). |
+| Question | dropped in v0 | Hypotheses are flat (D-013); a tag/theme column is the future grouping move if needed. |
 | Signal | Signal | Kept; primary axis becomes **internal / external context** instead of audience lens. |
 | Audience lens (`signal_lens_t`: market/labor/...) | replaced by context axis | Secondary tags TBD, OQ-4. |
 | Map lens (`lens_t`, node_lenses) | dropped unless OQ-4 revives tagging | |

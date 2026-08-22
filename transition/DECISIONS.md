@@ -93,3 +93,36 @@ migration runner and its `_migrations` tracking stay.
 role inside the walls. Removed wholesale. (Its patterns worth keeping are already
 generalized elsewhere: chunked agent runs, fill-only-null fact writes, monotone jsonb
 merges.)
+
+## D-012 · 2026-08-22 · Multi-user is the destination; gating is owned by corporate infra
+
+**DECIDED (direction).** The Strategy Atlas will become multi-user inside the walls,
+behind corporate gating the operator's team has already worked out (likely the hosting
+platform's own authentication; see OQ-13 on Posit Connect, whose viewer-access controls
+and user-identity headers fit this). Implications for the build:
+
+- v0 ships with the current model (admin cookie + server-stripped guest view); that IS
+  a working two-tier multi-user read model (operator writes, gated colleagues read).
+- Do not paint single-user corners: conviction, confidence moves, and rationales stay
+  attributed in the schema (an `actor` column costs nothing now and saves a migration
+  later), even while only one writer exists.
+- Per-user personal layers (own conviction, own confidence) are explicitly NOT in v0.
+  What "multi-user write" means is settled by the operator when it arrives (OQ-7).
+
+## D-013 · 2026-08-22 · No question tier in v0
+
+**DECIDED.** Hypotheses are a flat top-level list in v0; the `questions` grouping tier
+does not carry over. (Resolves former OQ-3.) If clustering pressure appears, a free-form
+tag/theme column on hypotheses is the first move, not a resurrected tier.
+
+## D-014 · 2026-08-22 · Conviction mechanics, settled
+
+**DECIDED.** (Operator delegated the design; resolves the ARCHITECTURE placeholder.)
+- Conviction lives on the evidence→hypothesis link, chosen at attach time, editable
+  after: three words, **low / medium / high**. No numeric precision theater, matching
+  the confidence-words philosophy.
+- Each link also carries direction (supports / cuts against / complicates) and a short
+  note on why it bears.
+- The hypothesis page shows evidence grouped by conviction with a display-only rollup
+  line. The rollup never writes confidence; the operator moves confidence through the
+  gate (rationale + snapshot) as always.

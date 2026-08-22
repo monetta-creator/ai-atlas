@@ -29,12 +29,10 @@ the work session:** get one real sample of the encoding system's output and one 
 the operator wants in, then design the mapping into (source, retained text, annotations
 jsonb). Do not build speculatively before seeing samples.
 
-## OQ-3 · Do questions survive as the grouping tier?
+## OQ-3 · RESOLVED → D-013
 
-Recommendation: keep a light grouping tier renamed to strategic questions or themes;
-strategy work naturally clusters hypotheses ("China exposure", "pricing power"...). If
-the operator prefers flat, a text tag on hypotheses is enough. Cheap either way; decide
-at remodel time.
+Questions do not survive in v0; hypotheses are flat. (Kept as a tombstone so numbering
+stays stable.)
 
 ## OQ-4 · Secondary tagging beyond internal/external
 
@@ -60,13 +58,16 @@ notes, commissioned studies) which is close to what intake v1 produces anyway.
 Recommendation: drop the portal, keep the finding-extraction pattern in mind for intake
 v1; delete the iframe either way.
 
-## OQ-7 · Colleague access
+## OQ-7 · What multi-user WRITE means when it arrives
 
-v0 stays single-operator with the guest/share view (server-stripped personal layer).
-If colleagues get real accounts later: per-user conviction? shared hypotheses with one
-owner? That is a product fork, not a feature; do not drift into it. Recommendation:
-guests browse the published/public layer; the librarian gets a named intake path only if
-manual handoff becomes a bottleneck.
+Multi-user is decided direction, gating owned by corporate infra (D-012); v0 ships the
+current two-tier read model (operator writes, gated colleagues see the public layer).
+Still open, for when write access widens: whose conviction is displayed (one shared
+house view vs per-user layers), whether confidence stays single-owner (recommended:
+yes, one accountable owner per hypothesis, others comment), and how identity reaches
+the app (if hosted on Posit Connect, its authenticated-user headers can replace the
+password login entirely; see OQ-13). Schema hedge already decided: attribute writes
+with an actor column from day one (D-012).
 
 ## OQ-8 · A webless Scout successor?
 
@@ -103,3 +104,41 @@ corporate gateway (Bedrock? internal proxy?), which models are approved, spend
 controls. The code path is env-configured (D-009) and fails soft, so this can stay
 unresolved without blocking day one. When it lands, verify the cost console's rate
 cards match the models actually served.
+
+## OQ-13 · Posit Connect as the host
+
+The company may be able to host on **Posit Connect**. Researched 2026-08-22 against the
+current Connect docs (2026.x): Connect now supports **Node.js content** natively
+(Express and generic Node HTTP servers), so a Next.js app is plausible there. This is
+attractive because Connect would solve the two hardest environment problems at once:
+**gating/auth** (Connect's own login + viewer permissions, satisfying D-012) and
+**hosting** (no bespoke server to argue for). Its presence also implies a corporate
+Postgres exists (Connect itself runs on one), strengthening RUNBOOK rung 1.
+
+What the work session must verify on the real instance:
+
+1. **Connect version** ≥ the release that added Node.js content, and Node runtimes
+   installed/configured by the admin (per-content Node versions are supported).
+2. **Deploy path:** `rsconnect-python` (≥ 1.29.0) deploys Node content; the bundle
+   needs `package.json` + `package-lock.json`, and Connect installs production deps at
+   build time, so the Connect server needs npm registry (or internal mirror) access.
+3. **Entrypoint + port:** Connect launches a JS/TS file that starts an HTTP server
+   reading `process.env.PORT`. For Next.js the clean fit is `output: 'standalone'` in
+   `next.config.ts`: `next build` then emits `.next/standalone/server.js`, which honors
+   `PORT`/`HOSTNAME` env, and the standalone bundle carries its own pruned
+   `node_modules` (reducing the registry-access dependency). Pre-build locally; do not
+   expect Connect to run `next build`.
+4. **Path prefix:** Connect serves content under a URL path. Next.js `basePath` is
+   build-time, so claim a stable vanity URL on Connect (e.g. `/strategy-atlas/`) and
+   bake it into `basePath` (and check cookie paths + the proxy allow-list logic).
+5. **User identity:** Connect can pass the authenticated user to content via trusted
+   headers; if verified on this instance, the app's password login can collapse to
+   header-trust (admin = allow-listed usernames), which is the natural D-012 endgame.
+6. **Long-running processes:** the AI actions run 30-60s; check Connect's request
+   timeout / process-idle settings cover that.
+
+Recommendation: treat Connect as the leading deployment candidate; keep plain
+`next start` on a sanctioned host as the fallback. Nothing in the codebase should
+assume either (the D-008 "deliberately basic" rule already guarantees this). Sources:
+[Connect Node.js docs](https://docs.posit.co/connect/admin/nodejs/) ·
+[content overview](https://docs.posit.co/connect/user/content-overview/).
