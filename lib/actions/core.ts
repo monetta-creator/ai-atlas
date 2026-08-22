@@ -2,14 +2,12 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { isAdmin, isEditMode, setEditMode, isPreview, setPreview } from '../auth';
+import { isEditMode, setEditMode, isPreview, setPreview } from '../auth';
 import { isValidContentKey, isValidContentValue, CONTENT_MAX_VALUE_LEN } from '../content';
 import * as m from '../mutations';
 import {
   getSource, getTargets, getQuestionSummaryInput,
   getSignal, getTestsByCodes } from '../data';
-import { getSupplyChainNode, type ScNodeDetail } from '../supply-chain/data';
-import { SC_NODE_BY_SLUG, type RiskLevel } from '../supply-chain/map';
 import { generateDossier, extractSourceMetadata, recommendClaims } from '../dossier';
 import { generateSignalAnalysis, type SignalAnalysisTouch } from '../signal-brief';
 import { generateQuestionSummary } from '../summary';
@@ -208,48 +206,6 @@ export async function extractSourceMetadataAction(text: string): Promise<SourceM
   const t = (text || '').trim();
   if (!t) return { title: '', author: '', url: '', published_at: '', domain_tag: '' };
   return extractSourceMetadata(t);
-}
-
-// Supply-chain node detail for the drawer (read). No requireAdmin: it resolves `personal`
-// itself, so a guest gets the published-only signals and no admin note. The slug must
-// exist in the static map (the firewall against a forged slug).
-export async function getSupplyChainNodeAction(slug: string): Promise<ScNodeDetail | null> {
-  if (typeof slug !== 'string' || !SC_NODE_BY_SLUG.has(slug)) return null;
-  const admin = await isAdmin();
-  const preview = await isPreview();
-  return getSupplyChainNode(slug, admin && !preview);
-}
-
-const RISK_LEVELS: RiskLevel[] = ['low', 'medium', 'high', 'critical'];
-
-// Set a node's risk override (empty = clear to the stub default) and admin note.
-export async function setSupplyChainNodeMetaAction(slug: string, risk: string, note: string): Promise<void> {
-  await requireAdmin();
-  if (!SC_NODE_BY_SLUG.has(slug)) throw new Error('Unknown node.');
-  let risk_level: RiskLevel | null = null;
-  if (risk !== '') {
-    if (!(RISK_LEVELS as string[]).includes(risk)) throw new Error('Invalid risk level.');
-    risk_level = risk as RiskLevel;
-  }
-  const admin_note = (note || '').trim().slice(0, 2000) || null;
-  await m.setSupplyChainNodeMeta(slug, { risk_level, admin_note });
-  revalidatePath('/', 'layout');
-}
-
-export async function linkSignalToNodeAction(slug: string, signalId: string): Promise<void> {
-  await requireAdmin();
-  if (!SC_NODE_BY_SLUG.has(slug)) throw new Error('Unknown node.');
-  if (!UUID_RE.test(signalId)) throw new Error('That does not look like a signal id.');
-  await m.linkSignalToNode(slug, signalId);
-  revalidatePath('/', 'layout');
-}
-
-export async function unlinkSignalFromNodeAction(slug: string, signalId: string): Promise<void> {
-  await requireAdmin();
-  if (!SC_NODE_BY_SLUG.has(slug)) throw new Error('Unknown node.');
-  if (!UUID_RE.test(signalId)) throw new Error('That does not look like a signal id.');
-  await m.unlinkSignalFromNode(slug, signalId);
-  revalidatePath('/', 'layout');
 }
 
 // Change 2 — recommend (don't attach) which claims this source fits.

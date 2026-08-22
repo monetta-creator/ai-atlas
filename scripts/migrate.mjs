@@ -1,31 +1,20 @@
-import { config } from 'dotenv';
-config({ path: '.env.local' });
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import pg from 'pg';
+import { makeClient } from './db.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dir = join(__dirname, '..', 'supabase', 'migrations');
 
-const client = new pg.Client({
-  host: process.env.SUPABASE_DB_HOST,
-  port: Number(process.env.SUPABASE_DB_PORT),
-  user: process.env.SUPABASE_DB_USER,
-  password: process.env.SUPABASE_DB_PASSWORD,
-  database: process.env.SUPABASE_DB_NAME,
-  ssl: { rejectUnauthorized: false },
-});
+const client = makeClient();
 
 async function main() {
   await client.connect();
   await client.query(
     `create table if not exists _migrations (filename text primary key, applied_at timestamptz not null default now());`
   );
-  // Deny-by-default like every other public table. The migrate role owns this
-  // table (owners bypass RLS), so migrations keep working; this just closes it
-  // off from the anon/publishable key via PostgREST. Idempotent. (Resolves the
-  // Supabase rls_disabled_in_public advisor for _migrations.)
+  // Deny-by-default like every other table; the migrate role owns this table
+  // (owners bypass RLS), so migrations keep working.
   await client.query(`alter table _migrations enable row level security;`);
   const applied = new Set(
     (await client.query('select filename from _migrations')).rows.map((r) => r.filename)

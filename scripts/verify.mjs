@@ -1,49 +1,67 @@
-import { config } from 'dotenv';
-config({ path: '.env.local' });
-import pg from 'pg';
+import { makeClient } from './db.mjs';
 
-const client = new pg.Client({
-  host: process.env.SUPABASE_DB_HOST,
-  port: Number(process.env.SUPABASE_DB_PORT),
-  user: process.env.SUPABASE_DB_USER,
-  password: process.env.SUPABASE_DB_PASSWORD,
-  database: process.env.SUPABASE_DB_NAME,
-  ssl: { rejectUnauthorized: false },
-});
+// Sanity-check a migrated + seeded database: table presence, seed shape, and
+// the invariants the app relies on. Read-only.
+
+const client = makeClient();
+let failures = 0;
+const check = (name, ok, detail = '') => {
+  if (ok) console.log(`  ok  ${name}`);
+  else {
+    failures++;
+    console.error(`FAIL  ${name}${detail ? ` — ${detail}` : ''}`);
+  }
+};
 
 async function main() {
   await client.connect();
 
-  console.log('\n— questions: stances + claims (via edges) —');
-  const perQ = await client.query(`
-    select q.sort_order, q.slug,
-      (select count(*) from stances s where s.question_id = q.id) as stances,
-      (select count(distinct e.from_id) from edges e
-         join stances s2 on s2.id = e.to_id and e.to_type='stance'
-        where s2.question_id = q.id and e.from_type='claim') as claims
-    from questions q order by q.sort_order`);
-  for (const r of perQ.rows) console.log(`  Q${r.sort_order} ${r.slug.padEnd(15)} ${r.stances} stances · ${r.claims} claims`);
+  const one = async (sql, params = []) => (await client.query(sql, params)).rows[0];
 
-  console.log('\n— confidence_label generated column (0.50 → ?) —');
-  const lbl = await client.query(`select confidence_label, count(*)::int n from claims where is_frame=false group by 1`);
-  for (const r of lbl.rows) console.log(`  ${r.confidence_label}: ${r.n}`);
+  // Tables exist
+  for (const t of ['hypotheses', 'evidence', 'signals', 'sources', 'rationales', 'snapshots', 'pipeline_runs', 'signal_candidates']) {
+    const r = await one(`select to_regclass($1) as reg`, [`public.${t}`]);
+    check(`table ${t} exists`, !!r.reg);
+  }
 
-  console.log('\n— F1 frame (no domain/test/confidence; quarantined) —');
-  const f = await client.query(`select code, is_frame, domain, test, confidence from claims where code='F1'`);
-  console.log('  ', JSON.stringify(f.rows[0]));
+  // Seed shape
+  const h = await one(`select count(*)::int as n from hypotheses`);
+  check('hypotheses seeded', h.n >= 3, `${h.n} rows`);
 
-  console.log('\n— B1 fed-by (the bridge spine) —');
-  const b1 = await client.query(`
-    select c.code, e.relation
-    from edges e join claims c on c.id = e.from_id
-    join bridge_claims b on b.id = e.to_id and e.to_type='bridge_claim'
-    where b.code='B1' and e.from_type='claim' order by e.relation, c.code`);
-  for (const r of b1.rows) console.log(`  ${r.code} ${r.relation} B1`);
+  const label = await one(`select conviction, conviction_label from hypotheses where code = 'H1'`);
+  check('H1 conviction neutral 0.50 -> "contested"', Number(label?.conviction) === 0.5 && label?.conviction_label === 'contested');
 
-  console.log('\n— reflexive claims —');
-  const rx = await client.query(`select code from claims where reflexive=true order by code`);
-  console.log('  ', rx.rows.map((r) => r.code).join(', '));
+  const sig = await one(`select count(*)::int as n from signals where is_published`);
+  check('a published signal exists', sig.n >= 1);
+
+  const ev = await one(
+    `select count(*)::int as n from evidence e join hypotheses hy on hy.id = e.hypothesis_id where hy.code = 'H1'`
+  );
+  check('published signal materialized evidence on H1', ev.n >= 1);
+
+  // Invariants
+  const orphan = await one(
+    `select count(*)::int as n from evidence where source_id is null and signal_id is null`
+  );
+  check('evidence always carries provenance', orphan.n === 0);
+
+  const fts = await one(
+    `select count(*)::int as n from hypotheses where search_tsv @@ plainto_tsquery('english', 'consolidates')`
+  );
+  check('hypotheses FTS matches seeded text', fts.n >= 1);
+
+  const rate = await one(`select count(*)::int as n from ai_rate_cards`);
+  check('rate cards seeded', rate.n >= 2);
 
   await client.end();
+  if (failures) {
+    console.error(`\n${failures} CHECK(S) FAILED`);
+    process.exit(1);
+  }
+  console.log('\nverify: all checks passed');
 }
-main().catch((e) => { console.error(e); process.exit(1); });
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

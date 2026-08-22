@@ -1,5 +1,5 @@
 {
-  "name": "ai-atlas",
+  "name": "strategy-atlas",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -10,14 +10,11 @@
     "test": "node scripts/run-tests.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "node scripts/seed.mjs",
-    "db:seed:concepts": "node scripts/seed-concepts.mjs",
-    "db:seed:threads": "node scripts/seed-threads.mjs",
     "db:verify": "node scripts/verify.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
     "@react-pdf/renderer": "^4.6.0",
-    "gpt-tokenizer": "^3.4.0",
     "marked": "^18.0.5",
     "next": "16.2.6",
     "node-html-parser": "^9.0.1",
@@ -25,7 +22,6 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "sanitize-html": "^2.17.4",
-    "three": "^0.180.0",
     "unpdf": "^1.6.2"
   },
   "devDependencies": {
@@ -35,11 +31,9 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/sanitize-html": "^2.16.1",
-    "@types/three": "^0.180.0",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
-    "playwright": "^1.62.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

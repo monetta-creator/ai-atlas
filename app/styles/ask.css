@@ -1,3 +1,8 @@
+/* Shared drawer keyframes (re-homed from the retired supply-chain sheet;
+   used by the ask drawers and the paper reader). */
+@keyframes scBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scDrawerIn { from { transform: translateX(100%); } to { transform: none; } }
+
 /* ---- Ask workspace (/ask) — the app's one viewport-height shell ------------
    The page root (.ask-page) is a 100dvh flex column with the sticky Header as
    its first child, so the shell takes the remainder structurally: no magic nav

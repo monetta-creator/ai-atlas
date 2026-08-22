@@ -13,15 +13,12 @@
 @import "./styles/signal-board.css";  /* /signals feed + cards */
 @import "./styles/sitenav.css";       /* top bar, dropdowns, mobile sheet */
 @import "./styles/concepts.css";      /* /concepts graph + authoring */
-@import "./styles/supply-chain.css";  /* sc graph/drawer: keyframes reused by ask */
 @import "./styles/ask.css";           /* /ask workspace shell + peek panel */
 @import "./styles/lobby.css";         /* the home-page front door */
 @import "./styles/rail.css";          /* portal rail + route transitions */
-@import "./styles/showcase.css";      /* the unlisted /showcase deck */
 @import "./styles/feedback.css";      /* bug/feature dialogs (.fb-*) */
-@import "./styles/paper-reader.css";  /* /research arXiv drawer (.pv-*) */
-@import "./styles/home.css"; /* Console Broadsheet layer — scoped to .bs (the home page) */
-@import "./styles/traceroute.css"; /* Traceroute explainer — scoped to .tr (/traceroute) */
+@import "./styles/paper-reader.css";  /* /research document drawer (.pv-*) */
+@import "./styles/home.css"; /* Console Broadsheet layer — scoped to .bs (the blotter) */
 
 /* Re-base the app's semantic Tailwind color/font utilities onto the design
    tokens so any utility usage (layout helpers, admin tooling, etc.) stays

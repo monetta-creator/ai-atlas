@@ -12,12 +12,11 @@ import FeedbackButtons from '@/components/feedback/FeedbackButtons';
 // (a globe with a nested flyout for the map-family extras), Ask, and About
 // pinned at the bottom in its own island. Hidden under 761px, where the
 // hamburger sheet remains the complete nav. Content clears the rail via
-// body:has(.portal-rail) padding, so pages without it (the showcase) stay
+// body:has(.portal-rail) padding, so pages without it stay
 // full-bleed.
 const EXPLORE_ITEMS = [
   { href: '/bridges', name: 'Bridges' },
   { href: '/concepts', name: 'Concepts' },
-  { href: '/traceroute', name: 'Traceroute' },
 ];
 // Detail pages that should light Explore without being listed in it.
 const EXPLORE_PREFIXES = ['/bridge/', '/claim/', '/q/', '/thesis-report/'];

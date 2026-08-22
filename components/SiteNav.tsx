@@ -36,12 +36,10 @@ const EXPLORE_VIEWS = [
   { href: '/research', label: 'Research Portal' },
 ];
 const EXPLORE_MORE = [
-  { href: '/bridges', label: 'Bridges' },
   { href: '/concepts', label: 'Concepts' },
-  { href: '/traceroute', label: 'Traceroute' },
 ];
 // Detail pages that should light the Explore dropdown without being listed in it.
-const EXPLORE_DETAIL_PREFIXES = ['/bridge/', '/claim/', '/q/', '/thesis-report/'];
+const EXPLORE_DETAIL_PREFIXES = ['/hypothesis/', '/hypothesis-report/'];
 
 interface AdminItem {
   href: string;
@@ -59,29 +57,7 @@ const ADMIN_ITEMS: AdminItem[] = [
   { href: '/worldview', label: 'Map editor', also: ['/data'] },
   { href: '/tickets', label: 'Tickets', badge: 'tickets' },
   { href: '/costs', label: 'Costs', also: ['/calibration'] },
-  { href: '/showcase', label: 'Showcase' },
 ];
-
-// Copies the direct /showcase URL: the deck is public but unlisted, so the
-// link IS the invitation for demo guests. Origin filled in client-side.
-function CopyShowcaseLink() {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    const url = `${window.location.origin}/showcase`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      window.prompt('Copy the showcase link:', url);
-    }
-  }
-  return (
-    <button type="button" className="btn btn--quiet btn--sm" onClick={copy} title="Copy the showcase link for demo guests">
-      {copied ? 'Link copied ✓' : 'Showcase link'}
-    </button>
-  );
-}
 
 const VISITED_KEY = 'atlas_nav_visited';
 
@@ -253,7 +229,6 @@ export default function SiteNav({
         <button type="submit" className="navmenu-item navmenu-item--btn">Preview as guest</button>
       </form>
       <div className="navmenu-item navmenu-item--plain"><ShareLinkButton token={shareToken} /></div>
-      <div className="navmenu-item navmenu-item--plain"><CopyShowcaseLink /></div>
       <div className="navmenu-sep" />
       <form action={logout}>
         <button type="submit" className="navmenu-item navmenu-item--btn">Sign out</button>

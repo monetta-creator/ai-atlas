@@ -7,7 +7,6 @@ export * from './signals';
 export * from './pipeline';
 export * from './reports';
 export * from './concepts';
-export * from './supply-chain';
 export * from './research';
 export * from './theses';
 export * from './tickets';

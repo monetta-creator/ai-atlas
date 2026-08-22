@@ -55,21 +55,11 @@ export function proxy(req: NextRequest) {
     // the pages re-check isAdmin() for every working-layer chunk.
     pathname === '/research' ||
     (pathname.startsWith('/research/') && !pathname.startsWith('/research/digest') && !pathname.startsWith('/research/console')) ||
-    // Traceroute is a self-contained explainer: static journey data plus a scripted
-    // inference walkthrough. It reads the supply-chain overlay for risk chips, which is
-    // stripped server-side for guests, and it never calls a model.
-    pathname === '/traceroute' ||
-    // Its tokenizer endpoint has to be public too, since the matcher below does not exempt
-    // /api. Pure string processing over a length-capped input: no model, no DB, no session.
-    pathname === '/api/traceroute/tokenize' ||
     // The Datasets portal: public catalog, dataset pages, and the Ask page (which
     // renders its own inline key-unlock panel instead of bouncing to /login). The
     // download API needs its own entries since the matcher does not exempt /api;
     // the key-gated dataset and the billable Ask endpoint enforce isPortal()
     // in-route, so the routing layer stays a convenience here as everywhere.
-    // The Showcase: an unlisted in-app slide deck for live demos. Public but
-    // linked from nowhere (no nav entry, robots noindex on the page).
-    pathname === '/showcase' ||
     pathname === '/datasets' ||
     pathname.startsWith('/datasets/') ||
     pathname.startsWith('/api/datasets/') ||
@@ -101,7 +91,6 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Static images are never auth-gated (the showcase's screen grabs must load
-  // for sessionless demo guests), matching the existing .svg carve-out.
+  // Static images are never auth-gated, matching the existing .svg carve-out.
   matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.svg|.*\\.png|.*\\.jpg).*)'],
 };

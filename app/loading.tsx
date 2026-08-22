@@ -8,7 +8,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 // mount (rail, header bar, brand, theme toggle) in the same positions, so
 // navigation reads as persistent chrome with only the content area swapping;
 // the sliding accent bar and a late-fading label cover the content. The one
-// intentional mismatch is /showcase, which is chromeless by design and clears
+// mismatches clear
 // the fallback chrome when it mounts. The admin menu is auth-dependent and
 // cannot render here; its corner fills in with the page.
 export default function Loading() {
