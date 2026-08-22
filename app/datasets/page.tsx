@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { isAdmin } from '@/lib/auth';
-import { SIGNAL_LENSES } from '@/lib/datasets/core';
+import { SIGNAL_CONTEXTS } from '@/lib/datasets/core';
 import { DATASETS } from '@/lib/datasets/registry';
 import Header from '@/components/Header';
 
@@ -30,7 +30,7 @@ export default async function DatasetsPage() {
             <div>
               <h1>Data Portal</h1>
               <p className="lede">
-                The Atlas as data: every published signal, claim, evidence row, concept, and report,
+                The Atlas as data: every published signal, hypothesis, evidence row, concept, and report,
                 downloadable as CSV or JSON with a documented schema. Built for analysts: filter and
                 group in the browser, pull a file into Sheets or a notebook, or ask in plain language
                 and get a cited answer with the right dataset attached.
@@ -72,17 +72,17 @@ export default async function DatasetsPage() {
                         </Link>
                       </div>
                     </div>
-                    {d.filters?.lens && (
+                    {d.filters?.context && (
                       <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 14 }}>
-                        <span className="lbl" style={{ fontSize: 9.5 }}>lens slices</span>
-                        {SIGNAL_LENSES.map((lens) => (
+                        <span className="lbl" style={{ fontSize: 9.5 }}>context slices</span>
+                        {SIGNAL_CONTEXTS.map((context) => (
                           <a
-                            key={lens}
+                            key={context}
                             className="btn btn--quiet btn--sm"
-                            href={`/api/datasets/${d.slug}?lens=${lens}`}
-                            title={`Download the ${lens} slice as CSV`}
+                            href={`/api/datasets/${d.slug}?context=${context}`}
+                            title={`Download the ${context} slice as CSV`}
                           >
-                            {lens}
+                            {context}
                           </a>
                         ))}
                       </div>

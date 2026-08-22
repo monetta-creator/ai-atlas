@@ -1,14 +1,13 @@
-// The Datasets portal registry contract. Follows lib/thesis/pack-core.ts:
-// query access is INJECTED (`Q`) rather than imported from lib/db so
+// The Datasets portal registry contract. Query access is INJECTED (`Q`)
+// rather than imported from lib/db so
 // scripts/test-datasets.mjs can drive the exact production SQL from plain Node,
 // and this module keeps type-only imports for the same reason.
 //
 // GUEST-SAFE BY CONSTRUCTION: every dataset is downloadable from the public
 // portal, so nothing in the personal layer may enter a builder's SELECT list:
-// confidence, confidence_label, domain_note, rationales, snapshots,
-// reliability_prior, dossier, evidence.note, touch_details, papers.review_note,
-// papers.rigor_prior, positions_crosscutting, supply-chain admin notes, and
-// unpublished or draft signals are all banned. scripts/test-datasets.mjs
+// conviction, conviction_label, rationales, snapshots, reliability_prior,
+// dossier, evidence.note, touch_details, papers.review_note, papers.rigor_prior,
+// and unpublished or draft signals are all banned. scripts/test-datasets.mjs
 // enforces the ban against the serialized output of every builder.
 //
 // Determinism: same corpus in, byte-identical rows out. Every ORDER BY carries a
@@ -41,7 +40,7 @@ export interface DatasetColumn {
 }
 
 export interface DatasetOpts {
-  lens?: string;          // validated against SIGNAL_LENSES before it reaches a builder
+  context?: string;       // validated against SIGNAL_CONTEXTS before it reaches a builder
 }
 
 export interface DatasetDef {
@@ -54,16 +53,14 @@ export interface DatasetDef {
   formats: ('csv' | 'json')[];
   heavy?: boolean;        // no explorer, truncated preview, download-only posture
   keyGated?: boolean;     // requires the portal key (bulk third-party article text)
-  filters?: { lens?: boolean };  // declares supported download query params
+  filters?: { context?: boolean };  // declares supported download query params
   build: (q: Q, opts?: DatasetOpts) => Promise<DatasetRow[]>;
 }
 
-// The Signal Board's six audience lenses (signal_lens_t). Kept as a literal here
-// rather than imported so the module stays loadable by Node type stripping.
-export const SIGNAL_LENSES = [
-  'market', 'labor', 'geopolitics', 'regulatory', 'capability', 'society',
-] as const;
+// The Signal Board's two contexts (context_t). Kept as a literal here rather
+// than imported so the module stays loadable by Node type stripping.
+export const SIGNAL_CONTEXTS = ['internal', 'external'] as const;
 
-export function isSignalLens(v: string): boolean {
-  return (SIGNAL_LENSES as readonly string[]).includes(v);
+export function isSignalContext(v: string): boolean {
+  return (SIGNAL_CONTEXTS as readonly string[]).includes(v);
 }

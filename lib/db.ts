@@ -1,12 +1,12 @@
 import pg from 'pg';
 import type { PoolClient } from 'pg';
 
-// Parse numeric/decimal (OID 1700) as JS numbers, not strings — confidences are
+// Parse numeric/decimal (OID 1700) as JS numbers, not strings — convictions are
 // arithmetic (sliders, toFixed), and 0–1 values are well within float range.
 pg.types.setTypeParser(1700, (v: string) => parseFloat(v));
 
 // Server-only Postgres access. It connects as a role that bypasses RLS, so the
-// SERVER decides public (the map) vs. personal (confidence, rationales, priors).
+// SERVER decides public (the board) vs. personal (conviction, rationales, priors).
 // Never import this into a client component.
 if (typeof window !== 'undefined') {
   throw new Error('lib/db must only be used on the server');
@@ -20,38 +20,21 @@ const POOL_OPTS = {
   max: Number(process.env.DB_POOL_MAX || 3),
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,
-  ssl: { rejectUnauthorized: false },
 };
 
-// Production (Vercel serverless) MUST use the Supabase pooler via DATABASE_URL —
-// the direct db.<ref>.supabase.co host is IPv6-only and unreachable from
-// serverless. Local dev falls back to the discrete SUPABASE_DB_* (direct) vars,
-// which is also what the migrate/seed scripts use (DDL needs a session, not the
-// transaction pooler).
+// One supported path: DATABASE_URL, any reachable Postgres 15+. TLS is on only
+// when the URL asks for it (sslmode=require) or DB_SSL=1 — a corporate or local
+// Postgres without TLS must not be forced through an SSL handshake.
 function makePool(): pg.Pool {
   const url = process.env.DATABASE_URL;
-  if (url) {
-    return new pg.Pool({ connectionString: url, ...POOL_OPTS });
+  if (!url) {
+    throw new Error('Database config missing: set DATABASE_URL, e.g. postgresql://user:pass@host:5432/strategy_atlas');
   }
-  const {
-    SUPABASE_DB_HOST,
-    SUPABASE_DB_PORT,
-    SUPABASE_DB_USER,
-    SUPABASE_DB_PASSWORD,
-    SUPABASE_DB_NAME,
-  } = process.env;
-  if (!SUPABASE_DB_HOST || !SUPABASE_DB_PORT || !SUPABASE_DB_USER || !SUPABASE_DB_PASSWORD || !SUPABASE_DB_NAME) {
-    throw new Error(
-      'Database config missing: set DATABASE_URL (Supabase pooler, for production) or all SUPABASE_DB_* vars (direct, for local).'
-    );
-  }
+  const wantSsl = /sslmode=require/.test(url) || process.env.DB_SSL === '1';
   return new pg.Pool({
-    host: SUPABASE_DB_HOST,
-    port: Number(SUPABASE_DB_PORT),
-    user: SUPABASE_DB_USER,
-    password: SUPABASE_DB_PASSWORD,
-    database: SUPABASE_DB_NAME,
+    connectionString: url,
     ...POOL_OPTS,
+    ...(wantSsl ? { ssl: { rejectUnauthorized: false } } : {}),
   });
 }
 
@@ -84,7 +67,7 @@ export async function exec(text: string, params?: unknown[]): Promise<number> {
 }
 
 // Run a function inside a single transaction on one pooled client. Used for the
-// human gate (a confidence move + its rationale + snapshot must be atomic).
+// human gate (a conviction move + its rationale + snapshot must be atomic).
 export async function withTx<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await getPool().connect();
   try {

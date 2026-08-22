@@ -20,21 +20,12 @@
 import { config } from 'dotenv';
 config({ path: '.env.local' });
 import assert from 'node:assert/strict';
-import pg from 'pg';
+import { makeClient } from './db.mjs';
 import { DATASETS, getDataset } from '../lib/datasets/registry.ts';
-import { isSignalLens, SIGNAL_LENSES } from '../lib/datasets/core.ts';
+import { isSignalContext, SIGNAL_CONTEXTS } from '../lib/datasets/core.ts';
 import { datasetFileName, datasetToCSV } from '../lib/datasets/serialize.ts';
 
-const client = process.env.DATABASE_URL
-  ? new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
-  : new pg.Client({
-      host: process.env.SUPABASE_DB_HOST,
-      port: Number(process.env.SUPABASE_DB_PORT),
-      user: process.env.SUPABASE_DB_USER,
-      password: process.env.SUPABASE_DB_PASSWORD,
-      database: process.env.SUPABASE_DB_NAME,
-      ssl: { rejectUnauthorized: false },
-    });
+const client = makeClient();
 await client.connect();
 // Serialize queries: builders issue Promise.all batches, which a bare pg.Client
 // (unlike the app's pool) cannot run concurrently.
@@ -60,10 +51,10 @@ const check = (name, fn) => {
 // (methodology text lives in the registry, not in rows); the substrings catch
 // derived spellings.
 const BANNED_EXACT = new Set([
-  'confidence', 'confidence_label', 'domain_note', 'reliability_prior',
+  'conviction', 'conviction_label', 'reliability_prior',
   'dossier', 'note', 'touch_details', 'review_note', 'rigor_prior', 'admin_note',
 ]);
-const BANNED_SUBSTRINGS = ['rationale', 'snapshot', 'confidence', 'prior', 'dossier'];
+const BANNED_SUBSTRINGS = ['rationale', 'snapshot', 'conviction', 'prior', 'dossier'];
 const EM_DASH = '—';
 
 // Quote-aware CSV parse (RFC-4180-ish, CRLF records) for the round-trip check.
@@ -121,13 +112,13 @@ check('registry: house style, no em dash anywhere', () => {
     }
   }
 });
-check('helpers: isSignalLens + datasetFileName', () => {
-  assert.ok(isSignalLens('labor'));
-  assert.ok(!isSignalLens('vibes'));
-  assert.equal(SIGNAL_LENSES.length, 6);
+check('helpers: isSignalContext + datasetFileName', () => {
+  assert.ok(isSignalContext('internal'));
+  assert.ok(!isSignalContext('vibes'));
+  assert.equal(SIGNAL_CONTEXTS.length, 2);
   const sig = DATASETS.find((d) => d.slug === 'signals');
   assert.equal(datasetFileName(sig, 'csv'), 'atlas-signals.csv');
-  assert.equal(datasetFileName(sig, 'json', 'labor'), 'atlas-signals-labor.json');
+  assert.equal(datasetFileName(sig, 'json', 'external'), 'atlas-signals-external.json');
 });
 
 // ---- per-dataset build checks ------------------------------------------------
@@ -197,13 +188,13 @@ async function countUnpublished(signalIds) {
   const signals = await getDataset('signals').build(q);
   check('signals: row count equals the published corpus', () =>
     assert.equal(signals.length, publishedCount));
-  const laborRows = await getDataset('signals').build(q, { lens: 'labor' });
-  check('signals: lens slice is a strict filter', () => {
-    assert.ok(laborRows.length <= signals.length);
-    for (const r of laborRows) assert.ok(String(r.lenses).includes('labor'));
+  const externalRows = await getDataset('signals').build(q, { context: 'external' });
+  check('signals: context slice is a strict filter', () => {
+    assert.ok(externalRows.length <= signals.length);
+    for (const r of externalRows) assert.equal(r.context, 'external');
   });
 
-  for (const slug of ['signals-by-claim', 'articles-full-text', 'evidence-ledger']) {
+  for (const slug of ['signals-by-hypothesis', 'articles-full-text', 'evidence-ledger']) {
     const rows = await getDataset(slug).build(q);
     const ids = idsOf(rows, 'signal_id');
     const bad = await countUnpublished(ids);
@@ -225,9 +216,9 @@ async function countUnpublished(signalIds) {
     significance: new Set(['high', 'medium', 'low']),
     direction: new Set(['supports', 'contradicts', 'neutral']),
   };
-  const byClaim = await getDataset('signals-by-claim').build(q);
-  check('signals-by-claim: enum values allow-listed', () => {
-    for (const r of byClaim) {
+  const byHypothesis = await getDataset('signals-by-hypothesis').build(q);
+  check('signals-by-hypothesis: enum values allow-listed', () => {
+    for (const r of byHypothesis) {
       assert.ok(enums.significance.has(r.significance), String(r.significance));
       if (r.direction !== null) assert.ok(enums.direction.has(r.direction), String(r.direction));
     }

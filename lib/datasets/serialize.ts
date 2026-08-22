@@ -24,7 +24,7 @@ export function datasetToCSV(def: DatasetDef, rows: DatasetRow[]): string {
 // The JSON envelope carries the schema alongside the rows so a consumer never
 // needs a second request to interpret a download.
 export function datasetToJSON(
-  def: DatasetDef, rows: DatasetRow[], opts: { lens?: string } = {}
+  def: DatasetDef, rows: DatasetRow[], opts: { context?: string } = {}
 ): string {
   return JSON.stringify({
     dataset: {
@@ -33,7 +33,7 @@ export function datasetToJSON(
       description: def.description,
       methodology: def.methodology,
       category: def.category,
-      lens: opts.lens ?? null,
+      context: opts.context ?? null,
       row_count: rows.length,
       columns: def.columns,
     },
@@ -42,7 +42,7 @@ export function datasetToJSON(
 }
 
 // Safe filename stem, mirroring lib/viewdata.ts fileStem.
-export function datasetFileName(def: DatasetDef, format: 'csv' | 'json', lens?: string): string {
-  const stem = ['atlas', def.slug, lens].filter(Boolean).join('-');
+export function datasetFileName(def: DatasetDef, format: 'csv' | 'json', context?: string): string {
+  const stem = ['atlas', def.slug, context].filter(Boolean).join('-');
   return `${stem}.${format}`;
 }

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { isAdmin, isPortal } from '@/lib/auth';
 import { q } from '@/lib/db';
-import { SIGNAL_LENSES, type DatasetRow } from '@/lib/datasets/core';
+import { SIGNAL_CONTEXTS, type DatasetRow } from '@/lib/datasets/core';
 import { getDataset } from '@/lib/datasets/registry';
 import Header from '@/components/Header';
 import DatasetSchemaTable from '@/components/datasets/DatasetSchemaTable';
@@ -68,12 +68,12 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
             </Link>
           )}
         </div>
-        {def.filters?.lens && (
+        {def.filters?.context && (
           <div className="flex items-center gap-2 flex-wrap" style={{ marginBottom: 10 }}>
-            <span className="lbl" style={{ fontSize: 9.5 }}>lens slices</span>
-            {SIGNAL_LENSES.map((lens) => (
-              <a key={lens} className="btn btn--quiet btn--sm" href={`/api/datasets/${def.slug}?lens=${lens}`}>
-                {lens}
+            <span className="lbl" style={{ fontSize: 9.5 }}>context slices</span>
+            {SIGNAL_CONTEXTS.map((context) => (
+              <a key={context} className="btn btn--quiet btn--sm" href={`/api/datasets/${def.slug}?context=${context}`}>
+                {context}
               </a>
             ))}
           </div>

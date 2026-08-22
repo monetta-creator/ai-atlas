@@ -1,11 +1,11 @@
 import type { NextRequest } from 'next/server';
 import { q } from '@/lib/db';
 import { isPortal } from '@/lib/auth';
-import { isSignalLens } from '@/lib/datasets/core';
+import { isSignalContext } from '@/lib/datasets/core';
 import { getDataset } from '@/lib/datasets/registry';
 import { datasetFileName, datasetToCSV, datasetToJSON } from '@/lib/datasets/serialize';
 
-// The Datasets portal download route: /api/datasets/<slug>?format=csv|json[&lens=...].
+// The Datasets portal download route: /api/datasets/<slug>?format=csv|json[&context=...].
 // Public (allow-listed in proxy.ts; its matcher does not exempt /api/*), except
 // key-gated datasets (bulk article text), which require the portal cookie.
 // Node runtime: builders run on lib/db's pg pool. No model call, no maxDuration.
@@ -35,26 +35,26 @@ export async function GET(
 
   const sp = req.nextUrl.searchParams;
   const format = sp.get('format') === 'json' ? 'json' : 'csv';
-  let lens: string | undefined;
-  if (def.filters?.lens) {
-    const v = sp.get('lens');
+  let context: string | undefined;
+  if (def.filters?.context) {
+    const v = sp.get('context');
     if (v) {
-      if (!isSignalLens(v)) {
+      if (!isSignalContext(v)) {
         return Response.json(
-          { error: 'Unknown lens. Valid: market, labor, geopolitics, regulatory, capability, society.' },
+          { error: 'Unknown context. Valid: internal, external.' },
           { status: 400 }
         );
       }
-      lens = v;
+      context = v;
     }
   }
 
-  const rows = await def.build(q, { lens });
+  const rows = await def.build(q, { context });
   const cache = def.keyGated ? 'no-store' : PUBLIC_CACHE;
-  const filename = datasetFileName(def, format, lens);
+  const filename = datasetFileName(def, format, context);
 
   if (format === 'json') {
-    return new Response(datasetToJSON(def, rows, { lens }), {
+    return new Response(datasetToJSON(def, rows, { context }), {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Content-Disposition': `inline; filename="${filename}"`,
