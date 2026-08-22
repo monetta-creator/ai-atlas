@@ -23,7 +23,6 @@ export interface NavCounts {
   pipeline: number;
   drafts: number;
   papers: number;
-  scout: number;
   tickets: number;
 }
 
@@ -35,7 +34,6 @@ const EXPLORE_VIEWS = [
   { href: '/reports', label: 'Report Portal' },
   { href: '/datasets', label: 'Data Portal' },
   { href: '/research', label: 'Research Portal' },
-  { href: '/scout', label: 'Startup Scout' },
 ];
 const EXPLORE_MORE = [
   { href: '/bridges', label: 'Bridges' },
@@ -57,7 +55,6 @@ const ADMIN_ITEMS: AdminItem[] = [
   { href: '/signals/drafts', label: 'Drafts', badge: 'drafts' },
   { href: '/theses', label: 'Theses' },
   { href: '/research/console', label: 'Papers', badge: 'papers' },
-  { href: '/scout/console', label: 'Scout', badge: 'scout' },
   { href: '/sources', label: 'Sources', also: ['/ingest', '/source'] },
   { href: '/worldview', label: 'Map editor', also: ['/data'] },
   { href: '/tickets', label: 'Tickets', badge: 'tickets' },

@@ -3,20 +3,12 @@
 // may only export async functions. Never re-export this module from index.ts,
 // and never import it into client code (it drags in server-only deps).
 
-import { isAdmin, isPortal } from '../auth';
+import { isAdmin } from '../auth';
 import type {
   Direction, Weight, } from '../types';
 
 export async function requireAdmin() {
   if (!(await isAdmin())) throw new Error('Unauthorized');
-}
-
-// Admin-or-portal gate for the scout research surface: isPortal() admits
-// admins implicitly (lib/auth.ts). Portal-permitted actions ALSO re-check the
-// target company's visibility and the daily budget; see the gate template on
-// intelSweepAction.
-export async function requirePortal() {
-  if (!(await isPortal())) throw new Error('Unauthorized');
 }
 
 export function str(fd: FormData, key: string): string {

@@ -17,7 +17,6 @@ export default async function DatasetsPage() {
     { key: 'argument-graph', label: 'Argument graph' },
     { key: 'sources', label: 'Sources' },
     { key: 'research', label: 'Research' },
-    { key: 'scout', label: 'Startup Scout' },
     { key: 'meta', label: 'Meta' },
   ];
 

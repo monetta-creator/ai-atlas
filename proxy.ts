@@ -50,22 +50,11 @@ export function proxy(req: NextRequest) {
     (pathname.startsWith('/concepts/') &&
       !pathname.startsWith('/concepts/new') &&
       !pathname.endsWith('/edit')) ||
-    // Retired reader pages (2026-08-13 lobby redesign): these three are redirect
-    // stubs now (landscape → /blotter, lens → /map, supply-chain → /traceroute).
-    // They stay allow-listed so a sessionless visitor gets the redirect, not /login.
-    pathname === '/landscape' ||
-    pathname === '/supply-chain' ||
-    pathname === '/lens' ||
     // The Research Portal: public read-only funnel output (threads, watchlist,
     // papers). The print digest and the working console's actions stay admin;
     // the pages re-check isAdmin() for every working-layer chunk.
     pathname === '/research' ||
     (pathname.startsWith('/research/') && !pathname.startsWith('/research/digest') && !pathname.startsWith('/research/console')) ||
-    // Startup Scout: public read-only watchlist + tracked-company profiles. The
-    // working console (queue, runs, verticals) stays admin; its page re-checks
-    // isAdmin() and non-tracked companies 404 for guests at the data layer.
-    pathname === '/scout' ||
-    (pathname.startsWith('/scout/') && !pathname.startsWith('/scout/console')) ||
     // Traceroute is a self-contained explainer: static journey data plus a scripted
     // inference walkthrough. It reads the supply-chain overlay for risk chips, which is
     // stripped server-side for guests, and it never calls a model.

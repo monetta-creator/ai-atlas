@@ -27,7 +27,6 @@ type DatasetCategory =
   | 'evidence'
   | 'sources'
   | 'research'
-  | 'scout'
   | 'meta';
 
 // `longtext` marks prose columns the explorer should truncate and the schema

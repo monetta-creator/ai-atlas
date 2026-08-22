@@ -47,7 +47,7 @@ const SECTIONS = [
   {
     id: 'can-be-wrong',
     heading: 'Ways it can still be wrong',
-    body: 'The guardrails reduce the obvious problems, they do not remove them. Confidence levels can carry the author’s bias. Stances may be argued unevenly. Evidence can stay one-sided if the looking stops. Claims can go stale between updates. The scout’s company facts come from the web and can be thin or wrong until enriched and reviewed. The structure pushes against all of this; it guarantees none of it.',
+    body: 'The guardrails reduce the obvious problems, they do not remove them. Confidence levels can carry the author’s bias. Stances may be argued unevenly. Evidence can stay one-sided if the looking stops. Claims can go stale between updates. The structure pushes against all of this; it guarantees none of it.',
   },
 ];
 

@@ -3,7 +3,7 @@ import type { DatasetColumn, DatasetDef, DatasetRow } from './core';
 // stripping) can load this module chain; the bundler resolves it the same.
 import {
   buildArgumentEdges, buildArgumentNodes, buildArticlesFullText, buildConcepts,
-  buildEvidenceLedger, buildResearchPapers, buildScoutCompanies, buildScoutEvents,
+  buildEvidenceLedger, buildResearchPapers,
   buildSignals, buildSignalsByClaim, buildSources, buildThesisReports,
 } from './builders.ts';
 
@@ -263,55 +263,6 @@ const BASE: DatasetDef[] = [
     ],
     build: buildResearchPapers,
   },
-  {
-    slug: 'scout-companies',
-    title: 'Scout: tracked companies',
-    description:
-      'The Startup Scout watchlist: young AI companies tracked as acquisition candidates, organized by vertical, with what each builds and the AI technology itself.',
-    methodology:
-      'Only tracked companies are included. The review funnel, the scoring agent\'s advisory verdicts and scores, review notes, and dossiers never enter a dataset. Facts come from discovery, homepage enrichment, and hand edits; web-sourced facts can be imprecise.',
-    category: 'scout',
-    formats: ['csv', 'json'],
-    columns: [
-      col('company_id', 'Company ID', 'text', 'Stable UUID; the profile URL is /scout/<id>.'),
-      col('name', 'Name', 'text', 'Company name.'),
-      col('domain', 'Domain', 'text', 'Bare homepage host, when known.'),
-      col('url', 'URL', 'text', 'Homepage URL, when known.'),
-      col('vertical', 'Vertical slug', 'text', 'The acquisition-thesis vertical the company is filed under.'),
-      col('vertical_name', 'Vertical', 'text', 'Display name of the vertical.'),
-      col('one_liner', 'One-liner', 'longtext', 'What the company builds, in one sentence.'),
-      col('ai_tech', 'AI tech', 'longtext', 'The AI technology itself, as concretely as sources allow.'),
-      col('stage', 'Stage', 'enum', 'pre_seed, seed, series_a, series_b, later, or unknown.'),
-      col('founded_year', 'Founded', 'number', 'Founding year, when reported.'),
-      col('funding_note', 'Funding note', 'text', 'Latest reported round, free text.'),
-      col('hq', 'HQ', 'text', 'Headquarters, when reported.'),
-      col('origin', 'Origin', 'enum', 'discovery (found by the web sweep) or manual (added by hand).'),
-      col('tracked_since', 'Tracked since', 'date', 'When the company cleared review onto the watchlist (YYYY-MM-DD).'),
-      col('event_count', 'Events', 'number', 'Timeline events logged for the company.'),
-    ],
-    build: buildScoutCompanies,
-  },
-  {
-    slug: 'scout-events',
-    title: 'Scout: company events',
-    description:
-      'The event timelines of tracked Scout companies: funding rounds, launches, and notable news, one row per event.',
-    methodology:
-      'Events on tracked companies only, matching what each public profile timeline shows. Logged by hand or by the research tools; each carries its source URL when one was reported.',
-    category: 'scout',
-    formats: ['csv', 'json'],
-    columns: [
-      col('event_id', 'Event ID', 'text', 'Stable UUID of the event.'),
-      col('company_id', 'Company ID', 'text', 'The company the event belongs to; joins scout-companies.'),
-      col('company_name', 'Company', 'text', 'Company name, denormalized for convenience.'),
-      col('vertical', 'Vertical slug', 'text', 'The company\'s vertical.'),
-      col('event_date', 'Date', 'date', 'Event date (YYYY-MM-DD).'),
-      col('kind', 'Kind', 'enum', 'funding, launch, news, milestone, or note.'),
-      col('title', 'Title', 'text', 'One-line description of the event.'),
-      col('url', 'URL', 'text', 'Source link, when one was reported.'),
-    ],
-    build: buildScoutEvents,
-  },
 ];
 
 const CATALOG: DatasetDef = {
@@ -326,7 +277,7 @@ const CATALOG: DatasetDef = {
   columns: [
     col('dataset_slug', 'Dataset slug', 'text', 'Slug of the dataset; its download URL is /api/datasets/<slug>.'),
     col('dataset_title', 'Dataset title', 'text', 'Display title of the dataset.'),
-    col('category', 'Category', 'enum', 'argument-graph, signals, evidence, sources, research, scout, or meta.'),
+    col('category', 'Category', 'enum', 'argument-graph, signals, evidence, sources, research, or meta.'),
     col('column_key', 'Column key', 'text', 'Machine name of the column; the CSV header.'),
     col('column_label', 'Column label', 'text', 'Display name of the column.'),
     col('column_type', 'Column type', 'enum', 'text, number, date, enum, or longtext.'),

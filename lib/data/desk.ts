@@ -7,8 +7,8 @@ import type {
 // One cheap round trip for the admin nav's live counts: work waiting in an
 // in-flight pipeline run, active signal drafts, and the paper review queue.
 // Called by Header ONLY for admins, so guests never pay for it.
-export async function getNavCounts(): Promise<{ pipeline: number; drafts: number; papers: number; scout: number; tickets: number }> {
-  const row = await one<{ pipeline: number; drafts: number; papers: number; scout: number; tickets: number }>(
+export async function getNavCounts(): Promise<{ pipeline: number; drafts: number; papers: number; tickets: number }> {
+  const row = await one<{ pipeline: number; drafts: number; papers: number; tickets: number }>(
     `select
        (select count(*) from signal_candidates sc
           join pipeline_runs r on r.id = sc.run_id
@@ -17,10 +17,9 @@ export async function getNavCounts(): Promise<{ pipeline: number; drafts: number
          where is_published = false and archived_at is null)::int as drafts,
        (select count(*) from papers
          where triage_status = 'kept' and review_status = 'pending')::int as papers,
-       (select count(*) from companies where status = 'queued')::int as scout,
        (select count(*) from tickets where status = 'open')::int as tickets`
   );
-  return row ?? { pipeline: 0, drafts: 0, papers: 0, scout: 0, tickets: 0 };
+  return row ?? { pipeline: 0, drafts: 0, papers: 0, tickets: 0 };
 }
 
 // ---- Tickets — the public feedback box (migration 0032) ---------------------

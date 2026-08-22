@@ -57,13 +57,6 @@ export const PORTAL_ICONS: Record<string, ReactNode> = {
       <path d="M12 6.5v14" />
     </svg>
   ),
-  scout: (
-    <svg {...ICON_ATTRS}>
-      <circle cx="12" cy="12" r="7.5" />
-      <path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4" />
-      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
-    </svg>
-  ),
 };
 
 // Rail chrome icons beyond the six portals: home, the Explore globe, the Ask
@@ -107,5 +100,4 @@ export const PORTALS: { href: string; name: string; icon: ReactNode }[] = [
   { href: '/reports', name: 'Report Portal', icon: PORTAL_ICONS.reports },
   { href: '/datasets', name: 'Data Portal', icon: PORTAL_ICONS.data },
   { href: '/research', name: 'Research Portal', icon: PORTAL_ICONS.research },
-  { href: '/scout', name: 'Startup Scout', icon: PORTAL_ICONS.scout },
 ];

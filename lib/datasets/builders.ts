@@ -319,36 +319,3 @@ export async function buildResearchPapers(q: Q): Promise<DatasetRow[]> {
   );
 }
 
-export async function buildScoutCompanies(q: Q): Promise<DatasetRow[]> {
-  // The tracked watchlist only, descriptive facts only. The review funnel, the
-  // scoring agent's advisory verdicts and scores, review notes, and the dossier
-  // never enter a dataset (a public pursue verdict on a named startup would
-  // disclose M&A intent).
-  return q<DatasetRow>(
-    `select c.id::text as company_id, c.name, c.domain, c.url,
-            c.vertical, v.name as vertical_name,
-            c.one_liner, c.ai_tech, c.stage::text as stage,
-            c.founded_year, c.funding_note, c.hq, c.origin::text as origin,
-            to_char(c.reviewed_at, 'YYYY-MM-DD') as tracked_since,
-            (select count(*)::int from company_events e where e.company_id = c.id) as event_count
-       from companies c
-       join scout_verticals v on v.slug = c.vertical
-      where c.status = 'tracked'
-      order by c.reviewed_at desc nulls last, c.id`
-  );
-}
-
-export async function buildScoutEvents(q: Q): Promise<DatasetRow[]> {
-  // Events on tracked companies: the same rows the public profile timeline
-  // renders. The note column stays out (it can carry working provenance).
-  return q<DatasetRow>(
-    `select e.id::text as event_id, e.company_id::text as company_id,
-            c.name as company_name, c.vertical,
-            to_char(e.event_date, 'YYYY-MM-DD') as event_date,
-            e.kind::text as kind, e.title, e.url
-       from company_events e
-       join companies c on c.id = e.company_id
-      where c.status = 'tracked'
-      order by e.event_date desc, e.id`
-  );
-}

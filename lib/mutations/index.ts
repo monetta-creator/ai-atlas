@@ -11,4 +11,3 @@ export * from './supply-chain';
 export * from './research';
 export * from './theses';
 export * from './tickets';
-export * from './scout';

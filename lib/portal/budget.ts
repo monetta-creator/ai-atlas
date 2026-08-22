@@ -10,10 +10,8 @@ import { one } from '@/lib/db';
 // pass the check (no lock; acceptable overshoot for a sub-cent call).
 
 export const PORTAL_FEATURE = 'portal_ask';
-// Every feature slug that draws on the portal's daily budget. Portal-triggered
-// scout research (intel sweeps, document reads) all log as 'portal_scout';
-// per-tool granularity lives in ai_cost_log.metadata.tool.
-const PORTAL_FEATURES = ['portal_ask', 'portal_scout'];
+// Every feature slug that draws on the portal's daily budget.
+const PORTAL_FEATURES = ['portal_ask'];
 
 function envNumber(name: string, fallback: number): number {
   const v = Number(process.env[name]);

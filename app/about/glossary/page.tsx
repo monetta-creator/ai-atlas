@@ -26,8 +26,6 @@ const TERMS: { id: string; term: string; def: string }[] = [
   { id: 'concept', term: 'Concept', def: 'One term in the AI vocabulary, marked settled or contested, wired into an acyclic prerequisite graph: understand the lower ones first.' },
   { id: 'thread', term: 'Research thread', def: 'A living synthesis of what the recent literature says on one question, revised as tracked papers land.' },
   { id: 'paper', term: 'Paper', def: 'One item in the research library, staged through triage and review. Paper findings are advisory; they never write evidence.' },
-  { id: 'scout', term: 'Startup Scout', def: 'The acquisition-target funnel: young AI companies discovered by vertical, scored recommend-only against an editable rubric, and tracked by the author. Verdicts and scores are private.' },
-  { id: 'vertical', term: 'Vertical', def: 'One slice of the scout’s acquisition thesis (fintech, enterprise workflows, process automation, ...), carrying its own discovery queries.' },
   { id: 'report', term: 'Report', def: 'A generated, citation-gated document: a period report, tear sheet, briefing, or thesis report, published by the author and downloadable as a PDF.' },
   { id: 'citation-gate', term: 'Citation gate', def: 'The check that strips any generated citation the underlying data pack cannot vouch for. Runs at generation, save, and render.' },
   { id: 'human-gate', term: 'Human gate', def: 'The rule that no value changes without a person: confidences move by hand with a reason, drafts publish by hand, recommendations are accepted by hand.' },

@@ -233,28 +233,6 @@ async function countUnpublished(signalIds) {
     }
   });
 
-  // Scout datasets: tracked-only floor, verified with independent SQL, and the
-  // events dataset never references a company the companies dataset omits.
-  const scoutCompanies = await getDataset('scout-companies').build(q);
-  const scoutEvents = await getDataset('scout-events').build(q);
-  {
-    const companyIds = idsOf(scoutCompanies, 'company_id');
-    const eventCompanyIds = idsOf(scoutEvents, 'company_id');
-    const allIds = [...new Set([...companyIds, ...eventCompanyIds])];
-    const bad = allIds.length
-      ? Number((await q(
-          `select count(*)::int as n from companies where id = any($1::uuid[]) and status <> 'tracked'`,
-          [allIds]
-        ))[0].n)
-      : 0;
-    check(`scout datasets: every company reference is tracked (${allIds.length} distinct)`, () =>
-      assert.equal(bad, 0, `${bad} non-tracked compan(ies) leaked`));
-    check('scout-events: company ids are a subset of scout-companies', () => {
-      const have = new Set(companyIds);
-      for (const id of eventCompanyIds) assert.ok(have.has(id), String(id));
-    });
-  }
-
   const catalog = await getDataset('catalog').build(q);
   check('catalog: mirrors the registry exactly', () => {
     const want = DATASETS.reduce((n, d) => n + d.columns.length, 0);

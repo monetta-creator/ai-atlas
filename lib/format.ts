@@ -1,7 +1,6 @@
 import type {
   ConfidenceLabel, Domain, Resolvability, Lens, Relation, Direction,
   SignalLens, Significance, ConceptStatus, SheetKind,
-  CompanyStatus, CompanyStage, CompanyEventKind, ScoutVerdict,
 } from './types';
 
 export const DOMAIN_LABEL: Record<Domain, string> = {
@@ -197,50 +196,7 @@ const FEATURE_LABEL: Record<string, string> = {
   thesis_gaps: 'Thesis · gap diagnosis',
   thesis_sections: 'Thesis report · sections',
   thesis_bottom_line: 'Thesis report · bottom line',
-  scout_discovery: 'Scout · discovery (web search)',
-  scout_agent: 'Scout · queue scoring',
-  scout_dossier: 'Scout · company dossier',
-  scout_intel: 'Scout · web intel sweep (web search)',
-  scout_doc: 'Scout · document extraction',
-  scout_competitors: 'Scout · competitor scan (web search)',
-  portal_scout: 'Scout · portal research',
 };
-
-// ---- Startup Scout (migration 0034) ----
-export const COMPANY_STATUS_LABEL: Record<CompanyStatus, string> = {
-  queued: 'Queued',
-  tracked: 'Tracked',
-  dismissed: 'Dismissed',
-  archived: 'Archived',
-};
-
-export const COMPANY_STAGE_LABEL: Record<CompanyStage, string> = {
-  pre_seed: 'Pre-seed',
-  seed: 'Seed',
-  series_a: 'Series A',
-  series_b: 'Series B',
-  later: 'Later stage',
-  unknown: 'Stage unknown',
-};
-
-export const COMPANY_EVENT_LABEL: Record<CompanyEventKind, string> = {
-  funding: 'Funding',
-  launch: 'Launch',
-  news: 'News',
-  milestone: 'Milestone',
-  note: 'Note',
-};
-
-export const SCOUT_VERDICT_LABEL: Record<ScoutVerdict, string> = {
-  pursue: 'Pursue',
-  watch: 'Watch',
-  pass: 'Pass',
-};
-
-// Pursue rides the supports green, watch the mid heat, pass stays quiet.
-export function scoutVerdictColor(v: ScoutVerdict): string {
-  return v === 'pursue' ? 'var(--supports)' : v === 'watch' ? 'var(--heat-2)' : 'var(--faint-ink)';
-}
 
 // ---- The Report Portal's generated reports (tear sheets) ----
 // Lives here (not in the server-only lib/tearsheet/generate.ts, which pulls the

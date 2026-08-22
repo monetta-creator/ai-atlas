@@ -84,12 +84,6 @@ export default async function Lobby() {
       name: 'Research Portal',
       desc: 'The latest AI research from arXiv, triaged against the Atlas and synthesized into threads.',
     },
-    {
-      href: '/scout',
-      icon: ICONS.scout,
-      name: 'Startup Scout',
-      desc: 'Young AI companies as acquisition targets: discovered by vertical, evaluated, and tracked.',
-    },
   ];
 
   return (

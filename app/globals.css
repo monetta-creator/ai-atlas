@@ -13,7 +13,7 @@
 @import "./styles/signal-board.css";  /* /signals feed + cards */
 @import "./styles/sitenav.css";       /* top bar, dropdowns, mobile sheet */
 @import "./styles/concepts.css";      /* /concepts graph + authoring */
-@import "./styles/supply-chain.css";  /* sc graph/drawer: keyframes reused by ask, classes by scout */
+@import "./styles/supply-chain.css";  /* sc graph/drawer: keyframes reused by ask */
 @import "./styles/ask.css";           /* /ask workspace shell + peek panel */
 @import "./styles/lobby.css";         /* the home-page front door */
 @import "./styles/rail.css";          /* portal rail + route transitions */
