@@ -3,84 +3,29 @@
 import { revalidatePath } from 'next/cache';
 import * as m from '../mutations';
 import {
-  getLastCompletedRunAt, getApprovedCandidates, getCandidateArchive, getDedupeScan,
+  getApprovedCandidates, getCandidateArchive, getDedupeScan,
   countPendingCandidates,
-  getCandidate, isFetchHostileDomain } from '../data';
+  } from '../data';
 import { SIGNAL_LENS_SLUGS } from '../format';
-import { discoverBatch, discoverBreakingSweep, discoveryPlan, type DiscoveryBatchRef } from '../pipeline/discovery';
-import { runCoverageCheck } from '../pipeline/coverage';
 import { triageChunk } from '../pipeline/triage';
 import { analyzeCandidate } from '../pipeline/analysis';
-import { domainOf, fetchCandidateText, FetchFailure } from '../pipeline/web';
 import { dedupeAllDrafts } from '../pipeline/dedupe';
 import type {
-  Significance, SignalLens, RunCadence, TriageStatus,
+  Significance, SignalLens, TriageStatus,
   CandidateArchiveFilters, CandidateArchiveResult,
-  DedupeRecommendation, RunCoverage,
+  DedupeRecommendation,
   } from '../types';
 import { UUID_RE, requireAdmin, str } from './shared';
 
-// ===== Discovery pipeline ===================================================
+// ===== Intake pipeline ======================================================
 // All steps are admin-gated, typed-arg actions that return data to the client
-// orchestrator (no redirect). Each is short by design — one batch / one candidate —
-// to stay under the Hobby 60s cap; the client drives the loop and polls progress.
-
-// Start a run: create the row, compute the lookback window, and hand the client the
-// ordered batch plan to execute.
-export async function startPipelineRunAction(
-  cadence: string, lookbackDays: number
-): Promise<{ runId: string; plan: DiscoveryBatchRef[]; sinceISO: string }> {
-  await requireAdmin();
-  if (cadence !== 'daily' && cadence !== 'weekly') throw new Error('Invalid cadence.');
-  const lookback = lookbackDays === 1 ? 1 : 7;
-  const windowStart = Date.now() - lookback * 86_400_000;
-  const last = await getLastCompletedRunAt();
-  const lastMs = last ? new Date(last).getTime() : 0;
-  // "last N days, or since the last run, whichever is shorter" -> the more recent start
-  const sinceISO = new Date(Math.max(windowStart, lastMs)).toISOString().slice(0, 10);
-  const runId = await m.createRun(cadence as RunCadence);
-  return { runId, plan: discoveryPlan(cadence as RunCadence), sinceISO };
-}
-
-export async function discoverBatchAction(
-  runId: string, lens: string, batchIndex: number, sinceISO: string
-): Promise<{ inserted: number }> {
-  await requireAdmin();
-  if (!UUID_RE.test(runId)) throw new Error('Bad run id.');
-  if (!(SIGNAL_LENS_SLUGS as string[]).includes(lens)) throw new Error('Invalid lens.');
-  if (!Number.isInteger(batchIndex) || batchIndex < 0 || batchIndex > 50) throw new Error('Bad batch index.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(sinceISO)) throw new Error('Bad since date.');
-  const inserted = await discoverBatch(runId, lens as SignalLens, batchIndex, sinceISO);
-  return { inserted };
-}
-
-// The breaking-events sweep: one extra lens-agnostic discovery unit per run (quality-outlet
-// allowlist, significance-first — see lib/pipeline/discovery.ts). Idempotent like
-// discoverBatch, so the client retries it the same way.
-export async function discoverBreakingSweepAction(
-  runId: string, sinceISO: string
-): Promise<{ inserted: number }> {
-  await requireAdmin();
-  if (!UUID_RE.test(runId)) throw new Error('Bad run id.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(sinceISO)) throw new Error('Bad since date.');
-  const inserted = await discoverBreakingSweep(runId, sinceISO);
-  return { inserted };
-}
-
-// The post-run coverage check (advisory): re-derives the window's most significant AI
-// developments with independent phrasing and marks each covered/missed against the run's
-// candidates + existing signals. Persists onto the run row; result also returns to the
-// console for the live log.
-export async function coverageCheckAction(runId: string): Promise<RunCoverage> {
-  await requireAdmin();
-  if (!UUID_RE.test(runId)) throw new Error('Bad run id.');
-  const coverage = await runCoverageCheck(runId);
-  revalidatePath('/pipeline');
-  return coverage;
-}
+// orchestrator (no redirect). Each is short by design — one chunk / one candidate —
+// which keeps every call cheap to retry and every run resumable. Candidates enter
+// through manual/document intake (prepareSignalFromSourceAction) with their text
+// retained at intake time; there is no web-discovery leg.
 
 // One bounded triage chunk per call (the client loops until remaining === 0), so each call
-// fits the 60s cap regardless of candidate volume. Returns the approved ids the analysis
+// stays short regardless of candidate volume. Returns the approved ids the analysis
 // step consumes once the queue is drained.
 export async function triageChunkAction(runId: string): Promise<{
   processed: number; approved: number; rejected: number; duplicate: number;
@@ -95,36 +40,6 @@ export async function triageChunkAction(runId: string): Promise<{
     return { ...r, approvedIds: approved.filter((c) => !c.signal_id).map((c) => c.id) };
   }
   return r;
-}
-
-// Stage 1 of analysis: fetch + cache the candidate's readable text in its OWN invocation,
-// so the whole 60s budget is available for slow hosts / PDF extraction / fallbacks and the
-// model leg (stage 2) never pays for the fetch. Failures come back as data; `terminal`
-// tells the orchestrator a retry cannot succeed (403, bad URL, unparseable document) so it
-// flags immediately instead of burning attempts on a deterministic outcome.
-export async function hydrateCandidateAction(candidateId: string): Promise<{
-  ok: boolean; skipped?: boolean; error?: string; terminal?: boolean; via?: 'direct' | 'jina';
-}> {
-  await requireAdmin();
-  if (!UUID_RE.test(candidateId)) throw new Error('Bad candidate id.');
-  try {
-    const cand = await getCandidate(candidateId);
-    if (!cand) return { ok: false, error: 'candidate not found', terminal: true };
-    if (cand.signal_id || cand.raw_content) return { ok: true, skipped: true };
-    // Learned routing: a domain whose history says direct fetches are doomed (reader-only
-    // successes, terminal access walls) goes straight to the reader.
-    const domain = (cand.source_domain || domainOf(cand.url)).toLowerCase().replace(/^www\./, '');
-    const preferJina = domain ? await isFetchHostileDomain(domain).catch(() => false) : false;
-    const { text, via } = await fetchCandidateText(cand.url, { preferJina });
-    await m.setCandidateRawContent(candidateId, text, via);
-    return { ok: true, via };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'fetch error';
-    const terminal = e instanceof FetchFailure ? e.terminal : false;
-    // Record the failed attempt (analysis-health view); a later success overwrites it.
-    await m.setAnalysisStatus(candidateId, 'error', msg.slice(0, 500)).catch(() => {});
-    return { ok: false, error: msg, terminal };
-  }
 }
 
 export async function analyzeCandidateAction(candidateId: string): Promise<{
@@ -154,10 +69,10 @@ export async function analyzeCandidateAction(candidateId: string): Promise<{
   } catch (e) {
     const status = (e as { status?: number } | null)?.status;
     const msg = e instanceof Error ? e.message : 'analysis error';
-    // Terminal = retrying cannot succeed: a classified fetch failure from the backstop
-    // path, or a model 4xx that isn't a rate limit (e.g. 400 request-too-large).
+    // Terminal = retrying cannot succeed: missing retained text, or a model 4xx that
+    // isn't a rate limit (e.g. 400 request-too-large).
     const terminal =
-      e instanceof FetchFailure ? e.terminal : status === 400 || status === 413;
+      /no retained text/.test(msg) || status === 400 || status === 413;
     // Record the failed attempt so the dashboard's analysis-health view is real. A later
     // successful retry overwrites this with 'drafted'; a final give-up sets 'discarded'.
     // Never let the status write mask the real error the orchestrator needs to back off on.

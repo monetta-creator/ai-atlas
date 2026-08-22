@@ -12,15 +12,6 @@ import AskDatasetCard, { type DatasetSuggestionMeta } from '@/components/dataset
 
 const DATASET_TOKEN = /\[dataset\s+([a-z0-9-]+)\]/gi;
 
-// Compact label for a web-source link: the bare host.
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
-}
-
 // CitationKind -> peek kind; signal and paper tags additionally resolve to
 // uuids through the message's own frozen map before the peek opens.
 const KIND_TO_PEEK: Record<CitationKind, PeekKind> = {
@@ -125,29 +116,9 @@ export default function AskThread({
                     stopped
                   </p>
                 )}
-                {m.webSources && m.webSources.length > 0 && (
-                  <p style={{ marginTop: 6, fontSize: 11.5, color: 'var(--faint-ink)' }}>
-                    From the web:{' '}
-                    {m.webSources.map((s, j) => (
-                      <a
-                        key={j}
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:underline"
-                        title={s.title}
-                        style={{ color: 'var(--accent)', marginRight: 10 }}
-                      >
-                        {hostOf(s.url)} ↗
-                      </a>
-                    ))}
-                  </p>
-                )}
                 {m.verify && <AskVerify report={m.verify} />}
                 {m.cost && <AskCost cost={m.cost} />}
-                {/* Web-informed answers skip the Atlas faithfulness check: web
-                    facts are outside the corpus and would flag as unfound. */}
-                {canVerify && !m.verify && !m.error && !streaming && !m.webSources?.length && (
+                {canVerify && !m.verify && !m.error && !streaming && (
                   <div className="ask-msg-actions">
                     <button
                       type="button"

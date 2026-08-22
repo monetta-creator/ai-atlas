@@ -9,7 +9,6 @@ import { setPaperRigorAction } from '@/lib/actions';
 import { SIGNAL_LENS_LABEL } from '@/lib/format';
 import Header from '@/components/Header';
 import PaperAnalysisButton from '@/components/PaperAnalysisButton';
-import PaperReader from '@/components/PaperReader';
 import PaperReviewControls from '@/components/PaperReviewControls';
 import PaperLinksPanel, { type SuggestedThreadPlacement } from '@/components/PaperLinksPanel';
 import PromotePaperButton from '@/components/PromotePaperButton';
@@ -120,7 +119,6 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
           {paper.comments && (
             <p className="text-xs" style={{ color: 'var(--heat-2)', marginTop: 4 }}>{paper.comments}</p>
           )}
-          <PaperReader arxivId={paper.arxiv_id} url={paper.url} title={paper.title} />
         </header>
 
         {personal && (

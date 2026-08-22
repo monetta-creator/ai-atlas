@@ -1,5 +1,5 @@
 import { runStructured } from '../dossier';
-import { fetchCandidateText, FetchFailure, MIN_READABLE_CHARS } from '../pipeline/web';
+import { FetchFailure, MIN_READABLE_CHARS } from '../text';
 import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL } from '../format';
 import * as m from '../mutations';
 import {
@@ -7,12 +7,12 @@ import {
 } from '../data';
 import type { Paper, PaperExtraction, SignalLens, ThreadRelation } from '../types';
 
-// Per-paper deep analysis (docs/research-section.md phase 2), two invocations like the
-// pipeline's hydrate->analyze: fetch + cache the full text in its own call, then one
-// non-web structured call produces the EXTRACTION — a claim-shaped reading, not a
-// summary — plus concept/thread proposals and a rigor SUGGESTION. On-demand only: the
-// admin clicks Analyze per paper; nothing here runs unattended, and nothing here
-// writes evidence or the rigor prior (model proposes, human commits).
+// Per-paper deep analysis: hydrate the full text from records already in hand,
+// then one non-web structured call produces the EXTRACTION — a claim-shaped
+// reading, not a summary — plus concept/thread proposals and a rigor SUGGESTION.
+// On-demand only: the admin clicks Analyze per paper; nothing here runs
+// unattended, and nothing here writes evidence or the rigor prior (model
+// proposes, human commits).
 
 const THREAD_RELATIONS: ThreadRelation[] = ['supports', 'complicates', 'contradicts', 'context'];
 
@@ -20,13 +20,13 @@ const THREAD_RELATIONS: ThreadRelation[] = ['supports', 'complicates', 'contradi
 
 interface HydrateResult {
   skipped?: boolean;    // text already cached
-  via?: string;         // 'html' | 'direct' | 'jina' | 'source'
+  via?: string;         // 'source'
 }
 
-// arXiv's LaTeXML HTML render (arxiv.org/html/<id>) is the cleanest full text when it
-// exists (most recent papers); the PDF is the fallback (unpdf extraction + reader
-// fallback via fetchCandidateText). Manual non-arXiv papers fetch their own URL; a
-// "Send to research" paper reuses its curated source text without any fetch.
+// There is no fetch leg any more: a paper's text comes from its linked curated
+// source (a "Send to research" paper, or a document added through intake). A
+// paper without a text-bearing source cannot be hydrated; the admin adds the
+// document text on the source first.
 export async function hydratePaper(paperId: string): Promise<HydrateResult> {
   const p = await getPaper(paperId);
   if (!p) throw new FetchFailure('paper not found', true, false);
@@ -38,25 +38,12 @@ export async function hydratePaper(paperId: string): Promise<HydrateResult> {
       await m.setPaperRawContent(paperId, text, 'source');
       return { via: 'source' };
     }
-    // fall through: the source had no usable text; try the paper's URL
   }
-
-  if (p.arxiv_id) {
-    try {
-      const html = await fetchCandidateText(`https://arxiv.org/html/${p.arxiv_id}`, { allowFallback: false });
-      await m.setPaperRawContent(paperId, html.text, 'html');
-      return { via: 'html' };
-    } catch {
-      // older papers have no HTML render — the PDF path below is the normal fallback
-    }
-    const pdf = await fetchCandidateText(`https://arxiv.org/pdf/${p.arxiv_id}`, {});
-    await m.setPaperRawContent(paperId, pdf.text, pdf.via);
-    return { via: pdf.via };
-  }
-
-  const fetched = await fetchCandidateText(p.url, {});
-  await m.setPaperRawContent(paperId, fetched.text, fetched.via);
-  return { via: fetched.via };
+  throw new FetchFailure(
+    'paper has no retained text: attach a source carrying the document text, then analyze',
+    true,
+    false
+  );
 }
 
 // ---- analyze ----------------------------------------------------------------

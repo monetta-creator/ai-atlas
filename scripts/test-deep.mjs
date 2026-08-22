@@ -258,16 +258,13 @@ check('ndVerify: parseable line with report', () => {
   assert.equal(ev.type, 'verify');
   assert.equal(ev.report.checked, 3);
 });
-check('ndCost + ndWebSources: parseable lines', () => {
+check('ndCost: parseable line', () => {
   const cost = JSON.parse(deep.ndCost({
     cost_usd: 0.02, input_tokens: 40000, output_tokens: 1800,
-    cache_read_tokens: 30000, searches: 2, rounds: 5, model: 'claude-haiku-4-5',
+    cache_read_tokens: 30000, searches: 0, rounds: 5, model: 'claude-haiku-4-5',
   }));
   assert.equal(cost.type, 'cost');
-  assert.equal(cost.report.searches, 2);
-  const ws = JSON.parse(deep.ndWebSources([{ url: 'https://a.com/x', title: 'A' }]));
-  assert.equal(ws.type, 'web_sources');
-  assert.equal(ws.sources[0].url, 'https://a.com/x');
+  assert.equal(cost.report.rounds, 5);
 });
 check('parseVerifyOutput: verdict_language clamped, absent -> empty', () => {
   const out = parseVerifyOutput({
@@ -290,7 +287,7 @@ check('guards: the plan numbers', () => {
 });
 check('house style: no em dash in any model- or user-facing string', () => {
   const strings = [
-    DEEP_ADDENDUM, deep.DEEP_WEB_ADDENDUM, STATUS_START, STATUS_WRITING, STATUS_VERIFYING,
+    DEEP_ADDENDUM, STATUS_START, STATUS_WRITING, STATUS_VERIFYING,
     VERIFY_INSTRUCTION, VERIFY_SYSTEM, VERIFY_TOOL.description ?? '',
     statusSearch('x', 2), statusRead('[claim 2.3]'), statusArticles('x', 1),
     ...DEEP_TOOLS.map((t) => t.description ?? ''),

@@ -1,21 +1,22 @@
 import Link from 'next/link';
 import { requireAdminPage } from '@/lib/auth';
-import { getRuns, getCandidates, getTextCoverage } from '@/lib/data';
+import { getRuns, getCandidates, getTextCoverage, listSignalsMissingText } from '@/lib/data';
 import { timeAgo } from '@/lib/format';
 import Header from '@/components/Header';
 import PipelineConsole from '@/components/PipelineConsole';
 import PipelineCandidates from '@/components/PipelineCandidates';
-import TextGuardPanel from '@/components/TextGuardPanel';
 
 export const dynamic = 'force-dynamic';
-// Hosts the discovery/analysis server actions; each unit call must fit the 60s cap.
+// Hosts the triage/analysis server actions (model calls).
 export const maxDuration = 60;
-export const metadata = { title: 'Discovery pipeline · The AI Atlas' };
+export const metadata = { title: 'Intake pipeline · The Atlas' };
 
 export default async function PipelinePage() {
   const admin = await requireAdminPage();
 
-  const [runs, textCoverage] = await Promise.all([getRuns(15), getTextCoverage()]);
+  const [runs, textCoverage, missingText] = await Promise.all([
+    getRuns(15), getTextCoverage(), listSignalsMissingText(5),
+  ]);
   const latest = runs[0] ?? null;
   const candidates = latest ? await getCandidates(latest.id) : [];
   const pendingAnalysisIds = candidates
@@ -27,53 +28,42 @@ export default async function PipelinePage() {
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <header className="pagehead">
-          <h1>Discovery pipeline</h1>
+          <h1>Intake pipeline</h1>
           <p className="lede">
-            Discover → triage → analyze candidate developments into draft signals. Review and publish
-            on the <Link href="/signals">Signal Board</Link>.
+            Triage → analyze candidate items into draft signals. Candidates enter from a
+            source page (Turn into signal) with their text retained at intake. Review and
+            publish on the <Link href="/signals">Signal Board</Link>.
           </p>
         </header>
 
         <PipelineConsole latestRun={latest} pendingAnalysisIds={pendingAnalysisIds} />
 
-        {/* The full-text guarantee, audited: retained-text coverage over the
-            published corpus, with the catch-up refetch when anything is missing. */}
-        <TextGuardPanel initial={textCoverage} />
-
-        {/* Post-run coverage check (advisory): what the window's press cycle considered
-            significant, and whether this run's funnel accounted for it. */}
-        {latest?.coverage && (
-          <section style={{ marginTop: 8 }}>
-            <div className="section-label">
-              Coverage check · since {latest.coverage.since} ·{' '}
-              {latest.coverage.developments.filter((d) => !d.covered).length} possible miss(es) of{' '}
-              {latest.coverage.developments.length}
-            </div>
+        {/* Retained-text coverage over the published corpus (display-only). A signal
+            missing text is a legacy gap: re-add the document text on its source. */}
+        <section style={{ marginTop: 8 }}>
+          <div className="section-label">
+            Retained text · {textCoverage.with_text}/{textCoverage.total} published signals carry full text
+          </div>
+          {missingText.length > 0 && (
             <div className="flex flex-col gap-1">
-              {latest.coverage.developments.map((d, i) => (
+              {missingText.map((r) => (
                 <div
-                  key={i}
+                  key={r.signal_id}
                   className="flex items-baseline flex-wrap gap-2 text-xs rounded-[var(--radius)] border p-2.5"
                   style={{ background: 'var(--surface)', borderColor: 'var(--line)', color: 'var(--dim)' }}
                 >
-                  <span style={{ color: d.covered ? 'var(--supports)' : 'var(--heat-4)', fontFamily: 'var(--font-mono)' }}>
-                    {d.covered ? '✓ covered' : '⚠ possible miss'}
-                  </span>
-                  {d.url ? (
-                    <a href={d.url} target="_blank" rel="noreferrer" style={{ color: 'var(--ink)' }}>
-                      {d.headline}
-                    </a>
-                  ) : (
-                    <span style={{ color: 'var(--ink)' }}>{d.headline}</span>
-                  )}
-                  {d.covered && d.matched && (
-                    <span style={{ color: 'var(--faint-ink)' }}>matches: {d.matched}</span>
+                  <span style={{ color: 'var(--heat-4)', fontFamily: 'var(--font-mono)' }}>⚠ no text</span>
+                  <Link href={`/signals/${r.signal_id}`} style={{ color: 'var(--ink)' }}>{r.title}</Link>
+                  {r.source_id && (
+                    <Link href={`/source/${r.source_id}`} style={{ color: 'var(--faint-ink)' }}>
+                      add text on the source →
+                    </Link>
                   )}
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          )}
+        </section>
 
         {/* Candidate review for the latest run */}
         {latest && (

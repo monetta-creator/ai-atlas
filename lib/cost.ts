@@ -6,17 +6,16 @@ import type { RateCard } from './types';
 // freezes the cost, and writes one ai_cost_log row. The whole thing is wrapped so a logging
 // failure can NEVER surface to the user or break the AI feature (telemetry is best-effort).
 //
-// The three call sites are lib/dossier.ts (generateDossier + the shared runStructured) and
-// lib/pipeline/web.ts (searchCandidates) — instrument those and every feature is covered.
+// The chokepoints are lib/dossier.ts (generateDossier + the shared runStructured) and the
+// ask routes — instrument those and every feature is covered.
 
-// The minimal shape we read off an Anthropic message's `usage`. Cache fields and the
-// server-tool block are optional/nullable depending on the call.
+// The minimal shape we read off an Anthropic message's `usage`. Cache fields are
+// optional/nullable depending on the call.
 export interface ApiUsage {
   input_tokens?: number | null;
   output_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
   cache_read_input_tokens?: number | null;
-  server_tool_use?: { web_search_requests?: number | null } | null;
 }
 
 // Feature slugs are written to ai_cost_log.feature; their human labels live in lib/format.ts
@@ -55,10 +54,6 @@ function computeCostUsd(
   );
 }
 
-// Server-tool web searches bill ~$10 per 1,000 requests ON TOP of tokens; the token rate
-// card can't price them, so a flat per-search surcharge folds into the frozen cost.
-const WEB_SEARCH_USD = 0.01;
-
 // Price a usage total WITHOUT logging it: the per-turn cost report the Ask
 // surfaces show the reader. Same rate-card math as recordApiCall (pricing is
 // linear, so a summed usage across several calls prices identically to pricing
@@ -73,10 +68,7 @@ export async function priceUsage(model: string, usage: ApiUsage | null | undefin
       cacheWrite: num(u.cache_creation_input_tokens),
       cacheRead: num(u.cache_read_input_tokens),
     };
-    return (
-      (rate ? computeCostUsd(tokens, rate) : 0) +
-      num(u.server_tool_use?.web_search_requests) * WEB_SEARCH_USD
-    );
+    return rate ? computeCostUsd(tokens, rate) : 0;
   } catch {
     return 0;
   }
@@ -100,13 +92,8 @@ export async function recordApiCall(opts: {
     const cacheWrite = num(u.cache_creation_input_tokens);
     const cacheRead = num(u.cache_read_input_tokens);
 
-    // Web-search surcharge folds into the frozen cost (and thereby into the
-    // portal's daily budget); see WEB_SEARCH_USD above.
-    const webSearches = num(u.server_tool_use?.web_search_requests);
     const rate = await getActiveRateCard(opts.model);
-    const cost =
-      (rate ? computeCostUsd({ input, output, cacheWrite, cacheRead }, rate) : 0) +
-      webSearches * WEB_SEARCH_USD;
+    const cost = rate ? computeCostUsd({ input, output, cacheWrite, cacheRead }, rate) : 0;
 
     // Utilization = total input context (uncached + cache write + cache read) / window.
     // Clamp to [0,100]: a successful call's prompt always fits the window.
@@ -117,7 +104,6 @@ export async function recordApiCall(opts: {
         : null;
 
     const metadata: Record<string, unknown> = { ...(opts.metadata ?? {}) };
-    if (webSearches > 0) metadata.web_search_requests = webSearches;
 
     await exec(
       `insert into ai_cost_log

@@ -2,8 +2,8 @@ import { one, exec, withTx } from '../db';
 import type {
   SignalLens,
   RunCadence, RunStatus, RunStep, TriageStatus, AnalysisStatus, } from '../types';
-import { sanitizeText } from '../pipeline/web';
-import type { RawCandidate } from '../pipeline/web';
+import { sanitizeText } from '../text';
+import type { RawCandidate } from '../text';
 
 // ---- Discovery pipeline ----------------------------------------------------
 

@@ -1,115 +1,11 @@
 import { one, exec, withTx } from '../db';
 import type {
-  RunStatus, PaperTriageStatus, PaperReviewStatus, ResearchStep, PaperExtraction, ThreadRelation,
+  PaperReviewStatus, PaperExtraction, ThreadRelation,
   ThreadStatus, ResearchThreadScan,
   } from '../types';
-import { sanitizeText } from '../pipeline/web';
-import type { ArxivEntry } from '../research/arxiv';
+import { sanitizeText } from '../text';
 
 // ---- Research section (migration 0023) ---------------------------------------
-
-export async function createResearchRun(sinceISO: string): Promise<string> {
-  const row = await one<{ id: string }>(
-    `insert into research_runs (since_date, status, step) values ($1::date, 'running', 'pull') returning id`,
-    [sinceISO]
-  );
-  return row!.id;
-}
-
-export async function updateResearchRun(
-  id: string,
-  fields: Partial<{ status: RunStatus; step: ResearchStep; error: string | null }>
-): Promise<void> {
-  const sets: string[] = [];
-  const params: unknown[] = [];
-  if (fields.status !== undefined) { params.push(fields.status); sets.push(`status = $${params.length}`); }
-  if (fields.step !== undefined) { params.push(fields.step); sets.push(`step = $${params.length}`); }
-  if (fields.error !== undefined) { params.push(fields.error); sets.push(`error = $${params.length}`); }
-  if (!sets.length) return;
-  params.push(id);
-  await exec(`update research_runs set ${sets.join(', ')}, updated_at = now() where id = $${params.length}`, params);
-}
-
-// Pull-step tallies are increments (one page per call); triage tallies are recomputed
-// from the papers themselves (recomputeResearchRunCounts) so re-runs stay honest.
-export async function bumpResearchPullCounts(id: string, scanned: number, inserted: number): Promise<void> {
-  await exec(
-    `update research_runs
-        set scanned_count = scanned_count + $1, pulled_count = pulled_count + $2, updated_at = now()
-      where id = $3`,
-    [scanned, inserted, id]
-  );
-}
-
-export async function recomputeResearchRunCounts(id: string): Promise<void> {
-  await exec(
-    `update research_runs r set
-       kept_count     = (select count(*) from papers p where p.run_id = r.id and p.triage_status = 'kept'),
-       rejected_count = (select count(*) from papers p where p.run_id = r.id and p.triage_status = 'rejected'),
-       updated_at = now()
-     where r.id = $1`,
-    [id]
-  );
-}
-
-// Bulk-upsert one pulled page. On conflict (a paper already in the library from a prior
-// run, a manual add, or a revision bubbling up the sort) refresh the arXiv metadata but
-// NEVER touch funnel or review state — triage decisions and the personal layer survive
-// re-pulls. Returns how many rows were actually new.
-export async function upsertArxivPapers(runId: string, entries: ArxivEntry[]): Promise<number> {
-  if (!entries.length) return 0;
-  let inserted = 0;
-  await withTx(async (c) => {
-    for (const e of entries) {
-      const res = await c.query(
-        `insert into papers
-           (origin, arxiv_id, url, run_id, title, abstract, authors, categories, comments,
-            arxiv_version, published_at, arxiv_updated)
-         values ('arxiv', $1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, nullif($10,'')::date, nullif($11,'')::date)
-         on conflict (arxiv_id) do update set
-           title = excluded.title, abstract = excluded.abstract, authors = excluded.authors,
-           categories = excluded.categories, comments = excluded.comments,
-           arxiv_version = excluded.arxiv_version, arxiv_updated = excluded.arxiv_updated,
-           updated_at = now()
-         returning (xmax = 0) as is_new`,
-        [
-          e.arxiv_id, e.url, runId, sanitizeText(e.title), sanitizeText(e.abstract),
-          JSON.stringify(e.authors), e.categories, e.comment ? sanitizeText(e.comment) : null,
-          e.version, e.published, e.updated,
-        ]
-      );
-      if ((res.rows[0] as { is_new: boolean } | undefined)?.is_new) inserted++;
-    }
-  });
-  return inserted;
-}
-
-export async function setPaperTriage(
-  paperId: string,
-  status: PaperTriageStatus,
-  reason: string | null,
-  suggestions?: { claim_touches: string[]; suggested_concepts: string[]; suggested_threads: string[] },
-  summary?: string | null
-): Promise<void> {
-  await exec(
-    `update papers
-        set triage_status = $1, triage_reason = $2,
-            triage_summary = coalesce($3, triage_summary),
-            claim_touches = coalesce($4, claim_touches),
-            suggested_concepts = coalesce($5, suggested_concepts),
-            suggested_threads = coalesce($6, suggested_threads),
-            updated_at = now()
-      where id = $7`,
-    [
-      status, reason,
-      summary ?? null,
-      suggestions?.claim_touches ?? null,
-      suggestions?.suggested_concepts ?? null,
-      suggestions?.suggested_threads ?? null,
-      paperId,
-    ]
-  );
-}
 
 // The review decision + its why (the human gate on the research funnel). Tracking
 // requires a note — enforced in the action; this just writes.
@@ -175,49 +71,6 @@ export async function createManualPaper(input: {
     );
   }
   return { id: row!.id, existed: false };
-}
-
-// Retention for triage rejects (docs/research-section.md): metadata rows are kept ~90
-// days for the citation-velocity self-correction, then pruned. Opportunistic — called
-// at run start, never from a cron. Guards keep anything referenced or human-touched.
-export async function pruneRejectedPapers(days = 90): Promise<number> {
-  return exec(
-    `delete from papers
-      where triage_status = 'rejected'
-        and review_status = 'pending'
-        and signal_id is null and source_id is null
-        and created_at < now() - make_interval(days => $1)
-        and not exists (select 1 from thread_papers tp where tp.paper_id = papers.id)
-        and not exists (select 1 from paper_concepts pc where pc.paper_id = papers.id)`,
-    [days]
-  );
-}
-
-// Atomically claim one chunk of pending papers for triage, so CONCURRENT triage
-// chunks (the console runs a small pool) never send the same paper to the model
-// twice: the claim is a single statement with `for update skip locked`, and marks
-// the rows via triage_reason. A claim expires after 5 minutes (updated_at), so a
-// chunk that died mid-model-call self-heals on the next pass — its papers are
-// still triage_status='pending' and get reclaimed.
-export async function claimPendingPapers(
-  runId: string, limit: number
-): Promise<{ id: string; arxiv_id: string | null; title: string; abstract: string | null; categories: string[]; comments: string | null; published_at: string | null }[]> {
-  const { rows } = await withTx(async (c) =>
-    c.query(
-      `update papers set triage_reason = 'in triage', updated_at = now()
-        where id in (
-          select id from papers
-           where run_id = $1 and triage_status = 'pending'
-             and (triage_reason is distinct from 'in triage' or updated_at < now() - interval '5 minutes')
-           order by published_at desc nulls last, created_at
-           limit $2
-           for update skip locked)
-        returning id, arxiv_id, title, abstract, categories, comments,
-                  to_char(published_at, 'YYYY-MM-DD') as published_at`,
-      [runId, limit]
-    )
-  );
-  return rows as { id: string; arxiv_id: string | null; title: string; abstract: string | null; categories: string[]; comments: string | null; published_at: string | null }[];
 }
 
 // ---- Research phase 2: analysis cache, extraction, links, promotion ----------
@@ -346,23 +199,6 @@ export async function saveThreadScan(scan: ResearchThreadScan | null): Promise<v
      values (true, $1::jsonb, now())
      on conflict (id) do update set recommendation = excluded.recommendation, generated_at = now()`,
     [JSON.stringify(scan)]
-  );
-}
-
-// ---- Research phase 4: citation self-correction -------------------------------
-
-export async function bulkUpdatePedigree(
-  pairs: { id: string; count: number | null; hindex: number | null }[]
-): Promise<void> {
-  if (!pairs.length) return;
-  await exec(
-    `update papers p set
-        citation_count = coalesce(u.count, p.citation_count),
-        author_hindex = coalesce(u.hindex, p.author_hindex),
-        citations_checked_at = now(), updated_at = now()
-       from unnest($1::uuid[], $2::int[], $3::int[]) as u(id, count, hindex)
-      where p.id = u.id`,
-    [pairs.map((p) => p.id), pairs.map((p) => p.count), pairs.map((p) => p.hindex)]
   );
 }
 

@@ -1,6 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { ArticleHit, AtlasSearchHit, PeekKind, PeekPayload } from './search';
-import type { AskCostReport, AskWebSource } from './history';
+import type { AskCostReport } from './history';
 
 // Pure helpers for the deep-research loop behind /api/ask/deep: the signal-tag
 // minter, the tool definitions and their input validation, tool-result
@@ -299,7 +299,6 @@ export const ndError = (text: string): string => ndLine({ type: 'error', text })
 export const ndDone = (signals: Record<string, string>): string => ndLine({ type: 'done', signals });
 export const ndVerify = (report: VerifyReport): string => ndLine({ type: 'verify', report });
 export const ndCost = (report: AskCostReport): string => ndLine({ type: 'cost', report });
-export const ndWebSources = (sources: AskWebSource[]): string => ndLine({ type: 'web_sources', sources });
 
 export const STATUS_START = 'Reading the question and the map';
 export const STATUS_WRITING = 'Writing the answer';
@@ -332,7 +331,6 @@ export interface VerifyReport {
   // Web search ran this turn: missing quotes/figures may live in web content
   // the deterministic layer cannot see (search results arrive encrypted), so
   // the UI softens those lines instead of flagging them.
-  webSearched?: boolean;
 }
 
 const normText = (s: string): string =>
@@ -477,8 +475,3 @@ Work in rounds: search broadly first, then fetch the records that look load-bear
 The reader asks one question and expects the full picture in one answer. Write it comprehensive, pinpoint, and self-contained: never ask a follow-up question, never defer material to a next turn, and never pad. If you state which way the records lean, open that sentence with "One reading:" and name the strongest record on the other side in the same paragraph; never present a lean as the Atlas's verdict.
 
 Write the final answer as prose paragraphs with inline citations. Structure a long answer with short bold section headers, each written as **Header** on its own line. Use no other markdown: no # headings, no bullet markers, no tables, no links.`;
-
-// Appended after DEEP_ADDENDUM when the composer's web toggle is on (the
-// system half also swaps in via askSystem(true), so no records-only rule
-// contradicts this).
-export const DEEP_WEB_ADDENDUM = `The web_search tool reaches the live web. The Atlas tools stay primary: research the records first, then search the web when a current development or an outside figure would sharpen the answer, or when the records leave a gap. Attribute web material in prose by naming the outlet or site; never put a web source in brackets, and never let a web result overwrite what a record says. Do not add a source list: the application renders your web sources automatically. Never narrate your process ("let me search", "now I have a picture"); after searching, write the answer directly.`;

@@ -5,7 +5,7 @@ import { buildAskContext } from '@/lib/ask/retrieve';
 import { askSystem, conversationMessages } from '@/lib/ask/prompt';
 import {
   clampHistory, clampSignalOffset, parseAskBody, retrievalQuery,
-  collectWebSources, encodeCostReport, encodeWebSources,
+  encodeCostReport,
 } from '@/lib/ask/history';
 import { checkPortalBudget, PORTAL_FEATURE } from '@/lib/portal/budget';
 
@@ -44,9 +44,6 @@ export async function POST(req: Request): Promise<Response> {
   if (!parsed) return new Response('Empty query', { status: 400 });
   const msgs = clampHistory(parsed);
   const tagStart = clampSignalOffset((body as { signalOffset?: unknown })?.signalOffset);
-  // Portal keyholders get the web toggle too; each search adds a flat
-  // surcharge in lib/cost.ts, so the daily budget check absorbs it naturally.
-  const webOn = Boolean((body as { web?: unknown })?.web);
 
   const budget = await checkPortalBudget();
   if (!budget.ok) {
@@ -63,9 +60,9 @@ export async function POST(req: Request): Promise<Response> {
     'X-Ask-Signals': JSON.stringify(Object.fromEntries(ctx.signalRefs.map((r) => [r.tag, r.id]))),
   };
 
-  if (ctx.hitCount === 0 && msgs.length === 1 && !webOn) {
+  if (ctx.hitCount === 0 && msgs.length === 1) {
     return new Response(
-      'Not in the Atlas. Nothing in the Atlas matched that. Try a topic, a claim code like 2.3, or a concept name.',
+      'Not in the Atlas. Nothing in the Atlas matched that. Try a topic or a hypothesis code.',
       { headers }
     );
   }
@@ -78,51 +75,18 @@ export async function POST(req: Request): Promise<Response> {
     async start(controller) {
       const t0 = Date.now();
       try {
-        const params = {
+        const ms = client.messages.stream({
           model: MODEL,
           max_tokens: 1500,
-          system: [{ type: 'text', text: askSystem(webOn), cache_control: { type: 'ephemeral' } }],
-          messages: conversationMessages(msgs, ctx, { web: webOn }),
-          ...(webOn
-            ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] }
-            : {}),
-        };
-        const ms = client.messages.stream(
-          params as unknown as Parameters<typeof client.messages.stream>[0]
-        );
-        // Web sources come from the RAW stream's citations_delta events; the
-        // pinned SDK's accumulator drops server-tool blocks (see /api/ask).
-        const webSources: { url: string; title: string }[] = [];
-        const seenSrc = new Set<string>();
-        const addSource = (c?: { type?: string; url?: string; title?: string | null }) => {
-          if (!c || c.type !== 'web_search_result_location' || !c.url || seenSrc.has(c.url)) return;
-          seenSrc.add(c.url);
-          webSources.push({ url: c.url.slice(0, 600), title: String(c.title ?? '').slice(0, 200) || c.url });
-        };
-        if (webOn) {
-          ms.on('streamEvent', (ev) => {
-            const e = ev as {
-              type?: string;
-              content_block?: { type?: string; content?: { type?: string; url?: string; title?: string | null }[] };
-              delta?: { type?: string; citation?: { type?: string; url?: string; title?: string | null } };
-            };
-            if (e.type === 'content_block_delta' && e.delta?.type === 'citations_delta') addSource(e.delta.citation);
-            if (e.type === 'content_block_start' && e.content_block?.type === 'web_search_tool_result'
-                && Array.isArray(e.content_block.content)) {
-              for (const r of e.content_block.content.slice(0, 3)) {
-                if (r?.type === 'web_search_result') addSource({ type: 'web_search_result_location', url: r.url, title: r.title });
-              }
-            }
-          });
-        }
+          system: [{ type: 'text', text: askSystem(), cache_control: { type: 'ephemeral' } }],
+          messages: conversationMessages(msgs, ctx),
+        });
         ms.on('text', (delta) => controller.enqueue(enc.encode(delta.replace(/\s*—\s*/g, ', '))));
         const final = await ms.finalMessage();
-        // Cost sentinel first, web-sources sentinel last (extractWebSources
-        // parses to end of string); the client strips both.
+        // The per-turn cost line rides a trailing sentinel; the client strips it.
         const usage = final.usage as {
           input_tokens?: number | null; output_tokens?: number | null;
           cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null;
-          server_tool_use?: { web_search_requests?: number | null } | null;
         };
         const costUsd = await priceUsage(MODEL, final.usage);
         controller.enqueue(enc.encode(encodeCostReport({
@@ -131,14 +95,10 @@ export async function POST(req: Request): Promise<Response> {
             (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
           output_tokens: usage.output_tokens ?? 0,
           cache_read_tokens: usage.cache_read_input_tokens ?? 0,
-          searches: Math.max(usage.server_tool_use?.web_search_requests ?? 0, 0),
+          searches: 0,
           rounds: 1,
           model: MODEL,
         })));
-        if (webOn) {
-          for (const s of collectWebSources(final)) addSource({ type: 'web_search_result_location', ...s });
-          if (webSources.length) controller.enqueue(enc.encode(encodeWebSources(webSources.slice(0, 8))));
-        }
         await recordApiCall({ feature: PORTAL_FEATURE, model: MODEL, usage: final.usage, wallMs: Date.now() - t0 });
       } catch {
         controller.enqueue(enc.encode('\n\nThe answer could not be completed. Please try again.'));

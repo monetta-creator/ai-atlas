@@ -123,50 +123,10 @@ export function clampSignalOffset(v: unknown): number {
   return Math.min(999, Math.max(0, Math.floor(n)));
 }
 
-// ---- Web sources (the composer's web-search toggle) --------------------------
-// The quick-ask stream is plain text and its headers are sent before the model
-// runs, so the cited web sources ride a trailing sentinel line the client
-// strips and parses. Tolerant on both ends: a missing or torn sentinel just
-// yields no sources.
-
-export interface AskWebSource {
-  url: string;
-  title: string;
-}
-
-export const WEB_SOURCES_MARKER = '@@ASK_WEB_SOURCES@@';
-
-export function encodeWebSources(sources: AskWebSource[]): string {
-  return `\n${WEB_SOURCES_MARKER}${JSON.stringify(sources)}`;
-}
-
-export function extractWebSources(acc: string): { text: string; sources: AskWebSource[] } {
-  const i = acc.lastIndexOf(WEB_SOURCES_MARKER);
-  if (i < 0) return { text: acc, sources: [] };
-  const text = acc.slice(0, i).trimEnd();
-  let sources: AskWebSource[] = [];
-  try {
-    const parsed = JSON.parse(acc.slice(i + WEB_SOURCES_MARKER.length)) as unknown;
-    if (Array.isArray(parsed)) {
-      sources = parsed
-        .filter((s): s is AskWebSource =>
-          !!s && typeof (s as AskWebSource).url === 'string' && /^https?:\/\//i.test((s as AskWebSource).url))
-        .map((s) => ({ url: s.url.slice(0, 600), title: String(s.title ?? '').slice(0, 200) || s.url }))
-        .slice(0, 8);
-    }
-  } catch {
-    // torn line: drop the sources, keep the answer
-  }
-  return { text, sources };
-}
-
 // ---- Per-turn cost report ----------------------------------------------------
-// What one Ask turn cost, shown to the reader under the answer. Rides the same
-// trailing-sentinel channel as the web sources on the plain-text stream (the
-// deep route sends it as its own NDJSON event instead). Emission order on the
-// plain stream is cost line THEN web-sources line, so extractWebSources'
-// parse-to-end-of-string stays valid and extractCostReport parses only its own
-// line. Both extractors are tolerant: a missing or torn sentinel yields null.
+// What one Ask turn cost, shown to the reader under the answer. Rides a
+// trailing sentinel line on the plain-text stream (the deep route sends it as
+// its own NDJSON event instead). Tolerant: a missing or torn sentinel yields null.
 
 export interface AskCostReport {
   cost_usd: number;
@@ -216,22 +176,4 @@ export function extractCostReport(acc: string): { text: string; cost: AskCostRep
   }
   const text = (acc.slice(0, i) + acc.slice(jsonEnd)).trimEnd();
   return { text, cost };
-}
-
-// Distinct cited web sources from a finished Anthropic message, in citation
-// order. Structurally typed so this module stays SDK-free and Node-testable.
-export function collectWebSources(msg: {
-  content: { type?: string; citations?: { type?: string; url?: string; title?: string | null }[] | null }[];
-}): AskWebSource[] {
-  const out: AskWebSource[] = [];
-  const seen = new Set<string>();
-  for (const block of msg.content) {
-    if (block.type !== 'text' || !block.citations) continue;
-    for (const c of block.citations) {
-      if (c.type !== 'web_search_result_location' || !c.url || seen.has(c.url)) continue;
-      seen.add(c.url);
-      out.push({ url: c.url.slice(0, 600), title: String(c.title ?? '').slice(0, 200) || c.url });
-    }
-  }
-  return out.slice(0, 8);
 }

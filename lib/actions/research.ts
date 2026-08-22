@@ -4,91 +4,23 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import * as m from '../mutations';
 import {
-  getSource, getCandidate, getCandidateBySourceId, getSignal, getLastResearchRunAt, countPendingPapers, getPaper, getThreadBySlug, getThreadScan } from '../data';
+  getSource, getCandidate, getCandidateBySourceId, getSignal, getPaper, getThreadBySlug, getThreadScan } from '../data';
 import { triageChunk } from '../pipeline/triage';
-import { domainOf, FetchFailure } from '../pipeline/web';
-import { pullPage } from '../research/pull';
-import { triagePapersChunk } from '../research/triage';
-import { parseArxivRef, fetchArxivByIds } from '../research/arxiv';
+import { domainOf, FetchFailure } from '../text';
 import { hydratePaper, analyzePaper, promotableText } from '../research/analysis';
 import { recommendQueueChunk } from '../research/queue-agent';
 import { updateThreadSynthesis } from '../research/synthesis';
 import { diagnoseThreadGaps } from '../research/thread-scan';
-import { refreshCitations } from '../research/citations';
 import type {
   TriageStatus,
   PaperReviewStatus, ThreadRelation, ThreadStatus, ResearchThreadScan,
   } from '../types';
 import { UUID_RE, parsePrior, requireAdmin, str } from './shared';
 
-// ===== Research section (docs/research-section.md) ==========================
-// Manual, console-driven runs over the arXiv intake — the same shape as the
-// discovery pipeline: typed-arg admin actions, one short checkpointed unit per
-// call, the client loops. Cost at rest is zero (no cron anywhere).
-
-// Start a research run: prune expired rejects (opportunistic, no cron), compute the
-// window (the ADMIN-CHOSEN lookback, default 7 days, hard-capped at 14 — volume
-// control is the admin's, a lesson from the 3,000-paper first run), narrowed to the
-// last completed run's pull with 1 day of idempotent overlap. Create the run row.
-export async function startResearchRunAction(lookbackDays = 7): Promise<{ runId: string; sinceISO: string }> {
-  await requireAdmin();
-  const lookback = Number.isInteger(lookbackDays) ? Math.min(Math.max(lookbackDays, 1), 14) : 7;
-  await m.pruneRejectedPapers().catch(() => {});
-  const windowStart = Date.now() - lookback * 86_400_000;
-  const last = await getLastResearchRunAt();
-  const lastMs = last ? new Date(last).getTime() - 86_400_000 : 0;
-  // "last N days, or since the last run, whichever is shorter" -> the more recent start
-  const sinceISO = new Date(Math.max(windowStart, lastMs)).toISOString().slice(0, 10);
-  const runId = await m.createResearchRun(sinceISO);
-  return { runId, sinceISO };
-}
-
-// One arXiv page per invocation (politeness + the 60s cap). No AI cost.
-export async function pullArxivPageAction(
-  runId: string, start: number, sinceISO: string
-): Promise<{ scanned: number; inserted: number; done: boolean; nextStart: number }> {
-  await requireAdmin();
-  if (!UUID_RE.test(runId)) throw new Error('Bad run id.');
-  if (!Number.isInteger(start) || start < 0 || start > 30_000) throw new Error('Bad start offset.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(sinceISO)) throw new Error('Bad since date.');
-  return pullPage(runId, start, sinceISO);
-}
-
-// One bounded triage chunk per call; the client loops until remaining === 0.
-export async function triageResearchChunkAction(runId: string): Promise<{
-  processed: number; kept: number; rejected: number; remaining: number;
-}> {
-  await requireAdmin();
-  if (!UUID_RE.test(runId)) throw new Error('Bad run id.');
-  const r = await triagePapersChunk(runId);
-  revalidatePath('/research');
-  return r;
-}
-
-export async function completeResearchRunAction(runId: string): Promise<void> {
-  await requireAdmin();
-  if (!UUID_RE.test(runId)) throw new Error('Bad run id.');
-  const pending = await countPendingPapers(runId);
-  if (pending > 0) {
-    throw new Error(`Cannot complete: ${pending} paper${pending === 1 ? '' : 's'} still pending triage.`);
-  }
-  await m.updateResearchRun(runId, { step: 'complete', status: 'completed' });
-  await m.recomputeResearchRunCounts(runId);
-  revalidatePath('/research');
-}
-
-export async function failResearchRunAction(runId: string, message: string): Promise<void> {
-  await requireAdmin();
-  if (!UUID_RE.test(runId)) throw new Error('Bad run id.');
-  await m.updateResearchRun(runId, { status: 'failed', error: String(message ?? '').slice(0, 500) });
-  revalidatePath('/research');
-}
-
-export async function pendingResearchTriageCountAction(runId: string): Promise<number> {
-  await requireAdmin();
-  if (!UUID_RE.test(runId)) throw new Error('Bad run id.');
-  return countPendingPapers(runId);
-}
+// ===== Research section =====================================================
+// The arXiv pull funnel is gone (no outbound web inside the walls): papers enter
+// by hand (addPaperAction) or from a curated source (sendSourceToResearchAction),
+// pre-approved. Review, analysis, threads, and promotion stay.
 
 // The review decision — the human gate on the research funnel. Tracking a paper
 // REQUIRES a why (the rationales discipline applied to papers).
@@ -105,38 +37,17 @@ export async function reviewPaperAction(
   revalidatePath('/research');
 }
 
-// Manual "Add paper" — the staleness-gap door (and the non-arXiv door: NBER, SSRN,
-// lab reports). An arXiv ref auto-fills from the API; anything else needs url+title.
-// Enters pre-approved (triage 'kept'): human before the expensive call.
+// Manual "Add paper": url + title (+ optional abstract). Enters pre-approved
+// (triage 'kept'): a human chose it. Text arrives via a linked source.
 export async function addPaperAction(formData: FormData) {
   await requireAdmin();
-  const ref = str(formData, 'ref');
   const url = str(formData, 'url');
   const title = str(formData, 'title');
   const abstract = str(formData, 'abstract');
 
-  if (ref) {
-    const arxivId = parseArxivRef(ref);
-    if (!arxivId) throw new Error('Could not parse an arXiv id from that link. For non-arXiv papers, use the URL + title fields.');
-    const [entry] = await fetchArxivByIds([arxivId]);
-    if (!entry) throw new Error(`arXiv returned no metadata for ${arxivId}.`);
-    await m.createManualPaper({
-      arxiv_id: entry.arxiv_id,
-      url: entry.url,
-      title: entry.title,
-      abstract: entry.abstract,
-      authors: entry.authors,
-      categories: entry.categories,
-      comments: entry.comment,
-      published_at: entry.published || null,
-      arxiv_version: entry.version,
-      arxiv_updated: entry.updated || null,
-    });
-  } else {
-    if (!url || !/^https?:\/\//i.test(url)) throw new Error('A valid http(s) URL is required.');
-    if (!title) throw new Error('A title is required for a non-arXiv paper.');
-    await m.createManualPaper({ url, title, abstract: abstract || null });
-  }
+  if (!url || !/^https?:\/\//i.test(url)) throw new Error('A valid http(s) URL is required.');
+  if (!title) throw new Error('A title is required.');
+  await m.createManualPaper({ url, title, abstract: abstract || null });
   revalidatePath('/research');
   redirect('/research');
 }
@@ -327,7 +238,6 @@ export async function sendSourceToResearchAction(sourceId: string): Promise<{ pa
   const src = data.source;
   const url = src.url || `urn:source:${sourceId}`;
   const res = await m.createManualPaper({
-    arxiv_id: src.url ? parseArxivRef(src.url) : null,
     url,
     title: src.title || 'Untitled source',
     source_id: sourceId,
@@ -414,18 +324,6 @@ export async function clearThreadScanAction(): Promise<void> {
   await requireAdmin();
   await m.saveThreadScan(null);
   revalidatePath('/research');
-}
-
-// ---- Research phase 4: citation self-correction ------------------------------
-
-// In-session refresh (a button, never a cron): batch POSTs to Semantic Scholar,
-// no AI cost. Includes recent rejects on purpose — the "rising rejects" surface
-// is the funnel admitting the field disagrees with it.
-export async function refreshCitationsAction(): Promise<{ checked: number; updated: number }> {
-  await requireAdmin();
-  const r = await refreshCitations();
-  revalidatePath('/research');
-  return r;
 }
 
 export async function requeuePaperAction(paperId: string): Promise<void> {

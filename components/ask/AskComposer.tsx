@@ -4,22 +4,16 @@ import { useState } from 'react';
 
 // The pinned composer. Autosize is computed in the change handler from the
 // event target (never a ref read in render); Enter sends, Shift+Enter breaks
-// the line, and the house Cmd/Ctrl+Enter still works. Since the 2026-08-21
-// rework the admin chat ALWAYS researches (the old Deep research toggle is
-// gone); the one remaining toggle is Web search, for admin and portal
-// keyholders (each search is budget-metered).
+// the line, and the house Cmd/Ctrl+Enter still works. The admin chat ALWAYS
+// researches; answers are grounded in Atlas records only (no web layer).
 export default function AskComposer({
   streaming, onSend, onStop, researchMode,
-  webAvailable, web, onToggleWeb,
 }: {
   streaming: boolean;
   onSend: (text: string) => void;
   onStop: () => void;
   // true on the admin surface: every question runs the research loop.
   researchMode: boolean;
-  webAvailable: boolean;
-  web: boolean;
-  onToggleWeb: () => void;
 }) {
   const [text, setText] = useState('');
 
@@ -31,12 +25,8 @@ export default function AskComposer({
   }
 
   const hint = researchMode
-    ? web
-      ? 'researches the Atlas, then the web, before answering · sources listed under the answer'
-      : 'researches the Atlas in rounds before answering, may take a minute'
-    : web
-      ? 'web search on: the Atlas stays primary, the web fills gaps, sources listed under the answer'
-      : 'grounded in the Atlas database · enter to send, shift+enter for a new line';
+    ? 'researches the Atlas in rounds before answering, may take a minute'
+    : 'grounded in the Atlas database · enter to send, shift+enter for a new line';
 
   return (
     <div className="ask-composer">
@@ -73,18 +63,6 @@ export default function AskComposer({
         )}
       </div>
       <div className="ask-composer-foot">
-        {webAvailable && (
-          <button
-            type="button"
-            className="ask-deep-toggle"
-            aria-pressed={web}
-            onClick={onToggleWeb}
-            disabled={streaming}
-            title="Add live web search on top of the Atlas records"
-          >
-            Web search
-          </button>
-        )}
         <p className="ask-composer-hint">{hint}</p>
       </div>
     </div>

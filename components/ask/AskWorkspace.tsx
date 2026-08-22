@@ -9,7 +9,7 @@ import {
   appendMessage, createConvo, deleteConvo, dropLastAssistant, getConvo,
   maxSignalSuffix, mergedSignalMap, setMessageVerify, useAskConvos,
 } from '@/components/ask/store';
-import { extractCostReport, extractWebSources, parseCostReport, type AskCostReport, type AskWebSource } from '@/lib/ask/history';
+import { extractCostReport, parseCostReport, type AskCostReport } from '@/lib/ask/history';
 import AskRail from '@/components/ask/AskRail';
 import AskThread from '@/components/ask/AskThread';
 import AskComposer from '@/components/ask/AskComposer';
@@ -39,7 +39,6 @@ export default function AskWorkspace({
   const [draft, setDraft] = useState('');
   const [draftMap, setDraftMap] = useState<SignalMap>({});
   const [draftSteps, setDraftSteps] = useState<string[]>([]);
-  const [webOn, setWebOn] = useState(false);
   const [verifyingIndex, setVerifyingIndex] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
   const [activePeek, setActivePeek] = useState<{ kind: PeekKind; id: string } | null>(null);
@@ -52,7 +51,6 @@ export default function AskWorkspace({
   // The admin chat always researches (the deep loop is the default engine
   // since 2026-08-21); the portal stays on the quick route for budget reasons.
   const researchMode = mode === 'admin';
-  const webAvailable = mode !== 'locked'; // admin + portal key; each search is budget-metered
   const locked = mode === 'locked';
   const active = activeId ? convos.find((c) => c.id === activeId) ?? null : null;
 
@@ -148,7 +146,7 @@ export default function AskWorkspace({
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: wire, signalOffset: maxSignalSuffix(convo), web: webAvailable && webOn }),
+        body: JSON.stringify({ messages: wire, signalOffset: maxSignalSuffix(convo) }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
@@ -172,32 +170,28 @@ export default function AskWorkspace({
         const { done, value } = await reader.read();
         if (done) break;
         acc += dec.decode(value, { stream: true });
-        // The cost and web-sources sentinels arrive in the final chunks; keep
-        // both out of the visible draft.
-        setDraft(extractCostReport(extractWebSources(acc).text).text);
+        // The cost sentinel arrives in the final chunks; keep it out of the
+        // visible draft.
+        setDraft(extractCostReport(acc).text);
       }
-      const { text: withCost, sources } = extractWebSources(acc);
-      const { text: bodyText, cost } = extractCostReport(withCost);
+      const { text: bodyText, cost } = extractCostReport(acc);
       const { clean, slugs } = extractDatasets(bodyText);
       appendMessage(convoId, {
         role: 'assistant',
         content: clean || 'The answer came back empty. Please try again.',
         signalMap: mergedMap,
         datasets: slugs.length ? slugs : undefined,
-        webSources: sources.length ? sources : undefined,
         cost: cost ?? undefined,
         error: clean ? undefined : true,
       });
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
-        const { text: withCost, sources } = extractWebSources(acc);
-        const { text: bodyText, cost } = extractCostReport(withCost);
+        const { text: bodyText, cost } = extractCostReport(acc);
         const { clean, slugs } = extractDatasets(bodyText);
         if (clean) {
           appendMessage(convoId, {
             role: 'assistant', content: clean, signalMap: mergedMap,
             datasets: slugs.length ? slugs : undefined,
-            webSources: sources.length ? sources : undefined,
             cost: cost ?? undefined,
             stopped: true,
           });
@@ -216,8 +210,8 @@ export default function AskWorkspace({
 
   // The research chat: NDJSON from /api/ask/deep. Status lines build the
   // research trail (persisted on the message as `steps`), delta lines build
-  // the answer, web_sources / verify / cost lines attach their payloads, and
-  // the terminal done line carries the full signal tag map.
+  // the answer, verify / cost lines attach their payloads, and the terminal
+  // done line carries the full signal tag map.
   async function runDeep(convoId: string) {
     const convo = getConvo(convoId);
     if (!convo || streaming) return;
@@ -236,7 +230,6 @@ export default function AskWorkspace({
     let errText = '';
     let verifyReport: VerifyReport | undefined;
     let costReport: AskCostReport | undefined;
-    let webSources: AskWebSource[] | undefined;
     const handleLine = (line: string) => {
       if (!line.trim()) return;
       let ev: { type?: string; text?: unknown; signals?: unknown; report?: unknown; sources?: unknown };
@@ -258,12 +251,6 @@ export default function AskWorkspace({
         verifyReport = ev.report as VerifyReport;
       } else if (ev.type === 'cost' && ev.report && typeof ev.report === 'object') {
         costReport = parseCostReport(ev.report) ?? undefined;
-      } else if (ev.type === 'web_sources' && Array.isArray(ev.sources)) {
-        const list = (ev.sources as AskWebSource[])
-          .filter((s) => !!s && typeof s.url === 'string' && /^https?:\/\//i.test(s.url))
-          .map((s) => ({ url: s.url.slice(0, 600), title: String(s.title ?? '').slice(0, 200) || s.url }))
-          .slice(0, 8);
-        webSources = list.length ? list : undefined;
       } else if (ev.type === 'error' && typeof ev.text === 'string') {
         errText = ev.text;
       }
@@ -275,7 +262,6 @@ export default function AskWorkspace({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: wire, signalOffset: maxSignalSuffix(convo), signalMap: priorMap,
-          web: webAvailable && webOn,
         }),
         signal: ac.signal,
       });
@@ -322,7 +308,6 @@ export default function AskWorkspace({
         steps: steps.length ? steps : undefined,
         verify: verifyReport,
         cost: costReport,
-        webSources,
         stopped: errText ? true : undefined, // cut short server-side; partial stands
       });
     } catch (e) {
@@ -335,7 +320,6 @@ export default function AskWorkspace({
             steps: steps.length ? steps : undefined,
             verify: verifyReport,
             cost: costReport,
-            webSources,
           });
         }
         // An abort before any text leaves the user turn trailing; the thread
@@ -478,9 +462,6 @@ export default function AskWorkspace({
             onSend={send}
             onStop={stop}
             researchMode={researchMode}
-            webAvailable={webAvailable}
-            web={webOn}
-            onToggleWeb={() => setWebOn((v) => !v)}
           />
         )}
       </div>

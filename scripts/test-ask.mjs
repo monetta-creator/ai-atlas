@@ -189,54 +189,6 @@ check('store: deleteConvo removes', () => {
   assert.equal(store.getConvo(id), null);
 });
 
-// ---- web sources (the web-search toggle's sentinel wire) ---------------------
-const {
-  encodeWebSources, extractWebSources, collectWebSources, WEB_SOURCES_MARKER,
-} = await import('../lib/ask/history.ts');
-
-check('web sources: encode/extract round trip', () => {
-  const sources = [{ url: 'https://example.com/a', title: 'A story' }];
-  const acc = `The answer text.${encodeWebSources(sources)}`;
-  const out = extractWebSources(acc);
-  assert.equal(out.text, 'The answer text.');
-  assert.deepEqual(out.sources, sources);
-});
-check('web sources: no marker leaves text untouched', () => {
-  const out = extractWebSources('Plain answer, no web.');
-  assert.equal(out.text, 'Plain answer, no web.');
-  assert.deepEqual(out.sources, []);
-});
-check('web sources: a torn sentinel drops sources, keeps the answer', () => {
-  const out = extractWebSources(`Answer.\n${WEB_SOURCES_MARKER}[{"url":"https://x`);
-  assert.equal(out.text, 'Answer.');
-  assert.deepEqual(out.sources, []);
-});
-check('web sources: bad urls filtered, titles defaulted, capped at 8', () => {
-  const many = Array.from({ length: 12 }, (_, i) => ({ url: `https://s${i}.com`, title: '' }));
-  const acc = `T${encodeWebSources([{ url: 'javascript:alert(1)', title: 'evil' }])}`;
-  assert.deepEqual(extractWebSources(acc).sources, []);
-  const out = extractWebSources(`T${WEB_SOURCES_MARKER}${JSON.stringify(many)}`);
-  assert.equal(out.sources.length, 8);
-  assert.equal(out.sources[0].title, 'https://s0.com');
-});
-check('collectWebSources: dedupes by url, skips non-text blocks', () => {
-  const msg = {
-    content: [
-      { type: 'server_tool_use' },
-      { type: 'text', citations: [
-        { type: 'web_search_result_location', url: 'https://a.com/x', title: 'A' },
-        { type: 'web_search_result_location', url: 'https://a.com/x', title: 'A again' },
-        { type: 'char_location', url: 'https://not-web.com' },
-      ] },
-      { type: 'text', citations: [{ type: 'web_search_result_location', url: 'https://b.com/y', title: null }] },
-    ],
-  };
-  assert.deepEqual(collectWebSources(msg), [
-    { url: 'https://a.com/x', title: 'A' },
-    { url: 'https://b.com/y', title: 'https://b.com/y' },
-  ]);
-});
-
 // ---- cost report sentinel ----------------------------------------------------
 check('cost report: encode/extract round-trip', () => {
   const report = {
@@ -252,18 +204,6 @@ check('cost report: missing or torn sentinel yields null, answer kept', () => {
   const torn = extractCostReport(`Answer.\n${COST_MARKER}{"cost_usd": 0.1`);
   assert.equal(torn.text, 'Answer.');
   assert.equal(torn.cost, null);
-});
-check('cost report: cost line before web-sources line, both extract', () => {
-  const report = {
-    cost_usd: 0.004, input_tokens: 9000, output_tokens: 800,
-    cache_read_tokens: 0, searches: 1, rounds: 1, model: 'claude-haiku-4-5',
-  };
-  const acc = `Answer.${encodeCostReport(report)}${encodeWebSources([{ url: 'https://a.com/x', title: 'A' }])}`;
-  const w = extractWebSources(acc);
-  assert.equal(w.sources.length, 1);
-  const c = extractCostReport(w.text);
-  assert.equal(c.text, 'Answer.');
-  assert.deepEqual(c.cost, report);
 });
 check('parseCostReport: clamps junk', () => {
   assert.equal(parseCostReport(null), null);

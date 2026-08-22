@@ -1,14 +1,13 @@
 import { runStructured } from '../dossier';
-import { LOW_QUALITY_DOMAINS } from './config';
-import { normalizeUrl } from './web';
+import { normalizeUrl } from '../text';
 import * as m from '../mutations';
 import { getPendingCandidates, countPendingCandidates, getSignalsDigestForTriage, getKnownUrls, getDomainStats } from '../data';
 import type { SignalCandidate, TriageStatus } from '../types';
 
 // Triage filters the candidate list down to what's worth analyzing. The client drives one
-// bounded CHUNK per call (triageChunk) so each fits the 60s cap no matter how many
-// candidates a run found. Per chunk, two passes:
-// (1) a deterministic deny-list pre-filter (known PR-wire / SEO-farm domains), then
+// bounded CHUNK per call (triageChunk) so each call stays short no matter how many
+// candidates a run holds. Per chunk, two passes:
+// (1) a deterministic already-tracked-URL dedup, then
 // (2) one non-web structured call that dedups against existing signals and applies
 // source-quality + relevance judgment. Writing decisions moves candidates out of
 // 'pending', so repeated calls drain the queue (and resume a partially-triaged run).
@@ -69,19 +68,14 @@ export async function triageChunk(
   let rejected = 0;
   let duplicate = 0;
 
-  // 1) deterministic pre-filter (this chunk): deny-list, then already-tracked-URL dedup.
-  const denied = new Set(LOW_QUALITY_DOMAINS);
-  // Every URL already tracked (manual sources + drafted candidates), normalized. A discovered
+  // 1) deterministic pre-filter (this chunk): already-tracked-URL dedup.
+  // Every URL already tracked (manual sources + drafted candidates), normalized. A candidate
   // URL in this set is a duplicate of something we already have — flag it WITHOUT spending a
   // model decision. Manual candidates (source_id set) are exempt: their URL IS the tracked source.
   const knownUrls = new Set((await getKnownUrls()).map(normalizeUrl));
   const toModel: SignalCandidate[] = [];
   for (const c of pending) {
-    const dom = (c.source_domain || '').toLowerCase().replace(/^www\./, '');
-    if (dom && denied.has(dom)) {
-      await m.setTriage(c.id, 'rejected', `low credibility: ${dom}`);
-      rejected++;
-    } else if (!c.source_id && c.url && knownUrls.has(normalizeUrl(c.url))) {
+    if (!c.source_id && c.url && knownUrls.has(normalizeUrl(c.url))) {
       await m.setTriage(c.id, 'duplicate', 'already tracked');
       duplicate++;
     } else {

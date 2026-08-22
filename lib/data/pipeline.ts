@@ -1,5 +1,4 @@
 import { q, one } from '../db';
-import { isNeverAutoBlocked } from '../pipeline/config';
 import type {
   PipelineRun, SignalCandidate, } from '../types';
 
@@ -84,54 +83,8 @@ export async function getDomainStats(minSeen = 2): Promise<DomainStat[]> {
   );
 }
 
-// Domains discovery keeps surfacing and triage never approves — SEO farms by observed
-// behavior. Fed into the web_search tool's blocked_domains so they stop entering the
-// funnel (and stop costing triage tokens) at all. Three guardrails (the Kimi-K3 audit):
-// duplicates are YIELD, not churn (a dupe means the domain carried a real story we
-// already track — this once blocked occ.gov, whose candidates were 5/6 duplicates);
-// primary-source infrastructure and major wires can never be auto-blocked (huggingface.co
-// had qualified on five rejected community-blog posts); and only the trailing 90 days
-// count, so a blocked domain that starts yielding can redeem itself once its old
-// rejections age out (a blocked domain never re-enters the funnel, so without decay the
-// block was permanent).
-export async function getZeroYieldDomains(minSeen = 4, limit = 30): Promise<string[]> {
-  const rows = await q<{ domain: string }>(
-    `select regexp_replace(lower(source_domain), '^www\\.', '') as domain
-       from signal_candidates
-      where source_domain is not null and source_domain <> '' and triage_status <> 'pending'
-        and created_at > now() - interval '90 days'
-      group by 1
-     having count(*) >= $1
-        and count(*) filter (where triage_status = 'approved' or triage_reason like 'unanalyzable:%') = 0
-        and count(*) filter (where triage_status = 'duplicate') = 0
-      order by count(*) desc
-      limit $2`,
-    [minSeen, limit]
-  );
-  return rows.map((r) => r.domain).filter((d) => !isNeverAutoBlocked(d));
-}
-
-// Should hydration skip the (historically doomed) direct fetch for this domain and go
-// straight to the reader? True when the domain has needed the reader before, or has
-// terminally access-walled a direct fetch, AND has never succeeded directly.
-export async function isFetchHostileDomain(domain: string): Promise<boolean> {
-  const row = await one<{ hostile: boolean; direct_ok: boolean }>(
-    `select
-       exists(select 1 from signal_candidates
-               where regexp_replace(lower(source_domain), '^www\\.', '') = $1
-                 and (fetched_via = 'jina'
-                      or analysis_error ~* '^HTTP 40[13]'
-                      or triage_reason ~* '^unanalyzable: (HTTP 40[13]|reader|page returned too little)')) as hostile,
-       exists(select 1 from signal_candidates
-               where regexp_replace(lower(source_domain), '^www\\.', '') = $1
-                 and fetched_via = 'direct') as direct_ok`,
-    [domain]
-  );
-  return !!row && row.hostile && !row.direct_ok;
-}
-
-// Triage processes pending candidates one bounded chunk per server-action call (each its
-// own 60s budget). This fetches the next chunk; writing decisions moves them out of
+// Triage processes pending candidates one bounded chunk per server-action call. This
+// fetches the next chunk; writing decisions moves them out of
 // 'pending', so repeated calls drain the queue (and resume a partially-triaged run).
 export async function getPendingCandidates(runId: string, limit: number): Promise<SignalCandidate[]> {
   return q<SignalCandidate>(
@@ -238,9 +191,8 @@ export async function getTextCoverage(): Promise<TextCoverage> {
   return row ?? { total: 0, with_text: 0 };
 }
 
-// A published signal missing retained text, with the URL a refetch would use
-// (curated source URL first, else the newest candidate's) and the rows the
-// fetched text could be stored on.
+// A published signal missing retained text (a legacy gap: intake now retains
+// text up front). Display-only — the admin re-adds the text on the source.
 export interface MissingTextRow {
   signal_id: string;
   title: string;
@@ -269,10 +221,4 @@ export async function listSignalsMissingText(limit = 5): Promise<MissingTextRow[
     `${MISSING_TEXT_SQL} order by s.published_at desc nulls last, s.id limit $1`,
     [limit]
   );
-}
-
-// The publish-time guard's lookup: the same shape for ONE signal, null when it
-// already holds text (nothing to do).
-export async function getSignalTextTarget(signalId: string): Promise<MissingTextRow | null> {
-  return one<MissingTextRow>(`${MISSING_TEXT_SQL} and s.id = $1`, [signalId]);
 }

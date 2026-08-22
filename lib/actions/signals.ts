@@ -5,13 +5,11 @@ import { redirect } from 'next/navigation';
 import { isAdmin, isPreview } from '../auth';
 import * as m from '../mutations';
 import {
-  getSource, getTargets, getSignalsPage, getCandidate, getCandidateBySourceId, getSignalIdBySource, isFetchHostileDomain,
-  getTextCoverage, getSignalTextTarget, listSignalsMissingText,
-  type TextCoverage, type MissingTextRow,
+  getSource, getTargets, getSignalsPage, getCandidate, getCandidateBySourceId, getSignalIdBySource,
 } from '../data';
 import { SIGNAL_LENS_SLUGS } from '../format';
 import { triageChunk } from '../pipeline/triage';
-import { domainOf, fetchCandidateText } from '../pipeline/web';
+import { domainOf } from '../text';
 import type {
   Direction, Significance, SignalLens, TriageStatus,
   SignalsFeedFilters, SignalsPageResult, } from '../types';
@@ -94,64 +92,18 @@ export async function updateSignalAction(formData: FormData) {
   redirect(`/signals/${id}`);
 }
 
-// One bounded attempt to retain the article text behind a signal, stored on
-// whichever row the record offers (source row first, else its newest candidate).
-// Every failure comes back as data; callers decide whether it matters.
-async function retainTextFor(row: MissingTextRow): Promise<{ ok: boolean; reason?: string }> {
-  if (!row.url) return { ok: false, reason: 'no url on the record' };
-  try {
-    const domain = domainOf(row.url).toLowerCase().replace(/^www\./, '');
-    const preferJina = domain ? await isFetchHostileDomain(domain).catch(() => false) : false;
-    const { text, via } = await fetchCandidateText(row.url, { preferJina, maxChars: 60000 });
-    if (row.source_id) await m.setSourceRawText(row.source_id, text);
-    else if (row.candidate_id) await m.setCandidateRawContent(row.candidate_id, text, via);
-    else return { ok: false, reason: 'no row to store the text on' };
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, reason: e instanceof Error ? e.message : 'fetch failed' };
-  }
-}
-
 // Publish / unpublish toggle — visibility only (editorial date is left alone).
-// Publishing also runs the retained-text guard: the corpus's 100% coverage is
-// protected at the moment a signal enters the public record, with ONE bounded
-// fetch if no text is held. Non-fatal by construction — publishing never fails
-// because a fetch did; /pipeline's coverage stat is the audit surface.
+// Text retention happens at INTAKE time now (the candidate/source carries its
+// text before it can be analyzed), so there is no fetch here; the coverage stat
+// on /pipeline remains the audit surface for any legacy gaps.
 export async function publishSignalAction(formData: FormData) {
   await requireAdmin();
   const id = str(formData, 'id');
   if (!UUID_RE.test(id)) throw new Error('Bad signal id.');
   const publishing = str(formData, 'publish') === '1';
   await m.setSignalPublished(id, publishing);
-  if (publishing) {
-    try {
-      const target = await getSignalTextTarget(id);
-      if (target) await retainTextFor(target);
-    } catch { /* non-fatal: the coverage stat on /pipeline surfaces any gap */ }
-  }
   revalidatePath('/', 'layout');
   redirect(safePath(str(formData, 'redirect_to')));
-}
-
-// The retained-text catch-up on /pipeline: process up to 5 published signals
-// still missing article text, one bounded fetch each (fits the page's 60s cap).
-export async function refetchMissingTextAction(): Promise<{
-  attempted: number;
-  retained: number;
-  failures: { title: string; reason: string }[];
-  coverage: TextCoverage;
-}> {
-  await requireAdmin();
-  const missing = await listSignalsMissingText(5);
-  const failures: { title: string; reason: string }[] = [];
-  let retained = 0;
-  for (const row of missing) {
-    const r = await retainTextFor(row);
-    if (r.ok) retained++;
-    else failures.push({ title: row.title, reason: (r.reason ?? 'failed').slice(0, 200) });
-  }
-  revalidatePath('/pipeline');
-  return { attempted: missing.length, retained, failures, coverage: await getTextCoverage() };
 }
 
 // Archive / unarchive a draft (set it aside out of the active queue, or restore it).

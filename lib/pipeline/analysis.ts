@@ -1,5 +1,5 @@
 import { runStructured } from '../dossier';
-import { fetchCandidateText, MIN_READABLE_CHARS } from './web';
+import { MIN_READABLE_CHARS } from '../text';
 import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL } from '../format';
 import * as m from '../mutations';
 import { getCandidate, getTargets, getSourceMeta } from '../data';
@@ -76,20 +76,12 @@ export async function analyzeCandidate(candidateId: string): Promise<AnalysisRes
   // reflect the live step for the admin status line (idempotent)
   await m.updateRun(cand.run_id, { step: 'analysis' });
 
-  // 1) the readable text. The orchestrator hydrates it in a separate invocation
-  // (hydrateCandidateAction — full 60s budget for slow hosts/PDFs) BEFORE calling analyze,
-  // so this is normally a cache read. The inline fetch is a backstop only (manual flows
-  // pre-set raw_content; old clients), kept on a tight budget so fetch + model still fit
-  // one invocation. On failure we THROW (no catch): the orchestrator classifies it
-  // (FetchFailure.terminal) and retries or flags 'unanalyzable' accordingly.
-  let text = cand.raw_content;
-  if (!text) {
-    const fetched = await fetchCandidateText(cand.url, { timeoutMs: 8_000, allowFallback: false });
-    text = fetched.text;
-    await m.setCandidateRawContent(candidateId, text, fetched.via);
-  }
+  // 1) the readable text. There is no fetch leg any more: every candidate arrives
+  // through manual/document intake with its text already retained (raw_content).
+  // A candidate without enough retained text is unanalyzable by construction.
+  const text = cand.raw_content;
   if (!text || text.length < MIN_READABLE_CHARS) {
-    throw new Error('source page returned too little readable text to analyze');
+    throw new Error('candidate has no retained text to analyze; re-add the source with its text');
   }
 
   // 2) structured analysis with the live claim/bridge list

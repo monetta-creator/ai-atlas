@@ -9,13 +9,7 @@ import { DATASETS } from '@/lib/datasets/registry';
 // detail is volatile and goes last. The model only narrates over the provided
 // records, mirroring the "use ONLY what is provided" pattern in lib/summary.ts.
 
-// The records-scope paragraph exists in two variants: the records-only default
-// and the records-primary version swapped in when web search is on (so the
-// system never contradicts itself; the old design appended a web addendum UNDER
-// a "records are your entire world" rule, and the model obeyed the rule).
 const SCOPE_RECORDS_ONLY = `You answer ONLY from the Atlas records provided in the user message. You have no outside knowledge about AI, the economy, companies, people, or events beyond those records. Treat the provided records as your entire world.`;
-
-const SCOPE_RECORDS_PLUS_WEB = `You answer from the Atlas records provided in the user message, plus the web searches you run with the web_search tool. The records are your primary source and the only thing the bracket-citation grammar covers; the web is your second layer for gaps and recent developments, attributed in prose. Never present general knowledge that came from neither.`;
 
 export const SYSTEM = `You are "Ask the Atlas", a question-answering assistant for The AI Atlas, a tool for staying oriented in the debate about AI and the economy. The Atlas is for orientation, not proof: your job is to help the reader find where the relevant thinking lives and point them to it, not to hand down verdicts.
 
@@ -48,22 +42,9 @@ export const ASK_SYSTEM = `${SYSTEM}
 
 The Atlas also publishes downloadable datasets, listed in the user message under DATASETS. When a table of data would serve the reader better than prose, or the question is really a data request (a list, a count over time, a per-team slice), still answer from the records, then end your answer with a line containing exactly [dataset <slug>] naming the most relevant dataset. Use only slugs from the DATASETS list, at most two, each in its own bracket. If no dataset fits, end without one.`;
 
-// Appended when the composer's web-search toggle is on (askSystem below also
-// swaps the records-scope paragraph, so no rule above contradicts this). The
-// records stay primary; the web fills gaps and is attributed in prose (the
-// route ships the cited URLs separately, so the model adds no source list).
-// A distinct static string: it forms its own cache entry beside the plain one.
-export const WEB_ADDENDUM = `
-
-Web search is enabled for this conversation. The Atlas records remain your primary source: answer from them first and cite them exactly as above. Search the web whenever it would sharpen the answer: a specific fact or figure the records lack, a development after the records' horizon, or an orientation question where the current state of play matters. Run at least one search before saying that anything is missing, unsettled, or not tracked; never reply "Not in the Atlas" without having searched. Do not narrate that you are about to search; search first, then start the reply with the answer itself. Answer with both layers: what the Atlas maps, cited by ID, and what the web adds. When a web result informs a statement, attribute it in prose by naming the outlet or site (for example: "Reuters reports..."). Never let a web result overwrite what a record says; if they disagree, present both and say which is the Atlas and which is the web. After searching, you may say plainly what neither the records nor the web settle. Do not add a source list or bibliography: the application renders your web sources automatically. The bracket-citation grammar is for Atlas records only; never put a web source in brackets.`;
-
-// The system prompt for the quick routes, web-aware. webOn swaps the
-// records-only scope paragraph for the records-plus-web one AND appends the
-// web addendum; webOff returns ASK_SYSTEM byte-identical (the cache prefix for
-// the plain path, the portal, and the deep route must not shift).
-export function askSystem(web: boolean): string {
-  if (!web) return ASK_SYSTEM;
-  return ASK_SYSTEM.replace(SCOPE_RECORDS_ONLY, SCOPE_RECORDS_PLUS_WEB) + WEB_ADDENDUM;
+// The system prompt for the quick routes (records-only; there is no web layer).
+export function askSystem(): string {
+  return ASK_SYSTEM;
 }
 
 // The full citable namespace. Cached as its own message block. (AskNamespace,
@@ -92,10 +73,8 @@ function fullSkeletonBlock(ctx: AskNamespace): string {
 // exactly the original single-shot shape.
 export function conversationMessages(
   msgs: AskWireMessage[],
-  ctx: AskContext,
-  opts: { web?: boolean } = {}
+  ctx: AskContext
 ): Anthropic.MessageParam[] {
-  const web = opts.web === true;
   const latest = msgs[msgs.length - 1];
   const skeleton: Anthropic.TextBlockParam = {
     type: 'text',
@@ -103,7 +82,7 @@ export function conversationMessages(
     cache_control: { type: 'ephemeral' },
   };
   if (msgs.length === 1) {
-    return [{ role: 'user', content: [skeleton, { type: 'text', text: queryBlock(latest.content, ctx, web) }] }];
+    return [{ role: 'user', content: [skeleton, { type: 'text', text: queryBlock(latest.content, ctx) }] }];
   }
   const out: Anthropic.MessageParam[] = [
     { role: 'user', content: [skeleton, { type: 'text', text: msgs[0].content }] },
@@ -117,7 +96,7 @@ export function conversationMessages(
         : { role: m.role, content: m.content }
     );
   }
-  out.push({ role: 'user', content: queryBlock(latest.content, ctx, web) });
+  out.push({ role: 'user', content: queryBlock(latest.content, ctx) });
   return out;
 }
 
@@ -128,10 +107,8 @@ export function conversationMessages(
 // own rolling breakpoint on the latest tool results, and the API allows four).
 export function deepConversationMessages(
   msgs: AskWireMessage[],
-  ns: AskNamespace,
-  opts: { web?: boolean } = {}
+  ns: AskNamespace
 ): Anthropic.MessageParam[] {
-  const web = opts.web === true;
   const latest = msgs[msgs.length - 1];
   const skeleton: Anthropic.TextBlockParam = {
     type: 'text',
@@ -139,7 +116,7 @@ export function deepConversationMessages(
     cache_control: { type: 'ephemeral' },
   };
   if (msgs.length === 1) {
-    return [{ role: 'user', content: [skeleton, { type: 'text', text: deepQueryBlock(latest.content, web) }] }];
+    return [{ role: 'user', content: [skeleton, { type: 'text', text: deepQueryBlock(latest.content) }] }];
   }
   const out: Anthropic.MessageParam[] = [
     { role: 'user', content: [skeleton, { type: 'text', text: msgs[0].content }] },
@@ -147,27 +124,19 @@ export function deepConversationMessages(
   for (let i = 1; i < msgs.length - 1; i++) {
     out.push({ role: msgs[i].role, content: msgs[i].content });
   }
-  out.push({ role: 'user', content: deepQueryBlock(latest.content, web) });
+  out.push({ role: 'user', content: deepQueryBlock(latest.content) });
   return out;
 }
 
-function deepQueryBlock(query: string, web: boolean): string {
-  const webLine = web
-    ? ' Web search is on: after the Atlas research, search the web when a current development or an outside figure would sharpen the answer, and attribute web material in prose by naming the outlet.'
-    : '';
-  return `QUESTION:\n${query}\n\nResearch this with your tools first: search the Atlas for the relevant records, fetch the ones that matter in full, and check the article text when the primary wording matters.${webLine} Then write one comprehensive, self-contained answer from what your research returned and the map above, citing every record you use by its bracketed ID.`;
+function deepQueryBlock(query: string): string {
+  return `QUESTION:\n${query}\n\nResearch this with your tools first: search the Atlas for the relevant records, fetch the ones that matter in full, and check the article text when the primary wording matters. Then write one comprehensive, self-contained answer from what your research returned and the map above, citing every record you use by its bracketed ID.`;
 }
 
 // The matched deep detail plus the question. Volatile, sent uncached and last.
-// The web variant of the closing instruction is the load-bearing half of the
-// web toggle: this block is the LAST thing the model reads, and the old
-// records-only wording here overrode the mid-system web addendum every time.
-function queryBlock(query: string, ctx: AskContext, web: boolean): string {
+function queryBlock(query: string, ctx: AskContext): string {
   const records = ctx.detail
     ? `RELEVANT RECORDS, deeper detail on what your question matched:\n\n${ctx.detail}`
     : 'RELEVANT RECORDS: none matched beyond the map above.';
-  const close = web
-    ? `Answer using the records above as the primary layer, citing each record you use by its ID in square brackets. Where the records leave a gap or a current development would sharpen the answer, search the web first and attribute what it adds in prose by naming the outlet. Never reply "Not in the Atlas." and never say the records lack something without having searched the web.`
-    : `Answer using only the records above, citing each record you use by its ID in square brackets. If the records bear on the question without settling it, orient the reader to the relevant records and say what is not settled, rather than refusing. Reply "Not in the Atlas." only if nothing above is relevant.`;
+  const close = `Answer using only the records above, citing each record you use by its ID in square brackets. If the records bear on the question without settling it, orient the reader to the relevant records and say what is not settled, rather than refusing. Reply "Not in the Atlas." only if nothing above is relevant.`;
   return `${records}\n\n----\n\nQUESTION:\n${query}\n\n${close}`;
 }
