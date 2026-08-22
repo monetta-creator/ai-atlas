@@ -8,7 +8,6 @@ import ConceptForm from '@/components/ConceptForm';
 
 export const dynamic = 'force-dynamic';
 // Hosts the AI recommend actions (prerequisites + hypothesis wiring).
-export const maxDuration = 60;
 export const metadata = { title: 'Edit concept · The Strategy Atlas' };
 
 export default async function EditConceptPage({

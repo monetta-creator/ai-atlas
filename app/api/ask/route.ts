@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { AI_FAST_MODEL, aiConfigured, makeAnthropic } from '@/lib/ai';
 import { isAdmin } from '@/lib/auth';
 import { priceUsage, recordApiCall } from '@/lib/cost';
 import { buildAskContext } from '@/lib/ask/retrieve';
@@ -16,13 +16,12 @@ import {
 //
 // Node runtime (the default) is required: retrieval uses lib/db's pg pool,
 // which needs Node TCP sockets and cannot run on the Edge runtime. Do NOT set
-// runtime = 'edge'. maxDuration covers the model leg.
+// runtime = 'edge'.
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
 
 // Start on Haiku for speed (a single MODEL constant so escalating a hard,
 // multi-record question to Sonnet later is a one-line change).
-const MODEL = 'claude-haiku-4-5';
+const MODEL = AI_FAST_MODEL;
 const TEXT_HEADERS = { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' };
 
 export async function POST(req: Request): Promise<Response> {
@@ -58,10 +57,9 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return new Response('AI is not configured.', { status: 500 });
+  if (!aiConfigured()) return new Response('AI is not configured.', { status: 500 });
   // Tight timeout, no in-call retries: stay well under the function cap.
-  const client = new Anthropic({ apiKey, timeout: 55_000, maxRetries: 0 });
+  const client = makeAnthropic({ timeout: 55_000, maxRetries: 0 });
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {

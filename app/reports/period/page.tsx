@@ -9,8 +9,6 @@ import ReportPreview from '@/components/ReportPreview';
 import WorkspaceTabs, { REPORTS_TABS } from '@/components/WorkspaceTabs';
 
 export const dynamic = 'force-dynamic';
-// Hosts the report-generation server actions (data + per-context legs + synthesis + save).
-export const maxDuration = 60;
 export const metadata = { title: 'Period report generator · The Strategy Atlas' };
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}/;

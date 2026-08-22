@@ -4,7 +4,7 @@ import Header from '@/components/Header';
 import CostsDashboard from '@/components/CostsDashboard';
 import WorkspaceTabs, { ANALYTICS_TABS } from '@/components/WorkspaceTabs';
 
-// Admin-only AI cost console. force-dynamic (reads cookies + DB); no maxDuration needed —
+// Admin-only AI cost console. force-dynamic (reads cookies + DB);
 // the only server action it hosts (addRateCardAction) is a quick DB insert, not an AI call.
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'AI costs · The AI Atlas' };

@@ -13,8 +13,6 @@ import ThreadScanPanel from '@/components/ThreadScanPanel';
 import QueueAgentPanel from '@/components/QueueAgentPanel';
 
 export const dynamic = 'force-dynamic';
-// Hosts the review/analysis server actions (model calls).
-export const maxDuration = 60;
 export const metadata = { title: 'Research console · The Atlas' };
 
 // The research WORKBENCH (admin): the review queue, manual adds, thread tools.

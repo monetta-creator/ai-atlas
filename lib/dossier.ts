@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { AI_MODEL, makeAnthropic } from './ai';
 import { recordApiCall } from './cost';
 import type {
   Dossier, Basis, BasisClaim, SourceMetadata, HypothesisRecommendation,
@@ -11,7 +12,7 @@ import type {
 // the reliability prior. Token cost is treated as a non-constraint (favor
 // thoroughness; always run the web pass).
 
-const MODEL = 'claude-sonnet-4-6';
+const MODEL = AI_MODEL;
 const BASES: Basis[] = ['web_verified', 'training_memory', 'document_stated'];
 
 const SYSTEM = `You are a source analyst for the Strategy Atlas, a tool for staying oriented on the strategic questions an operating team is testing. You profile a single source so the operator can judge how much to trust it.
@@ -124,11 +125,7 @@ function buildUserText(s: DossierSource): string {
 }
 
 export async function generateDossier(source: DossierSource): Promise<Dossier> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY is required to generate a dossier.');
-  }
-  const client = new Anthropic({ apiKey });
+  const client = makeAnthropic();
 
   const messages: Anthropic.MessageParam[] = [
     { role: 'user', content: buildUserText(source) },
@@ -229,12 +226,9 @@ export async function runStructured<T>(opts: {
   timeoutMs?: number;
   maxRetries?: number;
 }): Promise<T> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY is required for AI source tools.');
-  // Bounded under the 60s cap. Near-cap callers pass a tighter timeoutMs + maxRetries:0
-  // (the orchestrator retries on a fresh invocation); short callers keep the 50s/1 defaults.
-  const client = new Anthropic({
-    apiKey,
+  // Bounded. Near-cap callers pass a tighter timeoutMs + maxRetries:0 (the
+  // orchestrator retries on a fresh invocation); short callers keep 50s/1 defaults.
+  const client = makeAnthropic({
     timeout: opts.timeoutMs ?? 50_000,
     maxRetries: opts.maxRetries ?? 1,
   });

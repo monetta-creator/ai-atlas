@@ -17,7 +17,6 @@ import ConvictionMovementPanel from '@/components/dashboard/ConvictionMovementPa
 
 export const dynamic = 'force-dynamic';
 // Hosts the AI gap-diagnosis action (admin).
-export const maxDuration = 60;
 export const metadata = { title: 'Hypotheses · The Strategy Atlas' };
 
 // The Hypothesis Board: the tracked hypotheses as a ledger. Admin gets the

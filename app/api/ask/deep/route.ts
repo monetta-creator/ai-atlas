@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { AI_FAST_MODEL, aiConfigured, makeAnthropic } from '@/lib/ai';
 import { isAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { priceUsage, recordApiCall, type ApiUsage } from '@/lib/cost';
@@ -27,11 +28,10 @@ import {
 // The loop guards itself on wall clock, rounds, calls, and context size so a
 // slow session degrades to "answer with what you have", never a dead connection.
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
 
-const MODEL = 'claude-haiku-4-5';
+const MODEL = AI_FAST_MODEL;
 const FEATURE = 'ask_deep';
-const DEADLINE_MS = 280_000; // total research + answer budget inside maxDuration
+const DEADLINE_MS = 280_000; // total research + answer wall-clock budget
 const FINAL_RESERVE_MS = 60_000; // stop researching when less than this remains
 const NDJSON_HEADERS = { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' };
 
@@ -52,9 +52,8 @@ export async function POST(req: Request): Promise<Response> {
   const b = body as { signalOffset?: unknown; signalMap?: unknown };
   const tagger = createTagger(parseSignalMap(b?.signalMap), clampSignalOffset(b?.signalOffset));
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return new Response('AI is not configured.', { status: 500 });
-  const client = new Anthropic({ apiKey, timeout: 45_000, maxRetries: 1 });
+  if (!aiConfigured()) return new Response('AI is not configured.', { status: 500 });
+  const client = makeAnthropic({ timeout: 45_000, maxRetries: 1 });
 
   const ns = await loadNamespace();
   const system: Anthropic.TextBlockParam[] = [

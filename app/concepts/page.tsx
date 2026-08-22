@@ -7,7 +7,6 @@ import ConceptGapPanel from '@/components/ConceptGapPanel';
 
 export const dynamic = 'force-dynamic';
 // Hosts the AI gap-diagnosis action.
-export const maxDuration = 60;
 export const metadata = { title: 'Concepts · The AI Atlas' };
 
 export default async function ConceptsPage() {

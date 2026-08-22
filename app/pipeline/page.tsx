@@ -7,8 +7,6 @@ import PipelineConsole from '@/components/PipelineConsole';
 import PipelineCandidates from '@/components/PipelineCandidates';
 
 export const dynamic = 'force-dynamic';
-// Hosts the triage/analysis server actions (model calls).
-export const maxDuration = 60;
 export const metadata = { title: 'Intake pipeline · The Atlas' };
 
 export default async function PipelinePage() {

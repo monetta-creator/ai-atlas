@@ -13,7 +13,6 @@ import ConvictionMovementPanel from '@/components/dashboard/ConvictionMovementPa
 import CandidateArchive from '@/components/dashboard/CandidateArchive';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // hosts the candidate-archive read action
 export const metadata = { title: 'News Blotter · The Strategy Atlas' };
 
 // The News Blotter: the editor's desk, set in the Console Broadsheet voice

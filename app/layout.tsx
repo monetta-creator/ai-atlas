@@ -1,27 +1,34 @@
 import type { Metadata, Viewport } from "next";
-import { Schibsted_Grotesk, JetBrains_Mono, Anton } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-// Variable fonts: the design system uses non-standard display weights (620/640/660/680),
-// which only render correctly from a variable axis — so load these as variable, no fixed weight.
-const schibsted = Schibsted_Grotesk({
+// Vendored variable fonts (app/fonts/*.woff2): the app must build and run with
+// zero outbound network (corporate walls), so next/font/google is banned. The
+// design system uses non-standard display weights (620/640/660/680), which only
+// render correctly from a variable axis — so load these as variable ranges.
+const schibsted = localFont({
+  src: [
+    { path: "./fonts/schibsted-grotesk.woff2", weight: "400 900", style: "normal" },
+    { path: "./fonts/schibsted-grotesk-italic.woff2", weight: "400 900", style: "italic" },
+  ],
   variable: "--font-schibsted",
-  subsets: ["latin"],
   display: "swap",
 });
 
-const jetbrains = JetBrains_Mono({
+const jetbrains = localFont({
+  src: [
+    { path: "./fonts/jetbrains-mono.woff2", weight: "100 800", style: "normal" },
+    { path: "./fonts/jetbrains-mono-italic.woff2", weight: "100 800", style: "italic" },
+  ],
   variable: "--font-jetbrains",
-  subsets: ["latin"],
   display: "swap",
 });
 
 // The broadsheet headline voice (Console Broadsheet redesign): one weight, used only
 // for editorial headlines and big numerals via --font-headline. Never bolded.
-const anton = Anton({
+const anton = localFont({
+  src: [{ path: "./fonts/anton.woff2", weight: "400", style: "normal" }],
   variable: "--font-anton",
-  weight: "400",
-  subsets: ["latin"],
   display: "swap",
 });
 

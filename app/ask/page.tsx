@@ -12,7 +12,7 @@ export const metadata = { title: 'Ask the Atlas' };
 // mode against /api/portal/ask; locked visitors get the full shell with the
 // inline unlock panel where the composer sits (never a /login redirect, which
 // corporate networks flag). Model calls live in the API routes, which own
-// their maxDuration; conversations live in the visitor's browser only.
+// conversations live in the visitor's browser only.
 // ?q= seeds a first turn (the lobby's chat launcher); the workspace fires it
 // once on mount and strips the param from the URL.
 export default async function AskPage({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {

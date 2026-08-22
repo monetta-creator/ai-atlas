@@ -15,9 +15,6 @@ import SendToResearchButton from '@/components/SendToResearchButton';
 const truncate = (s: string, n = 64) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
 export const dynamic = 'force-dynamic';
-// The dossier action runs an Anthropic call; give its server action
-// room (Next applies page-level maxDuration to the page's Server Actions).
-export const maxDuration = 60;
 
 export default async function SourcePage({
   params,

@@ -9,8 +9,6 @@ import ThreadSynthesisButton from '@/components/ThreadSynthesisButton';
 import type { ThreadRelation } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
-// Hosts the synthesis-update server action (one bounded model call).
-export const maxDuration = 60;
 export const metadata = { title: 'Research thread · The AI Atlas' };
 
 const RELATION_ORDER: ThreadRelation[] = ['supports', 'contradicts', 'complicates', 'context'];

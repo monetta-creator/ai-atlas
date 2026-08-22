@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { makeClient } from './db.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dir = join(__dirname, '..', 'supabase', 'migrations');
+const dir = join(__dirname, '..', 'db', 'migrations');
 
 const client = makeClient();
 

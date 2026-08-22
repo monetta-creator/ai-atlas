@@ -8,7 +8,6 @@ import { renderHypothesisPdf, hypothesisPdfFilename } from '@/lib/pdf/hypothesis
 // narrative is re-gated against the frozen pack before rendering.
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 

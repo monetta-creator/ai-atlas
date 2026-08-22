@@ -5,9 +5,6 @@ import SourceForm from '@/components/SourceForm';
 import WorkspaceTabs, { SOURCES_TABS } from '@/components/WorkspaceTabs';
 
 export const dynamic = 'force-dynamic';
-// The PDF auto-fill calls extractSourceMetadataAction (a Server Action on this
-// page) — give it headroom, same as the source page.
-export const maxDuration = 60;
 
 export default async function IngestPage() {
   const admin = await requireAdminPage();

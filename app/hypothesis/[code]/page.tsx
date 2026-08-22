@@ -20,8 +20,6 @@ import SignalCard from '@/components/SignalCard';
 import ShareNotice from '@/components/ShareNotice';
 
 export const dynamic = 'force-dynamic';
-// Hosts AI server actions (gap diagnosis + the report console's model legs).
-export const maxDuration = 60;
 
 // One hypothesis: the statement + test, the gated conviction (admin moves it,
 // rationale required), the evidence links, the signals touching it, the linked

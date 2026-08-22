@@ -15,8 +15,6 @@ import DossierView from '@/components/DossierView';
 import AskAtlas from '@/components/AskAtlas';
 
 export const dynamic = 'force-dynamic';
-// The page hosts AI server actions (Generate analysis, Generate dossier).
-export const maxDuration = 60;
 
 export default async function SignalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

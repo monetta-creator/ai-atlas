@@ -9,7 +9,6 @@ import { renderPeriodPdf, periodPdfFilename } from '@/lib/pdf/period-doc';
 // does not exempt /api, hence the page-prefix placement).
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 

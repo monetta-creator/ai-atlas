@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { AI_FAST_MODEL, aiConfigured, makeAnthropic } from '@/lib/ai';
 import { isAdmin } from '@/lib/auth';
 import { priceUsage, recordApiCall } from '@/lib/cost';
 import { encodeCostReport } from '@/lib/ask/history';
@@ -8,9 +8,8 @@ import { buildSignalAskContext } from '@/lib/signal-ask';
 // required: retrieval uses lib/db's pg pool. Mirrors /api/ask but with a per-signal context
 // (its summary, source text, and touched claims) instead of the whole-Atlas retrieval.
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
 
-const MODEL = 'claude-haiku-4-5';
+const MODEL = AI_FAST_MODEL;
 const TEXT_HEADERS = { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' };
 
 export async function POST(
@@ -36,10 +35,9 @@ export async function POST(
   const ctxData = await buildSignalAskContext(id, query);
   if (!ctxData.found) return new Response('Signal not found', { status: 404 });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return new Response('AI is not configured.', { status: 500 });
+  if (!aiConfigured()) return new Response('AI is not configured.', { status: 500 });
   // Tight timeout, no in-call retries: stay well under the 60s function cap.
-  const client = new Anthropic({ apiKey, timeout: 55_000, maxRetries: 0 });
+  const client = makeAnthropic({ timeout: 55_000, maxRetries: 0 });
   const enc = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({

@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { AI_FAST_MODEL, aiConfigured, makeAnthropic } from '@/lib/ai';
 import { isAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { recordApiCall } from '@/lib/cost';
@@ -19,9 +20,8 @@ import {
 // always-on copy of this inside /api/ask/deep, where the gathered tool
 // results are already in hand.
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
 
-const MODEL = 'claude-haiku-4-5';
+const MODEL = AI_FAST_MODEL;
 const FEATURE = 'ask_verify';
 const MAX_RECORDS = 12;
 
@@ -80,10 +80,9 @@ export async function POST(req: Request): Promise<Response> {
 
   let report: VerifyReport = { flags: [], ...runDeterministicChecks(answer, corpus) };
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (recordBlocks.length && apiKey) {
+  if (recordBlocks.length && aiConfigured()) {
     try {
-      const client = new Anthropic({ apiKey, timeout: 30_000, maxRetries: 1 });
+      const client = makeAnthropic({ timeout: 30_000, maxRetries: 1 });
       const t0 = Date.now();
       const res = await client.messages.create({
         model: MODEL,

@@ -14,8 +14,6 @@ import PromotePaperButton from '@/components/PromotePaperButton';
 import type { ThreadRelation } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
-// Hosts the hydrate/analyze/promotion server actions; each must fit the 60s cap.
-export const maxDuration = 60;
 export const metadata = { title: 'Paper · The Strategy Atlas' };
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;

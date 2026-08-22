@@ -9,7 +9,6 @@ import { createTicket } from '@/lib/mutations';
 // bytes, never just the declared content type.
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
 
 const MAX_IMAGES = 3;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;

@@ -1,7 +1,7 @@
 // Runs the whole scripts/test-*.mjs suite sequentially and reports a summary.
 // Every test is READ-ONLY or transaction-rollback by design, so this is safe to
 // run against a live dev database. The DB-backed tests need .env.local
-// (SUPABASE_DB_*); the pure ones run anywhere.
+// (DATABASE_URL); the pure ones run anywhere.
 //
 //   npm test
 //

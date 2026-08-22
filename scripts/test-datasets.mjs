@@ -15,7 +15,7 @@
 //   6. CSV           — header is the column keys; a quote-aware round-trip parse
 //                      yields the right record and field counts
 //
-// Run: node scripts/test-datasets.mjs   (loads .env.local; DATABASE_URL, else SUPABASE_DB_*)
+// Run: node scripts/test-datasets.mjs   (loads .env.local; DATABASE_URL)
 
 import { config } from 'dotenv';
 config({ path: '.env.local' });

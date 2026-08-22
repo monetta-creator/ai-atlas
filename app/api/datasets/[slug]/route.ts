@@ -8,7 +8,7 @@ import { datasetFileName, datasetToCSV, datasetToJSON } from '@/lib/datasets/ser
 // The Datasets portal download route: /api/datasets/<slug>?format=csv|json[&context=...].
 // Public (allow-listed in proxy.ts; its matcher does not exempt /api/*), except
 // key-gated datasets (bulk article text), which require the portal cookie.
-// Node runtime: builders run on lib/db's pg pool. No model call, no maxDuration.
+// Node runtime: builders run on lib/db's pg pool. No model call.
 export const dynamic = 'force-dynamic';
 
 // Datasets change only when the admin publishes, so public downloads are safe to
