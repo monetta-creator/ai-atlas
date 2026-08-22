@@ -147,3 +147,43 @@ scout), never of the mechanisms above. Where a mechanism is currently expressed 
 a dying object (e.g. the tear-sheet's stance rollup, the QuestionMap SVG), the mechanism
 is re-expressed against hypotheses, not deleted. "Focused v0" means fewer objects and
 fewer surfaces, not a lobotomized engine.
+
+## D-016 · 2026-08-22 · Claims are absorbed into hypotheses (resolves OQ-1)
+
+**DECIDED.** One tier of belief-objects. Hypotheses take over what claims had (the
+falsifiable `test`, the gated judgment, the rationale history); evidence attaches
+directly to hypotheses; the claims tier does not carry over. Rationale: one mental
+model for multi-user readers (statement → evidence → source), no filing decision per
+piece of evidence, no double bookkeeping, one accountable judgment per hypothesis —
+and the AI Atlas's own usage showed the thesis→mapped-claims layer used lightly.
+
+The decomposition escape hatch: hypotheses are many-to-many with evidence (the same
+item bears on several hypotheses at different confidence), and a recurring load-bearing
+sub-statement is **promoted to its own (narrower) hypothesis** and related by link —
+same object type, no tree. Guards against mushy hypotheses: the required `test` field,
+and the kept gap-diagnosis machinery flagging a hypothesis absorbing evidence that
+points too many ways. Engineering dividend: the polymorphic `edges` graph is no longer
+needed for v0.
+
+## D-017 · 2026-08-22 · Terminology swap: conviction is the hypothesis judgment, confidence is the evidence weight
+
+**DECIDED (operator's proposal).** Supersedes the naming in D-006/D-014; mechanics are
+unchanged, the words swap to where they natively belong:
+
+- **Hypothesis → CONVICTION.** The gated, human-only, word-labeled 0..1 judgment
+  (rationale required, snapshot on every move). "Conviction" is what a person holds
+  about a thesis (investment usage: a high-conviction position); models do not have
+  conviction, which makes the gate legible in the word itself. Calibration becomes the
+  conviction history.
+- **Evidence link → CONFIDENCE.** low / medium / high, chosen at attach time, editable;
+  plus direction and a why-it-bears note (D-014 mechanics, renamed). It is an
+  assessment of an input, not a commitment.
+- **Confidence ≠ reliability prior.** The source-level `reliability_prior` survives as
+  trust in the source generally; evidence confidence is the read on this item bearing
+  on this hypothesis. Two numbers, two meanings, never merged.
+- **Glossary duty:** AI Atlas "confidence" (node-level) maps to Strategy Atlas
+  "conviction"; Strategy Atlas "confidence" is a NEW meaning at the evidence level.
+  Old commits/docs must be read through that mapping.
+- The four display words (thin/contested/leaning/settled) and their thresholds carry
+  over to conviction for v0; the words may be re-picked at UI-copy time ("contested"
+  reads odd for a personal conviction). Threshold logic (`conf_label()`) is unchanged.

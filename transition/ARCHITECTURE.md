@@ -7,13 +7,14 @@ at `OPEN-QUESTIONS.md` rather than pretending to be settled.
 
 ```
 HYPOTHESIS                  the top-line unit: a strategic statement under test
-                            (flat list in v0; no question/grouping tier, D-013)
+                            (flat list in v0, D-013; the ONLY belief-object, D-016)
   ├── statement       what we believe / are testing
   ├── test            what evidence would move it (falsifiability, kept from claims)
-  ├── confidence      0..1, human-committed only, word-labeled (thin/contested/leaning/settled)
+  ├── conviction      0..1, human-committed only through the gate, word-labeled (D-017)
   ├── status          active / retired / resolved
-  └── EVIDENCE LINKS  n per hypothesis
-        ├── conviction   low / medium / high, set at attach time, editable (D-014)
+  └── EVIDENCE LINKS  n per hypothesis; many-to-many (one item can bear on several
+        │             hypotheses at different confidence)
+        ├── confidence   low / medium / high, set at attach time, editable (D-017)
         ├── direction    supports / cuts against / complicates
         ├── note         why it bears
         ├── actor        who attached it (multi-user hedge, D-012)
@@ -28,34 +29,47 @@ SIGNAL   a tracked development, published by a human
 SOURCE   an ingested artifact (document, CSV, note) with retained extracted text, FTS-indexed
 ```
 
-What this keeps from the AI Atlas: the human gate (confidence never moves without a
+What this keeps from the AI Atlas: the human gate (conviction never moves without a
 rationale; a snapshot is written on every move), publish-materializes-evidence, FTS
 retrieval for /ask, the calibration/snapshot history, reports.
 
-What it drops: stances, bridge claims, the audience-lens taxonomy as the organizing
-axis (internal/external context replaces it; whether a secondary tag set survives is
-OQ-4), web discovery, Startup Scout.
+What it drops: stances, bridge claims, the claims tier (absorbed into hypotheses,
+D-016), the audience-lens taxonomy as the organizing axis (internal/external context
+replaces it; whether a secondary tag set survives is OQ-4), web discovery, Startup
+Scout.
 
-### Hypotheses = evolved theses
+### Hypotheses = evolved theses, absorbing claims (D-016)
 
 The `theses` subsystem is the ancestor: statement, mapped support, gap scan, reports,
-workflow page. The remodel promotes it to the top of the tree and gives it what claims
-had (a `test`, a confidence under the gate, evidence bearing directly on it). The fate of
-`claims` as a separate tier is **OQ-1**; the leading option is that hypotheses absorb
-them and evidence attaches directly to hypotheses.
+workflow page. The remodel promotes it to the top of the tree and folds the claims tier
+into it: hypotheses take the falsifiable `test`, the gated judgment, and the rationale
+history; evidence attaches directly. Hypotheses are the ONLY belief-object; a recurring
+load-bearing sub-statement is promoted to its own narrower hypothesis and related by
+link (no sub-claim tree, no polymorphic edges graph in v0). Guards against mushy
+hypotheses: the required `test`, and the gap-diagnosis machinery flagging a hypothesis
+whose evidence points too many ways.
 
-### Conviction mechanics (D-006, D-014)
+### Conviction and confidence (D-006, D-014, D-017)
 
-- Conviction lives on the evidence link, not on the evidence item: the same document can
-  bear strongly on one hypothesis and weakly on another.
-- Scale: **low / medium / high**, chosen at attach time, editable after. Coarse and
-  human on purpose; precision theater is a known failure mode and the AI Atlas already
-  learned this with confidence words.
-- Display: a hypothesis page shows its evidence sorted by conviction × recency, with a
-  rollup (e.g. "weighted balance leans supportive, driven by 2 high-conviction items").
-- The rollup NEVER writes confidence. The operator reads it, then moves confidence
-  through the existing gate with a rationale. This preserves calibration integrity: the
-  snapshot history stays a record of human judgment.
+Two words, two levels, deliberately assigned:
+
+- **Conviction** is the hypothesis-level judgment: 0..1, word-labeled, movable ONLY by
+  a human through the gate (rationale required, snapshot written). Conviction is what a
+  person holds about a thesis; models do not have conviction. Calibration becomes the
+  conviction history.
+- **Confidence** is the evidence-link weight: **low / medium / high**, chosen at attach
+  time, editable after, alongside direction and a why-it-bears note. Coarse and human
+  on purpose; precision theater is a known failure mode and the AI Atlas already
+  learned this with words over numbers.
+- Confidence lives on the LINK, not the item: the same document can bear on one
+  hypothesis at high confidence and another at low.
+- Confidence ≠ the source `reliability_prior` (kept): the prior is trust in the source
+  generally; confidence is the read on this item bearing on this hypothesis.
+- Display: a hypothesis page shows its evidence sorted by confidence × recency, with a
+  rollup line (e.g. "balance leans supportive, driven by 2 high-confidence items").
+- The rollup NEVER writes conviction. The operator reads it, then moves conviction
+  through the gate. This preserves calibration integrity: the snapshot history stays a
+  record of human judgment.
 
 ## 2. Intake (the artifact pipeline)
 
@@ -126,8 +140,8 @@ panels, the citation-tag machinery, cost metering. Changed:
 ## 5. Roadmap after day one
 
 1. Wire environment (RUNBOOK), verify baseline schema + seed, smoke-test the gate loop.
-2. Resolve OQ-1 (claims tier) with the operator; finish the hypothesis remodel if any
-   of it was deferred.
+2. Finish the hypothesis remodel if any of it was deferred (the model itself is
+   settled: D-013/D-016/D-017).
 3. Build intake v1 (document deconstruction).
 4. Intake v1.5 (CSV) + the encoding-system integration (OQ-2).
 5. Revisit reports/digest for the internal audience (the librarian workflow may want a

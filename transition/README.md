@@ -36,9 +36,9 @@ Your job is NOT to redo the transformation. Your job is:
 
 These survived the transition and still bind:
 
-- **The human gate.** The model proposes; the human commits. No confidence moves without
-  a rationale. No signal enters the record without a human publishing it. Keep this
-  property through every refactor.
+- **The human gate.** The model proposes; the human commits. No conviction moves
+  without a rationale. No signal enters the record without a human publishing it. Keep
+  this property through every refactor.
 - **All DB access is server-side** through `lib/db.ts`. Never import it into a client
   component.
 - **Guest/share stripping is done server-side** in `lib/data/*`. The server decides what

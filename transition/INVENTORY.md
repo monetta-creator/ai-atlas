@@ -33,7 +33,7 @@ around which the pipeline strip is performed.
 | `q/[slug]/page.tsx` | KILL with the question tier (D-013); its claim-list duties move to the hypothesis surfaces. 9 stance + 5 bridge refs, imports `StanceCard`/`QuestionMap`/`BridgeBand` |
 | `q/[slug]/summary/page.tsx` | KILL with questions (`lib/summary.ts` narrates stances) |
 | `q/[slug]/claim/new/page.tsx` | MUTATE: re-home claim/hypothesis authoring off the question path; stance-edge picker dies |
-| `claim/[code]/page.tsx` | MUTATE: strip stance/bridge neighbour sections; fate follows OQ-1 |
+| `claim/[code]/page.tsx` | MUTATE → becomes the hypothesis detail page (D-016): its evidence/test/rationale structure survives, re-targeted |
 | `bridge/[code]/page.tsx`, `bridge/new/page.tsx`, `bridges/page.tsx` | KILL |
 | `worldview/page.tsx` | MUTATE: `getNodeOptions()` returns `{stances, claims, bridges}` |
 | `data/page.tsx` | MUTATE: 8 stance + 7 bridge refs |
@@ -223,7 +223,8 @@ report document family, lobby/ask remainder, feedback dialogs.
   `discovery_queries`, the 0016 learning-loop columns), `concept_claims` (CHECK
   includes 'bridge_claim'; links by TEXT CODE), `theses` → `hypotheses`,
   `thesis_reports` (frozen packs, §0), `generated_reports` (kind).
-- KEEP: `claims` (per OQ-1), `sources`, `signals` + `digest_snapshots`,
+- KEEP: `claims` (merges INTO `hypotheses` with `theses`, D-016), `sources`,
+  `signals` + `digest_snapshots`,
   `positions_crosscutting`, `dedupe_scan`, `reports`, `ai_rate_cards` + `ai_cost_log`,
   concepts trio + gap scans, research tables (per OQ-6), `research_agent_prefs`,
   `tickets` + `ticket_images`, supply-chain pair (OQ-10).

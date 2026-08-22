@@ -6,19 +6,12 @@ silently. When one is settled, record it in `DECISIONS.md` and delete it here.
 
 ---
 
-## OQ-1 · Do claims survive as a tier under hypotheses?
+## OQ-1 · RESOLVED → D-016 (and D-017)
 
-Options:
-- **A. Absorb (recommended):** hypotheses take over `test` + gated confidence; evidence
-  attaches directly to hypotheses. Flattest model, matches the operator's stated
-  hierarchy (hypothesis → evidence → signal). Claims table dies; its good ideas
-  (falsifiable test, confidence words, rationale history) move onto hypotheses.
-- **B. Keep as sub-claims:** a hypothesis decomposes into smaller falsifiable claims,
-  each with own confidence; evidence attaches at the claim level and rolls up. More
-  structure, more upkeep; the AI Atlas thesis→mapped-claims mechanism already looked
-  like this and the operator used it lightly.
-
-Decide before the baseline schema is squashed; it changes 2-3 tables and the map SVG.
+Claims are absorbed into hypotheses; one tier of belief-objects, promote-and-link as
+the decomposition escape hatch. Terminology settled alongside it (D-017): conviction =
+the gated hypothesis judgment, confidence = the evidence-link weight. (Tombstone kept
+so numbering stays stable.)
 
 ## OQ-2 · CSV uploads and the operator's encoding system
 

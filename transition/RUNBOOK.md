@@ -59,7 +59,7 @@ Never commit `.env.local`.
 ```
 npm install        # or the offline variant from step 0
 npm run db:migrate # applies the baseline schema (tracks in _migrations)
-npm run db:seed    # loads the starter structure; all confidences start at 0.50
+npm run db:seed    # loads the starter structure; all convictions start at 0.50
 npm run db:verify  # sanity-checks the seed
 npm run dev        # http://localhost:3000
 ```
@@ -68,7 +68,7 @@ Log in with `ADMIN_PASSWORD` at `/login`.
 
 ## 4. Verify the install (smoke tests)
 
-1. **The gate loop:** open a hypothesis, move its confidence with a rationale, confirm
+1. **The gate loop:** open a hypothesis, move its conviction with a rationale, confirm
    the move appears in `/calibration` (snapshot + move log).
 2. **Manual intake:** create a source, turn it into a draft signal, publish it, confirm
    evidence materialized on the touched hypothesis and the signal shows on the board.
@@ -84,8 +84,8 @@ Log in with `ADMIN_PASSWORD` at `/login`.
 - [ ] Read `transition/` end to end.
 - [ ] Walk the DB ladder; record the rung in `DECISIONS.md` (OQ-11).
 - [ ] Run §3 and §4; fix anything environment-specific and log it.
-- [ ] With the operator: resolve OQ-1 (claims tier) if the remodel left it open; it
-      gates the baseline schema's final shape.
+- [ ] Confirm the hypothesis remodel landed complete (D-016/D-017): no claims tier,
+      conviction on hypotheses, confidence on evidence links.
 - [ ] If Posit Connect is available: walk the OQ-13 checklist (Connect version, Node
       runtimes, vanity URL / basePath, user-identity headers, timeouts) and record the
       verdict in DECISIONS.md.
