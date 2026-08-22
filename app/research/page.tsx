@@ -9,7 +9,7 @@ import Header from '@/components/Header';
 import ResearchInfo from '@/components/ResearchInfo';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Research Portal · The AI Atlas' };
+export const metadata = { title: 'Research Portal · The Strategy Atlas' };
 
 // Strip the synthesis HTML down to a plain-text card excerpt.
 const excerpt = (html: string, n = 190) => {

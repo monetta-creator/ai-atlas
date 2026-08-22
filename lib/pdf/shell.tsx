@@ -137,8 +137,8 @@ export function PdfCover({ kindLabel, title, subject, metaLines }: {
       </View>
       <View style={s.coverFoot}>
         <Text>
-          Generated from the AI Atlas corpus: tracked signals, falsifiable claims, and the evidence
-          wiring them together. Every citation in this report resolves to a tracked record.
+          Generated from the Strategy Atlas corpus: tracked signals, falsifiable hypotheses, and the
+          evidence wiring them together. Every citation in this report resolves to a tracked record.
         </Text>
       </View>
     </Page>
@@ -179,14 +179,15 @@ export function Disclaimer({ generatedAt }: { generatedAt: string }): ReactNode 
     <View wrap={false} style={{ marginTop: 22, borderTopWidth: 1, borderTopColor: LINE, paddingTop: 8 }}>
       <Text style={s.disclaimer}>
         Methodology: the data half of this report (counts, directions, spans, coverage statements) is
-        computed deterministically from the AI Atlas database. The narrative half is drafted by an AI
+        computed deterministically from the Strategy Atlas database. The narrative half is drafted by an AI
         model (Claude) over that frozen evidence pack only, then passed through a citation gate: any
         link the pack cannot vouch for is removed before rendering. Statistics in the prose come from
         the computed figures. Generated {generatedAt.slice(0, 10)}.
       </Text>
       <Text style={s.disclaimer}>
-        The AI Atlas is an orientation tool, not a research product: it maps where the disagreement
-        is and what evidence would move it. Nothing here is investment, legal, or professional advice.
+        The Strategy Atlas is an orientation tool, not a research product: it maps where the
+        disagreement is and what evidence would move it. Nothing here is investment, legal, or
+        professional advice.
       </Text>
     </View>
   );

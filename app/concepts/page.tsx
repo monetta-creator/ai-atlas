@@ -7,7 +7,7 @@ import ConceptGapPanel from '@/components/ConceptGapPanel';
 
 export const dynamic = 'force-dynamic';
 // Hosts the AI gap-diagnosis action.
-export const metadata = { title: 'Concepts · The AI Atlas' };
+export const metadata = { title: 'Concepts · The Strategy Atlas' };
 
 export default async function ConceptsPage() {
   const admin = await isAdmin();
@@ -46,7 +46,7 @@ export default async function ConceptsPage() {
             <div>
               <h1>Concepts · the semantic scaffold</h1>
               <p className="lede">
-                The vocabulary the AI-economy debate is conducted in, stacked by dependency:
+                The vocabulary the strategy is argued in, stacked by dependency:
                 foundational ideas at the bottom, the concepts built on them above. Most terms
                 have settled technical meanings; the contested ones are where arguments
                 quietly talk past each other.

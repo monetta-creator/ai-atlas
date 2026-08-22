@@ -5,7 +5,7 @@ import Header from '@/components/Header';
 import DraftQueue from '@/components/DraftQueue';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Draft queue · The AI Atlas' };
+export const metadata = { title: 'Draft queue · The Strategy Atlas' };
 
 // Admin-only working queue of UNPUBLISHED signals, with a manual duplicate scan. Separate
 // from the public published feed at /signals so neither page is one long scroll.

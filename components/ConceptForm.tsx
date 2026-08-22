@@ -175,7 +175,7 @@ export default function ConceptForm({
           style={{ resize: 'vertical' }}
           value={explanation}
           onChange={(e) => setExplanation(e.target.value)}
-          placeholder="What it is, why it matters to the AI-economy debate, and where the term gets misused."
+          placeholder="What it is, why it matters to the strategy, and where the term gets misused."
         />
       </div>
 

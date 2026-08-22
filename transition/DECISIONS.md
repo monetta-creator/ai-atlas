@@ -187,3 +187,36 @@ unchanged, the words swap to where they natively belong:
 - The four display words (thin/contested/leaning/settled) and their thresholds carry
   over to conviction for v0; the words may be re-picked at UI-copy time ("contested"
   reads odd for a personal conviction). Threshold logic (`conf_label()`) is unchanged.
+
+## D-018 · 2026-08-22 · Execution record: the transformation is complete and verified
+
+**EXECUTED.** Every decision above that called for code was carried out outside the
+firewall and verified before handoff:
+
+- **Amputations** (D-004, D-011, plus the web legs per D-002): stances, bridges,
+  questions, claims-as-a-tier, Scout, traceroute, showcase, web discovery, arXiv pull,
+  and the Ask web toggle are gone.
+- **The remodel** (D-005, D-006, D-014, D-016, D-017): `hypotheses` is the top-line
+  object (code `H<n>`, required test, gated conviction), evidence attaches directly
+  with a per-link confidence weight + direction, signals carry `context`
+  internal/external and `touches` of hypothesis codes. New surfaces: `/map` is the
+  Hypothesis Board, `/hypothesis/[code]` the detail page (conviction editor, evidence,
+  gap scan, report console), `/hypothesis-report/[id]` + PDF the public report views.
+  The datasets portal, blotter, concepts, research library, reports, ask, calibration,
+  and costs are all re-expressed against hypotheses.
+- **The schema** (D-010): one squashed baseline at `db/migrations/0001_baseline.sql`
+  (the folder moved from `supabase/migrations`).
+- **The replatform** (D-007, D-008, D-009): `lib/db.ts` takes one `DATABASE_URL`
+  (TLS opt-in, Supabase fallback removed); fonts are vendored in `app/fonts`
+  (next/font/local; the build makes zero outbound requests); `lib/ai.ts` is the one
+  Anthropic client factory (`ANTHROPIC_BASE_URL`, `ATLAS_AI_MODEL`/`ATLAS_AI_FAST_MODEL`,
+  fail-soft without a key); every Vercel-ism (maxDuration exports, pooler notes) is
+  scrubbed; `.env.example` is rewritten.
+- **Verification**: `tsc` zero errors, ESLint zero warnings, `next build` clean, and a
+  real Postgres 16 bring-up in the build container: migrate + seed + verify green,
+  every guest and admin route returning 200, the rollback test suite
+  (`scripts/run-tests.mjs`) 5/5, fonts confirmed served from the app itself.
+
+What was NOT done, on purpose: the open questions in `OPEN-QUESTIONS.md` (encoding-system
+intake, multiuser write semantics, Posit Connect verdict, and the rest) await the
+operator inside the walls.

@@ -11,7 +11,7 @@ import { getThreadBySlug, getThreadPapers } from '../data';
 // the thread's evidence, it does not import the model's own views.
 
 const SYNTHESIS_SYSTEM = [
-  'You maintain one page of a research wiki for The AI Atlas: the living synthesis of a research thread (a frontier question in the AI-economy debate).',
+  'You maintain one page of a research wiki for the Strategy Atlas: the living synthesis of a research thread (a frontier question the team keeps returning to).',
   'Rewrite the synthesis from the CURRENT papers listed and the prior synthesis. This is maintenance, not an essay: keep what still holds, revise what new papers change, and say plainly when papers contradict each other or when the picture has not moved.',
   'Structure (markdown, use ## headings): current state of the question in 2-4 sentences; what the papers actually show (cite papers inline by [arxiv id] or title); where the evidence conflicts or is thin; what would settle it next.',
   'Ground EVERY statement in the provided papers. Do not import outside knowledge or opinions. If the papers are few or weak, the honest synthesis says so.',

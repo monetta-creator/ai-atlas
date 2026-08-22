@@ -6,7 +6,7 @@ import Header from '@/components/Header';
 import TicketRow from '@/components/TicketRow';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Tickets · The AI Atlas' };
+export const metadata = { title: 'Tickets · The Strategy Atlas' };
 
 const KINDS = new Set(['bug', 'feature']);
 const STATUSES = new Set(['open', 'in_progress', 'resolved', 'declined']);

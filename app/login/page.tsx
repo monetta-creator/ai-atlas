@@ -30,7 +30,7 @@ export default async function LoginPage({
               <circle cx="10" cy="10" r="3.4" />
               <path d="M10 1.5v4M10 14.5v4M1.5 10h4M14.5 10h4" strokeLinecap="round" />
             </svg>
-            The AI Atlas
+            The Strategy Atlas
           </span>
           <p className="lede" style={{ fontSize: 14.5, marginTop: 12 }}>
             A structured map for staying oriented in the AI economy debate.
@@ -86,7 +86,7 @@ export default async function LoginPage({
 
         <p className="text-center" style={{ marginTop: 20, fontSize: 12 }}>
           <Link href="/about" style={{ color: 'var(--dim)' }} className="hover:underline">
-            About the AI Atlas →
+            About the Strategy Atlas →
           </Link>
         </p>
       </div>

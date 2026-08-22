@@ -104,7 +104,7 @@ export default function CostsDashboard({ data }: { data: CostDashboard }) {
   const { summary, daily, features, runs, recent, activeRateCards, rateCardHistory } = data;
 
   const shown = showAll ? recent : recent.slice(0, 50);
-  const SRC = 'AI Atlas · ai_cost_log (cost frozen at call time)';
+  const SRC = 'Strategy Atlas · ai_cost_log (cost frozen at call time)';
 
   const def = activeRateCards.find((c) => c.model === 'claude-sonnet-4-6') ?? activeRateCards[0];
   const formDefaults: RateCardDefaults | undefined = def

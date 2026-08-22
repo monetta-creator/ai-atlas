@@ -3,7 +3,7 @@ import { getTrackedSince, getThreadsUpdatedSince } from '@/lib/data';
 import { sanitizeSynthesisHtml } from '@/lib/sanitize';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Research digest · The AI Atlas' };
+export const metadata = { title: 'Research digest · The Strategy Atlas' };
 
 // Admin-only, not linked in nav (the /signals/digest pattern). A clean, print-friendly
 // snapshot of the research picture: papers tracked in the window (with their whys and
@@ -30,7 +30,7 @@ export default async function ResearchDigestPage({
     <main className="digest">
       <header style={{ marginBottom: 24 }}>
         <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, margin: '0 0 4px', color: 'var(--ink)' }}>
-          AI Atlas · Research Digest
+          Strategy Atlas · Research Digest
         </h1>
         <p style={{ color: 'var(--dim)', fontSize: 13, margin: 0 }}>
           {since ? `since ${since}` : 'last 14 days'} · {papers.length} paper{papers.length === 1 ? '' : 's'} tracked ·{' '}

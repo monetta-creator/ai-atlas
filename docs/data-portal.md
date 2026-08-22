@@ -1,5 +1,7 @@
 # The Datasets portal (`/datasets`)
 
+> **Historical note (2026-08-22).** This document describes the AI Atlas as built before the Strategy Atlas remodel (claims/stances/bridges, audience lenses, web discovery). The machinery it explains largely survives, but object names and some subsystems changed; `transition/` is the authoritative record of what maps to what.
+
 Written 2026-08-13, at v1 ship. The self-service data product over the Atlas: colleagues
 query the data, download structured datasets, and ask in plain language, without accounts.
 

@@ -7,7 +7,7 @@ import CalibrationView from '@/components/CalibrationView';
 import WorkspaceTabs, { ANALYTICS_TABS } from '@/components/WorkspaceTabs';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Calibration · The AI Atlas' };
+export const metadata = { title: 'Calibration · The Strategy Atlas' };
 
 // Admin-only: the confidence history is the personal layer made legible. Every move
 // already writes a snapshot + rationale (moveConfidence); this is the reader.

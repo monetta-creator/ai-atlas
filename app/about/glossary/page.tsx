@@ -2,33 +2,30 @@ import Editable from '@/components/Editable';
 import { getEditContext } from '@/lib/content';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Glossary · The AI Atlas' };
+export const metadata = { title: 'Glossary · The Strategy Atlas' };
 
 const TERMS: { id: string; term: string; def: string }[] = [
-  { id: 'question', term: 'Question', def: 'A neutral, open question that reasonable people disagree on. The top of the map.' },
-  { id: 'stance', term: 'Stance', def: 'A candidate answer to a question, labeled with who actually holds it.' },
-  { id: 'claim', term: 'Claim', def: 'A specific, checkable statement a stance rests on. Must carry a test.' },
-  { id: 'test', term: 'Test', def: 'What would have to be true to stop believing a claim. Required.' },
-  { id: 'frame', term: 'Frame', def: 'An organizing belief that is not itself falsifiable. Stored and labeled, kept out of evidence.' },
-  { id: 'domain', term: 'Domain', def: 'The single area a claim belongs to: capability, economics, build-out, market, or labor. Evidence in one cannot quietly move another.' },
-  { id: 'bridge-claim', term: 'Bridge-claim', def: 'A first-class claim about the link between two domains, with its own test.' },
-  { id: 'evidence', term: 'Evidence', def: 'A finding attached to a claim or bridge, marked supporting, contradicting, or neutral. Carries its provenance: a source, a signal, or both.' },
-  { id: 'source', term: 'Source', def: 'An article, paper, or document evidence is drawn from. Carries an AI-written dossier and an author-set reliability rating (0 to 100; the AI never sets it).' },
-  { id: 'confidence', term: 'Confidence', def: 'How strongly the author holds a claim, 0 to 1, shown as a word: thin, contested, leaning, or settled. Private.' },
-  { id: 'rationale', term: 'Rationale', def: 'The short reason recorded on every confidence move. Required, never edited after.' },
-  { id: 'reflexive', term: 'Reflexive', def: 'A flag for a claim whose truth is partly caused by belief in it.' },
-  { id: 'personal-layer', term: 'Personal layer', def: 'The author’s confidences, rationales, source ratings, and positions. Stripped server-side for guests.' },
-  { id: 'share-view', term: 'Share view', def: 'Guest mode: the public map with the personal layer hidden. There is no separate renderer.' },
-  { id: 'signal', term: 'Signal', def: 'One tracked development on the Signal Board: title, summary, lenses, and the claims or bridges it touches. Drafts are author-only; publishing writes the evidence rows.' },
-  { id: 'signal-lens', term: 'Signal lens', def: 'The audience angle a signal is filed under: market, labor, geopolitics, regulatory, capability, or society.' },
-  { id: 'discovery-pipeline', term: 'Discovery pipeline', def: 'The flow that feeds the Signal Board: web discovery, triage, analysis, human review. Only ever produces drafts.' },
-  { id: 'touch', term: 'Touch', def: 'The link between a signal and a claim or bridge, with a direction and reason. Becomes one evidence row on publish.' },
-  { id: 'concept', term: 'Concept', def: 'One term in the AI vocabulary, marked settled or contested, wired into an acyclic prerequisite graph: understand the lower ones first.' },
-  { id: 'thread', term: 'Research thread', def: 'A living synthesis of what the recent literature says on one question, revised as tracked papers land.' },
+  { id: 'hypothesis', term: 'Hypothesis', def: 'A falsifiable statement the strategy leans on, with a stable code (H1, H2, ...). The top-line object of the board.' },
+  { id: 'test', term: 'Test', def: 'What would have to be true to stop believing a hypothesis. Required.' },
+  { id: 'conviction', term: 'Conviction', def: 'How strongly the team holds a hypothesis, 0 to 1, shown as a word: thin, contested, leaning, or settled. Private; moves only with a rationale.' },
+  { id: 'confidence', term: 'Confidence', def: 'The weight on one evidence link: high, medium, or low. How much this piece of evidence should count, set by the operator.' },
+  { id: 'evidence', term: 'Evidence', def: 'A finding attached to a hypothesis, marked supporting, contradicting, or neutral. Carries its provenance: a source, a signal, or both.' },
+  { id: 'source', term: 'Source', def: 'An article, paper, or document evidence is drawn from. Carries an AI-written dossier and an operator-set reliability rating (0 to 100; the AI never sets it).' },
+  { id: 'rationale', term: 'Rationale', def: 'The short reason recorded on every conviction move. Required, never edited after.' },
+  { id: 'personal-layer', term: 'Personal layer', def: 'The operator\u2019s convictions, rationales, and source ratings. Stripped server-side for guests.' },
+  { id: 'share-view', term: 'Share view', def: 'Guest mode: the public board with the personal layer hidden. There is no separate renderer.' },
+  { id: 'signal', term: 'Signal', def: 'One tracked development on the Signal Board: title, summary, context, and the hypotheses it touches. Drafts are operator-only; publishing writes the evidence rows.' },
+  { id: 'context', term: 'Context', def: 'Where a signal comes from: internal (inside the organization) or external (the outside world).' },
+  { id: 'intake', term: 'Intake', def: 'The flow that feeds the Signal Board: a document enters by hand, is triaged and analyzed, and a human reviews the draft. Only ever produces drafts.' },
+  { id: 'touch', term: 'Touch', def: 'The link between a signal and a hypothesis, with a direction and reason. Becomes one evidence row on publish.' },
+  { id: 'hypothesis-link', term: 'Hypothesis link', def: 'A relation between two hypotheses, usually a narrower one promoted out of a gap scan on a broader one.' },
+  { id: 'gap-scan', term: 'Gap scan', def: 'A recommend-only diagnosis of hypotheses the recent evidence demands but the board lacks. Creating from it is an explicit human commit.' },
+  { id: 'concept', term: 'Concept', def: 'One term in the working vocabulary, marked settled or contested, wired into an acyclic prerequisite graph: understand the lower ones first.' },
+  { id: 'thread', term: 'Research thread', def: 'A living synthesis of what the tracked literature says on one question, revised as papers land.' },
   { id: 'paper', term: 'Paper', def: 'One item in the research library, staged through triage and review. Paper findings are advisory; they never write evidence.' },
-  { id: 'report', term: 'Report', def: 'A generated, citation-gated document: a period report, tear sheet, briefing, or thesis report, published by the author and downloadable as a PDF.' },
+  { id: 'report', term: 'Report', def: 'A generated, citation-gated document: a period report or a hypothesis report, published by the operator and downloadable as a PDF.' },
   { id: 'citation-gate', term: 'Citation gate', def: 'The check that strips any generated citation the underlying data pack cannot vouch for. Runs at generation, save, and render.' },
-  { id: 'human-gate', term: 'Human gate', def: 'The rule that no value changes without a person: confidences move by hand with a reason, drafts publish by hand, recommendations are accepted by hand.' },
+  { id: 'human-gate', term: 'Human gate', def: 'The rule that no value changes without a person: convictions move by hand with a reason, drafts publish by hand, recommendations are accepted by hand.' },
 ];
 
 export default async function GlossaryPage() {

@@ -1,5 +1,7 @@
 # The core loop
 
+> **Historical note (2026-08-22).** This document describes the AI Atlas as built before the Strategy Atlas remodel (claims/stances/bridges, audience lenses, web discovery). The machinery it explains largely survives, but object names and some subsystems changed; `transition/` is the authoritative record of what maps to what.
+
 How the AI Atlas turns published material into a position you can defend, and how
 that position stays current.
 

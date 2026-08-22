@@ -4,28 +4,28 @@ import Editable from '@/components/Editable';
 import { getEditContext } from '@/lib/content';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'About · The AI Atlas' };
+export const metadata = { title: 'About · The Strategy Atlas' };
 
 const OVERVIEW = [
   {
     id: 'what-it-is',
     heading: 'What it is',
-    body: 'The AI Atlas maps the debate about the AI economy: the open questions, the positions people take on them, what each position depends on, and what is still unsettled. Its job is to place a new development on the map and show what it affects.',
+    body: 'The Strategy Atlas tracks an operating team\u2019s strategic hypotheses: the falsifiable statements the strategy leans on, the evidence for and against each, and the conviction the team has committed to them. Its job is to place a new development on the board and show which hypotheses it touches.',
   },
   {
     id: 'the-problem',
     heading: 'The problem',
-    body: 'Claims about AI arrive fast, confident, contradictory, and usually from someone with a position to protect. The Atlas is one fixed place to put each piece and see what it actually touches.',
+    body: 'Signals arrive fast, confident, contradictory, and usually from someone with a position to protect. The Atlas is one fixed place to put each piece and see what it actually touches.',
   },
   {
     id: 'how-it-works',
     heading: 'How it works',
-    body: 'A question holds two to four stances, each labeled with who holds it. Each stance rests on claims, and every claim carries a test: what would have to be true to stop believing it. Evidence attaches to claims as supporting or contradicting. Claims linking two domains are pulled out as bridge-claims and tested on their own. A private layer holds the author’s confidence and reasons; the public view is the same map with that layer stripped. New material enters through pipelines (web discovery for the Signal Board, arXiv triage for research, company discovery for the scout) that only ever produce drafts. A human reviews everything before it reaches the map, and publishing a signal is what writes its evidence rows. The working surfaces (Ask, the reports, the datasets) sit on top of the same corpus, with every generated citation checked against the records before it ships.',
+    body: 'Every hypothesis carries a test: what would have to be true to stop believing it. Evidence attaches to hypotheses as supporting or contradicting, each link weighted by a confidence the operator sets. A private layer holds the operator\u2019s conviction and reasons; the public view is the same board with that layer stripped. New material enters through manual intake (documents the team and its librarian bring in) that only ever produces drafts. A human reviews everything before it reaches the board, and publishing a signal is what writes its evidence rows. The working surfaces (Ask, the reports, the datasets) sit on top of the same corpus, with every generated citation checked against the records before it ships.',
   },
   {
     id: 'why-it-matters',
     heading: 'What success looks like',
-    body: 'Most weeks nothing happens that should move the map, and the tool says so. Success is being able to place a new development and know what it touches.',
+    body: 'Most weeks nothing happens that should move the board, and the tool says so. Success is being able to place a new development and know what it touches.',
   },
 ];
 
@@ -45,7 +45,7 @@ const HUB = [
     index: '02',
     kind: 'terms',
     title: 'Glossary',
-    blurb: 'Every term defined: question, stance, claim, test, frame, bridge-claim, and the rest.',
+    blurb: 'Every term defined: hypothesis, test, conviction, confidence, signal, and the rest.',
   },
   {
     id: 'limitations',
@@ -58,7 +58,7 @@ const HUB = [
 ];
 
 const SCOPE_DEFAULT =
-  'The deep argument map covers one lens: the market and economics of AI. The Signal Board ranges wider, filing developments under six audience lenses. The whole thing is a running record of how one person is thinking, not a consensus.';
+  'The board covers the strategic questions the team is actually working. Signals are filed by context: internal developments from inside the organization, external developments from the world. The whole thing is a running record of how the team is thinking, not a consensus.';
 
 export default async function AboutPage() {
   const { editing, txt } = await getEditContext();
@@ -69,7 +69,7 @@ export default async function AboutPage() {
         <Editable
           as="h1"
           k="about.overview.title"
-          value={txt('about.overview.title', 'About the AI Atlas')}
+          value={txt('about.overview.title', 'About the Strategy Atlas')}
           editing={editing}
         />
         <Editable
@@ -77,7 +77,7 @@ export default async function AboutPage() {
           className="lede"
           multiline
           k="about.overview.lede"
-          value={txt('about.overview.lede', 'A structured map for staying oriented in the AI economy debate.')}
+          value={txt('about.overview.lede', 'A structured board for tracking strategic hypotheses, evidence, and conviction.')}
           editing={editing}
         />
       </header>
@@ -88,7 +88,7 @@ export default async function AboutPage() {
         k="about.overview.surfaces"
         value={txt(
           'about.overview.surfaces',
-          'The front door is the lobby: a question box and seven portals. The Signal Board tracks developments by audience lens. The News Blotter is the editor’s desk over the same feed. Claims & Theses is the argument map. The Report Portal serves generated, citation-gated reports as PDFs. The Data Portal offers the corpus as downloadable datasets. The Research Portal triages arXiv papers against the map. Startup Scout tracks young AI companies as acquisition candidates by vertical. Ask, the chat workspace, answers over the whole corpus with citations that open the underlying record.'
+          'The front door is the lobby: a question box and six portals. The Signal Board tracks developments by internal and external context. The News Blotter is the editor’s desk over the same feed. Hypotheses is the board itself. The Report Portal serves generated, citation-gated reports as PDFs. The Data Portal offers the corpus as downloadable datasets. The Research Portal reads papers and long documents deeply against the board. Ask, the chat workspace, answers over the whole corpus with citations that open the underlying record.'
         )}
         editing={editing}
         style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--dim)', margin: '0 0 8px' }}

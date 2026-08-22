@@ -28,7 +28,7 @@ interface SignalAnalysis {
   counterpoint: SignalCounterpoint;
 }
 
-const SYSTEM = `You are an analyst for The AI Atlas, a tool for staying oriented in the debate about AI and the economy. You are handed ONE tracked development (a "signal") and asked to help a reader understand it in depth, without them having to open the source or rely on a single short summary.
+const SYSTEM = `You are an analyst for the Strategy Atlas, an operating team's tool for tracking its strategic hypotheses. You are handed ONE tracked development (a "signal") and asked to help a reader understand it in depth, without them having to open the source or rely on a single short summary.
 
 Produce two things from the material provided, and nothing else:
 

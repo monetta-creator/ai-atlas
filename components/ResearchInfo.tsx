@@ -69,7 +69,7 @@ export default function ResearchInfo() {
               The arXiv intake: pull → triage → review. Runs are manual only (nothing is scheduled;
               cost at rest is zero). A pull lists new cs.AI / cs.LG / cs.CL submissions for the chosen
               lookback; triage reads each title + abstract against the Atlas&rsquo;s claims, concepts, and
-              threads and keeps the few percent that genuinely bear on the AI-economy debate. Nothing
+              threads and keeps the few percent that genuinely bear on the tracked hypotheses. Nothing
               here writes evidence: promotion to a signal, and publishing it, is the only road into the
               Argument Map.
             </p>

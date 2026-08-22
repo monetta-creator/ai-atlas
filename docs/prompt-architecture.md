@@ -1,5 +1,7 @@
 # Prompt architecture: what actually goes to the API
 
+> **Historical note (2026-08-22).** This document describes the AI Atlas as built before the Strategy Atlas remodel (claims/stances/bridges, audience lenses, web discovery). The machinery it explains largely survives, but object names and some subsystems changed; `transition/` is the authoritative record of what maps to what.
+
 An answer to "what do the prompts look like?", from the 30-second version to the
 byte layout of a request.
 

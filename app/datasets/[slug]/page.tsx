@@ -9,7 +9,7 @@ import DatasetSchemaTable from '@/components/datasets/DatasetSchemaTable';
 import DatasetExplorer from '@/components/datasets/DatasetExplorer';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Dataset · The AI Atlas' };
+export const metadata = { title: 'Dataset · The Strategy Atlas' };
 
 // A dataset's public page: description, methodology, the auto-generated schema
 // table, downloads, and the in-browser explorer. Heavy datasets (bulk article

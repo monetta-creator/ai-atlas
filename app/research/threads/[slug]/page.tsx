@@ -9,7 +9,7 @@ import ThreadSynthesisButton from '@/components/ThreadSynthesisButton';
 import type { ThreadRelation } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Research thread · The AI Atlas' };
+export const metadata = { title: 'Research thread · The Strategy Atlas' };
 
 const RELATION_ORDER: ThreadRelation[] = ['supports', 'contradicts', 'complicates', 'context'];
 const RELATION_COLOR: Record<ThreadRelation, string> = {

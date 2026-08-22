@@ -7,7 +7,7 @@ import WorkspaceTabs, { ANALYTICS_TABS } from '@/components/WorkspaceTabs';
 // Admin-only AI cost console. force-dynamic (reads cookies + DB);
 // the only server action it hosts (addRateCardAction) is a quick DB insert, not an AI call.
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'AI costs · The AI Atlas' };
+export const metadata = { title: 'AI costs · The Strategy Atlas' };
 
 export default async function CostsPage() {
   const admin = await requireAdminPage();

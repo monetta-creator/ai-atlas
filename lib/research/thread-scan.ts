@@ -11,7 +11,7 @@ import type { ResearchThreadScan, ThreadRecommendation } from '../types';
 // live slugs on read, and "Create thread" on a card is the human commit.
 
 const SCAN_SYSTEM = [
-  'You look for MISSING research threads in The AI Atlas research section. A thread is a frontier question in the AI-economy debate that papers keep bearing on (e.g. "does scaling keep paying off?").',
+  'You look for MISSING research threads in the Strategy Atlas research section. A thread is a frontier question that tracked papers keep bearing on.',
   'You are given the existing threads and the recent papers that survived triage. Recommend a new thread ONLY when several recent papers clearly cluster around a question no existing thread covers. Recommending nothing is a normal outcome.',
   'Never propose a thread that overlaps an existing one: if papers fit an existing thread, they belong there.',
   'For each recommendation: slug (kebab-case, short), title (the question as a short phrase), question (one full sentence), argument (2-3 sentences naming the specific papers that motivated it). At most 3.',

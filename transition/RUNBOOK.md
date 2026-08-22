@@ -45,7 +45,7 @@ Copy `.env.example` → `.env.local` and set:
 
 | Var | Required | Notes |
 |---|---|---|
-| `DATABASE_URL` | yes | From step 1. (The discrete `SUPABASE_DB_*` fallback vars may still exist in `lib/db.ts`; `DATABASE_URL` takes precedence and is the supported path.) |
+| `DATABASE_URL` | yes | From step 1. The one supported path (the Supabase-era fallback vars are gone). TLS only with `sslmode=require` in the URL or `DB_SSL=1`. |
 | `AUTH_SECRET` | yes | ≥ 32 random chars. App refuses to start auth without it (fails closed). |
 | `ADMIN_PASSWORD` | yes | Strong; it is the operator login. |
 | `ANTHROPIC_API_KEY` | no | Leave unset until the LLM endpoint exists; AI features disable themselves. |
@@ -57,11 +57,12 @@ Never commit `.env.local`.
 ## 3. Initialize
 
 ```
-npm install        # or the offline variant from step 0
-npm run db:migrate # applies the baseline schema (tracks in _migrations)
-npm run db:seed    # loads the starter structure; all convictions start at 0.50
-npm run db:verify  # sanity-checks the seed
-npm run dev        # http://localhost:3000
+npm install                # or the offline variant from step 0
+npm run db:migrate         # applies db/migrations/0001_baseline.sql (tracks in _migrations)
+npm run db:seed            # loads the starter structure; all convictions start at 0.50
+npm run db:verify          # sanity-checks the seed
+node scripts/run-tests.mjs # the read-only/rollback test suite (5 scripts, all should pass)
+npm run dev                # http://localhost:3000
 ```
 
 Log in with `ADMIN_PASSWORD` at `/login`.
@@ -76,8 +77,9 @@ Log in with `ADMIN_PASSWORD` at `/login`.
    confirm citations resolve and peek panels open. (Without an API key this is the one
    surface that stays dark; that is expected.)
 4. **Zero-outbound check:** with dev tools' network tab open (or a local proxy), click
-   through the main surfaces and confirm no request leaves localhost. Any external
-   request is a bug; fix before regular use.
+   through the main surfaces and confirm no request leaves localhost. Fonts are
+   vendored in `app/fonts` (next/font/local), so nothing should reach Google Fonts.
+   Any external request is a bug; fix before regular use.
 
 ## 5. First working session checklist (for the work-side Claude)
 

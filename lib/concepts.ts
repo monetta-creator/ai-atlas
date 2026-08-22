@@ -22,7 +22,7 @@ function conceptBlock(c: ConceptForAI): string {
 
 // ---- prerequisite edges -----------------------------------------------------
 
-const PREREQ_SYSTEM = `You map prerequisite dependencies between AI concepts for The AI Atlas's semantic scaffold — a layered knowledge graph where an edge means "a reader must understand X before Y".
+const PREREQ_SYSTEM = `You map prerequisite dependencies between concepts for the Strategy Atlas's semantic scaffold — a layered knowledge graph where an edge means "a reader must understand X before Y".
 
 Given ONE concept and the list of existing concepts, recommend which existing concepts are DIRECT prerequisites of it:
 - A prerequisite is conceptually load-bearing: this concept's definition is hard to grasp without it. Thematic relatedness is NOT a dependency.

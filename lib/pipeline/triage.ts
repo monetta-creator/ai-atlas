@@ -13,7 +13,7 @@ import type { SignalCandidate, TriageStatus } from '../types';
 // 'pending', so repeated calls drain the queue (and resume a partially-triaged run).
 
 const TRIAGE_SYSTEM = [
-  'You triage candidate news items for an AI-economy intelligence board read by financial-institution analysts.',
+  'You triage candidate items for an internal strategy intelligence board read by an operating team.',
   'For each candidate decide: "approved" (worth a closer look), "duplicate" (same story as an existing signal — name it), or "rejected".',
   'Reject when: the source is low quality (PR newswires, SEO content farms, marketing posts, thin aggregators/listicles), the item is off-lens, it is older than the window, or it merely rehashes prior coverage with nothing new.',
   'Approve primary sources and serious analysis: company filings, regulators, reputable outlets, research labs, think tanks, quality trade press.',

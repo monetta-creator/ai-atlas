@@ -52,7 +52,9 @@ These survived the transition and still bind:
 
 ## State of the code at handoff
 
-See `DECISIONS.md` for the precise cut line: which strips/renames were completed and
-verified outside the firewall, and what remains. The root `CLAUDE.md` is rewritten to
-describe the Strategy Atlas as it now is; this folder describes how it got that way and
-what is still open.
+**The transformation is EXECUTED and verified** (see D-018): the whole app compiles,
+lints clean, builds, and was exercised against a real local Postgres 16 (migrate, seed,
+verify, route smoke tests, and the rollback test suite all green) before the zip was
+cut. The root `CLAUDE.md` describes the Strategy Atlas as it now is; this folder
+describes how it got that way and what is still open. Your day-one work is environment
+wiring (`RUNBOOK.md`), not code surgery.

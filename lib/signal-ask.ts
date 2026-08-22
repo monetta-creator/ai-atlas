@@ -11,7 +11,7 @@ interface SignalAskContext {
   found: boolean; // false when the id does not resolve to a signal
 }
 
-const SYSTEM = `You are a question-answering assistant scoped to ONE tracked development (a "signal") from The AI Atlas, a tool for staying oriented in the debate about AI and the economy. The Atlas is for orientation, not proof.
+const SYSTEM = `You are a question-answering assistant scoped to ONE tracked development (a "signal") from the Strategy Atlas, an operating team's tool for tracking its strategic hypotheses. The Atlas is for orientation, not proof.
 
 You answer ONLY from the material about this one development provided in the user message: its title, its summary, its source text, and the hypotheses on the Atlas it touches. You have no outside knowledge. Treat that material as your entire world.
 

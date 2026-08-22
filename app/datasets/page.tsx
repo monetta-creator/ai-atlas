@@ -5,7 +5,7 @@ import { DATASETS } from '@/lib/datasets/registry';
 import Header from '@/components/Header';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Data Portal · The AI Atlas' };
+export const metadata = { title: 'Data Portal · The Strategy Atlas' };
 
 // The public Datasets portal hub: the catalog of downloadable, guest-safe
 // datasets plus the door to the team Ask surface. Nothing here calls a model.

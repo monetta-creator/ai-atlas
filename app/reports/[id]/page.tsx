@@ -6,7 +6,7 @@ import Header from '@/components/Header';
 import ReportReadView from '@/components/ReportReadView';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Report · The AI Atlas' };
+export const metadata = { title: 'Report · The Strategy Atlas' };
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 

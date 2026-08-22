@@ -1,5 +1,7 @@
 # Research Section (arXiv) — Design
 
+> **Historical note (2026-08-22).** This document describes the AI Atlas as built before the Strategy Atlas remodel (claims/stances/bridges, audience lenses, web discovery). The machinery it explains largely survives, but object names and some subsystems changed; `transition/` is the authoritative record of what maps to what.
+
 Status: design agreed 2026-07-09, pre-implementation. This doc is the source of truth for the build; open items at the bottom need the maintainer's input but do not block phase 1.
 
 ## What it is

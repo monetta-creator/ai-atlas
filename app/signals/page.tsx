@@ -5,7 +5,7 @@ import Header from '@/components/Header';
 import SignalFeed from '@/components/SignalFeed';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Signal Board · The AI Atlas' };
+export const metadata = { title: 'Signal Board · The Strategy Atlas' };
 
 // The PUBLISHED feed — what the world sees. Guests, logged-out visitors, and the admin all
 // see the same published signals here; the admin's unpublished drafts live on the separate

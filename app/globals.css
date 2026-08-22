@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* The AI Atlas — Console design system.
+/* The Strategy Atlas — Console design system.
    The visual language lives in these stylesheets, loaded in this order
    (later files layer on earlier ones; the ORDER is the cascade, keep it):
      tokens.css      → palette, type, density & motion easings (light + dark)
