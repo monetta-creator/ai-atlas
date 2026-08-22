@@ -23,13 +23,13 @@ const cleanText = (text: string | null): string | null =>
 // reduced to plain text.
 export function sanitizeReportNarrative(report: Report): Report {
   const n = report.narrative;
-  const perLens: Record<string, string | null> = {};
-  for (const k of Object.keys(n.perLens)) perLens[k] = cleanHtml(n.perLens[k]);
+  const perContext: Record<string, string | null> = {};
+  for (const k of Object.keys(n.perContext)) perContext[k] = cleanHtml(n.perContext[k]);
   const callouts: Record<string, string | null> = {};
   for (const k of Object.keys(n.callouts)) callouts[k] = cleanText(n.callouts[k]);
   return {
     ...report,
-    narrative: { macroSurvey: cleanHtml(n.macroSurvey), claimsRecap: cleanHtml(n.claimsRecap), perLens, callouts },
+    narrative: { macroSurvey: cleanHtml(n.macroSurvey), claimsRecap: cleanHtml(n.claimsRecap), perContext, callouts },
   };
 }
 

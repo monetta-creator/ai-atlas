@@ -7,7 +7,7 @@ import Header from '@/components/Header';
 import SignalForm from '@/components/SignalForm';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Edit signal · The AI Atlas' };
+export const metadata = { title: 'Edit signal · The Strategy Atlas' };
 
 export default async function EditSignalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -19,7 +19,7 @@ export default async function EditSignalPage({ params }: { params: Promise<{ id:
   if (!data) notFound();
   const { signal } = data;
 
-  const { claims, bridges } = await getTargets();
+  const { hypotheses } = await getTargets();
   const sources = (await getSources()).map((s) => ({ id: s.id, title: s.title }));
 
   return (
@@ -38,15 +38,14 @@ export default async function EditSignalPage({ params }: { params: Promise<{ id:
           mode="edit"
           signalId={signal.id}
           action={updateSignalAction}
-          claims={claims}
-          bridges={bridges}
+          hypotheses={hypotheses}
           sources={sources}
           initial={{
             title: signal.title,
             summary: signal.summary ?? '',
             significance: signal.significance,
-            lenses: signal.lenses,
-            claim_touches: signal.claim_touches,
+            context: signal.context,
+            touches: signal.touches,
             touch_details: signal.touch_details,
             source_id: signal.source_id,
             published_at: signal.published_at,

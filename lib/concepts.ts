@@ -2,9 +2,9 @@ import { runStructured } from './dossier';
 
 // Server-only. Two non-web structured calls for the /concepts authoring form,
 // both recommend-only (the admin confirms each suggestion in the form; nothing
-// here writes — same gate philosophy as the claim/lens recommenders):
+// here writes — same gate philosophy as the hypothesis recommenders):
 //  - which existing concepts a new/edited concept depends on (prerequisite edges)
-//  - which argument-map claims/bridges the concept is relevant to (claim wiring)
+//  - which tracked hypotheses the concept is relevant to (hypothesis wiring)
 
 interface ConceptForAI {
   name: string;
@@ -78,16 +78,16 @@ export async function recommendConceptPrereqs(
   });
 }
 
-// ---- claim wiring -----------------------------------------------------------
+// ---- hypothesis wiring ------------------------------------------------------
 
-const CLAIM_SYSTEM = `You wire concepts from The AI Atlas's semantic scaffold to the claims and bridge-claims on its Argument Map.
+const HYPOTHESIS_SYSTEM = `You wire concepts from the Strategy Atlas's semantic scaffold to its tracked hypotheses.
 
-Given ONE concept and the map's claim list, recommend the claims this concept is genuinely RELEVANT to — claims whose statement or falsification test invokes the concept, or cannot be evaluated without understanding it. Omit weak or merely thematic matches; recommending nothing is correct when no claim leans on the concept. reason = one concise sentence on where the claim leans on it. Use only codes from the provided list. You only RECOMMEND — the human confirms each link. Never use an em dash in your reasons; use a comma or a colon instead.`;
+Given ONE concept and the hypothesis list, recommend the hypotheses this concept is genuinely RELEVANT to — hypotheses whose statement or falsification test invokes the concept, or cannot be evaluated without understanding it. Omit weak or merely thematic matches; recommending nothing is correct when no hypothesis leans on the concept. reason = one concise sentence on where the hypothesis leans on it. Use only codes from the provided list. You only RECOMMEND — the human confirms each link. Never use an em dash in your reasons; use a comma or a colon instead.`;
 
-export async function recommendConceptClaims(
+export async function recommendConceptHypotheses(
   concept: ConceptForAI,
-  targets: { code: string; statement: string; type: 'claim' | 'bridge_claim' }[]
-): Promise<{ code: string; type: 'claim' | 'bridge_claim'; statement: string; reason: string }[]> {
+  targets: { code: string; statement: string }[]
+): Promise<{ code: string; statement: string; reason: string }[]> {
   if (!targets.length) return [];
   const codes = targets.map((t) => t.code);
   const schema = {
@@ -109,18 +109,16 @@ export async function recommendConceptClaims(
     },
     required: ['recommendations'],
   };
-  const list = targets
-    .map((t) => `[${t.code}]${t.type === 'bridge_claim' ? ' (bridge)' : ''} ${t.statement}`)
-    .join('\n');
+  const list = targets.map((t) => `[${t.code}] ${t.statement}`).join('\n');
   const out = await runStructured<{ recommendations: { code: string; reason: string }[] }>({
-    system: CLAIM_SYSTEM,
-    user: `CONCEPT:\n${conceptBlock(concept)}\n\nCLAIMS:\n${list}`,
-    toolName: 'submit_claim_links',
-    toolDescription: 'Return the recommended claim/bridge-claim links.',
+    system: HYPOTHESIS_SYSTEM,
+    user: `CONCEPT:\n${conceptBlock(concept)}\n\nHYPOTHESES:\n${list}`,
+    toolName: 'submit_hypothesis_links',
+    toolDescription: 'Return the recommended hypothesis links.',
     schema,
     maxTokens: 2000,
     effort: 'medium',
-    feature: 'concept_claims',
+    feature: 'concept_hypotheses',
   });
   const byCode = new Map(targets.map((t) => [t.code, t]));
   const seen = new Set<string>();
@@ -128,35 +126,35 @@ export async function recommendConceptClaims(
     const t = byCode.get(r.code);
     if (!t || seen.has(r.code)) return [];
     seen.add(r.code);
-    return [{ code: t.code, type: t.type, statement: t.statement, reason: r.reason }];
+    return [{ code: t.code, statement: t.statement, reason: r.reason }];
   });
 }
 
 // ---- gap diagnosis ------------------------------------------------------------
 
-const GAP_SYSTEM = `You audit the semantic scaffold of The AI Atlas — a layered dependency graph of AI terminology that underpins an argument map of the AI-economy debate — and recommend concepts that are MISSING.
+const GAP_SYSTEM = `You audit the semantic scaffold of the Strategy Atlas — a layered dependency graph of the terminology its tracked hypotheses lean on — and recommend concepts that are MISSING.
 
-You receive the existing concepts (with their prerequisite wiring) and the map's claims/bridge-claims. Recommend new concepts, in priority order, that are:
-- vocabulary the claims lean on but the scaffold lacks (a claim or its test invokes a term no concept explains), or
+You receive the existing concepts (with their prerequisite wiring) and the tracked hypotheses. Recommend new concepts, in priority order, that are:
+- vocabulary the hypotheses lean on but the scaffold lacks (a hypothesis or its test invokes a term no concept explains), or
 - a missing intermediate that bridges existing concepts (a reader can't get from X to Z without it), or
 - a foundational idea the scaffold silently assumes.
 
 Rules:
 - At most 5. Recommending fewer — or none — is correct when the scaffold is adequate. Never pad.
 - No near-duplicates of existing concepts; if an existing concept could be EDITED to cover the gap, it is not a gap.
-- argument: 1–3 sentences making the case — what it bridges, which claims need it, why the scaffold is incomplete without it. This is the part the human judges.
+- argument: 1–3 sentences making the case — what it bridges, which hypotheses need it, why the scaffold is incomplete without it. This is the part the human judges.
 - short_definition: one tooltip-ready sentence. explanation: 2–4 sentences of draft seed (the human expands it later). Be brief — this is a diagnosis, not the finished prose.
 - status: 'contested' ONLY when the definition itself is disputed (who uses the word decides what it means); otherwise 'settled'.
-- slug: lowercase-hyphenated. prerequisite_slugs: only slugs from the existing list, direct prerequisites only. claim_codes: only codes from the provided list, only genuine reliance.
+- slug: lowercase-hyphenated. prerequisite_slugs: only slugs from the existing list, direct prerequisites only. hypothesis_codes: only codes from the provided list, only genuine reliance.
 You only RECOMMEND — a human reviews each argument and decides what to create.
 Never use an em dash in any text you write (arguments, definitions, explanations); use a comma, a colon, or separate sentences instead.`;
 
 export async function diagnoseConceptGaps(
   existing: { slug: string; name: string; short_definition: string; status: string; prereq_slugs: string[] }[],
-  targets: { code: string; statement: string; type: 'claim' | 'bridge_claim' }[]
+  targets: { code: string; statement: string }[]
 ): Promise<{
   slug: string; name: string; short_definition: string; explanation: string;
-  status: string; prerequisite_slugs: string[]; claim_codes: string[]; argument: string;
+  status: string; prerequisite_slugs: string[]; hypothesis_codes: string[]; argument: string;
 }[]> {
   const slugs = existing.map((e) => e.slug);
   const codes = targets.map((t) => t.code);
@@ -176,12 +174,12 @@ export async function diagnoseConceptGaps(
             explanation: { type: 'string' },
             status: { type: 'string', enum: ['settled', 'contested'] },
             prerequisite_slugs: { type: 'array', items: { type: 'string', enum: slugs } },
-            claim_codes: { type: 'array', items: { type: 'string', enum: codes } },
+            hypothesis_codes: { type: 'array', items: { type: 'string', enum: codes } },
             argument: { type: 'string' },
           },
           required: [
             'slug', 'name', 'short_definition', 'explanation',
-            'status', 'prerequisite_slugs', 'claim_codes', 'argument',
+            'status', 'prerequisite_slugs', 'hypothesis_codes', 'argument',
           ],
         },
       },
@@ -193,17 +191,15 @@ export async function diagnoseConceptGaps(
       e.prereq_slugs.length ? ` | needs: ${e.prereq_slugs.join(', ')}` : ''
     }`)
     .join('\n');
-  const claimList = targets
-    .map((t) => `[${t.code}]${t.type === 'bridge_claim' ? ' (bridge)' : ''} ${t.statement}`)
-    .join('\n');
+  const hypothesisList = targets.map((t) => `[${t.code}] ${t.statement}`).join('\n');
   const out = await runStructured<{
     recommendations: {
       slug: string; name: string; short_definition: string; explanation: string;
-      status: string; prerequisite_slugs: string[]; claim_codes: string[]; argument: string;
+      status: string; prerequisite_slugs: string[]; hypothesis_codes: string[]; argument: string;
     }[];
   }>({
     system: GAP_SYSTEM,
-    user: `EXISTING CONCEPTS:\n${conceptList}\n\nARGUMENT MAP:\n${claimList}`,
+    user: `EXISTING CONCEPTS:\n${conceptList}\n\nTRACKED HYPOTHESES:\n${hypothesisList}`,
     toolName: 'submit_gap_diagnosis',
     toolDescription: 'Return the recommended missing concepts, in priority order.',
     schema,

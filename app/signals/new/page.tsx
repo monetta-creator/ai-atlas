@@ -6,12 +6,12 @@ import Header from '@/components/Header';
 import SignalForm from '@/components/SignalForm';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'New signal · The AI Atlas' };
+export const metadata = { title: 'New signal · The Strategy Atlas' };
 
 export default async function NewSignalPage() {
   const admin = await requireAdminPage();
 
-  const { claims, bridges } = await getTargets();
+  const { hypotheses } = await getTargets();
   const sources = (await getSources()).map((s) => ({ id: s.id, title: s.title }));
 
   return (
@@ -32,8 +32,7 @@ export default async function NewSignalPage() {
         <SignalForm
           mode="create"
           action={createSignalAction}
-          claims={claims}
-          bridges={bridges}
+          hypotheses={hypotheses}
           sources={sources}
         />
       </section>

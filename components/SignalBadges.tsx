@@ -1,26 +1,24 @@
 import {
-  SIGNAL_LENS_LABEL, SIGNAL_LENS_COLOR, SIGNIFICANCE_LABEL, significanceColor,
+  SIGNAL_CONTEXT_LABEL, SIGNAL_CONTEXT_COLOR, SIGNIFICANCE_LABEL, significanceColor,
 } from '@/lib/format';
-import type { SignalLens, Significance } from '@/lib/types';
+import type { SignalContext, Significance } from '@/lib/types';
 
-// Lens pills, tinted by each lens's identity color (a calm accent, never a fill).
-export function LensBadges({ lenses }: { lenses: SignalLens[] }) {
-  if (!lenses?.length) return null;
+// Context pill, tinted by the context's identity color (a calm accent, never a fill).
+export function ContextBadge({ context }: { context: SignalContext }) {
+  if (!context) return null;
+  const color = SIGNAL_CONTEXT_COLOR[context];
   return (
     <span className="signal-lenses">
-      {lenses.map((l) => (
-        <span
-          key={l}
-          className="badge signal-lens-badge"
-          style={{
-            color: SIGNAL_LENS_COLOR[l],
-            borderColor: `color-mix(in oklab, ${SIGNAL_LENS_COLOR[l]} 38%, var(--line))`,
-            background: `color-mix(in oklab, ${SIGNAL_LENS_COLOR[l]} 7%, var(--surface))`,
-          }}
-        >
-          {SIGNAL_LENS_LABEL[l]}
-        </span>
-      ))}
+      <span
+        className="badge signal-lens-badge"
+        style={{
+          color,
+          borderColor: `color-mix(in oklab, ${color} 38%, var(--line))`,
+          background: `color-mix(in oklab, ${color} 7%, var(--surface))`,
+        }}
+      >
+        {SIGNAL_CONTEXT_LABEL[context]}
+      </span>
     </span>
   );
 }

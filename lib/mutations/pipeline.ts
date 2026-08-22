@@ -1,15 +1,13 @@
-import { one, exec, withTx } from '../db';
+import { one, exec } from '../db';
 import type {
-  SignalLens,
   RunCadence, RunStatus, RunStep, TriageStatus, AnalysisStatus, } from '../types';
 import { sanitizeText } from '../text';
-import type { RawCandidate } from '../text';
 
-// ---- Discovery pipeline ----------------------------------------------------
+// ---- Intake pipeline --------------------------------------------------------
 
 export async function createRun(cadence: RunCadence): Promise<string> {
   const row = await one<{ id: string }>(
-    `insert into pipeline_runs (cadence, status, step) values ($1, 'running', 'discovery') returning id`,
+    `insert into pipeline_runs (cadence, status, step) values ($1, 'running', 'triage') returning id`,
     [cadence]
   );
   return row!.id;
@@ -29,15 +27,6 @@ export async function updateRun(
   await exec(`update pipeline_runs set ${sets.join(', ')}, updated_at = now() where id = $${params.length}`, params);
 }
 
-// Persist the post-run coverage-check result (migration 0026). Overwrites: re-running
-// the check on a resumed run replaces the stale audit with the current one.
-export async function setRunCoverage(id: string, coverage: unknown): Promise<void> {
-  await exec(
-    `update pipeline_runs set coverage = $1::jsonb, updated_at = now() where id = $2`,
-    [JSON.stringify(coverage), id]
-  );
-}
-
 // Recompute the run tallies straight from its candidates + linked signals (cheap,
 // keeps the polled counts honest no matter which step ran or was re-run).
 export async function recomputeRunCounts(id: string): Promise<void> {
@@ -52,29 +41,6 @@ export async function recomputeRunCounts(id: string): Promise<void> {
   );
 }
 
-// Bulk-insert discovered candidates; unique(run_id,url) makes re-running a batch a no-op.
-// Returns how many rows were actually new. `queries` records the search batch that
-// surfaced these candidates (migration 0016 — makes query-level hit rates learnable).
-export async function insertCandidates(
-  runId: string, lens: SignalLens, items: RawCandidate[], queries: string[] = []
-): Promise<number> {
-  if (!items.length) return 0;
-  let inserted = 0;
-  await withTx(async (c) => {
-    for (const it of items) {
-      const pub = /^\d{4}-\d{2}-\d{2}/.test(it.published_date) ? it.published_date.slice(0, 10) : null;
-      const res = await c.query(
-        `insert into signal_candidates (run_id, lens, url, headline, source_domain, published_date, discovery_queries)
-         values ($1, $2, $3, $4, $5, $6, $7)
-         on conflict (run_id, url) do nothing`,
-        [runId, lens, it.url, it.headline || null, it.source_domain || null, pub, queries.length ? queries : null]
-      );
-      inserted += res.rowCount ?? 0;
-    }
-  });
-  return inserted;
-}
-
 export async function setTriage(
   candidateId: string, status: TriageStatus, reason: string | null
 ): Promise<void> {
@@ -86,8 +52,7 @@ export async function setTriage(
 
 export async function setCandidateRawContent(
   candidateId: string,
-  text: string | null,
-  via?: 'direct' | 'jina'
+  text: string | null
 ): Promise<void> {
   // Defense-in-depth: a NUL anywhere in the text kills the whole update (Postgres `text`
   // rejects 0x00 — the bug that flagged every PDF candidate). The fetch layer sanitizes
@@ -95,9 +60,9 @@ export async function setCandidateRawContent(
   const clean = text == null ? null : sanitizeText(text);
   await exec(
     `update signal_candidates
-        set raw_content = $1, fetched_via = coalesce($2, fetched_via), updated_at = now()
-      where id = $3`,
-    [clean, via ?? null, candidateId]
+        set raw_content = $1, updated_at = now()
+      where id = $2`,
+    [clean, candidateId]
   );
 }
 

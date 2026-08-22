@@ -6,12 +6,12 @@ import {
   getApprovedCandidates, getCandidateArchive, getDedupeScan,
   countPendingCandidates,
   } from '../data';
-import { SIGNAL_LENS_SLUGS } from '../format';
+import { SIGNAL_CONTEXT_SLUGS } from '../format';
 import { triageChunk } from '../pipeline/triage';
 import { analyzeCandidate } from '../pipeline/analysis';
 import { dedupeAllDrafts } from '../pipeline/dedupe';
 import type {
-  Significance, SignalLens, TriageStatus,
+  Significance, SignalContext, TriageStatus,
   CandidateArchiveFilters, CandidateArchiveResult,
   DedupeRecommendation,
   } from '../types';
@@ -64,7 +64,7 @@ export async function analyzeCandidateAction(candidateId: string): Promise<{
       title: res.analysis.title,
       significance: res.analysis.significance,
       reliability: res.analysis.proposed_reliability,
-      touches: res.analysis.claim_touches.length,
+      touches: res.analysis.touches.length,
     };
   } catch (e) {
     const status = (e as { status?: number } | null)?.status;
@@ -115,8 +115,8 @@ export async function getCandidateArchiveAction(
   filters: CandidateArchiveFilters
 ): Promise<CandidateArchiveResult> {
   const f = filters ?? {};
-  const lens = (SIGNAL_LENS_SLUGS as string[]).includes(f.lens as string)
-    ? (f.lens as SignalLens) : undefined;
+  const context = (SIGNAL_CONTEXT_SLUGS as readonly string[]).includes(f.context as string)
+    ? (f.context as SignalContext) : undefined;
   const TRIAGE: TriageStatus[] = ['pending', 'approved', 'rejected', 'duplicate'];
   const triage_status = (TRIAGE as string[]).includes(f.triage_status as string)
     ? (f.triage_status as TriageStatus) : undefined;
@@ -126,7 +126,7 @@ export async function getCandidateArchiveAction(
   const to = f.to && DATE_RE.test(f.to) ? f.to : undefined;
   const search = (typeof f.search === 'string' ? f.search : '').slice(0, 120).trim() || undefined;
   const page = Number.isInteger(f.page) && (f.page as number) > 0 ? Math.min(f.page as number, 100_000) : 1;
-  return getCandidateArchive({ lens, triage_status, dateField, from, to, search, page, pageSize: 25 });
+  return getCandidateArchive({ context, triage_status, dateField, from, to, search, page, pageSize: 25 });
 }
 
 export async function completePipelineRunAction(runId: string): Promise<void> {

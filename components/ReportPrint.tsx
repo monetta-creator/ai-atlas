@@ -1,7 +1,7 @@
 'use client';
 
 import { createPortal } from 'react-dom';
-import { SIGNAL_LENS_LABEL, formatDateRange } from '@/lib/format';
+import { SIGNAL_CONTEXT_LABEL, formatDateRange } from '@/lib/format';
 import type { Report } from '@/lib/types';
 import ReportDisclaimer from './ReportDisclaimer';
 
@@ -15,8 +15,6 @@ import ReportDisclaimer from './ReportDisclaimer';
 // decorative shape; callout boxes = #000099 bg + white bold centered text; black on white;
 // a footer (title · range · generated) repeats on every page via position:fixed. Sections
 // with no content are omitted entirely.
-
-const pct = (r: number | null) => (r === null ? '–' : `${Math.round(r * 100)}%`);
 
 // Make internal root-relative links absolute so they're clickable in the exported PDF
 // (a PDF has no base URL). External https links are already absolute and untouched.
@@ -33,22 +31,21 @@ export default function ReportPrint({ report, title }: { report: Report; title: 
   if (typeof document === 'undefined') return null;
 
   const origin = window.location.origin;
-  const { narrative, range, lenses, generatedAt, metrics, touches, signals } = report;
+  const { narrative, range, contexts, generatedAt, touches, signals } = report;
   const when = `${generatedAt.slice(0, 10)} ${generatedAt.slice(11, 16)} UTC`;
   const dateRange = formatDateRange(range.from, range.to);
-  const creative = title && !title.startsWith('AI Atlas') ? title : '';
-  const headline = creative || `AI Atlas Report - ${dateRange}`;
-  const lensCount = `${lenses.length} lens${lenses.length === 1 ? '' : 'es'}`;
+  const creative = title && !title.startsWith('Strategy Atlas') ? title : '';
+  const headline = creative || `Strategy Atlas Report - ${dateRange}`;
+  const contextCount = `${contexts.length} context${contexts.length === 1 ? '' : 's'}`;
   const subText = creative
-    ? `AI Atlas Report · ${dateRange} · ${lensCount} · generated ${when}`
-    : `${lensCount} · generated ${when}`;
-  const footer = `AI Atlas Report · ${dateRange} · generated ${when}`;
+    ? `Strategy Atlas Report · ${dateRange} · ${contextCount} · generated ${when}`
+    : `${contextCount} · generated ${when}`;
+  const footer = `Strategy Atlas Report · ${dateRange} · generated ${when}`;
 
-  const lensesWithContent = lenses.filter((l) => narrative.perLens[l]);
-  const hasPipeline = metrics.overall.counts.candidates > 0;
+  const contextsWithContent = contexts.filter((c) => narrative.perContext[c]);
   const hasTouches = touches.length > 0;
   const hasSignals = signals.length > 0;
-  const hasAppendix = hasPipeline || hasTouches || hasSignals;
+  const hasAppendix = hasTouches || hasSignals;
 
   // Plain render helper (not a component) — keeps it out of the React component namespace.
   const renderBody = (html: string) => (
@@ -66,16 +63,16 @@ export default function ReportPrint({ report, title }: { report: Report; title: 
         <p className="print-sub">{subText}</p>
       </header>
 
-      {/* Summary — page 1: the 3×2 grid of per-lens callouts at the top, then the period
-          summary. The page break follows (claims recap, lenses, appendices, disclaimer). */}
-      {lensesWithContent.length > 0 && (
+      {/* Summary — page 1: the grid of per-context callouts at the top, then the period
+          summary. The page break follows (recap, contexts, appendices, disclaimer). */}
+      {contextsWithContent.length > 0 && (
         <div className="print-callout-grid">
-          {lensesWithContent.map((l) => {
-            const c = narrative.callouts[l];
+          {contextsWithContent.map((c) => {
+            const text = narrative.callouts[c];
             return (
-              <div key={l} className="print-callout-cell">
-                <div className="print-callout-lens">{SIGNAL_LENS_LABEL[l]}</div>
-                <div className="print-callout-text">{c && c.trim() ? c : '–'}</div>
+              <div key={c} className="print-callout-cell">
+                <div className="print-callout-lens">{SIGNAL_CONTEXT_LABEL[c]}</div>
+                <div className="print-callout-text">{text && text.trim() ? text : '–'}</div>
               </div>
             );
           })}
@@ -91,17 +88,17 @@ export default function ReportPrint({ report, title }: { report: Report; title: 
 
       {narrative.claimsRecap && (
         <section className="print-section print-page">
-          <h2 className="print-h">Claims Recap</h2>
+          <h2 className="print-h">Hypotheses Recap</h2>
           {renderBody(narrative.claimsRecap)}
         </section>
       )}
 
-      {/* Each lens on its own page; its name appears once (the model's leading heading is
+      {/* Each context on its own page; its name appears once (the model's leading heading is
           stripped, the umbrella header is dropped, and the callout lives on the summary grid). */}
-      {lensesWithContent.map((l) => (
-        <section key={l} className="print-section print-page">
-          <h2 className="print-h">{SIGNAL_LENS_LABEL[l]}</h2>
-          {renderBody(narrative.perLens[l] as string)}
+      {contextsWithContent.map((c) => (
+        <section key={c} className="print-section print-page">
+          <h2 className="print-h">{SIGNAL_CONTEXT_LABEL[c]}</h2>
+          {renderBody(narrative.perContext[c] as string)}
         </section>
       ))}
 
@@ -110,38 +107,9 @@ export default function ReportPrint({ report, title }: { report: Report; title: 
           <section className="print-section print-page">
             <h2 className="print-h">Appendices</h2>
 
-            {hasPipeline && (
-              <div className="print-appendix">
-                <h3 className="print-h3">Discovery pipeline</h3>
-                <p className="print-body">
-                  Overall: {metrics.overall.counts.candidates} candidates · {metrics.overall.counts.approved} approved ·{' '}
-                  {metrics.overall.counts.drafted} drafted · {metrics.overall.counts.published} published · triage pass{' '}
-                  {pct(metrics.overall.rates.triagePass)} · analysis conv. {pct(metrics.overall.rates.analysisConversion)} ·{' '}
-                  discovery→signal {pct(metrics.overall.rates.discoveryToSignal)} · draft→published{' '}
-                  {pct(metrics.overall.rates.draftToPublished)}
-                </p>
-                <table className="print-table">
-                  <thead>
-                    <tr><th>Lens</th><th>Candidates</th><th>Approved</th><th>Drafted</th><th>Published</th></tr>
-                  </thead>
-                  <tbody>
-                    {metrics.perLens.map(({ lens, funnel }) => (
-                      <tr key={lens}>
-                        <td>{SIGNAL_LENS_LABEL[lens]}</td>
-                        <td>{funnel.counts.candidates}</td>
-                        <td>{funnel.counts.approved}</td>
-                        <td>{funnel.counts.drafted}</td>
-                        <td>{funnel.counts.published}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
             {hasTouches && (
               <div className="print-appendix">
-                <h3 className="print-h3">Claims &amp; bridge-claims touched ({touches.length})</h3>
+                <h3 className="print-h3">Hypotheses touched ({touches.length})</h3>
                 <ul className="print-list">
                   {touches.map((t) => (
                     <li key={t.code}>

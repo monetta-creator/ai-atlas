@@ -1,6 +1,6 @@
 import { q, one } from '../db';
 import type {
-  Paper, ResearchRun, ResearchThread, ThreadPaperRow, ResearchThreadScan, WatchlistRow, RisingReject,
+  Paper, ResearchThread, ThreadPaperRow, ResearchThreadScan, WatchlistRow,
   RecentThreadRevision, } from '../types';
 
 // ===== Research section (migration 0023) =====================================
@@ -11,40 +11,12 @@ import type {
 // List reads omit the heavy columns (raw_content, extraction) — same discipline as
 // signal_candidates. Dates cast to text (pg returns `date` as a JS Date otherwise).
 const PAPER_LIST_COLUMNS = `
-  id, origin, arxiv_id, url, run_id, source_id, title, abstract, authors, categories,
-  comments, arxiv_version,
+  id, url, source_id, title, abstract, authors,
   to_char(published_at, 'YYYY-MM-DD') as published_at,
-  to_char(arxiv_updated, 'YYYY-MM-DD') as arxiv_updated,
-  triage_status, triage_reason, triage_summary, claim_touches, suggested_concepts, suggested_threads,
+  triage_status, triage_reason, triage_summary, touches, suggested_concepts, suggested_threads,
   fetched_via, rigor_prior, review_status, review_note, reviewed_at, signal_id,
-  citation_count, citations_checked_at, author_hindex,
   agent_recommendation, agent_reason, agent_confidence, agent_cluster, agent_at::text as agent_at,
   created_at, updated_at`;
-
-export async function getResearchRuns(limit = 15): Promise<ResearchRun[]> {
-  return q<ResearchRun>(
-    `select id, triggered_at, status, step, to_char(since_date, 'YYYY-MM-DD') as since_date,
-            scanned_count, pulled_count, kept_count, rejected_count, error, created_at, updated_at
-       from research_runs order by triggered_at desc limit $1`,
-    [limit]
-  );
-}
-
-export async function getLastResearchRunAt(): Promise<string | null> {
-  const row = await one<{ triggered_at: string }>(
-    `select triggered_at::text as triggered_at from research_runs
-      where status = 'completed' order by triggered_at desc limit 1`
-  );
-  return row?.triggered_at ?? null;
-}
-
-export async function countPendingPapers(runId: string): Promise<number> {
-  const row = await one<{ n: string }>(
-    `select count(*)::text as n from papers where run_id = $1 and triage_status = 'pending'`,
-    [runId]
-  );
-  return Number(row?.n ?? 0);
-}
 
 // The review queue: triage-kept papers awaiting the human decision, newest first.
 export async function getReviewQueuePapers(limit = 100): Promise<Paper[]> {
@@ -132,7 +104,7 @@ export async function getThreadBySlug(slug: string): Promise<ResearchThread | nu
 
 export async function getThreadPapers(threadId: string): Promise<ThreadPaperRow[]> {
   return q<ThreadPaperRow>(
-    `select p.id, p.title, p.arxiv_id, p.url,
+    `select p.id, p.title, p.url,
             to_char(p.published_at, 'YYYY-MM-DD') as published_at,
             tp.relation, tp.why, p.review_status, p.review_note,
             p.extraction->>'headline_claim' as headline,
@@ -159,9 +131,9 @@ export async function getThreadRevisions(
 // The concept page's admin-only "recent research" pane: confirmed paper links.
 export async function getPapersForConcept(
   slug: string, limit = 6
-): Promise<{ id: string; title: string; arxiv_id: string | null; url: string; published_at: string | null; headline: string | null }[]> {
+): Promise<{ id: string; title: string; url: string; published_at: string | null; headline: string | null }[]> {
   return q(
-    `select p.id, p.title, p.arxiv_id, p.url,
+    `select p.id, p.title, p.url,
             to_char(p.published_at, 'YYYY-MM-DD') as published_at,
             p.extraction->>'headline_claim' as headline
        from paper_concepts pc
@@ -190,15 +162,15 @@ export function reconcileThreadScan(
   return recommendations.length ? { ...scan, recommendations } : null;
 }
 
-// Phase 4: the watchlist + the citation self-correction surface.
+// The watchlist.
 
 export async function getWatchlist(limit = 60): Promise<WatchlistRow[]> {
   return q<WatchlistRow>(
-    `select id, title, arxiv_id, url,
+    `select id, title, url,
             to_char(published_at, 'YYYY-MM-DD') as published_at,
             review_note, reviewed_at::text as reviewed_at,
             extraction->>'headline_claim' as headline,
-            citation_count, citations_checked_at::text as citations_checked_at, author_hindex, signal_id
+            signal_id
        from papers
       where review_status = 'tracked'
       order by reviewed_at desc nulls last
@@ -207,29 +179,15 @@ export async function getWatchlist(limit = 60): Promise<WatchlistRow[]> {
   );
 }
 
-export async function getRisingRejects(minCitations = 5, limit = 12): Promise<RisingReject[]> {
-  return q<RisingReject>(
-    `select id, title, arxiv_id, url,
-            to_char(published_at, 'YYYY-MM-DD') as published_at,
-            triage_reason, review_status, citation_count
-       from papers
-      where citation_count >= $1
-        and (triage_status = 'rejected' or review_status = 'dismissed')
-      order by citation_count desc
-      limit $2`,
-    [minCitations, limit]
-  );
-}
-
 // The research digest's two halves: papers tracked in the window, threads whose
 // synthesis moved in the window.
 export async function getTrackedSince(sinceISO: string | null): Promise<WatchlistRow[]> {
   return q<WatchlistRow>(
-    `select id, title, arxiv_id, url,
+    `select id, title, url,
             to_char(published_at, 'YYYY-MM-DD') as published_at,
             review_note, reviewed_at::text as reviewed_at,
             extraction->>'headline_claim' as headline,
-            citation_count, citations_checked_at::text as citations_checked_at, signal_id
+            signal_id
        from papers
       where review_status = 'tracked'
         and reviewed_at >= coalesce($1::date, (now() - interval '14 days')::date)
@@ -265,44 +223,41 @@ export async function getRecentThreadRevisions(sinceISO: string | null, limit = 
   );
 }
 
-// Papers on the reviewed shelf whose ADVISORY touches name this claim/bridge code.
-// A cross-link only: papers never write evidence (the 0023 invariant).
+// Papers on the reviewed shelf whose ADVISORY touches name this hypothesis code.
+// A cross-link only: papers never write evidence.
 export async function getPapersForTarget(code: string, limit = 6): Promise<
-  { id: string; title: string; arxiv_id: string | null; published_at: string | null; headline: string | null }[]
+  { id: string; title: string; published_at: string | null; headline: string | null }[]
 > {
   return q(
-    `select id, title, arxiv_id, to_char(published_at, 'YYYY-MM-DD') as published_at,
+    `select id, title, to_char(published_at, 'YYYY-MM-DD') as published_at,
             extraction->>'headline_claim' as headline
        from papers
       where triage_status = 'kept' and review_status in ('tracked', 'noted')
-        and claim_touches @> array[$1]::text[]
+        and touches @> array[$1]::text[]
       order by published_at desc nulls last
       limit $2`,
     [code, limit]
   );
 }
 
-// The portal's map rollup: which claims/bridges the reviewed shelf bears on,
-// resolved to statements (dangling codes keep a null href and read as drift).
+// The portal's rollup: which hypotheses the reviewed shelf bears on, resolved
+// to statements (dangling codes keep a null href and read as drift).
 export async function getResearchTouchRollup(limit = 10): Promise<
   { code: string; statement: string | null; href: string | null; paper_count: number }[]
 > {
   return q(
     `with touches as (
-       select unnest(claim_touches) as code
+       select unnest(touches) as code
          from papers
         where triage_status = 'kept' and review_status in ('tracked', 'noted')
      )
      select t.code,
-            coalesce(c.statement, b.statement) as statement,
-            case when c.id is not null then '/claim/' || t.code
-                 when b.id is not null then '/bridge/' || t.code
-                 else null end as href,
+            h.statement,
+            case when h.id is not null then '/hypothesis/' || t.code else null end as href,
             count(*)::int as paper_count
        from touches t
-       left join claims c on c.code = t.code
-       left join bridge_claims b on b.code = t.code
-      group by t.code, c.id, b.id, c.statement, b.statement
+       left join hypotheses h on h.code = t.code
+      group by t.code, h.id, h.statement
       order by count(*) desc, t.code
       limit $1`,
     [limit]

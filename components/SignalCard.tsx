@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import type { Signal } from '@/lib/types';
-import { dateLabel, touchHref, signalLensColor, SIGNAL_LENS_LABEL } from '@/lib/format';
+import { dateLabel, touchHref, signalContextColor, SIGNAL_CONTEXT_LABEL } from '@/lib/format';
 import { publishSignalAction, archiveSignalAction, unarchiveSignalAction } from '@/lib/actions';
 import { SignificanceTag } from './SignalBadges';
 
-// One post-it on the pinboard. Tinted paper + top bar in the first lens's color,
-// lens dots instead of full badges (the grid is 4-across), title and blurb clamped
+// One post-it on the pinboard. Tinted paper + top bar in the context's color,
+// a context dot instead of a full badge (the grid is 4-across), title and blurb clamped
 // by CSS. The card is a container (not a single Link) because the touch chips are
 // themselves links; the title links to the detail page. `redirectTo` is where the
 // admin actions return after a publish/archive. The inline viewTransitionName lets
@@ -15,10 +15,10 @@ const TOUCH_CAP = 4;
 export default function SignalCard({
   signal, admin, redirectTo = '/signals',
 }: { signal: Signal; admin: boolean; redirectTo?: string }) {
-  const accent = signal.lenses.length ? signalLensColor(signal.lenses[0]) : 'var(--line)';
+  const accent = signal.context ? signalContextColor(signal.context) : 'var(--line)';
   const date = dateLabel(signal.published_at);
-  const touches = signal.claim_touches.slice(0, TOUCH_CAP);
-  const moreTouches = signal.claim_touches.length - touches.length;
+  const touches = signal.touches.slice(0, TOUCH_CAP);
+  const moreTouches = signal.touches.length - touches.length;
 
   return (
     <div
@@ -31,9 +31,7 @@ export default function SignalCard({
     >
       <div className="signal-top">
         <span className="bs-lensdots">
-          {signal.lenses.map((l) => (
-            <i key={l} style={{ background: signalLensColor(l) }} title={SIGNAL_LENS_LABEL[l]} />
-          ))}
+          <i style={{ background: signalContextColor(signal.context) }} title={SIGNAL_CONTEXT_LABEL[signal.context]} />
         </span>
         <SignificanceTag significance={signal.significance} />
         {admin && !signal.is_published && (
@@ -54,7 +52,7 @@ export default function SignalCard({
 
       {touches.length > 0 && (
         <div className="touches">
-          {touches.map((code) => (
+          {touches.map((code: string) => (
             <Link key={code} href={touchHref(code)} className="touch-chip">{code}</Link>
           ))}
           {moreTouches > 0 && <span className="touch-label">+{moreTouches}</span>}

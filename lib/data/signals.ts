@@ -1,7 +1,7 @@
 import { q, one } from '../db';
 import type {
-  Direction, Domain, ConfidenceLabel,
-  Signal, SignalTouch, SignalLens, Significance, SignalsPageResult,
+  Direction, ConvictionLabel,
+  Signal, SignalTouch, SignalContext, Significance, SignalsPageResult,
   DedupeRecommendation,
   } from '../types';
 
@@ -15,15 +15,13 @@ interface SignalQuery {
   publishedOnly?: boolean;     // force published-only regardless of admin (digests)
   since?: string;              // ISO timestamp — published_at >= since
   until?: string;              // 'YYYY-MM-DD' — published_at < until::date + 1 (inclusive end-day)
-  lenses?: SignalLens[];       // array-overlap filter
+  contexts?: SignalContext[];
   significance?: Significance[];
 }
 
-// `s.lenses::text[]` — node-pg has no parser for the custom signal_lens_t[] OID, so we
-// cast to text[] (a well-known OID) to guarantee a JS string[] reaches the app.
 export const SIGNAL_COLUMNS = `
   s.id, s.title, s.summary, s.significance,
-  s.lenses::text[] as lenses, s.claim_touches,
+  s.context::text as context, s.touches,
   s.source_id, s.published_at, s.is_published, s.archived_at, s.origin, s.created_at, s.updated_at,
   src.title as source_title, src.url as source_url`;
 
@@ -43,9 +41,9 @@ export async function getSignals(opts: SignalQuery = {}): Promise<Signal[]> {
     // drop everything published after 00:00 on that day).
     where.push(`s.published_at < ($${params.length}::date + 1)`);
   }
-  if (opts.lenses && opts.lenses.length) {
-    params.push(opts.lenses);
-    where.push(`s.lenses && $${params.length}::signal_lens_t[]`);
+  if (opts.contexts && opts.contexts.length) {
+    params.push(opts.contexts);
+    where.push(`s.context = any($${params.length}::context_t[])`);
   }
   if (opts.significance && opts.significance.length) {
     params.push(opts.significance);
@@ -65,7 +63,7 @@ export async function getSignals(opts: SignalQuery = {}): Promise<Signal[]> {
 interface SignalPageQuery {
   admin?: boolean;                                      // server-set; drafts visible only when true
   status?: 'published' | 'unpublished' | 'archived';   // honored only when admin
-  lenses?: SignalLens[];
+  contexts?: SignalContext[];
   significance?: Significance[];
   search?: string;
   page?: number;
@@ -90,9 +88,9 @@ export async function getSignalsPage(opts: SignalPageQuery): Promise<SignalsPage
     where.push('s.is_published = false');
     where.push('s.archived_at is null');                 // ACTIVE drafts only (archived excluded)
   }
-  if (opts.lenses && opts.lenses.length) {
-    params.push(opts.lenses);
-    where.push(`s.lenses && $${params.length}::signal_lens_t[]`);
+  if (opts.contexts && opts.contexts.length) {
+    params.push(opts.contexts);
+    where.push(`s.context = any($${params.length}::context_t[])`);
   }
   if (opts.significance && opts.significance.length) {
     params.push(opts.significance);
@@ -168,24 +166,11 @@ export function reconcileDedupeScan(
   return groups.length ? { ...rec, groups } : null;
 }
 
-// Resolve a signal's claim_touches codes back to the claims/bridge-claims they name,
-// preserving the author's order and folding in each touch's direction/reason from
-// touch_details. A code that no longer resolves is dropped for guests; for the admin
-// it surfaces as an `unresolved` marker (the drift guard). confidence_label and the
-// model's reason are personal-layer — nulled for guests, like everywhere else.
-// Falsification tests keyed by claim/bridge code, for enriching AI prompts that already
-// hold the resolved touches (SignalTouch carries the statement but not the test).
-export async function getTestsByCodes(codes: string[]): Promise<Record<string, string | null>> {
-  if (!codes || !codes.length) return {};
-  const rows = await q<{ code: string; test: string | null }>(
-    `select code, test from claims where code = any($1)
-     union all
-     select code, test from bridge_claims where code = any($1)`,
-    [codes]
-  );
-  return Object.fromEntries(rows.map((r) => [r.code, r.test]));
-}
-
+// Resolve a signal's touches codes back to the hypotheses they name, preserving
+// the author's order and folding in each touch's direction/reason from
+// touch_details. A code that no longer resolves is dropped for guests; for the
+// admin it surfaces as an `unresolved` marker (the drift guard). conviction_label
+// and the model's reason are personal-layer — nulled for guests.
 async function resolveTouches(
   codes: string[],
   touchDetails: Record<string, { direction?: Direction; reason?: string }> | null | undefined,
@@ -193,19 +178,11 @@ async function resolveTouches(
 ): Promise<SignalTouch[]> {
   if (!codes || !codes.length) return [];
   const rows = await q<{
-    code: string; type: 'claim' | 'bridge_claim';
-    statement: string; domain: Domain | null; confidence_label: ConfidenceLabel;
+    code: string; statement: string; conviction_label: ConvictionLabel;
   }>(
-    `select code, 'claim'::text as type, statement, domain::text as domain, confidence_label
-       from claims where code = any($1)
-     union all
-     select code, 'bridge_claim'::text as type, statement, domain_from::text as domain, confidence_label
-       from bridge_claims where code = any($1)`,
+    `select code, statement, conviction_label from hypotheses where code = any($1)`,
     [codes]
   );
-  // Safe to key on bare code: claim and bridge-claim code namespaces are disjoint by
-  // construction (bridges are B1..Bn, claims are numeric / frames Fn), so the UNION
-  // never produces two rows with the same code.
   const byCode = new Map(rows.map((r) => [r.code, r]));
   const details = touchDetails ?? {};
   return codes
@@ -213,23 +190,21 @@ async function resolveTouches(
       const r = byCode.get(code);
       const d = details[code];
       if (!r) {
-        // Drift: the code no longer names a live claim/bridge. Admins see it flagged so
-        // they can fix the signal; guests never see a broken link.
+        // Drift: the code no longer names a live hypothesis. Admins see it
+        // flagged so they can fix the signal; guests never see a broken link.
         return personal
           ? {
-              code, type: 'claim', statement: 'This code no longer resolves to a claim or bridge-claim.',
-              domain: null, confidence_label: null, href: '#',
+              code, statement: 'This code no longer resolves to a hypothesis.',
+              conviction_label: null, href: '#',
               direction: d?.direction ?? null, reason: null, unresolved: true,
             }
           : null;
       }
       return {
         code: r.code,
-        type: r.type,
         statement: r.statement,
-        domain: r.domain,
-        confidence_label: personal ? r.confidence_label : null,
-        href: r.type === 'bridge_claim' ? `/bridge/${r.code}` : `/claim/${encodeURIComponent(r.code)}`,
+        conviction_label: personal ? r.conviction_label : null,
+        href: `/hypothesis/${encodeURIComponent(r.code)}`,
         direction: d?.direction ?? null,
         reason: personal ? (d?.reason ?? null) : null,
       };
@@ -250,17 +225,16 @@ export async function getSignal(
     [id]
   );
   if (!signal) return null;
-  const touches = await resolveTouches(signal.claim_touches, signal.touch_details, personal);
+  const touches = await resolveTouches(signal.touches, signal.touch_details, personal);
   // touch_details (the model's reasons) is personal-layer — keep it off the wire for guests.
   if (!personal) signal.touch_details = undefined;
   return { signal, touches };
 }
 
-// Reverse lookup: every signal whose claim_touches names this code (GIN-backed). Drafts
-// are admin-only; guests see published signals. Powers the claim/bridge "Related signals"
-// cross-link to the Signal Board.
-export async function getSignalsTouchingClaim(code: string, personal: boolean): Promise<Signal[]> {
-  const where = ['s.claim_touches @> array[$1]::text[]'];
+// Reverse lookup: every signal whose touches names this code (GIN-backed).
+// Drafts are admin-only; guests see published signals.
+export async function getSignalsTouchingHypothesis(code: string, personal: boolean): Promise<Signal[]> {
+  const where = ['s.touches @> array[$1]::text[]'];
   if (!personal) where.push('s.is_published = true');
   return q<Signal>(
     `select ${SIGNAL_COLUMNS}
@@ -272,15 +246,14 @@ export async function getSignalsTouchingClaim(code: string, personal: boolean): 
   );
 }
 
-// "In context": other signals that touch any of the SAME claim/bridge codes as this one,
-// so a development on the detail page reads as part of an ongoing story. GIN array-overlap
-// (`&&`) on claim_touches, self excluded, gated to published for guests (like everywhere).
-// Returns [] when the signal touches nothing.
+// "In context": other signals that touch any of the SAME hypothesis codes as
+// this one, so a development on the detail page reads as part of an ongoing
+// story. GIN array-overlap (`&&`), self excluded, published-only for guests.
 export async function getRelatedSignals(
   signalId: string, codes: string[], personal: boolean
 ): Promise<Signal[]> {
   if (!codes || !codes.length) return [];
-  const where = ['s.id <> $1', 's.claim_touches && $2::text[]'];
+  const where = ['s.id <> $1', 's.touches && $2::text[]'];
   if (!personal) where.push('s.is_published = true');
   return q<Signal>(
     `select ${SIGNAL_COLUMNS}

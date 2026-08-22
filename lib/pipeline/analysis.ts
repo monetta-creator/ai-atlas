@@ -1,28 +1,28 @@
 import { runStructured } from '../dossier';
 import { MIN_READABLE_CHARS } from '../text';
-import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL } from '../format';
+import { SIGNAL_CONTEXT_SLUGS, SIGNAL_CONTEXT_LABEL } from '../format';
 import * as m from '../mutations';
 import { getCandidate, getTargets, getSourceMeta } from '../data';
-import type { AnalyzedSignal, Direction, Significance, SignalLens } from '../types';
+import type { AnalyzedSignal, Direction, Significance, SignalContext } from '../types';
 
 const DIRECTIONS: Direction[] = ['supports', 'contradicts', 'neutral'];
 
-// Per-candidate analysis: fetch the page text, then a single non-web structured call
-// (live claim list injected so claim_touches cite real codes) produces a draft signal
-// proposal. One call per candidate — batching degrades claim_touches accuracy. The
-// draft is saved unpublished (origin='pipeline'); a human reviews and publishes.
-// proposed_reliability is a SUGGESTION returned to the UI — never written to the
-// source's prior (the model never sets the prior; that guardrail holds).
+// Per-candidate analysis: a single non-web structured call (live hypothesis list
+// injected so touches cite real codes) produces a draft signal proposal over the
+// text retained at intake. One call per candidate — batching degrades touch
+// accuracy. The draft is saved unpublished (origin='pipeline'); a human reviews
+// and publishes. proposed_reliability is a SUGGESTION returned to the UI —
+// never written to the source's prior (the model never sets the prior).
 
 const ANALYSIS_SYSTEM = [
-  'You analyze one source and produce a Signal Board entry for financial-institution analysts.',
+  'You analyze one source and produce a Signal Board entry for an operating team tracking its strategic hypotheses.',
   'Voice: a curated internal intelligence brief — factual, specific, no hype, no stance-taking.',
-  'Be DESCRIPTIVE, not normative: explain what happened and where it lands structurally; do NOT say whether AI is good or bad, or whether to buy or sell.',
-  'Title: short, declarative, factual (e.g. "Hyperscaler combined AI capex commitments reach $725B for 2026, up 36% YoY" — not "Big Tech makes massive AI bet").',
-  'Summary: 2–4 sentences — what happened, what it means structurally, one sentence on the implication for a financial institution. No jargon.',
-  'significance: high = materially moves or tests a claim on the Argument Map or is a genuine new data point on a contested question; medium = relevant context that confirms the picture; low = background. Give a one-sentence reason.',
-  'lenses: one or more of the provided lens codes (the item may touch more than the one it was retrieved under).',
-  'claim_touches: ONLY codes from the provided claim/bridge list that this specific development genuinely bears on — not merely thematically related. For each, set direction: "supports" (evidence FOR the claim), "contradicts" (evidence AGAINST it), or "neutral" (bears on it but does not cut either way), plus a one-sentence reason. Empty if none truly apply.',
+  'Be DESCRIPTIVE, not normative: explain what happened and where it lands structurally; do NOT hand down verdicts.',
+  'Title: short, declarative, factual (state the development itself, not a vibe).',
+  'Summary: 2–4 sentences — what happened, what it means structurally, one sentence on the implication for the team. No jargon.',
+  'significance: high = materially moves or tests a tracked hypothesis or is a genuine new data point on a contested question; medium = relevant context that confirms the picture; low = background. Give a one-sentence reason.',
+  'context: "internal" when the development originates inside the organization (an internal memo, metric, decision), "external" when it comes from the outside world.',
+  'touches: ONLY codes from the provided hypothesis list that this specific development genuinely bears on — not merely thematically related. For each, set direction: "supports" (evidence FOR the hypothesis), "contradicts" (evidence AGAINST it), or "neutral" (bears on it but does not cut either way), plus a one-sentence reason. Empty if none truly apply.',
   'proposed_reliability: 0–100, your suggested reliability prior for this SOURCE, as a suggestion only.',
   'Work only from the provided text. Do not fabricate facts, figures, or codes.',
   'Never use an em dash in your output; use a comma, a colon, or separate sentences instead.',
@@ -37,8 +37,8 @@ function buildSchema(codes: string[]) {
       summary: { type: 'string' },
       significance: { type: 'string', enum: ['high', 'medium', 'low'] },
       significance_reason: { type: 'string' },
-      lenses: { type: 'array', items: { type: 'string', enum: SIGNAL_LENS_SLUGS } },
-      claim_touches: {
+      context: { type: 'string', enum: SIGNAL_CONTEXT_SLUGS },
+      touches: {
         type: 'array',
         items: {
           type: 'object',
@@ -55,7 +55,7 @@ function buildSchema(codes: string[]) {
     },
     required: [
       'title', 'summary', 'significance', 'significance_reason',
-      'lenses', 'claim_touches', 'proposed_reliability',
+      'context', 'touches', 'proposed_reliability',
     ],
   };
 }
@@ -84,15 +84,13 @@ export async function analyzeCandidate(candidateId: string): Promise<AnalysisRes
     throw new Error('candidate has no retained text to analyze; re-add the source with its text');
   }
 
-  // 2) structured analysis with the live claim/bridge list
-  const { claims, bridges } = await getTargets();
-  const targets = [...claims, ...bridges];
-  const codes = targets.map((t) => t.code);
-  const targetList = [
-    ...claims.map((t) => `[${t.code}] (claim) ${t.statement}`),
-    ...bridges.map((t) => `[${t.code}] (bridge-claim) ${t.statement}`),
-  ].join('\n');
-  const lensGuide = SIGNAL_LENS_SLUGS.map((s) => `[${s}] ${SIGNAL_LENS_LABEL[s]}`).join('\n');
+  // 2) structured analysis with the live hypothesis list
+  const { hypotheses } = await getTargets();
+  const codes = hypotheses.map((t) => t.code);
+  const targetList = hypotheses
+    .map((t) => `[${t.code}] ${t.statement}${t.test ? ` (falsified if: ${t.test})` : ''}`)
+    .join('\n');
+  const contextGuide = SIGNAL_CONTEXT_SLUGS.map((s) => `[${s}] ${SIGNAL_CONTEXT_LABEL[s]}`).join('\n');
 
   // For a manual upload (source_id set) enrich the prompt with the curated bibliography the
   // candidate row doesn't carry (outlet/author) — parity with the old manual proposer.
@@ -109,15 +107,15 @@ export async function analyzeCandidate(candidateId: string): Promise<AnalysisRes
     `\n\n${text}`;
 
   const out = await runStructured<AnalyzedSignal>({
-    // The lens guide + target list live in the SYSTEM block (which runStructured marks
-    // cache_control: ephemeral), not the user message: they're identical for every
+    // The context guide + hypothesis list live in the SYSTEM block (which runStructured
+    // marks cache_control: ephemeral), not the user message: they're identical for every
     // candidate in a run, so calls 2..N of an analysis pass read the expensive prefix
-    // (tools + system + claim list) from the prompt cache instead of re-billing it.
+    // (tools + system + hypothesis list) from the prompt cache instead of re-billing it.
     // Only the per-candidate source block rides in the user message.
     system: [
       ANALYSIS_SYSTEM,
-      `\nLENSES (use only these codes):\n${lensGuide}`,
-      `\nARGUMENT-MAP CLAIMS & BRIDGE-CLAIMS (use ONLY these codes for claim_touches):\n${targetList || '(none)'}`,
+      `\nCONTEXT (choose one):\n${contextGuide}`,
+      `\nTRACKED HYPOTHESES (use ONLY these codes for touches):\n${targetList || '(none)'}`,
     ].join('\n'),
     user: sourceBlock,
     toolName: 'submit_signal',
@@ -127,30 +125,29 @@ export async function analyzeCandidate(candidateId: string): Promise<AnalysisRes
     effort: 'medium',
     feature: 'pipeline_analysis',
     pipelineRunId: cand.run_id,
-    metadata: { candidate_id: candidateId, lens: cand.lens },
-    // Near the 60s cap (the backstop fetch can spend up to 8s; the normal path reads the
-    // hydrated cache): bound the model leg to 38s and disable in-call SDK retries so one
-    // analyze call provably fits. Retry is the orchestrator's job (a fresh invocation,
-    // with the page text already cached).
+    metadata: { candidate_id: candidateId, context: cand.context },
+    // Bound the model leg and disable in-call SDK retries so one analyze call
+    // stays short. Retry is the orchestrator's job (a fresh invocation).
     timeoutMs: 38_000,
     maxRetries: 0,
   });
 
   // 3) coerce + allow-list everything (never trust the model for codes/enums)
-  const validLens = new Set<string>(SIGNAL_LENS_SLUGS);
   const validCode = new Set(codes);
   const significance: Significance = (['high', 'medium', 'low'] as const).includes(
     out.significance as Significance
   )
     ? (out.significance as Significance)
     : 'medium';
-  const lenses = Array.isArray(out.lenses)
-    ? Array.from(new Set(out.lenses.filter((l): l is SignalLens => validLens.has(l as string))))
-    : [];
+  const context: SignalContext = (SIGNAL_CONTEXT_SLUGS as readonly string[]).includes(
+    out.context as string
+  )
+    ? (out.context as SignalContext)
+    : cand.context;
   const validDir = new Set<Direction>(DIRECTIONS);
   const seen = new Set<string>();
-  const claim_touches = Array.isArray(out.claim_touches)
-    ? out.claim_touches
+  const touches = Array.isArray(out.touches)
+    ? out.touches
         .filter((t) => t && validCode.has(t.code) && !seen.has(t.code) && seen.add(t.code))
         .map((t) => ({
           code: t.code,
@@ -164,8 +161,8 @@ export async function analyzeCandidate(candidateId: string): Promise<AnalysisRes
     summary: String(out.summary ?? ''),
     significance,
     significance_reason: String(out.significance_reason ?? ''),
-    lenses: lenses.length ? lenses : [cand.lens],
-    claim_touches,
+    context,
+    touches,
     proposed_reliability,
   };
 
@@ -183,11 +180,11 @@ export async function analyzeCandidate(candidateId: string): Promise<AnalysisRes
       title: analysis.title,
       summary: analysis.summary,
       significance: analysis.significance,
-      lenses: analysis.lenses,
-      claim_touches: analysis.claim_touches.map((t) => t.code),
+      context: analysis.context,
+      touches: analysis.touches.map((t) => t.code),
       // Preserve the model's per-touch direction + reason; becomes evidence on publish.
       touch_details: Object.fromEntries(
-        analysis.claim_touches.map((t) => [t.code, { direction: t.direction, reason: t.reason }])
+        analysis.touches.map((t) => [t.code, { direction: t.direction, reason: t.reason }])
       ),
       source_id: sourceId,
       published_at: cand.published_date || null,

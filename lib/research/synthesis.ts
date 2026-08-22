@@ -39,7 +39,7 @@ export async function updateThreadSynthesis(
   const paperList = papers
     .map((p) => {
       const bits = [
-        `- [${p.arxiv_id ?? 'manual'}] ${p.title} (${p.published_at ?? 'undated'}, ${p.relation})`,
+        `- ${p.title} (${p.published_at ?? 'undated'}, ${p.relation})`,
         p.headline && `  finding: ${p.headline}`,
         p.effect && `  effect: ${p.effect}`,
         p.why && `  placed because: ${p.why}`,

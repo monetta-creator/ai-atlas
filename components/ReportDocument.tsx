@@ -1,12 +1,12 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { SIGNAL_LENS_LABEL, signalLensColor, formatDateRange } from '@/lib/format';
-import type { Report, SignalLens } from '@/lib/types';
+import { SIGNAL_CONTEXT_LABEL, signalContextColor, formatDateRange } from '@/lib/format';
+import type { Report, SignalContext } from '@/lib/types';
 import RichTextEditable from './RichTextEditable';
 import EditorToolbar from './EditorToolbar';
 
-// The generated report, in display order: header, macro survey, claims recap, lens-by-lens
+// The generated report, in display order: header, macro survey, hypotheses recap, context
 // breakdown. (The page renders the read-only appendices below this.) Every narrative
 // section is a fully-editable rich-text field (HTML), plus one editable/removable plain-text
 // CALLOUT (the section's key takeaway, rendered as a callout box in the PDF). Edits flow up
@@ -63,8 +63,8 @@ export default function ReportDocument({
   onExport,
   onEditSection,
   onEditCallout,
-  lensErrors,
-  onRetryLens,
+  sectionErrors,
+  onRetryContext,
   retrying,
 }: {
   report: Report;
@@ -78,11 +78,11 @@ export default function ReportDocument({
   onExport: () => void;
   onEditSection: (key: string, html: string) => void;
   onEditCallout: (key: string, value: string | null) => void;
-  lensErrors: Record<string, string>;
-  onRetryLens: (lens: SignalLens) => void;
-  retrying: SignalLens | null;
+  sectionErrors: Record<string, string>;
+  onRetryContext: (context: SignalContext) => void;
+  retrying: SignalContext | null;
 }) {
-  const { narrative, range, lenses, generatedAt } = report;
+  const { narrative, range, contexts, generatedAt } = report;
   // Stable per-generation key so editors persist across keystrokes but remount (reload
   // fresh content) on a new generation.
   const ekey = (k: string) => `${generatedAt}:${k}`;
@@ -113,7 +113,7 @@ export default function ReportDocument({
             style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 600 }}
           />
           <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--dim)' }}>
-            AI Atlas Report · {formatDateRange(range.from, range.to)} · {lenses.length} lens{lenses.length === 1 ? '' : 'es'} · generated {when}
+            Strategy Atlas Report · {formatDateRange(range.from, range.to)} · {contexts.length} context{contexts.length === 1 ? '' : 's'} · generated {when}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -128,7 +128,7 @@ export default function ReportDocument({
           </button>
           <button type="button" className="btn btn--ghost btn--sm" onClick={onResynthesize} disabled={resynthesizing}
             style={resynthesizing ? { opacity: 0.6, cursor: 'wait' } : undefined}
-            title="Re-run the macro survey + claims recap from the current lens text">
+            title="Re-run the macro survey + hypotheses recap from the current section text">
             {resynthesizing ? 'Re-synthesizing…' : 'Re-synthesize overview'}
           </button>
         </div>
@@ -139,7 +139,7 @@ export default function ReportDocument({
         <EditorToolbar />
       </div>
 
-      {/* Period summary (the cross-lens overview; was "Macro survey") */}
+      {/* Period summary (the cross-context overview) */}
       <section style={{ marginTop: 14 }}>
         <div className="section-label">Period summary</div>
         {narrative.macroSurvey ? (
@@ -154,40 +154,40 @@ export default function ReportDocument({
         )}
       </section>
 
-      {/* Claims recap */}
+      {/* Hypotheses recap */}
       <section style={{ marginTop: 18 }}>
-        <div className="section-label">Claims recap</div>
+        <div className="section-label">Hypotheses recap</div>
         {narrative.claimsRecap ? (
           <RichTextEditable
             key={ekey('claimsRecap')}
             initialHtml={narrative.claimsRecap}
-            ariaLabel="Claims recap"
+            ariaLabel="Hypotheses recap"
             onChange={(html) => onEditSection('claimsRecap', html)}
           />
         ) : (
-          <Muted>Synthesis did not produce a claims recap.</Muted>
+          <Muted>Synthesis did not produce a hypotheses recap.</Muted>
         )}
       </section>
 
-      {/* Lens-by-lens breakdown — each lens has one callout (the key takeaway), which the
-          PDF gathers into the summary-page grid */}
-      <div className="section-label" style={{ marginTop: 22 }}>Lens-by-lens breakdown</div>
-      {lenses.map((lens) => {
-        const html = narrative.perLens[lens];
-        const err = lensErrors[lens];
+      {/* Context-by-context breakdown — each context has one callout (the key takeaway),
+          which the PDF gathers into the summary-page grid */}
+      <div className="section-label" style={{ marginTop: 22 }}>Context breakdown</div>
+      {contexts.map((context) => {
+        const html = narrative.perContext[context];
+        const err = sectionErrors[context];
         return (
-          <section key={lens} style={{ marginTop: 14 }}>
-            <div className="section-label" style={{ color: signalLensColor(lens) }}>
-              {SIGNAL_LENS_LABEL[lens]}
+          <section key={context} style={{ marginTop: 14 }}>
+            <div className="section-label" style={{ color: signalContextColor(context) }}>
+              {SIGNAL_CONTEXT_LABEL[context]}
             </div>
             {html ? (
               <>
-                {callout(lens)}
+                {callout(context)}
                 <RichTextEditable
-                  key={ekey(`lens:${lens}`)}
+                  key={ekey(`context:${context}`)}
                   initialHtml={html}
-                  ariaLabel={`${SIGNAL_LENS_LABEL[lens]} narrative`}
-                  onChange={(h) => onEditSection(`lens:${lens}`, h)}
+                  ariaLabel={`${SIGNAL_CONTEXT_LABEL[context]} narrative`}
+                  onChange={(h) => onEditSection(`context:${context}`, h)}
                 />
               </>
             ) : err ? (
@@ -196,20 +196,20 @@ export default function ReportDocument({
                 style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
               >
                 <span className="text-sm" style={{ color: 'var(--heat-4)' }}>
-                  Couldn’t generate this lens: {err}
+                  Couldn’t generate this section: {err}
                 </span>
                 <button
                   type="button"
                   className="btn btn--ghost btn--sm"
-                  onClick={() => onRetryLens(lens)}
-                  disabled={retrying === lens}
-                  style={retrying === lens ? { opacity: 0.6, cursor: 'wait' } : undefined}
+                  onClick={() => onRetryContext(context)}
+                  disabled={retrying === context}
+                  style={retrying === context ? { opacity: 0.6, cursor: 'wait' } : undefined}
                 >
-                  {retrying === lens ? 'Retrying…' : 'Retry'}
+                  {retrying === context ? 'Retrying…' : 'Retry'}
                 </button>
               </div>
             ) : (
-              <Muted>No developments under this lens in this period.</Muted>
+              <Muted>No developments under this context in this period.</Muted>
             )}
           </section>
         );

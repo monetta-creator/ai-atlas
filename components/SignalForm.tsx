@@ -3,9 +3,9 @@
 import { useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
-  SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL, SIGNAL_LENS_COLOR, SIGNIFICANCE_LABEL,
+  SIGNAL_CONTEXT_SLUGS, SIGNAL_CONTEXT_LABEL, SIGNAL_CONTEXT_COLOR, SIGNIFICANCE_LABEL,
 } from '@/lib/format';
-import type { Direction, Significance, SignalLens } from '@/lib/types';
+import type { Direction, Significance, SignalContext } from '@/lib/types';
 import type { TargetOption } from '@/lib/data';
 
 const truncate = (s: string, n = 72) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
@@ -21,8 +21,8 @@ interface InitialValues {
   title?: string;
   summary?: string;
   significance?: Significance;
-  lenses?: SignalLens[];
-  claim_touches?: string[];
+  context?: SignalContext;
+  touches?: string[];
   touch_details?: Record<string, TouchDetail>;
   source_id?: string | null;
   published_at?: string | null;
@@ -53,12 +53,11 @@ function SubmitRow({ mode }: { mode: 'create' | 'edit' }) {
 }
 
 export default function SignalForm({
-  action, mode, claims, bridges, initial = {}, signalId, sources, lockedSourceId,
+  action, mode, hypotheses, initial = {}, signalId, sources, lockedSourceId,
 }: {
   action: (formData: FormData) => void | Promise<void>;
   mode: 'create' | 'edit';
-  claims: TargetOption[];
-  bridges: TargetOption[];
+  hypotheses: TargetOption[];
   initial?: InitialValues;
   signalId?: string;
   sources?: { id: string; title: string | null }[];
@@ -67,9 +66,9 @@ export default function SignalForm({
   const [title, setTitle] = useState(initial.title ?? '');
   const [summary, setSummary] = useState(initial.summary ?? '');
   const [significance, setSignificance] = useState<Significance>(initial.significance ?? 'medium');
-  const [lenses, setLenses] = useState<Set<SignalLens>>(new Set(initial.lenses ?? []));
+  const [context, setContext] = useState<SignalContext>(initial.context ?? 'external');
   const [touches, setTouches] = useState<Map<string, TouchDetail>>(
-    () => new Map((initial.claim_touches ?? []).map((c) => [
+    () => new Map((initial.touches ?? []).map((c) => [
       c, initial.touch_details?.[c] ?? { direction: 'neutral' as Direction, reason: '' },
     ]))
   );
@@ -80,14 +79,6 @@ export default function SignalForm({
     initial.published_at ? new Date(initial.published_at).toISOString().slice(0, 10) : ''
   );
 
-  function toggleLens(l: SignalLens) {
-    setLenses((prev) => {
-      const next = new Set(prev);
-      if (next.has(l)) next.delete(l);
-      else next.add(l);
-      return next;
-    });
-  }
   function toggleTouch(code: string) {
     setTouches((prev) => {
       const next = new Map(prev);
@@ -106,7 +97,7 @@ export default function SignalForm({
     });
   }
 
-  // One claim/bridge option: a checkbox, and — when checked — how this development
+  // One hypothesis option: a checkbox, and — when checked — how this development
   // bears on it (the direction that becomes the materialized evidence's direction) plus
   // an optional reason (becomes the evidence excerpt).
   const renderOption = (opt: TargetOption) => {
@@ -146,7 +137,6 @@ export default function SignalForm({
     );
   };
 
-  const lensesJson = JSON.stringify(SIGNAL_LENS_SLUGS.filter((s) => lenses.has(s)));
   const touchesJson = JSON.stringify([...touches.keys()]);
   const touchDetailsJson = JSON.stringify(Object.fromEntries(touches));
 
@@ -157,8 +147,7 @@ export default function SignalForm({
       style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
     >
       {mode === 'edit' && signalId && <input type="hidden" name="id" value={signalId} />}
-      <input type="hidden" name="lenses" value={lensesJson} />
-      <input type="hidden" name="claim_touches" value={touchesJson} />
+      <input type="hidden" name="touches" value={touchesJson} />
       <input type="hidden" name="touch_details" value={touchDetailsJson} />
       <input type="hidden" name="source_id" value={sourceId} />
 
@@ -184,7 +173,7 @@ export default function SignalForm({
           style={{ resize: 'vertical' }}
           value={summary}
           onChange={(e) => setSummary(e.target.value)}
-          placeholder="What happened, and why it matters to a financial institution."
+          placeholder="What happened, and why it matters to the team."
         />
       </div>
 
@@ -216,30 +205,31 @@ export default function SignalForm({
         </div>
       </div>
 
-      {/* lenses */}
+      {/* context */}
       <div className="field">
-        <label>Lenses</label>
+        <label>Context</label>
+        <input type="hidden" name="context" value={context} />
         <div className="lens-chip-row">
-          {SIGNAL_LENS_SLUGS.map((l) => {
-            const on = lenses.has(l);
+          {SIGNAL_CONTEXT_SLUGS.map((c) => {
+            const on = context === c;
             return (
               <button
-                key={l}
+                key={c}
                 type="button"
                 className="lenschip"
                 data-on={on ? '' : undefined}
-                onClick={() => toggleLens(l)}
+                onClick={() => setContext(c)}
                 style={
                   on
                     ? {
-                        color: SIGNAL_LENS_COLOR[l],
-                        borderColor: `color-mix(in oklab, ${SIGNAL_LENS_COLOR[l]} 45%, var(--line))`,
-                        background: `color-mix(in oklab, ${SIGNAL_LENS_COLOR[l]} 10%, var(--surface))`,
+                        color: SIGNAL_CONTEXT_COLOR[c],
+                        borderColor: `color-mix(in oklab, ${SIGNAL_CONTEXT_COLOR[c]} 45%, var(--line))`,
+                        background: `color-mix(in oklab, ${SIGNAL_CONTEXT_COLOR[c]} 10%, var(--surface))`,
                       }
                     : undefined
                 }
               >
-                {SIGNAL_LENS_LABEL[l]}
+                {SIGNAL_CONTEXT_LABEL[c]}
               </button>
             );
           })}
@@ -264,19 +254,17 @@ export default function SignalForm({
         </div>
       )}
 
-      {/* claim_touches — each touched claim/bridge gets a direction (supports / contradicts /
+      {/* touches — each touched hypothesis gets a direction (supports / contradicts /
           neutral) and an optional reason, which become the evidence materialized on publish. */}
       <div className="field">
-        <label>Touches: claims &amp; bridge-claims this development bears on</label>
+        <label>Touches: hypotheses this development bears on</label>
         <p className="text-xs" style={{ color: 'var(--faint-ink)', margin: '0 0 6px' }}>
           For each, set whether the development supports or contradicts it. Evidence is written
-          into the Argument Map when you publish.
+          into the Atlas when you publish.
         </p>
         <div className="touch-picker">
-          {claims.length > 0 && <div className="touch-group-label">Claims</div>}
-          {claims.map((c) => renderOption(c))}
-          {bridges.length > 0 && <div className="touch-group-label">Bridge-claims</div>}
-          {bridges.map((b) => renderOption(b))}
+          {hypotheses.length > 0 && <div className="touch-group-label">Hypotheses</div>}
+          {hypotheses.map((h) => renderOption(h))}
         </div>
       </div>
 

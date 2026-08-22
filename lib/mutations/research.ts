@@ -88,16 +88,16 @@ export async function setPaperRawContent(paperId: string, text: string | null, v
 export async function setPaperExtraction(
   paperId: string,
   extraction: PaperExtraction,
-  suggestions: { claim_touches: string[]; suggested_concepts: string[]; suggested_threads: string[] }
+  suggestions: { touches: string[]; suggested_concepts: string[]; suggested_threads: string[] }
 ): Promise<void> {
   await exec(
     `update papers set
-       extraction = $1::jsonb, claim_touches = $2, suggested_concepts = $3, suggested_threads = $4,
+       extraction = $1::jsonb, touches = $2, suggested_concepts = $3, suggested_threads = $4,
        updated_at = now()
      where id = $5`,
     [
       JSON.stringify(extraction),
-      suggestions.claim_touches, suggestions.suggested_concepts, suggestions.suggested_threads,
+      suggestions.touches, suggestions.suggested_concepts, suggestions.suggested_threads,
       paperId,
     ]
   );

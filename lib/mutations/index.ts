@@ -2,11 +2,10 @@
 // actions in lib/actions are the only callers, and every one re-checks
 // isAdmin first). Import from '@/lib/mutations' as before.
 export * from './core';
-export * from './worldview';
 export * from './signals';
 export * from './pipeline';
 export * from './reports';
 export * from './concepts';
 export * from './research';
-export * from './theses';
+export * from './hypotheses';
 export * from './tickets';

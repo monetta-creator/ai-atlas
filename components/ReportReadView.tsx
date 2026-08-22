@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { SIGNAL_LENS_LABEL, signalLensColor, formatDateRange } from '@/lib/format';
+import { SIGNAL_CONTEXT_LABEL, signalContextColor, formatDateRange } from '@/lib/format';
 import type { Report } from '@/lib/types';
 import ReportDisclaimer from './ReportDisclaimer';
 
@@ -13,16 +13,16 @@ function Prose({ html }: { html: string }) {
 }
 
 export default function ReportReadView({ title, report }: { title: string; report: Report }) {
-  const { narrative, range, lenses, generatedAt, touches } = report;
+  const { narrative, range, contexts, generatedAt, touches } = report;
   const when = generatedAt.slice(0, 10);
-  const lensesWithContent = lenses.filter((l) => narrative.perLens[l]);
+  const contextsWithContent = contexts.filter((c) => narrative.perContext[c]);
   // Creative editorial title leads (large); the report name + date + generated go in the
-  // byline beneath. Legacy auto-titles ("AI Atlas — <range>") fall back to the name as the
+  // byline beneath. Legacy auto-titles ("Strategy Atlas — <range>") fall back to the name as the
   // headline so older reports still read cleanly.
-  const creative = title && !title.startsWith('AI Atlas') ? title : '';
-  const headline = creative || `AI Atlas Report - ${formatDateRange(range.from, range.to)}`;
+  const creative = title && !title.startsWith('Strategy Atlas') ? title : '';
+  const headline = creative || `Strategy Atlas Report - ${formatDateRange(range.from, range.to)}`;
   const byline = creative
-    ? `AI Atlas Report · ${formatDateRange(range.from, range.to)} · generated ${when}`
+    ? `Strategy Atlas Report · ${formatDateRange(range.from, range.to)} · generated ${when}`
     : `Generated ${when}`;
 
   return (
@@ -41,15 +41,15 @@ export default function ReportReadView({ title, report }: { title: string; repor
         </section>
       )}
 
-      {/* The per-lens callouts, gathered as a 3×2 grid (one per lens). */}
-      {lensesWithContent.length > 0 && (
+      {/* The per-context callouts, gathered as a grid (one per context). */}
+      {contextsWithContent.length > 0 && (
         <div className="callout-grid" style={{ marginTop: 16 }}>
-          {lensesWithContent.map((l) => {
-            const c = narrative.callouts[l];
+          {contextsWithContent.map((c) => {
+            const text = narrative.callouts[c];
             return (
-              <div key={l} className="callout-box">
-                <div className="callout-box-lens">{SIGNAL_LENS_LABEL[l]}</div>
-                <div className="callout-box-text">{c && c.trim() ? c : '–'}</div>
+              <div key={c} className="callout-box">
+                <div className="callout-box-lens">{SIGNAL_CONTEXT_LABEL[c]}</div>
+                <div className="callout-box-text">{text && text.trim() ? text : '–'}</div>
               </div>
             );
           })}
@@ -58,21 +58,21 @@ export default function ReportReadView({ title, report }: { title: string; repor
 
       {narrative.claimsRecap && (
         <section style={{ marginTop: 22 }}>
-          <div className="section-label">Claims recap</div>
+          <div className="section-label">Hypotheses recap</div>
           <Prose html={narrative.claimsRecap} />
         </section>
       )}
 
-      {lensesWithContent.map((l) => (
-        <section key={l} style={{ marginTop: 22 }}>
-          <div className="section-label" style={{ color: signalLensColor(l) }}>{SIGNAL_LENS_LABEL[l]}</div>
-          <Prose html={narrative.perLens[l] as string} />
+      {contextsWithContent.map((c) => (
+        <section key={c} style={{ marginTop: 22 }}>
+          <div className="section-label" style={{ color: signalContextColor(c) }}>{SIGNAL_CONTEXT_LABEL[c]}</div>
+          <Prose html={narrative.perContext[c] as string} />
         </section>
       ))}
 
       {touches.length > 0 && (
         <section style={{ marginTop: 24 }}>
-          <div className="section-label">Claims &amp; bridge-claims touched ({touches.length})</div>
+          <div className="section-label">Hypotheses touched ({touches.length})</div>
           <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--dim)', fontSize: 14, lineHeight: 1.6 }}>
             {touches.map((t) => (
               <li key={t.code} style={{ margin: '3px 0' }}>

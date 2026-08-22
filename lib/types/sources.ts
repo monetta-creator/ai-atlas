@@ -1,7 +1,7 @@
-import type { Direction, Domain, Lens, NodeType, SignalLens, Weight } from './core';
-// ---- AI source dossier (Design Doc §7.1) — the model surfaces information,
-// never a score; the author still sets the reliability prior. Stored in
-// sources.dossier (jsonb). Provenance (`basis`) is surfaced visually in the UI.
+import type { Direction, Weight } from './core';
+// ---- AI source dossier — the model surfaces information, never a score; the
+// operator still sets the reliability prior. Stored in sources.dossier (jsonb).
+// Provenance (`basis`) is surfaced visually in the UI.
 export type Basis = 'web_verified' | 'training_memory' | 'document_stated';
 
 export interface BasisClaim {
@@ -30,62 +30,25 @@ export interface Dossier {
   for_the_analyst: {
     bias_to_model: string;          // the angle to keep in mind, NOT a verdict
     questions_unverified: string[]; // ranked by load-bearingness
-    suggested_domain_tag: Domain;
-    suggested_lenses: Lens[];
   };
 }
 
-// AI-extracted bibliographic metadata to pre-fill the add-source form (Change 1).
+// AI-extracted bibliographic metadata to pre-fill the add-source form.
 // Empty string means "not found" — fields are never guessed.
 export interface SourceMetadata {
   title: string;
   author: string;
   url: string;
   published_at: string; // YYYY-MM-DD or ''
-  domain_tag: string;   // a Domain value or ''
 }
 
-// An AI recommendation that a source is evidence for a claim (Change 2). Advisory
-// only — the author decides what to attach.
-export interface ClaimRecommendation {
-  claim_code: string;
+// An AI recommendation that a source is evidence for a hypothesis. Advisory
+// only — the operator decides what to attach.
+export interface HypothesisRecommendation {
+  code: string;
   direction: Direction;
-  weight: Weight;
+  confidence: Weight;
   reason: string;
-}
-
-// Question state summary (AI one-pager + history log). Numbers in `metrics` are
-// computed in code (not the model) so the timeline is trustworthy; the model
-// writes the prose sections.
-export interface SummaryMetrics {
-  stances: number;
-  claims: number;
-  bridges: number;
-  contested: number;
-  evidence_total: number;
-  supporting: number;
-  contradicting: number;
-  neutral: number;
-  claims_without_evidence: number;
-  one_sided: number;
-}
-
-export interface QuestionSummary {
-  headline: string;            // one-line tl;dr
-  overall_state: string;       // what's resolved vs still contested
-  claims_overview: string;     // the claims present, incl. bridge-claims
-  interdependencies: string;   // connections between claims/stances/bridges
-  evidence_summary: string;    // how much evidence is attached, distribution
-  falsifiability: string;      // what would it take to settle contested points
-  patterns_and_gaps: string;   // notable patterns or gaps in what's collected
-}
-
-export interface QuestionSummaryRow {
-  id: string;
-  question_id: string;
-  summary: QuestionSummary;
-  metrics: SummaryMetrics;
-  created_at: string;
 }
 
 export interface Source {
@@ -95,7 +58,6 @@ export interface Source {
   outlet: string | null;
   url: string | null;
   published_at: string | null;
-  domain_tag: Domain | null;
   reliability_prior: number | null;
   dossier: Dossier | null;
   created_at: string;
@@ -103,15 +65,14 @@ export interface Source {
 
 export interface Evidence {
   id: string;
-  source_id: string | null;           // nullable since 0006 — a signal can be its own source
-  signal_id?: string | null;          // set when this evidence was materialized from a signal
-  lens?: SignalLens | null;           // the audience lens this finding speaks to
-  target_type: NodeType;
-  target_id: string;
+  hypothesis_id: string;
+  source_id: string | null;           // nullable — a signal can be its own source
+  signal_id?: string | null;          // set when materialized from a signal on publish
   direction: Direction;
-  weight: Weight;
+  confidence: Weight;                 // the operator's weight on THIS link (D-017)
   excerpt: string | null;
-  note: string | null;
+  note: string | null;                // why it bears; admin-only in guest reads
+  actor?: string;
   created_at: string;
   source_title?: string | null;
   source_outlet?: string | null;
@@ -121,14 +82,14 @@ export interface Evidence {
 
 export interface Rationale {
   id: string;
-  target_type: string;
-  target_id: string;
-  old_confidence: number | null;
-  new_confidence: number | null;
+  hypothesis_id: string;
+  old_conviction: number | null;
+  new_conviction: number | null;
   reason: string;
   evidence_id: string | null;
+  actor?: string;
   created_at: string;
-  // joined-in when a move cited an evidence row (rationales.evidence_id)
+  // joined-in when a move cited an evidence row
   evidence_excerpt?: string | null;
   evidence_direction?: Direction | null;
   evidence_source?: string | null;

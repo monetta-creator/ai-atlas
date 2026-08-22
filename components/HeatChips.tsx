@@ -1,25 +1,31 @@
-import { confidenceText, heatFill } from '@/lib/format';
-import type { ConfidenceLabel } from '@/lib/types';
+import { heatFill, heatVar } from '@/lib/format';
+import type { ConvictionLabel } from '@/lib/types';
 
-// The Console confidence renderer: five cells fill cool→warm with the raw
-// confidence; each lit cell carries its own heat-step color. Admin-only —
-// callers gate on `admin` and pass the (non-null) confidence number.
+// The five-chip conviction meter (Console design system): chips fill cool→warm
+// with the raw 0–1 conviction; the color comes from the band label.
 export default function HeatChips({
-  confidence,
+  conviction,
   label,
 }: {
-  confidence: number | null;
-  label?: ConfidenceLabel;
+  conviction: number | null;
+  label: ConvictionLabel;
 }) {
-  const fill = heatFill(confidence);
+  const filled = heatFill(conviction);
+  const color = heatVar(label);
   return (
-    <div className="heat-chips" title={label ? confidenceText(label) : undefined}>
-      {[0, 1, 2, 3, 4].map((i) => (
+    <span className="heat-chips" aria-hidden="true" style={{ display: 'inline-flex', gap: 3 }}>
+      {Array.from({ length: 5 }, (_, i) => (
         <i
           key={i}
-          style={i < fill ? { background: `var(--heat-${i})`, opacity: 0.95 } : undefined}
+          style={{
+            width: 7,
+            height: 12,
+            borderRadius: 2,
+            background: i < filled ? color : 'var(--line)',
+            display: 'inline-block',
+          }}
         />
       ))}
-    </div>
+    </span>
   );
 }

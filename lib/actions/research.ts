@@ -86,7 +86,7 @@ export async function analyzePaperAction(paperId: string): Promise<{
     return {
       ok: true,
       headline: r.extraction.headline_claim,
-      touches: r.claim_touches.length,
+      touches: r.touches.length,
       proposedRigor: r.extraction.proposed_rigor,
     };
   } catch (e) {
@@ -173,7 +173,7 @@ export async function preparePaperPromotionAction(paperId: string): Promise<{
     sourceId = await m.ensureSource({
       url: paper.url,
       title: paper.title,
-      outlet: paper.arxiv_id ? 'arxiv.org' : domainOf(paper.url) || null,
+      outlet: domainOf(paper.url) || null,
     });
     await m.setPaperSource(paperId, sourceId);
   }
@@ -194,8 +194,8 @@ export async function preparePaperPromotionAction(paperId: string): Promise<{
       sourceId,
       url: paper.url,
       headline: paper.title,
-      source_domain: paper.arxiv_id ? 'arxiv.org' : domainOf(paper.url) || null,
-      lens: 'capability', // seed only — analysis sets the real lenses
+      source_domain: domainOf(paper.url) || null,
+      context: 'external', // seed only — analysis sets the model's context
       published_date: paper.published_at,
       raw_content: text,
     });

@@ -3,10 +3,10 @@ import { notFound } from 'next/navigation';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getSignal, getSource, getRelatedSignals } from '@/lib/data';
 import { getAskClientData } from '@/lib/ask/retrieve';
-import { dateLabel, DOMAIN_LABEL, confidenceText, directionLabel, directionColor } from '@/lib/format';
+import { dateLabel, convictionText, directionLabel, directionColor } from '@/lib/format';
 import { publishSignalAction, deleteSignalAction, archiveSignalAction, unarchiveSignalAction } from '@/lib/actions';
 import Header from '@/components/Header';
-import { LensBadges, SignificanceTag } from '@/components/SignalBadges';
+import { ContextBadge, SignificanceTag } from '@/components/SignalBadges';
 import RelatedSignalsTable from '@/components/RelatedSignalsTable';
 import { SignalBriefSection, SignalCounterpointSection } from '@/components/SignalBriefView';
 import GenerateSignalAnalysisButton from '@/components/GenerateSignalAnalysisButton';
@@ -37,7 +37,7 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
   // The dependent second wave: related signals need the touches, the source
   // dossier needs the source id. Both admin-relevant reads run concurrently.
   const [related, srcData] = await Promise.all([
-    getRelatedSignals(signal.id, signal.claim_touches, personal),
+    getRelatedSignals(signal.id, signal.touches, personal),
     personal && signal.source_id ? getSource(signal.source_id) : Promise.resolve(null),
   ]);
   const dossier = srcData?.source.dossier ?? null;
@@ -54,7 +54,7 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
 
         <header className="pagehead" style={{ padding: '20px 0 18px' }}>
           <div className="signal-top" style={{ marginBottom: 12 }}>
-            <LensBadges lenses={signal.lenses} />
+            <ContextBadge context={signal.context} />
             <SignificanceTag significance={signal.significance} />
             {personal && !signal.is_published && (
               <span className="badge badge--dashed" style={{ fontSize: 11, padding: '3px 9px' }}>
@@ -121,7 +121,7 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
               <div style={{ marginTop: 22 }}>
                 <div className="section-label">Ask this signal</div>
                 <p style={{ color: 'var(--faint-ink)', fontSize: 13, margin: '6px 0 0' }}>
-                  Answers are grounded only in this signal, its source, and the claims it touches.
+                  Answers are grounded only in this signal, its source, and the hypotheses it touches.
                 </p>
                 <AskAtlas
                   validIds={validIds}
@@ -146,12 +146,12 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
         {/* The other read: the opposing interpretation + what would deflate it. Public. */}
         {signal.counterpoint && <SignalCounterpointSection counterpoint={signal.counterpoint} />}
 
-        {/* Claims and bridge-claims this signal links to. */}
+        {/* Hypotheses this signal links to. */}
         <section style={{ marginTop: 30 }}>
-          <div className="section-label">On the Argument Map</div>
+          <div className="section-label">On the Atlas</div>
           {touches.length === 0 ? (
             <p style={{ color: 'var(--faint-ink)', fontSize: 14 }}>
-              Not yet linked to any claim or bridge-claim.
+              Not yet linked to any hypothesis.
             </p>
           ) : (
             <div className="flex flex-col gap-2.5">
@@ -172,14 +172,13 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
                   <Link key={t.code} href={t.href} className="touch-detail">
                     <div className="td-head">
                       <span>{t.code}</span>
-                      <span>· {t.type === 'bridge_claim' ? 'bridge-claim' : 'claim'}</span>
-                      {/* direction is descriptive (how it bears on the claim) — public */}
+                      <span>· hypothesis</span>
+                      {/* direction is descriptive (how it bears on the hypothesis) — public */}
                       {t.direction && (
                         <span className={directionColor(t.direction)}>· {directionLabel(t.direction)}</span>
                       )}
-                      {t.domain && <span>· {DOMAIN_LABEL[t.domain]}</span>}
-                      {/* confidence is the personal layer — admin only */}
-                      {personal && t.confidence_label && <span>· {confidenceText(t.confidence_label)}</span>}
+                      {/* conviction is the personal layer — admin only */}
+                      {personal && t.conviction_label && <span>· {convictionText(t.conviction_label)}</span>}
                     </div>
                     <div className="td-stmt">{t.statement}</div>
                     {/* the model's reason is admin-only (personal layer) */}
@@ -200,7 +199,7 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
           <section style={{ marginTop: 30 }}>
             <div className="section-label">In context</div>
             <p style={{ color: 'var(--faint-ink)', fontSize: 13, margin: '0 0 12px' }}>
-              {related.length} other tracked development{related.length === 1 ? '' : 's'} touching the same claims.
+              {related.length} other tracked development{related.length === 1 ? '' : 's'} touching the same hypotheses.
             </p>
             <RelatedSignalsTable signals={related} />
           </section>

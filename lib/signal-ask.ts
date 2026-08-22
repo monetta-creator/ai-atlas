@@ -1,7 +1,7 @@
 import { getSignal, getSource, getTestsByCodes } from './data';
 
 // Server-only. Builds the grounding context for the per-signal "Ask this signal" chatbot:
-// a prompt bounded to ONE signal (its summary, source text, and the claims it touches),
+// a prompt bounded to ONE signal (its summary, source text, and the hypotheses it touches),
 // far cheaper than the whole-Atlas /ask retrieval. The route streams Haiku over this.
 // Admin-only (the route enforces it), so we read with personal = true.
 
@@ -13,7 +13,7 @@ interface SignalAskContext {
 
 const SYSTEM = `You are a question-answering assistant scoped to ONE tracked development (a "signal") from The AI Atlas, a tool for staying oriented in the debate about AI and the economy. The Atlas is for orientation, not proof.
 
-You answer ONLY from the material about this one development provided in the user message: its title, its summary, its source text, and the claims on the Argument Map it touches. You have no outside knowledge. Treat that material as your entire world.
+You answer ONLY from the material about this one development provided in the user message: its title, its summary, its source text, and the hypotheses on the Atlas it touches. You have no outside knowledge. Treat that material as your entire world.
 
 How to answer:
 - If the material answers the question, answer it plainly and concisely.
@@ -36,14 +36,13 @@ export async function buildSignalAskContext(signalId: string, query: string): Pr
     const src = await getSource(signal.source_id);
     sourceText = src?.source.raw_text ?? null;
   }
-  const tests = await getTestsByCodes(signal.claim_touches);
+  const tests = await getTestsByCodes(signal.touches);
 
   const touchLines = touches
     .filter((t) => !t.unresolved)
     .map((t) => {
-      const kind = t.type === 'bridge_claim' ? 'bridge' : 'claim';
       const test = tests[t.code] ? ` Falsified if: ${tests[t.code]}` : '';
-      return `[${kind} ${t.code}] ${t.statement}${test}`;
+      return `[hypothesis ${t.code}] ${t.statement}${test}`;
     })
     .join('\n');
 
@@ -57,7 +56,7 @@ export async function buildSignalAskContext(signalId: string, query: string): Pr
 Title: ${signal.title}
 ${signal.source_title ? `Source: ${signal.source_title}\n` : ''}Summary: ${signal.summary || '(none)'}
 
-CLAIMS IT TOUCHES ON THE ARGUMENT MAP:
+HYPOTHESES IT TOUCHES ON THE ATLAS:
 ${touchLines || '(none)'}${body}
 
 ----

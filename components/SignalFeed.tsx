@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import type { SignalsPageResult, SignalLens } from '@/lib/types';
+import type { SignalsPageResult, SignalContext } from '@/lib/types';
 import { getSignalsFeedAction } from '@/lib/actions';
-import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL, signalLensColor } from '@/lib/format';
+import { SIGNAL_CONTEXT_SLUGS, SIGNAL_CONTEXT_LABEL, signalContextColor } from '@/lib/format';
 import SignalCard from './SignalCard';
 
-// One layer of the Signal Board feed (published OR draft). Lens/significance/search/pagination
+// One layer of the Signal Board feed (published OR draft). Context/significance/search/pagination
 // run through getSignalsFeedAction so they don't re-render the rest of the page; the server
 // hands page 1 as `initial`. The action recomputes admin server-side and forces guests to
 // published-only, so a `status="unpublished"` instance is only ever mounted for the admin —
@@ -24,7 +24,7 @@ export default function SignalFeed({
   // Where admin card actions (publish/archive) return after acting; forwarded to SignalCard.
   redirectTo?: string;
 }) {
-  const [lenses, setLenses] = useState<SignalLens[]>([]);
+  const [contexts, setContexts] = useState<SignalContext[]>([]);
   const [highOnly, setHighOnly] = useState(false);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -62,7 +62,7 @@ export default function SignalFeed({
       try {
         const r = await getSignalsFeedAction({
           status,
-          lenses: lenses.length ? lenses : undefined,
+          contexts: contexts.length ? contexts : undefined,
           significance: highOnly ? ['high'] : undefined,
           search: debounced || undefined,
           page,
@@ -73,36 +73,36 @@ export default function SignalFeed({
       }
     })();
     return () => { cancelled = true; };
-  }, [lenses, highOnly, debounced, page, status, reloadToken]);
+  }, [contexts, highOnly, debounced, page, status, reloadToken]);
 
   const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize));
-  const anyFilter = lenses.length > 0 || highOnly || !!search;
+  const anyFilter = contexts.length > 0 || highOnly || !!search;
   const noun = status === 'archived' ? 'archived draft' : status === 'unpublished' ? 'draft' : 'signal';
 
-  function toggleLens(l: SignalLens) {
-    setLenses((cur) => (cur.includes(l) ? cur.filter((x) => x !== l) : [...cur, l]));
+  function toggleContext(c: SignalContext) {
+    setContexts((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]));
     setPage(1);
   }
-  function clearAll() { setLenses([]); setHighOnly(false); setSearch(''); setDebounced(''); setPage(1); }
+  function clearAll() { setContexts([]); setHighOnly(false); setSearch(''); setDebounced(''); setPage(1); }
 
   return (
     <div className="flex flex-col gap-3">
       {/* Filters */}
       <div className="flex flex-col gap-2">
         <div className="lens-chip-row">
-          {SIGNAL_LENS_SLUGS.map((l) => {
-            const on = lenses.includes(l);
-            const color = signalLensColor(l);
+          {SIGNAL_CONTEXT_SLUGS.map((c) => {
+            const on = contexts.includes(c);
+            const color = signalContextColor(c);
             return (
               <button
-                key={l}
+                key={c}
                 type="button"
                 className="lenschip"
                 data-on={on ? '' : undefined}
-                onClick={() => toggleLens(l)}
+                onClick={() => toggleContext(c)}
                 style={on ? { color, borderColor: `color-mix(in oklab, ${color} 45%, var(--line))`, background: `color-mix(in oklab, ${color} 12%, var(--surface))` } : undefined}
               >
-                {SIGNAL_LENS_LABEL[l]}
+                {SIGNAL_CONTEXT_LABEL[c]}
               </button>
             );
           })}

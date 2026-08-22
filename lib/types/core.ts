@@ -1,98 +1,64 @@
-export type Domain = 'capability' | 'economics' | 'build_out' | 'market' | 'labor';
+// The Strategy Atlas core model (transition D-016/D-017): one tier of
+// belief-objects. A HYPOTHESIS carries the falsifiable test and the gated
+// CONVICTION (0..1, word-labeled, human-moved only); EVIDENCE links attach
+// directly to hypotheses with a per-link CONFIDENCE (the Weight words), a
+// direction, and a why-it-bears note.
+
 export type Resolvability = 'clean' | 'slow' | 'qualitative';
-export type Lens =
-  | 'market' | 'economics' | 'social' | 'employment'
-  | 'education' | 'geopolitics' | 'stack';
-export type Relation = 'supports' | 'contradicts' | 'depends_on' | 'organizes';
 export type Direction = 'supports' | 'contradicts' | 'neutral';
+// The evidence-link confidence words (D-017). "Weight" remains the type name
+// because the words are weights; the column and UI say confidence.
 export type Weight = 'high' | 'medium' | 'low';
-export type NodeType = 'stance' | 'claim' | 'bridge_claim';
-export type ConfidenceLabel = 'settled' | 'leaning' | 'contested' | 'thin' | null;
+export type ConvictionLabel = 'settled' | 'leaning' | 'contested' | 'thin' | null;
+export type HypothesisStatus = 'active' | 'retired' | 'resolved';
 
 // ---- Signal Board ----
-// A separate, audience-tailored lens vocabulary (distinct from the argument map's
-// Lens). Mirrors the signal_lens_t Postgres enum in migration 0004.
 export type Significance = 'high' | 'medium' | 'low';
-export type SignalLens =
-  | 'market' | 'labor' | 'geopolitics' | 'regulatory' | 'capability' | 'society';
+// The primary signal axis (D-005): where the development comes from.
+export type SignalContext = 'internal' | 'external';
 export type SignalOrigin = 'manual' | 'pipeline';
 
-// ---- Discovery pipeline (migration 0005) ----
+// ---- Intake pipeline ----
 export type TriageStatus = 'pending' | 'approved' | 'rejected' | 'duplicate';
-// 'source' (migration 0015) = a single-source run created when an admin turns one manual
-// source into a signal; kept out of discovery history/analytics and the lookback window.
-export type RunCadence = 'manual' | 'daily' | 'weekly' | 'source';
+// 'source' = a single-source run created when an admin turns one manual
+// source into a signal; 'manual' = a multi-candidate intake batch.
+export type RunCadence = 'manual' | 'source';
 export type RunStatus = 'running' | 'completed' | 'failed';
-export type RunStep = 'discovery' | 'triage' | 'analysis' | 'complete';
-// Per-candidate analysis outcome (migration 0007). 'drafted' = became a draft signal;
-// 'error' = a failed attempt (transient, retried); 'discarded' = terminalized after the
-// orchestrator exhausted retries. Lets the dashboard show real analysis-step health.
+export type RunStep = 'triage' | 'analysis' | 'complete';
 export type AnalysisStatus = 'pending' | 'drafted' | 'error' | 'discarded';
 
-export interface Question {
+export interface Hypothesis {
   id: string;
-  title: string;
-  slug: string;
-  summary: string | null;
-  primary_lens: Lens | null;
-  sort_order: number;
-}
-
-export interface QuestionStats extends Question {
-  stance_count: number;
-  claim_count: number;
-  contested_count: number;
-  last_moved: string | null;
-  evidence_count: number;   // distinct evidence rows on the question's claims (public)
-}
-
-export interface Stance {
-  id: string;
-  question_id: string;
-  code: string;
-  title: string;
-  holder: string | null;
-  summary: string | null;
-  test: string;
-  confidence: number | null;
-  confidence_label: ConfidenceLabel;
-  sort_order: number;
-}
-
-export interface Claim {
-  id: string;
-  code: string;
+  code: string;                  // stable short code: H1, H2, ... (citations, touches)
   statement: string;
-  test: string | null;
-  domain: Domain | null;
-  domain_note: string | null;
-  resolvability: Resolvability | null;
-  confidence: number | null;
-  confidence_label: ConfidenceLabel;
-  is_frame: boolean;
-  reflexive: boolean;
-}
-
-export interface BridgeClaim {
-  id: string;
-  code: string;
-  statement: string;
-  domain_from: Domain;
-  domain_to: Domain;
-  test: string;
-  resolvability: Resolvability | null;
-  confidence: number | null;
-  confidence_label: ConfidenceLabel;
-  reflexive: boolean;
+  test: string;                  // what evidence would move it
   note: string | null;
+  resolvability: Resolvability | null;
+  conviction: number | null;     // nulled for guests (the personal layer)
+  conviction_label: ConvictionLabel;
+  status: HypothesisStatus;
+  created_at?: string;
+  updated_at?: string;
+  // joined-in by list reads:
+  evidence_count?: number;
+  supports?: number;
+  contradicts?: number;
+  neutral?: number;
+  signal_count?: number;
+  last_moved?: string | null;    // admin-only; nulled for guests
+  report_count?: number;
+  last_generated_at?: string | null;
+  // The per-hypothesis gap scan (working layer; selected by detail reads only).
+  gap_scan?: import('./concepts').ArgumentGapScan | null;
 }
 
-export interface Edge {
+// Promote-and-link (D-016): a related/narrower hypothesis. Joined fields carry
+// the far end for display.
+export interface HypothesisLink {
   id: string;
-  from_type: NodeType;
   from_id: string;
-  to_type: NodeType;
   to_id: string;
-  relation: Relation;
   note: string | null;
+  code?: string;                 // the far end's code
+  statement?: string;            // the far end's statement
 }

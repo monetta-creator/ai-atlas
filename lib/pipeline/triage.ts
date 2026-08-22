@@ -110,7 +110,7 @@ export async function triageChunk(
     const list = toModel
       .map(
         (c, i) =>
-          `[${i}] (${c.lens}) ${c.source_domain || '?'}${c.published_date ? ` · ${c.published_date}` : ''} — ${c.headline || c.url}\n    ${c.url}`
+          `[${i}] (${c.context}) ${c.source_domain || '?'}${c.published_date ? ` · ${c.published_date}` : ''} — ${c.headline || c.url}\n    ${c.url}`
       )
       .join('\n');
 

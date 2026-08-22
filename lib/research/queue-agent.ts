@@ -76,8 +76,8 @@ async function buildSystem(): Promise<string> {
     ...taste.dismissed.map((t) => `- "${t}"`),
     '\nATLAS THREADS (papers that move these lean tracked):',
     ...threads.map((t) => `- ${t.slug}: ${t.title}`),
-    '\nATLAS CLAIMS AND BRIDGES (codes only, for bearing):',
-    [...targets.claims, ...targets.bridges].map((t) => `[${t.code}] ${t.statement.slice(0, 110)}`).join('\n'),
+    '\nTRACKED HYPOTHESES (codes only, for bearing):',
+    targets.hypotheses.map((t) => `[${t.code}] ${t.statement.slice(0, 110)}`).join('\n'),
     '\nATLAS CONCEPTS:',
     concepts.map((c) => c.slug).join(', ')
   );

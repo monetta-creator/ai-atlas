@@ -1,22 +1,21 @@
 import { one, exec, withTx } from '../db';
 import type { PoolClient } from 'pg';
 import type {
-  Direction, Significance, SignalLens,
+  Direction, Significance, SignalContext,
   SignalOrigin, DedupeRecommendation,
   } from '../types';
 
 // ---- Signal Board ----------------------------------------------------------
-// Arrays are passed as JS arrays and cast to their Postgres types in SQL
-// (signal_lens_t[] / text[]). published_at defaults to now() when not supplied.
+// published_at defaults to now() when not supplied.
 
 interface SignalInput {
   title: string;
   summary?: string | null;
   significance: Significance;
-  lenses: SignalLens[];
-  claim_touches: string[];
+  context: SignalContext;
+  touches: string[];
   // Per-touch {direction, reason} keyed by code; the source of truth for the evidence
-  // a signal materializes on publish. Codes are a subset of claim_touches.
+  // a signal materializes on publish. Codes are a subset of touches.
   touch_details?: Record<string, { direction: Direction; reason: string }>;
   source_id?: string | null;
   published_at?: string | null;
@@ -35,44 +34,36 @@ async function syncSignalEvidence(
 
   const sig = (
     await c.query(
-      `select claim_touches, touch_details, source_id, lenses::text[] as lenses
-         from signals where id = $1`,
+      `select touches, touch_details, source_id from signals where id = $1`,
       [signalId]
     )
   ).rows[0] as
     | {
-        claim_touches: string[];
+        touches: string[];
         touch_details: Record<string, { direction?: string; reason?: string }> | null;
         source_id: string | null;
-        lenses: string[] | null;
       }
     | undefined;
-  if (!sig || !sig.claim_touches?.length) return;
+  if (!sig || !sig.touches?.length) return;
 
-  // Resolve every touched code to a real (target_type, target_id) in one query.
+  // Resolve every touched code to a live hypothesis id in one query.
   const resolved = (
-    await c.query(
-      `select code, 'claim'::text as type, id from claims where code = any($1)
-       union all
-       select code, 'bridge_claim'::text as type, id from bridge_claims where code = any($1)`,
-      [sig.claim_touches]
-    )
-  ).rows as { code: string; type: 'claim' | 'bridge_claim'; id: string }[];
-  const byCode = new Map(resolved.map((r) => [r.code, r]));
+    await c.query(`select code, id from hypotheses where code = any($1)`, [sig.touches])
+  ).rows as { code: string; id: string }[];
+  const byCode = new Map(resolved.map((r) => [r.code, r.id]));
 
   const details = sig.touch_details ?? {};
-  const lens = sig.lenses && sig.lenses.length ? sig.lenses[0] : null; // representative audience lens
   const validDir = new Set<string>(['supports', 'contradicts', 'neutral']);
 
-  for (const code of sig.claim_touches) {
-    const target = byCode.get(code);
-    if (!target) continue; // a code that no longer names a live claim/bridge is skipped
+  for (const code of sig.touches) {
+    const hypId = byCode.get(code);
+    if (!hypId) continue; // a code that no longer names a live hypothesis is skipped
     const d = details[code] ?? {};
     const direction = validDir.has(d.direction ?? '') ? d.direction : 'neutral';
     await c.query(
-      `insert into evidence (signal_id, source_id, target_type, target_id, direction, weight, excerpt, lens)
-       values ($1, $2, $3, $4, $5, 'medium', $6, $7::signal_lens_t)`,
-      [signalId, sig.source_id, target.type, target.id, direction, d.reason ? String(d.reason) : null, lens]
+      `insert into evidence (signal_id, source_id, hypothesis_id, direction, confidence, excerpt, actor)
+       values ($1, $2, $3, $4, 'medium', $5, 'publish')`,
+      [signalId, sig.source_id, hypId, direction, d.reason ? String(d.reason) : null]
     );
   }
 }
@@ -86,15 +77,15 @@ async function insertSignalRow(
   const row = (
     await c.query(
       `insert into signals
-         (title, summary, significance, lenses, claim_touches, touch_details, source_id, published_at, is_published, origin)
-       values ($1, $2, $3, $4::signal_lens_t[], $5::text[], $6::jsonb, $7, coalesce($8::timestamptz, now()), $9, $10)
+         (title, summary, significance, context, touches, touch_details, source_id, published_at, is_published, origin)
+       values ($1, $2, $3, $4::context_t, $5::text[], $6::jsonb, $7, coalesce($8::timestamptz, now()), $9, $10)
        returning id`,
       [
         input.title,
         input.summary || null,
         input.significance,
-        input.lenses,
-        input.claim_touches,
+        input.context,
+        input.touches,
         JSON.stringify(input.touch_details ?? {}),
         input.source_id || null,
         input.published_at || null,
@@ -165,21 +156,21 @@ export async function createSourceCandidate(input: {
   url: string;
   headline?: string | null;
   source_domain?: string | null;
-  lens: SignalLens;
+  context: SignalContext;
   published_date?: string | null;
   raw_content: string;
 }): Promise<string> {
   const row = await one<{ id: string }>(
     `insert into signal_candidates
-       (run_id, source_id, url, headline, source_domain, lens, published_date, raw_content)
-     values ($1, $2, $3, $4, $5, $6, $7::date, $8) returning id`,
+       (run_id, source_id, url, headline, source_domain, context, published_date, raw_content)
+     values ($1, $2, $3, $4, $5, $6::context_t, $7::date, $8) returning id`,
     [
       input.runId,
       input.sourceId,
       input.url,
       input.headline || null,
       input.source_domain || null,
-      input.lens,
+      input.context,
       input.published_date || null,
       input.raw_content,
     ]
@@ -192,7 +183,7 @@ export async function updateSignal(id: string, input: SignalInput): Promise<void
     await c.query(
       `update signals set
          title = $1, summary = $2, significance = $3,
-         lenses = $4::signal_lens_t[], claim_touches = $5::text[], touch_details = $6::jsonb,
+         context = $4::context_t, touches = $5::text[], touch_details = $6::jsonb,
          source_id = $7, published_at = coalesce($8::timestamptz, published_at),
          updated_at = now()
        where id = $9`,
@@ -200,8 +191,8 @@ export async function updateSignal(id: string, input: SignalInput): Promise<void
         input.title,
         input.summary || null,
         input.significance,
-        input.lenses,
-        input.claim_touches,
+        input.context,
+        input.touches,
         JSON.stringify(input.touch_details ?? {}),
         input.source_id || null,
         input.published_at || null,
@@ -267,13 +258,13 @@ export async function mergeDraftSignals(canonicalId: string, duplicateIds: strin
   return withTx(async (c) => {
     // Lock the canonical + duplicates together (merge is a draft-stage op).
     const rowsRes = await c.query(
-      `select id, summary, significance, lenses::text[] as lenses, claim_touches, touch_details, is_published
+      `select id, summary, significance, touches, touch_details, is_published
          from signals where id = any($1::uuid[]) for update`,
       [[canonicalId, ...dupes]]
     );
     const rows = rowsRes.rows as {
       id: string; summary: string | null; significance: Significance;
-      lenses: SignalLens[]; claim_touches: string[];
+      touches: string[];
       touch_details: Record<string, { direction: Direction; reason: string }> | null;
       is_published: boolean;
     }[];
@@ -282,15 +273,13 @@ export async function mergeDraftSignals(canonicalId: string, duplicateIds: strin
     const dupRows = rows.filter((r) => r.id !== canonicalId && !r.is_published);
     if (!dupRows.length) return [];
 
-    // Union claim_touches + lenses; merge touch_details (canonical wins on key conflicts);
+    // Union touches; merge touch_details (canonical wins on key conflicts);
     // widen significance to the group max.
-    const touches = new Set(canonical.claim_touches);
-    const lenses = new Set(canonical.lenses);
+    const touches = new Set(canonical.touches);
     const details: Record<string, { direction: Direction; reason: string }> = { ...(canonical.touch_details ?? {}) };
     let significance = canonical.significance;
     for (const d of dupRows) {
-      d.claim_touches.forEach((t) => touches.add(t));
-      d.lenses.forEach((l) => lenses.add(l));
+      d.touches.forEach((t) => touches.add(t));
       for (const [code, det] of Object.entries(d.touch_details ?? {})) {
         if (!(code in details)) details[code] = det;               // canonical wins
       }
@@ -314,10 +303,10 @@ export async function mergeDraftSignals(canonicalId: string, duplicateIds: strin
     await c.query(
       `update signals set
          summary = $1, significance = $2,
-         lenses = $3::signal_lens_t[], claim_touches = $4::text[], touch_details = $5::jsonb,
+         touches = $3::text[], touch_details = $4::jsonb,
          updated_at = now()
-       where id = $6`,
-      [summary || null, significance, Array.from(lenses), Array.from(touches), JSON.stringify(details), canonicalId]
+       where id = $5`,
+      [summary || null, significance, Array.from(touches), JSON.stringify(details), canonicalId]
     );
 
     // Capture the affected runs BEFORE the delete NULLs signal_id, so the caller can refresh

@@ -6,14 +6,12 @@ import { isEditMode, setEditMode, isPreview, setPreview } from '../auth';
 import { isValidContentKey, isValidContentValue, CONTENT_MAX_VALUE_LEN } from '../content';
 import * as m from '../mutations';
 import {
-  getSource, getTargets, getQuestionSummaryInput,
+  getSource, getTargets,
   getSignal, getTestsByCodes } from '../data';
-import { generateDossier, extractSourceMetadata, recommendClaims } from '../dossier';
+import { generateDossier, extractSourceMetadata, recommendHypotheses } from '../dossier';
 import { generateSignalAnalysis, type SignalAnalysisTouch } from '../signal-brief';
-import { generateQuestionSummary } from '../summary';
-import { recommendLenses } from '../lens';
 import type {
-  Direction, Weight, SourceMetadata, ClaimRecommendation, Lens,
+  Direction, Weight, SourceMetadata, HypothesisRecommendation,
   } from '../types';
 import { DIRECTIONS, UUID_RE, WEIGHTS, parsePrior, requireAdmin, safePath, str } from './shared';
 
@@ -26,30 +24,27 @@ export async function createSourceAction(formData: FormData) {
     url: str(formData, 'url'),
     published_at: str(formData, 'published_at') || undefined,
     raw_text: str(formData, 'raw_text'),
-    domain_tag: str(formData, 'domain_tag') || null,
     reliability_prior: parsePrior(str(formData, 'reliability_prior')),
   });
   redirect(`/source/${id}`);
 }
 
-export async function moveConfidenceAction(formData: FormData) {
+// The human gate's action: a conviction can never move without its why.
+export async function moveConvictionAction(formData: FormData) {
   await requireAdmin();
   const reason = str(formData, 'reason');
-  if (!reason) throw new Error('A rationale is required to move a confidence.');
-  const newConfidence = Number(formData.get('new_confidence'));
-  if (Number.isNaN(newConfidence) || newConfidence < 0 || newConfidence > 1) {
-    throw new Error('Confidence must be between 0 and 1.');
+  if (!reason) throw new Error('A rationale is required to move a conviction.');
+  const newConviction = Number(formData.get('new_conviction'));
+  if (Number.isNaN(newConviction) || newConviction < 0 || newConviction > 1) {
+    throw new Error('Conviction must be between 0 and 1.');
   }
-  const target_type = str(formData, 'target_type');
-  if (target_type !== 'claim' && target_type !== 'bridge_claim' && target_type !== 'stance' && target_type !== 'position') {
-    throw new Error('Invalid target type.');
-  }
+  const hypothesisId = str(formData, 'hypothesis_id');
+  if (!UUID_RE.test(hypothesisId)) throw new Error('Bad hypothesis id.');
   const evidenceId = str(formData, 'evidence_id');
   if (evidenceId && !UUID_RE.test(evidenceId)) throw new Error('Bad evidence id.');
-  await m.moveConfidence({
-    target_type,
-    target_id: str(formData, 'target_id'),
-    new_confidence: newConfidence,
+  await m.moveConviction({
+    hypothesis_id: hypothesisId,
+    new_conviction: newConviction,
     reason,
     evidence_id: evidenceId || null,
   });
@@ -108,34 +103,6 @@ export async function togglePreviewAction() {
   revalidatePath('/', 'layout');
 }
 
-// ---- Direct domain-text edits (the /data editor) ----
-export type UpdateFieldState = { ok: boolean; error?: string };
-
-// useActionState-shaped, like saveContentAction, but it writes straight to the
-// domain row (questions/stances/claims/bridge_claims) through the registry-guarded
-// writer. table/column are validated against the same registry the mutation uses
-// (m.isEditableDomainField) so the two layers can't drift; value/id are parameterized.
-export async function updateDomainFieldAction(
-  _prev: UpdateFieldState,
-  formData: FormData
-): Promise<UpdateFieldState> {
-  await requireAdmin();
-  const table = str(formData, 'table');
-  const id = str(formData, 'id');
-  const column = str(formData, 'column');
-  const value = str(formData, 'value');
-  if (!UUID_RE.test(id)) return { ok: false, error: 'Bad record id.' };
-  if (!m.isEditableDomainField(table, column)) return { ok: false, error: 'Field not editable.' };
-  if (value.length > 8000) return { ok: false, error: 'Text must be under 8000 characters.' };
-  try {
-    await m.updateDomainField(table, id, column, value);
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Could not save.' };
-  }
-  revalidatePath('/', 'layout');
-  return { ok: true };
-}
-
 export async function generateDossierAction(formData: FormData) {
   await requireAdmin();
   const sourceId = str(formData, 'source_id');
@@ -177,12 +144,11 @@ export async function generateSignalAnalysisAction(formData: FormData) {
     sourceText = src?.source.raw_text ?? null;
   }
 
-  const tests = await getTestsByCodes(signal.claim_touches);
+  const tests = await getTestsByCodes(signal.touches);
   const analysisTouches: SignalAnalysisTouch[] = touches
     .filter((t) => !t.unresolved)
     .map((t) => ({
       code: t.code,
-      type: t.type,
       statement: t.statement,
       test: tests[t.code] ?? null,
       direction: t.direction ?? null,
@@ -204,35 +170,35 @@ export async function generateSignalAnalysisAction(formData: FormData) {
 export async function extractSourceMetadataAction(text: string): Promise<SourceMetadata> {
   await requireAdmin();
   const t = (text || '').trim();
-  if (!t) return { title: '', author: '', url: '', published_at: '', domain_tag: '' };
+  if (!t) return { title: '', author: '', url: '', published_at: '' };
   return extractSourceMetadata(t);
 }
 
-// Change 2 — recommend (don't attach) which claims this source fits.
-export async function recommendClaimsAction(sourceId: string): Promise<ClaimRecommendation[]> {
+// Recommend (don't attach) which hypotheses this source fits.
+export async function recommendHypothesesAction(sourceId: string): Promise<HypothesisRecommendation[]> {
   await requireAdmin();
   if (!sourceId) return [];
   const data = await getSource(sourceId);
   if (!data) return [];
   const { source } = data;
-  const { claims } = await getTargets();
+  const { hypotheses } = await getTargets();
   const dossierBlurb = source.dossier
     ? `${source.dossier.document_internal?.thesis ?? ''} ${source.dossier.document_internal?.what_its_selling ?? ''}`
     : '';
   const text = (source.raw_text || '').trim() || dossierBlurb.trim();
-  return recommendClaims(
+  return recommendHypotheses(
     { text, title: source.title, author: source.author, outlet: source.outlet },
-    claims.map((c) => ({ code: c.code, statement: c.statement, test: null }))
+    hypotheses.map((c) => ({ code: c.code, statement: c.statement, test: c.test ?? null }))
   );
 }
 
-// Change 3 — attach one source as evidence to many claims/bridges at once.
-// The client serializes the selected items into a JSON `payload` field.
+// Attach one source as evidence to many hypotheses at once. The client
+// serializes the selected items into a JSON `payload` field.
 export async function addEvidenceBulkAction(formData: FormData) {
   await requireAdmin();
   const sourceId = str(formData, 'source_id');
   if (!sourceId) throw new Error('No source specified.');
-  let parsed: { target: string; direction: string; weight: string }[] = [];
+  let parsed: { hypothesis_id: string; direction: string; confidence: string; note?: string }[] = [];
   try {
     parsed = JSON.parse(str(formData, 'payload') || '[]');
   } catch {
@@ -240,20 +206,16 @@ export async function addEvidenceBulkAction(formData: FormData) {
   }
   const excerpt = str(formData, 'excerpt') || undefined;
   const rows = parsed.map((it) => {
-    const sep = it.target.indexOf(':');
-    const target_type = it.target.slice(0, sep);
-    const target_id = it.target.slice(sep + 1);
-    if (target_type !== 'claim' && target_type !== 'bridge_claim') throw new Error('Invalid target.');
-    if (!target_id) throw new Error('Missing target id.');
+    if (!UUID_RE.test(it.hypothesis_id ?? '')) throw new Error('Missing hypothesis id.');
     if (!DIRECTIONS.includes(it.direction as Direction)) throw new Error('Invalid direction.');
-    if (!WEIGHTS.includes(it.weight as Weight)) throw new Error('Invalid weight.');
+    if (!WEIGHTS.includes(it.confidence as Weight)) throw new Error('Invalid confidence.');
     return {
       source_id: sourceId,
-      target_type: target_type as 'claim' | 'bridge_claim',
-      target_id,
+      hypothesis_id: it.hypothesis_id,
       direction: it.direction as Direction,
-      weight: it.weight as Weight,
+      confidence: it.confidence as Weight,
       excerpt,
+      note: it.note ? String(it.note).slice(0, 2000) : undefined,
     };
   });
   if (rows.length) {
@@ -273,18 +235,14 @@ export async function deleteSourceAction(formData: FormData) {
   redirect('/ingest');
 }
 
-// Change 4 — repoint one evidence link to a different claim/bridge.
+// Repoint one evidence link to a different hypothesis.
 export async function reassignEvidenceAction(formData: FormData) {
   await requireAdmin();
   const evidenceId = str(formData, 'evidence_id');
   const sourceId = str(formData, 'source_id');
-  const target = str(formData, 'target');
-  const sep = target.indexOf(':');
-  const target_type = target.slice(0, sep);
-  const target_id = target.slice(sep + 1);
-  if (target_type !== 'claim' && target_type !== 'bridge_claim') throw new Error('Invalid target.');
-  if (!target_id || !evidenceId) throw new Error('Missing data.');
-  await m.reassignEvidence(evidenceId, target_type, target_id);
+  const hypothesisId = str(formData, 'hypothesis_id');
+  if (!UUID_RE.test(hypothesisId) || !evidenceId) throw new Error('Missing data.');
+  await m.reassignEvidence(evidenceId, hypothesisId);
   revalidatePath('/', 'layout');
   redirect(`/source/${sourceId}`);
 }
@@ -298,46 +256,4 @@ export async function deleteEvidenceAction(formData: FormData) {
   await m.deleteEvidence(evidenceId);
   revalidatePath('/', 'layout');
   redirect(`/source/${sourceId}`);
-}
-
-// Generate a fresh question-state summary, append it to the per-question log,
-// and show the timeline. Metrics are computed in code (input.metrics).
-export async function generateQuestionSummaryAction(formData: FormData) {
-  await requireAdmin();
-  const questionId = str(formData, 'question_id');
-  const slug = str(formData, 'slug');
-  if (!questionId || !slug) throw new Error('Missing question.');
-  const input = await getQuestionSummaryInput(questionId);
-  if (!input) throw new Error('Question not found.');
-  const summary = await generateQuestionSummary(input);
-  await m.createQuestionSummary(questionId, summary, input.metrics);
-  revalidatePath('/', 'layout');
-  redirect(`/q/${slug}/summary`);
-}
-
-// ---- Lens tagging ----
-const LENS_VALUES: Lens[] = ['market', 'economics', 'social', 'employment', 'education', 'geopolitics', 'stack'];
-
-// Toggle one lens on a node. Called directly from the LensTagger client component.
-export async function setNodeLensAction(
-  targetType: string,
-  targetId: string,
-  lens: string,
-  on: boolean
-): Promise<void> {
-  await requireAdmin();
-  if (targetType !== 'claim' && targetType !== 'bridge_claim' && targetType !== 'stance') {
-    throw new Error('Invalid target.');
-  }
-  if (!UUID_RE.test(targetId)) throw new Error('Bad target id.');
-  if (!(LENS_VALUES as string[]).includes(lens)) throw new Error('Unknown lens.');
-  if (on) await m.addNodeLens(targetType, targetId, lens);
-  else await m.removeNodeLens(targetType, targetId, lens);
-  revalidatePath('/', 'layout');
-}
-
-// Recommend lenses for a statement (advisory; returns to the client, no DB write).
-export async function recommendNodeLensesAction(statement: string): Promise<Lens[]> {
-  await requireAdmin();
-  return recommendLenses(statement);
 }

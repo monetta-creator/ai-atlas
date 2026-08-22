@@ -1,28 +1,28 @@
 import { requireAdminPage } from '@/lib/auth';
 import { buildReportData } from '@/lib/report';
 import { listSavedReports } from '@/lib/data';
-import { SIGNAL_LENS_SLUGS } from '@/lib/format';
-import type { SignalLens } from '@/lib/types';
+import { SIGNAL_CONTEXT_SLUGS } from '@/lib/format';
+import type { SignalContext } from '@/lib/types';
 import Header from '@/components/Header';
 import ReportGenerator from '@/components/ReportGenerator';
 import ReportPreview from '@/components/ReportPreview';
 import WorkspaceTabs, { REPORTS_TABS } from '@/components/WorkspaceTabs';
 
 export const dynamic = 'force-dynamic';
-// Hosts the report-generation server actions (data + per-lens legs + synthesis + save).
+// Hosts the report-generation server actions (data + per-context legs + synthesis + save).
 export const maxDuration = 60;
-export const metadata = { title: 'Period report generator · The AI Atlas' };
+export const metadata = { title: 'Period report generator · The Strategy Atlas' };
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}/;
 const dayString = (d: Date) => d.toISOString().slice(0, 10);
 
 // Admin-only period-report generator, the Report Portal's console for the fortnight
 // narrative (moved here from /report, which now redirects). Controls drive the live
-// data preview via the URL (?from&to&lenses), like the digest page.
+// data preview via the URL (?from&to&contexts), like the digest page.
 export default async function PeriodReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; lenses?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; contexts?: string }>;
 }) {
   const admin = await requireAdminPage();
   const sp = await searchParams;
@@ -34,16 +34,16 @@ export default async function PeriodReportPage({
   const to = sp.to && ISO_DAY.test(sp.to) ? sp.to.slice(0, 10) : dayString(today);
   const from = sp.from && ISO_DAY.test(sp.from) ? sp.from.slice(0, 10) : dayString(ninetyAgo);
 
-  // Parse lenses (comma-separated), validate against the canonical set; default to all six.
-  const valid = new Set<string>(SIGNAL_LENS_SLUGS);
-  const parsed = (sp.lenses || '')
+  // Parse contexts (comma-separated), validate against the canonical set; default to both.
+  const valid = new Set<string>(SIGNAL_CONTEXT_SLUGS);
+  const parsed = (sp.contexts || '')
     .split(',')
     .map((s) => s.trim())
-    .filter((l) => valid.has(l)) as SignalLens[];
-  const lenses = parsed.length ? parsed : [...SIGNAL_LENS_SLUGS];
+    .filter((c) => valid.has(c)) as SignalContext[];
+  const contexts = parsed.length ? parsed : [...SIGNAL_CONTEXT_SLUGS];
 
   const [report, saved] = await Promise.all([
-    buildReportData({ from, to, lenses, personal: true }),
+    buildReportData({ from, to, contexts, personal: true }),
     listSavedReports(),
   ]);
 
@@ -55,12 +55,12 @@ export default async function PeriodReportPage({
           <h1>Period report generator</h1>
           <p className="lede">
             Compile a period intelligence report from the Signal Board: pick a date range and the
-            lenses to cover, generate the narrative, edit it, and save or export to PDF.
+            contexts to cover, generate the narrative, edit it, and save or export to PDF.
           </p>
         </header>
         <WorkspaceTabs tabs={REPORTS_TABS} active="/reports/period" />
 
-        <ReportGenerator initialFrom={from} initialTo={to} initialLenses={lenses} initialSaved={saved} />
+        <ReportGenerator initialFrom={from} initialTo={to} initialContexts={contexts} initialSaved={saved} />
         <ReportPreview report={report} />
       </section>
     </>

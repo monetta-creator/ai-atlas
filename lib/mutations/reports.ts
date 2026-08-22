@@ -12,17 +12,17 @@ export async function saveReport(input: { id?: string; title: string; report: Re
   if (id) {
     await exec(
       `update reports set title = $2, date_from = $3::date, date_to = $4::date,
-              lenses = $5::signal_lens_t[], generated_at = $6::timestamptz, data = $7::jsonb
+              contexts = $5::context_t[], generated_at = $6::timestamptz, data = $7::jsonb
         where id = $1`,
-      [id, title, report.range.from, report.range.to, report.lenses, report.generatedAt, json]
+      [id, title, report.range.from, report.range.to, report.contexts, report.generatedAt, json]
     );
     return id;
   }
   const row = await one<{ id: string }>(
-    `insert into reports (title, date_from, date_to, lenses, generated_at, data)
-       values ($1, $2::date, $3::date, $4::signal_lens_t[], $5::timestamptz, $6::jsonb)
+    `insert into reports (title, date_from, date_to, contexts, generated_at, data)
+       values ($1, $2::date, $3::date, $4::context_t[], $5::timestamptz, $6::jsonb)
      returning id`,
-    [title, report.range.from, report.range.to, report.lenses, report.generatedAt, json]
+    [title, report.range.from, report.range.to, report.contexts, report.generatedAt, json]
   );
   return row!.id;
 }
@@ -60,39 +60,4 @@ export async function addRateCard(input: {
     ]
   );
   return row!.id;
-}
-
-// ---- Generated reports (the Report Portal's tear sheets, migration 0030) ----
-// Insert-only like thesis reports: a re-run is a NEW row. The caller
-// (saveSheetAction) re-gates the narrative against the pack at the save boundary.
-export async function saveGeneratedReport(input: {
-  kind: 'claim' | 'bridge' | 'lens' | 'atlas';
-  subject: string | null;
-  title: string;
-  scope_from: string | null;
-  scope_to: string | null;
-  pack: unknown;
-  narrative: unknown;
-  generated_at: string;
-}): Promise<string> {
-  const row = await one<{ id: string }>(
-    `insert into generated_reports (kind, subject, title, scope_from, scope_to, pack, narrative, generated_at)
-     values ($1::report_kind_t, $2, $3, $4::date, $5::date, $6::jsonb, $7::jsonb, $8::timestamptz)
-     returning id`,
-    [
-      input.kind, input.subject, input.title, input.scope_from, input.scope_to,
-      JSON.stringify(input.pack), JSON.stringify(input.narrative), input.generated_at,
-    ]
-  );
-  return row!.id;
-}
-
-// The one mutable field: publishing is the human gate that lists a generated
-// report on the public portal and opens its PDF download.
-export async function setGeneratedReportPublished(id: string, on: boolean): Promise<void> {
-  await exec(`update generated_reports set is_published = $2 where id = $1`, [id, on]);
-}
-
-export async function deleteGeneratedReport(id: string): Promise<void> {
-  await exec(`delete from generated_reports where id = $1`, [id]);
 }

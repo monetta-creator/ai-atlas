@@ -1,11 +1,10 @@
 import { runStructured } from '../dossier';
 import { FetchFailure, MIN_READABLE_CHARS } from '../text';
-import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL } from '../format';
 import * as m from '../mutations';
 import {
   getPaper, getTargets, getConceptDigest, getThreadDigest, getSourceText,
 } from '../data';
-import type { Paper, PaperExtraction, SignalLens, ThreadRelation } from '../types';
+import type { Paper, PaperExtraction, ThreadRelation } from '../types';
 
 // Per-paper deep analysis: hydrate the full text from records already in hand,
 // then one non-web structured call produces the EXTRACTION — a claim-shaped
@@ -49,17 +48,16 @@ export async function hydratePaper(paperId: string): Promise<HydrateResult> {
 // ---- analyze ----------------------------------------------------------------
 
 const ANALYSIS_SYSTEM = [
-  'You analyze one research paper for The AI Atlas, a tool for staying oriented in the AI-economy debate. Produce a structured FINDING, not a summary: a claim-shaped reading the author can test.',
-  'headline_claim: what the paper actually asserts, one falsifiable sentence in plain language.',
-  'the_test: what was actually measured, on what data or systems, at what scale.',
-  'effect_size: how big the result is and where it holds or breaks (scope conditions). Use the paper\'s own numbers.',
+  'You analyze one research paper or long-form document for the Strategy Atlas, an operating team\'s tool for tracking its strategic hypotheses. Produce a structured FINDING, not a summary: a claim-shaped reading the team can test.',
+  'headline_claim: what the document actually asserts, one falsifiable sentence in plain language.',
+  'the_test: what was actually measured or examined, on what data or systems, at what scale.',
+  'effect_size: how big the result is and where it holds or breaks (scope conditions). Use the document\'s own numbers.',
   'limitations: what the authors themselves concede, plus any obvious unstated ones.',
-  'counterpoint: what a fair skeptic would say (benchmark gaming, tiny n, lab PR dressed as science, prompt sensitivity, no baselines).',
-  'econ_implication: what this means for the ECONOMICS of AI in the next 12 to 24 months, stated with restraint. If the honest answer is "little or nothing yet", say exactly that.',
-  'who_cares: for each audience lens the paper genuinely speaks to (often just one or two), one concrete sentence on why that audience should care. Omit lenses it does not speak to.',
-  'claim_codes: ONLY codes from the provided claim/bridge list this paper genuinely bears on, not merely thematically related. Often empty. These are advisory, they never write evidence.',
-  'concept_slugs: listed concepts the paper directly concerns. thread_placements: listed threads this paper would move, each with a relation (supports / complicates / contradicts / context) and a one-sentence why.',
-  'proposed_rigor: 0-100, your suggested methodological-rigor prior for this paper, a suggestion only: venue signal, sample size, baselines, code availability, claims-vs-evidence gap.',
+  'counterpoint: what a fair skeptic would say (benchmark gaming, tiny n, marketing dressed as analysis, cherry-picked baselines).',
+  'strategy_implication: what this means for the strategy picture in the next 12 to 24 months, stated with restraint. If the honest answer is "little or nothing yet", say exactly that.',
+  'hypothesis_codes: ONLY codes from the provided hypothesis list this document genuinely bears on, not merely thematically related. Often empty. These are advisory, they never write evidence.',
+  'concept_slugs: listed concepts the document directly concerns. thread_placements: listed threads this document would move, each with a relation (supports / complicates / contradicts / context) and a one-sentence why.',
+  'proposed_rigor: 0-100, your suggested methodological-rigor prior for this document, a suggestion only: venue signal, sample size, baselines, data availability, claims-vs-evidence gap.',
   'Work only from the provided text. Do not fabricate numbers, codes, or slugs. Never use an em dash anywhere; use a comma, a colon, or separate sentences instead.',
 ].join(' ');
 
@@ -74,20 +72,8 @@ function buildSchema(codes: string[], concepts: string[], threads: string[]) {
       effect_size: { type: 'string' },
       limitations: { type: 'string' },
       counterpoint: { type: 'string' },
-      econ_implication: { type: 'string' },
-      who_cares: {
-        type: 'array',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          properties: {
-            lens: { type: 'string', enum: SIGNAL_LENS_SLUGS },
-            note: { type: 'string' },
-          },
-          required: ['lens', 'note'],
-        },
-      },
-      claim_codes: { type: 'array', items: strEnum(codes) },
+      strategy_implication: { type: 'string' },
+      hypothesis_codes: { type: 'array', items: strEnum(codes) },
       concept_slugs: { type: 'array', items: strEnum(concepts) },
       thread_placements: {
         type: 'array',
@@ -106,20 +92,20 @@ function buildSchema(codes: string[], concepts: string[], threads: string[]) {
     },
     required: [
       'headline_claim', 'the_test', 'effect_size', 'limitations', 'counterpoint',
-      'econ_implication', 'who_cares', 'claim_codes', 'concept_slugs', 'thread_placements',
+      'strategy_implication', 'hypothesis_codes', 'concept_slugs', 'thread_placements',
       'proposed_rigor',
     ],
   };
 }
 
 interface RawExtraction extends PaperExtraction {
-  claim_codes: string[];
+  hypothesis_codes: string[];
   concept_slugs: string[];
 }
 
 interface AnalyzePaperResult {
   extraction: PaperExtraction;
-  claim_touches: string[];
+  touches: string[];
   suggested_concepts: string[];
   suggested_threads: string[];
 }
@@ -129,34 +115,26 @@ export async function analyzePaper(paperId: string): Promise<AnalyzePaperResult>
   if (!p) throw new Error('Paper not found.');
 
   // The orchestrator hydrates in a separate invocation first; the abstract is the
-  // backstop for papers whose full text cannot be fetched (some manual adds).
+  // backstop for papers whose full text was never retained (some manual adds).
   const body = (p.raw_content || '').trim() || (p.abstract || '').trim();
   if (body.length < MIN_READABLE_CHARS) {
-    throw new Error('No usable text: fetch the full text first, or add an abstract.');
+    throw new Error('No usable text: hydrate the full text first, or add an abstract.');
   }
 
-  const { claims, bridges } = await getTargets();
-  const targets = [...claims, ...bridges];
-  const codes = targets.map((t) => t.code);
+  const { hypotheses } = await getTargets();
+  const codes = hypotheses.map((t) => t.code);
   const concepts = await getConceptDigest();
   const threads = await getThreadDigest();
   const conceptSlugs = concepts.map((c) => c.slug);
   const threadSlugs = threads.map((t) => t.slug);
 
-  const targetList = [
-    ...claims.map((t) => `[${t.code}] (claim) ${t.statement}`),
-    ...bridges.map((t) => `[${t.code}] (bridge-claim) ${t.statement}`),
-  ].join('\n');
+  const targetList = hypotheses.map((t) => `[${t.code}] ${t.statement}`).join('\n');
   const conceptList = concepts.map((c) => `[${c.slug}] ${c.name}: ${c.short_definition}`).join('\n');
   const threadList = threads.map((t) => `[${t.slug}] ${t.title}: ${t.question}`).join('\n');
-  const lensGuide = SIGNAL_LENS_SLUGS.map((s) => `[${s}] ${SIGNAL_LENS_LABEL[s]}`).join('\n');
 
   const meta = [
-    p.arxiv_id && `arXiv: ${p.arxiv_id}`,
     p.published_at && `Published: ${p.published_at}`,
     p.authors.length && `Authors: ${p.authors.slice(0, 12).join(', ')}`,
-    p.categories.length && `Categories: ${p.categories.join(', ')}`,
-    p.comments && `Comment: ${p.comments}`,
   ].filter(Boolean).join('\n');
 
   const out = await runStructured<RawExtraction>({
@@ -164,8 +142,7 @@ export async function analyzePaper(paperId: string): Promise<AnalyzePaperResult>
     // rides the prompt cache across consecutive Analyze clicks.
     system: [
       ANALYSIS_SYSTEM,
-      `\nAUDIENCE LENSES (use only these codes):\n${lensGuide}`,
-      `\nARGUMENT-MAP CLAIMS & BRIDGE-CLAIMS (use ONLY these codes):\n${targetList || '(none)'}`,
+      `\nTRACKED HYPOTHESES (use ONLY these codes):\n${targetList || '(none)'}`,
       `\nCONCEPTS (use ONLY these slugs):\n${conceptList || '(none)'}`,
       `\nRESEARCH THREADS (use ONLY these slugs):\n${threadList || '(none)'}`,
     ].join('\n'),
@@ -176,9 +153,9 @@ export async function analyzePaper(paperId: string): Promise<AnalyzePaperResult>
     maxTokens: 3000,
     effort: 'medium',
     feature: 'research_analysis',
-    metadata: { paper_id: paperId, arxiv_id: p.arxiv_id },
+    metadata: { paper_id: paperId },
     // The model leg runs in its own invocation (hydrate is separate): bound it so one
-    // call provably fits the 60s cap; the client retries on a fresh invocation.
+    // call stays short; the client retries on a fresh invocation.
     timeoutMs: 45_000,
     maxRetries: 0,
   });
@@ -187,7 +164,6 @@ export async function analyzePaper(paperId: string): Promise<AnalyzePaperResult>
   const validCode = new Set(codes);
   const validConcept = new Set(conceptSlugs);
   const validThread = new Set(threadSlugs);
-  const validLens = new Set<string>(SIGNAL_LENS_SLUGS);
   const validRel = new Set<ThreadRelation>(THREAD_RELATIONS);
   const s = (v: unknown, cap = 2000) => String(v ?? '').slice(0, cap);
   const seenThreads = new Set<string>();
@@ -197,10 +173,7 @@ export async function analyzePaper(paperId: string): Promise<AnalyzePaperResult>
     effect_size: s(out.effect_size),
     limitations: s(out.limitations),
     counterpoint: s(out.counterpoint),
-    econ_implication: s(out.econ_implication),
-    who_cares: (Array.isArray(out.who_cares) ? out.who_cares : [])
-      .filter((w) => w && validLens.has(w.lens as string))
-      .map((w) => ({ lens: w.lens as SignalLens, note: s(w.note, 500) })),
+    strategy_implication: s(out.strategy_implication),
     thread_placements: (Array.isArray(out.thread_placements) ? out.thread_placements : [])
       .filter((t) => t && validThread.has(t.slug) && !seenThreads.has(t.slug) && seenThreads.add(t.slug))
       .map((t) => ({
@@ -216,13 +189,13 @@ export async function analyzePaper(paperId: string): Promise<AnalyzePaperResult>
       : [];
   const result: AnalyzePaperResult = {
     extraction,
-    claim_touches: pick(out.claim_codes, validCode, 6),
+    touches: pick(out.hypothesis_codes, validCode, 6),
     suggested_concepts: pick(out.concept_slugs, validConcept, 4),
     suggested_threads: (extraction.thread_placements ?? []).map((t) => t.slug),
   };
 
   await m.setPaperExtraction(paperId, extraction, {
-    claim_touches: result.claim_touches,
+    touches: result.touches,
     suggested_concepts: result.suggested_concepts,
     suggested_threads: result.suggested_threads,
   });

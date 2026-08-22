@@ -34,7 +34,6 @@ create type paper_triage_t      as enum ('pending','kept','rejected');
 create type paper_review_t      as enum ('pending','noted','tracked','dismissed');
 create type thread_status_t     as enum ('open','settled','dormant');
 create type thread_relation_t   as enum ('supports','complicates','contradicts','context');
-create type report_kind_t       as enum ('hypothesis','atlas');
 create type ticket_kind_t       as enum ('bug','feature');
 create type ticket_status_t     as enum ('open','in_progress','resolved','declined');
 
@@ -306,24 +305,6 @@ create table reports (
 );
 create index reports_updated_idx on reports (updated_at desc);
 
--- Generated tear sheets: per-hypothesis deep report + the whole-Atlas briefing.
--- Insert-only; is_published is the human gate onto the public shelf.
-create table generated_reports (
-  id           uuid primary key default gen_random_uuid(),
-  kind         report_kind_t not null,
-  subject      text,                    -- hypothesis code; null for 'atlas'
-  title        text not null default 'Untitled report',
-  scope_from   date,
-  scope_to     date,
-  pack         jsonb not null,          -- deterministic, guest-safe evidence pack + stats
-  narrative    jsonb not null,          -- sanitized, citation-gated HTML sections + audit
-  is_published boolean not null default false,
-  generated_at timestamptz not null,
-  created_at   timestamptz not null default now()
-);
-create index generated_reports_kind_idx on generated_reports (kind, generated_at desc);
-create index generated_reports_pub_idx  on generated_reports (is_published, generated_at desc);
-
 -- Frozen per-hypothesis runs (statement frozen at generation; guest-safe pack;
 -- cited narrative). Immutable rows: a re-run inserts a new row.
 create table hypothesis_reports (
@@ -592,7 +573,7 @@ begin
   foreach t in array array[
     'hypotheses','hypothesis_links','sources','signals','evidence','snapshots','rationales',
     'content_blocks','digest_snapshots','pipeline_runs','signal_candidates','dedupe_scan',
-    'reports','generated_reports','hypothesis_reports','ai_rate_cards','ai_cost_log',
+    'reports','hypothesis_reports','ai_rate_cards','ai_cost_log',
     'concepts','concept_edges','concept_links','concept_gap_scan','argument_gap_scan',
     'papers','research_threads','thread_papers','thread_revisions','paper_concepts',
     'research_thread_scan','research_agent_prefs','tickets','ticket_images'

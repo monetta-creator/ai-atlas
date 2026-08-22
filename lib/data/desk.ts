@@ -54,10 +54,9 @@ export async function getTicketImage(id: string): Promise<{ content_type: string
 // One cheap round trip for the lobby's live tile stats. Counts only, guest-safe
 // by construction (nothing here touches the personal layer).
 interface LobbyStats {
-  claims: number;
+  hypotheses: number;
   signalsPublished: number;
   signalsWeek: number;
-  theses: number;
   papersTracked: number;
   threads: number;
 }
@@ -65,44 +64,41 @@ interface LobbyStats {
 export async function getLobbyStats(): Promise<LobbyStats> {
   const row = await one<LobbyStats>(
     `select
-       (select count(*) from claims where is_frame = false)::int as "claims",
+       (select count(*) from hypotheses where status = 'active')::int as "hypotheses",
        (select count(*) from signals where is_published)::int as "signalsPublished",
        (select count(*) from signals
          where is_published and published_at >= now() - interval '7 days')::int as "signalsWeek",
-       (select count(*) from theses)::int as "theses",
        (select count(*) from papers where review_status = 'tracked')::int as "papersTracked",
        (select count(*) from research_threads)::int as "threads"`
   );
-  return row ?? { claims: 0, signalsPublished: 0, signalsWeek: 0, theses: 0, papersTracked: 0, threads: 0 };
+  return row ?? { hypotheses: 0, signalsPublished: 0, signalsWeek: 0, papersTracked: 0, threads: 0 };
 }
 
-// The front page's thesis tracker: the latest saved run per standing thesis,
+// The front page's hypothesis tracker: the latest saved run per hypothesis,
 // newest first. Everything here is guest-safe by construction (the pack's stats
 // are the public shareable report's own numbers).
-export interface ThesisTrackerEntry {
+export interface HypothesisTrackerEntry {
   report_id: string;
-  thesis_id: string;
+  hypothesis_id: string;
   title: string;
   statement: string;
   generated_at: string;
   matched: number;
   supports: number;
   contradicts: number;
-  mixed: number;
 }
 
-export async function getLatestThesisReports(limit = 2): Promise<ThesisTrackerEntry[]> {
-  return q<ThesisTrackerEntry>(
-    `select id as report_id, thesis_id, title, statement,
+export async function getLatestHypothesisReports(limit = 2): Promise<HypothesisTrackerEntry[]> {
+  return q<HypothesisTrackerEntry>(
+    `select id as report_id, hypothesis_id, title, statement,
             generated_at::text as generated_at,
             coalesce((pack->'stats'->>'matched')::int, 0) as matched,
-            coalesce((pack->'stats'->'stances'->>'supports')::int, 0) as supports,
-            coalesce((pack->'stats'->'stances'->>'contradicts')::int, 0) as contradicts,
-            coalesce((pack->'stats'->'stances'->>'mixed')::int, 0) as mixed
+            coalesce((pack->'stats'->'directions'->>'supports')::int, 0) as supports,
+            coalesce((pack->'stats'->'directions'->>'contradicts')::int, 0) as contradicts
        from (
-         select distinct on (thesis_id) *
-           from thesis_reports
-          order by thesis_id, generated_at desc
+         select distinct on (hypothesis_id) *
+           from hypothesis_reports
+          order by hypothesis_id, generated_at desc
        ) t
       order by generated_at desc, id
       limit $1`,

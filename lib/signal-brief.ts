@@ -10,7 +10,6 @@ import type { SignalBrief, SignalCounterpoint, Direction } from './types';
 
 export interface SignalAnalysisTouch {
   code: string;
-  type: 'claim' | 'bridge_claim';
   statement: string;
   test: string | null;
   direction: Direction | null;
@@ -89,13 +88,12 @@ function buildUser(input: SignalAnalysisInput): string {
   const touches = input.touches.length
     ? input.touches
         .map((t) => {
-          const kind = t.type === 'bridge_claim' ? 'bridge-claim' : 'claim';
           const dir = t.direction ? ` (${DIR_LABEL[t.direction]})` : '';
           const test = t.test ? ` Falsified if: ${t.test}` : '';
-          return `[${t.code}] ${kind}: ${t.statement}${dir}.${test}`;
+          return `[${t.code}] hypothesis: ${t.statement}${dir}.${test}`;
         })
         .join('\n')
-    : '(this signal is not linked to any claim or bridge-claim)';
+    : '(this signal is not linked to any hypothesis)';
 
   // Cap the source text like the dossier does: profiling does not need the whole document
   // and long input pushes the call toward the function timeout.

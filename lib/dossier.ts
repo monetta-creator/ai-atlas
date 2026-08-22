@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { recordApiCall } from './cost';
 import type {
-  Dossier, Basis, BasisClaim, Domain, Lens, SourceMetadata, ClaimRecommendation,
+  Dossier, Basis, BasisClaim, SourceMetadata, HypothesisRecommendation,
 } from './types';
 
 // Server-only. The AI source dossier (Design Doc §7.1): one web-grounded
@@ -12,11 +12,9 @@ import type {
 // thoroughness; always run the web pass).
 
 const MODEL = 'claude-sonnet-4-6';
-const DOMAINS: Domain[] = ['capability', 'economics', 'build_out', 'market', 'labor'];
-const LENSES: Lens[] = ['market', 'economics', 'social', 'employment', 'education', 'geopolitics', 'stack'];
 const BASES: Basis[] = ['web_verified', 'training_memory', 'document_stated'];
 
-const SYSTEM = `You are a source analyst for The AI Atlas, a tool for staying oriented in the AI-economy debate. You profile a single source so the author can judge how much to trust it.
+const SYSTEM = `You are a source analyst for the Strategy Atlas, a tool for staying oriented on the strategic questions an operating team is testing. You profile a single source so the operator can judge how much to trust it.
 
 Produce a DOSSIER, never a score. You surface information; the author decides. Never output a trust number or a verdict on the source's worth.
 
@@ -33,10 +31,8 @@ Every external claim is a {field, value, basis, confidence} object:
 FABRICATION IS THE WORST OUTCOME. Never invent a fact to fill a field. An honest "unknown" with low confidence is always better than a plausible guess.
 
 for_the_analyst:
-- bias_to_model: the angle/lens to keep in mind when reading this source — NOT a verdict on whether it is right.
+- bias_to_model: the angle to keep in mind when reading this source — NOT a verdict on whether it is right.
 - questions_unverified: things a careful reader should check, ranked most load-bearing first.
-- suggested_domain_tag: the single best-fit domain (capability | economics | build_out | market | labor).
-- suggested_lenses: any applicable lenses.
 
 Never use an em dash in any text you write; use a comma, a colon, or separate sentences instead.
 
@@ -92,10 +88,8 @@ const DOSSIER_SCHEMA = {
       properties: {
         bias_to_model: { type: 'string' },
         questions_unverified: { type: 'array', items: { type: 'string' } },
-        suggested_domain_tag: { type: 'string', enum: DOMAINS },
-        suggested_lenses: { type: 'array', items: { type: 'string', enum: LENSES } },
       },
-      required: ['bias_to_model', 'questions_unverified', 'suggested_domain_tag', 'suggested_lenses'],
+      required: ['bias_to_model', 'questions_unverified'],
     },
   },
   required: ['document_internal', 'external_claims', 'for_the_analyst'],
@@ -209,8 +203,6 @@ function normalizeDossier(input: unknown): Dossier {
     for_the_analyst: {
       bias_to_model: fa.bias_to_model ?? '',
       questions_unverified: fa.questions_unverified ?? [],
-      suggested_domain_tag: DOMAINS.includes(fa.suggested_domain_tag) ? fa.suggested_domain_tag : 'capability',
-      suggested_lenses: Array.isArray(fa.suggested_lenses) ? fa.suggested_lenses.filter((l) => LENSES.includes(l)) : [],
     },
   };
 }
@@ -284,15 +276,14 @@ const METADATA_SCHEMA = {
     author: { type: 'string' },
     url: { type: 'string' },
     published_at: { type: 'string' },
-    domain_tag: { type: 'string', enum: [...DOMAINS, ''] },
   },
-  required: ['title', 'author', 'url', 'published_at', 'domain_tag'],
+  required: ['title', 'author', 'url', 'published_at'],
 };
 
 export async function extractSourceMetadata(text: string): Promise<SourceMetadata> {
   const raw = await runStructured<SourceMetadata>({
     system:
-      'Extract bibliographic metadata from the source text. Return "" for any field you cannot determine from the text — never guess or invent. published_at must be YYYY-MM-DD or "". domain_tag classifies the source into the AI-economy domain it most concerns: capability (are models improving), economics (unit economics / business viability), build_out (power, chips, data centers), market (pricing, valuation, where value accrues), labor (jobs, hiring, knowledge work); use "" if unclear.',
+      'Extract bibliographic metadata from the source text. Return "" for any field you cannot determine from the text — never guess or invent. published_at must be YYYY-MM-DD or "".',
     user: `SOURCE TEXT:\n${text.slice(0, 24000)}`,
     toolName: 'submit_metadata',
     toolDescription: 'Return the extracted source metadata.',
@@ -301,17 +292,15 @@ export async function extractSourceMetadata(text: string): Promise<SourceMetadat
     effort: 'low',
     feature: 'pdf_metadata',
   });
-  const domain = String(raw.domain_tag ?? '');
   return {
     title: String(raw.title ?? '').trim(),
     author: String(raw.author ?? '').trim(),
     url: String(raw.url ?? '').trim(),
     published_at: String(raw.published_at ?? '').trim(),
-    domain_tag: (DOMAINS as string[]).includes(domain) ? domain : '',
   };
 }
 
-// Change 2 — recommend which claims a source is good evidence for (advisory only).
+// Recommend which hypotheses a source is good evidence for (advisory only).
 interface RecommendSource {
   text: string;
   title: string | null;
@@ -319,12 +308,12 @@ interface RecommendSource {
   outlet: string | null;
 }
 
-export async function recommendClaims(
+export async function recommendHypotheses(
   src: RecommendSource,
-  claims: { code: string; statement: string; test: string | null }[]
-): Promise<ClaimRecommendation[]> {
-  if (!claims.length) return [];
-  const codes = claims.map((c) => c.code);
+  hypotheses: { code: string; statement: string; test: string | null }[]
+): Promise<HypothesisRecommendation[]> {
+  if (!hypotheses.length) return [];
+  const codes = hypotheses.map((c) => c.code);
   const schema = {
     type: 'object',
     additionalProperties: false,
@@ -335,18 +324,18 @@ export async function recommendClaims(
           type: 'object',
           additionalProperties: false,
           properties: {
-            claim_code: { type: 'string', enum: codes },
+            code: { type: 'string', enum: codes },
             direction: { type: 'string', enum: ['supports', 'contradicts', 'neutral'] },
-            weight: { type: 'string', enum: ['high', 'medium', 'low'] },
+            confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
             reason: { type: 'string' },
           },
-          required: ['claim_code', 'direction', 'weight', 'reason'],
+          required: ['code', 'direction', 'confidence', 'reason'],
         },
       },
     },
     required: ['recommendations'],
   };
-  const claimList = claims
+  const list = hypotheses
     .map((c) => `[${c.code}] ${c.statement}${c.test ? ` (would be falsified if: ${c.test})` : ''}`)
     .join('\n');
   const meta = [
@@ -355,22 +344,22 @@ export async function recommendClaims(
     src.outlet && `Outlet: ${src.outlet}`,
   ].filter(Boolean).join('  ·  ');
 
-  const out = await runStructured<{ recommendations: ClaimRecommendation[] }>({
+  const out = await runStructured<{ recommendations: HypothesisRecommendation[] }>({
     system:
-      'You recommend which claims a source is good EVIDENCE for. Each claim is listed with its code and its falsification test. Recommend ONLY claims the source genuinely bears on — omit weak or tangential matches; recommending nothing is correct when the source does not fit any claim. For each: direction = whether the source supports or contradicts the claim (or neutral); weight = high/medium/low by how strong the evidence is; reason = one concise sentence. You only RECOMMEND — the human decides what to attach. Use only claim codes from the provided list. Never use an em dash in your reasons; use a comma or a colon instead.',
-    user: `CLAIMS:\n${claimList}\n\nSOURCE${meta ? `  (${meta})` : ''}:\n${(src.text || '').slice(0, 24000) || '(no text provided)'}`,
+      'You recommend which hypotheses a source is good EVIDENCE for. Each hypothesis is listed with its code and its falsification test. Recommend ONLY hypotheses the source genuinely bears on — omit weak or tangential matches; recommending nothing is correct when the source does not fit any. For each: direction = whether the source supports or contradicts the hypothesis (or neutral); confidence = high/medium/low by how strongly this item bears on it; reason = one concise sentence. You only RECOMMEND — the human decides what to attach. Use only codes from the provided list. Never use an em dash in your reasons; use a comma or a colon instead.',
+    user: `HYPOTHESES:\n${list}\n\nSOURCE${meta ? `  (${meta})` : ''}:\n${(src.text || '').slice(0, 24000) || '(no text provided)'}`,
     toolName: 'submit_recommendations',
-    toolDescription: 'Return recommended claim matches.',
+    toolDescription: 'Return recommended hypothesis matches.',
     schema,
     maxTokens: 4000,
     effort: 'medium',
-    feature: 'claim_recommendations',
+    feature: 'hypothesis_recommendations',
   });
   const valid = new Set(codes);
   return (out.recommendations ?? []).filter(
     (r) =>
-      valid.has(r.claim_code) &&
+      valid.has(r.code) &&
       ['supports', 'contradicts', 'neutral'].includes(r.direction) &&
-      ['high', 'medium', 'low'].includes(r.weight)
+      ['high', 'medium', 'low'].includes(r.confidence)
   );
 }

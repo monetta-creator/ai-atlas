@@ -7,11 +7,11 @@ import * as m from '../mutations';
 import {
   getSource, getTargets, getSignalsPage, getCandidate, getCandidateBySourceId, getSignalIdBySource,
 } from '../data';
-import { SIGNAL_LENS_SLUGS } from '../format';
+import { SIGNAL_CONTEXT_SLUGS } from '../format';
 import { triageChunk } from '../pipeline/triage';
 import { domainOf } from '../text';
 import type {
-  Direction, Significance, SignalLens, TriageStatus,
+  Direction, Significance, SignalContext, TriageStatus,
   SignalsFeedFilters, SignalsPageResult, } from '../types';
 import { DIRECTIONS, UUID_RE, requireAdmin, safePath, str } from './shared';
 import { parseStringArray } from './shared';
@@ -30,8 +30,8 @@ function parseTouchDetails(raw: string): Record<string, { direction?: string; re
   }
 }
 
-// Read + validate the shared signal fields from a create/edit form. claim_touches is
-// validated against the live claim/bridge code list so junk never persists.
+// Read + validate the shared signal fields from a create/edit form. touches is
+// validated against the live hypothesis code list so junk never persists.
 async function readSignalFields(formData: FormData) {
   const title = str(formData, 'title');
   if (!title) throw new Error('A signal needs a title.');
@@ -39,20 +39,22 @@ async function readSignalFields(formData: FormData) {
   const significance = str(formData, 'significance');
   if (!(SIGNIFICANCES as string[]).includes(significance)) throw new Error('Invalid significance.');
 
-  const lenses = parseStringArray(str(formData, 'lenses'))
-    .filter((l): l is SignalLens => (SIGNAL_LENS_SLUGS as string[]).includes(l));
+  const contextRaw = str(formData, 'context');
+  const context: SignalContext = (SIGNAL_CONTEXT_SLUGS as readonly string[]).includes(contextRaw)
+    ? (contextRaw as SignalContext)
+    : 'external';
 
-  const { claims, bridges } = await getTargets();
-  const validCodes = new Set([...claims, ...bridges].map((t) => t.code));
-  const claim_touches = Array.from(
-    new Set(parseStringArray(str(formData, 'claim_touches')).filter((c) => validCodes.has(c)))
+  const { hypotheses } = await getTargets();
+  const validCodes = new Set(hypotheses.map((t) => t.code));
+  const touches = Array.from(
+    new Set(parseStringArray(str(formData, 'touches')).filter((c) => validCodes.has(c)))
   );
 
   // Per-touch direction + reason — one entry per validated touch (default neutral so
   // every touch materializes with an honest direction). Direction is allow-listed.
   const rawDetails = parseTouchDetails(str(formData, 'touch_details'));
   const touch_details: Record<string, { direction: Direction; reason: string }> = {};
-  for (const code of claim_touches) {
+  for (const code of touches) {
     const d = rawDetails[code];
     const direction = d && DIRECTIONS.includes(d.direction as Direction) ? (d.direction as Direction) : 'neutral';
     touch_details[code] = { direction, reason: d?.reason ? String(d.reason).slice(0, 2000) : '' };
@@ -65,8 +67,8 @@ async function readSignalFields(formData: FormData) {
     title,
     summary: str(formData, 'summary') || null,
     significance: significance as Significance,
-    lenses,
-    claim_touches,
+    context,
+    touches,
     touch_details,
     source_id: sourceIdRaw || null,
     published_at: str(formData, 'published_at') || null,
@@ -173,7 +175,7 @@ export async function prepareSignalFromSourceAction(sourceId: string): Promise<{
       url: src.url || `urn:source:${sourceId}`, // candidate.url is NOT NULL; raw_content set => no fetch
       headline: src.title,
       source_domain: domainOf(src.url || '') || src.outlet || null,
-      lens: 'market', // seed only — analyzeCandidate uses the model's lenses; this is the fallback
+      context: 'external', // seed only — analyzeCandidate sets the model's context; this is the fallback
       published_date: src.published_at ? new Date(src.published_at).toISOString().slice(0, 10) : null,
       raw_content: text,
     });
@@ -215,13 +217,13 @@ export async function getSignalsFeedAction(filters: SignalsFeedFilters): Promise
   const status =
     personal && (f.status === 'published' || f.status === 'unpublished' || f.status === 'archived')
       ? f.status : undefined;
-  const lenses = Array.isArray(f.lenses)
-    ? f.lenses.filter((l): l is SignalLens => (SIGNAL_LENS_SLUGS as string[]).includes(l as string))
+  const contexts = Array.isArray(f.contexts)
+    ? f.contexts.filter((c): c is SignalContext => (SIGNAL_CONTEXT_SLUGS as readonly string[]).includes(c as string))
     : undefined;
   const significance = Array.isArray(f.significance)
     ? f.significance.filter((s): s is Significance => (SIGNIFICANCES as string[]).includes(s as string))
     : undefined;
   const search = (typeof f.search === 'string' ? f.search : '').slice(0, 120).trim() || undefined;
   const page = Number.isInteger(f.page) && (f.page as number) > 0 ? Math.min(f.page as number, 100_000) : 1;
-  return getSignalsPage({ admin: personal, status, lenses, significance, search, page });
+  return getSignalsPage({ admin: personal, status, contexts, significance, search, page });
 }

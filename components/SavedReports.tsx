@@ -34,7 +34,7 @@ export default function SavedReports({
             >
               <span style={{ color: 'var(--ink)', fontWeight: 600, fontSize: 14 }}>{r.title}</span>
               <span style={{ color: 'var(--faint-ink)', fontSize: 12, marginLeft: 8 }}>
-                {r.date_from} → {r.date_to} · {r.lenses.length} lens{r.lenses.length === 1 ? '' : 'es'} · saved {r.updated_at.slice(0, 10)}
+                {r.date_from} → {r.date_to} · {r.contexts.length} context{r.contexts.length === 1 ? '' : 's'} · saved {r.updated_at.slice(0, 10)}
               </span>
             </button>
             <button

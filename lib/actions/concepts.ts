@@ -5,9 +5,9 @@ import { redirect } from 'next/navigation';
 import * as m from '../mutations';
 import {
   getTargets, getConceptGraph, getConceptGapScan } from '../data';
-import { recommendConceptPrereqs, recommendConceptClaims, diagnoseConceptGaps } from '../concepts';
+import { recommendConceptPrereqs, recommendConceptHypotheses, diagnoseConceptGaps } from '../concepts';
 import type {
-  ConceptStatus, ConceptPrereqRecommendation, ConceptClaimRecommendation,
+  ConceptStatus, ConceptPrereqRecommendation, ConceptHypothesisRecommendation,
   ConceptGapScan, ConceptGapRecommendation,
   } from '../types';
 import { UUID_RE, requireAdmin, str } from './shared';
@@ -19,9 +19,8 @@ const CONCEPT_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const CONCEPT_STATUSES: ConceptStatus[] = ['settled', 'contested'];
 
 // Read + validate the shared concept fields from the create/edit form. The client
-// only ever sends prerequisite IDS and claim CODES — both are re-checked against
-// the live lists here, and a claim link's target_type is re-derived server-side
-// from the code (never trusted from the wire).
+// only ever sends prerequisite IDS and hypothesis CODES — both are re-checked
+// against the live lists here (never trusted from the wire).
 async function readConceptFields(formData: FormData, selfId?: string) {
   const name = str(formData, 'name');
   if (!name || name.length > 120) throw new Error('A concept needs a name (max 120 characters).');
@@ -45,13 +44,10 @@ async function readConceptFields(formData: FormData, selfId?: string) {
       .filter((id) => UUID_RE.test(id) && liveIds.has(id) && id !== selfId)
   ));
 
-  const { claims, bridges } = await getTargets();
-  const typeByCode = new Map<string, 'claim' | 'bridge_claim'>(
-    [...claims, ...bridges].map((t) => [t.code, t.type])
-  );
-  const claim_links = Array.from(new Set(parseStringArray(str(formData, 'claim_codes'))))
-    .filter((code) => typeByCode.has(code))
-    .map((code) => ({ target_type: typeByCode.get(code)!, target_code: code }));
+  const { hypotheses } = await getTargets();
+  const validCodes = new Set(hypotheses.map((t) => t.code));
+  const codes = Array.from(new Set(parseStringArray(str(formData, 'codes'))))
+    .filter((code) => validCodes.has(code));
 
   return {
     slug,
@@ -60,7 +56,7 @@ async function readConceptFields(formData: FormData, selfId?: string) {
     explanation: explanation || null,
     status: status as ConceptStatus,
     prerequisite_ids,
-    claim_links,
+    codes,
   };
 }
 
@@ -128,33 +124,33 @@ export async function recommendConceptPrereqsAction(input: {
   });
 }
 
-// Recommend claim/bridge wiring (advisory; same gate as recommendClaimsAction).
-export async function recommendConceptClaimsAction(input: {
+// Recommend hypothesis wiring (advisory; same gate as recommendHypothesesAction).
+export async function recommendConceptHypothesesAction(input: {
   name: string; short_definition: string; explanation: string;
-}): Promise<ConceptClaimRecommendation[]> {
+}): Promise<ConceptHypothesisRecommendation[]> {
   await requireAdmin();
   const name = (input?.name ?? '').trim();
   if (!name) return [];
-  const { claims, bridges } = await getTargets();
-  return recommendConceptClaims(
+  const { hypotheses } = await getTargets();
+  return recommendConceptHypotheses(
     {
       name,
       short_definition: (input.short_definition ?? '').trim(),
       explanation: (input.explanation ?? '').trim(),
     },
-    [...claims, ...bridges].map((t) => ({ code: t.code, statement: t.statement, type: t.type }))
+    hypotheses.map((t) => ({ code: t.code, statement: t.statement }))
   );
 }
 
-// ---- Concept gap scan (admin-triggered diagnosis; migration 0018) ----------
-// One model call reads the scaffold + the Argument Map and argues for missing
-// concepts. Recommend-only: a recommendation can pre-fill /concepts/new, never
-// write. The scan persists (singleton) so the review survives a refresh; it is
-// reconciled against live concepts on read and on dismiss.
+// ---- Concept gap scan (admin-triggered diagnosis) --------------------------
+// One model call reads the scaffold + the tracked hypotheses and argues for
+// missing concepts. Recommend-only: a recommendation can pre-fill /concepts/new,
+// never write. The scan persists (singleton) so the review survives a refresh;
+// it is reconciled against live concepts on read and on dismiss.
 
 export async function diagnoseConceptGapsAction(): Promise<ConceptGapScan> {
   await requireAdmin();
-  const [{ concepts, edges }, { claims, bridges }] = await Promise.all([
+  const [{ concepts, edges }, { hypotheses }] = await Promise.all([
     getConceptGraph(), getTargets(),
   ]);
   const slugById = new Map(concepts.map((c) => [c.id, c.slug]));
@@ -168,9 +164,7 @@ export async function diagnoseConceptGapsAction(): Promise<ConceptGapScan> {
       .map((e) => slugById.get(e.prerequisite_id))
       .filter((s): s is string => !!s),
   }));
-  const targets = [...claims, ...bridges].map((t) => ({
-    code: t.code, statement: t.statement, type: t.type,
-  }));
+  const targets = hypotheses.map((t) => ({ code: t.code, statement: t.statement }));
 
   const raw = await diagnoseConceptGaps(existing, targets);
 
@@ -199,8 +193,8 @@ export async function diagnoseConceptGapsAction(): Promise<ConceptGapScan> {
       prerequisite_slugs: Array.from(new Set(
         (Array.isArray(r.prerequisite_slugs) ? r.prerequisite_slugs : []).filter((s) => liveSlugs.has(s))
       )),
-      claim_codes: Array.from(new Set(
-        (Array.isArray(r.claim_codes) ? r.claim_codes : []).filter((c) => validCodes.has(c))
+      hypothesis_codes: Array.from(new Set(
+        (Array.isArray(r.hypothesis_codes) ? r.hypothesis_codes : []).filter((c) => validCodes.has(c))
       )),
       argument,
     });

@@ -1,37 +1,21 @@
 import Link from 'next/link';
 import { isAdmin } from '@/lib/auth';
-import { listSavedReports, getLatestThesisReports, listGeneratedReports, getTargets } from '@/lib/data';
+import { listSavedReports, getLatestHypothesisReports } from '@/lib/data';
 import { formatDateRange, dateLabel } from '@/lib/format';
 import Header from '@/components/Header';
-import SheetConsole from '@/components/reports/SheetConsole';
-import SheetRow from '@/components/reports/SheetRow';
 
 export const dynamic = 'force-dynamic';
-// Hosts the sheet-generation server actions (pack + two model legs + save).
-export const maxDuration = 60;
-export const metadata = { title: 'Report Portal · The AI Atlas' };
+export const metadata = { title: 'Report Portal · The Strategy Atlas' };
 
-// The Report Portal: pre-ready generators (admin), then the published shelf.
-// Guests see published generated reports, period reports, and thesis reports,
-// each with its branded PDF download; drafts and the console are admin-only.
-// ?generate=claim&code=4.2 pre-fills the console (the claim pages link here).
-export default async function ReportPortal({
-  searchParams,
-}: {
-  searchParams: Promise<{ generate?: string | string[]; code?: string | string[] }>;
-}) {
-  const [admin, sp] = await Promise.all([isAdmin(), searchParams]);
-  const [reports, theses, generated, targets] = await Promise.all([
+// The Report Portal: the published shelf. Guests see period reports and
+// hypothesis reports, each with its branded PDF download; the period-report
+// generator is the admin console at /reports/period.
+export default async function ReportPortal() {
+  const admin = await isAdmin();
+  const [reports, hypothesisReports] = await Promise.all([
     listSavedReports(),
-    getLatestThesisReports(20),
-    listGeneratedReports(!admin),
-    admin ? getTargets() : Promise.resolve({ claims: [], bridges: [] }),
+    getLatestHypothesisReports(20),
   ]);
-  const published = generated.filter((g) => g.is_published);
-  const drafts = generated.filter((g) => !g.is_published);
-  const gen = typeof sp.generate === 'string' ? sp.generate : undefined;
-  const initialKind = gen === 'claim' || gen === 'lens' || gen === 'atlas' ? gen : undefined;
-  const initialCode = typeof sp.code === 'string' ? sp.code : undefined;
 
   return (
     <>
@@ -40,7 +24,7 @@ export default async function ReportPortal({
         <header className="pagehead" style={{ paddingBottom: 26 }}>
           <h1>Report Portal</h1>
           <p className="lede">
-            Grounded reports from the Atlas corpus at claim, lens, thesis, and whole-Atlas
+            Grounded reports from the Atlas corpus at period and hypothesis
             granularity: cited, synthesized, and downloadable as branded PDFs.
           </p>
         </header>
@@ -48,34 +32,14 @@ export default async function ReportPortal({
         {admin && (
           <div style={{ marginBottom: 34 }}>
             <div className="section-label">Generate a report</div>
-            <SheetConsole
-              claims={targets.claims.map((t) => ({ code: t.code, statement: t.statement }))}
-              bridges={targets.bridges.map((t) => ({ code: t.code, statement: t.statement }))}
-              initialKind={initialKind}
-              initialCode={initialCode}
-            />
-          </div>
-        )}
-
-        {admin && drafts.length > 0 && (
-          <div style={{ marginBottom: 34 }}>
-            <div className="section-label">Drafts · {drafts.length} · publish to list them below</div>
-            <div className="flex flex-col gap-[10px]">
-              {drafts.map((g) => <SheetRow key={g.id} meta={g} admin />)}
+            <div className="flex flex-wrap gap-3">
+              <Link href="/reports/period" className="btn btn--ghost">Period report generator</Link>
+              <Link href="/map" className="btn btn--ghost">Hypothesis reports · from a hypothesis page</Link>
             </div>
           </div>
         )}
 
-        <div className="section-label">Generated reports · {published.length}</div>
-        {published.length === 0 ? (
-          <p className="text-sm" style={{ color: 'var(--faint-ink)' }}>Nothing published yet.</p>
-        ) : (
-          <div className="flex flex-col gap-[10px]">
-            {published.map((g) => <SheetRow key={g.id} meta={g} admin={admin} />)}
-          </div>
-        )}
-
-        <div className="section-label" style={{ marginTop: 28 }}>Period reports · {reports.length}</div>
+        <div className="section-label">Period reports · {reports.length}</div>
         {reports.length === 0 ? (
           <p className="text-sm" style={{ color: 'var(--faint-ink)' }}>No saved reports yet.</p>
         ) : (
@@ -88,7 +52,7 @@ export default async function ReportPortal({
                 </Link>
                 <span className="text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>
                   {formatDateRange(r.date_from, r.date_to)}
-                  {r.lenses.length > 0 ? ` · ${r.lenses.length} lens${r.lenses.length === 1 ? '' : 'es'}` : ''}
+                  {r.contexts.length > 0 ? ` · ${r.contexts.length} context${r.contexts.length === 1 ? '' : 's'}` : ''}
                   {dateLabel(r.updated_at) ? ` · saved ${dateLabel(r.updated_at)}` : ''}
                 </span>
                 <a href={`/reports/${r.id}/pdf`} className="btn btn--ghost btn--sm">PDF</a>
@@ -97,14 +61,14 @@ export default async function ReportPortal({
           </div>
         )}
 
-        <div className="section-label" style={{ marginTop: 28 }}>Thesis reports · {theses.length}</div>
-        {theses.length === 0 ? (
-          <p className="text-sm" style={{ color: 'var(--faint-ink)' }}>No thesis reports yet.</p>
+        <div className="section-label" style={{ marginTop: 28 }}>Hypothesis reports · {hypothesisReports.length}</div>
+        {hypothesisReports.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--faint-ink)' }}>No hypothesis reports yet.</p>
         ) : (
           <div className="flex flex-col gap-[10px]">
-            {theses.map((t) => (
+            {hypothesisReports.map((t) => (
               <div key={t.report_id} className="plate flex items-baseline gap-3 flex-wrap">
-                <Link href={`/thesis-report/${t.report_id}`} className="hover:underline"
+                <Link href={`/hypothesis-report/${t.report_id}`} className="hover:underline"
                   style={{ fontWeight: 600, fontSize: 15.5, color: 'var(--ink)', flex: 1, minWidth: 260 }}>
                   {t.statement}
                 </Link>
@@ -112,7 +76,7 @@ export default async function ReportPortal({
                   {t.matched} matched · {t.supports}s / {t.contradicts}c
                   {dateLabel(t.generated_at) ? ` · ${dateLabel(t.generated_at)}` : ''}
                 </span>
-                <a href={`/thesis-report/${t.report_id}/pdf`} className="btn btn--ghost btn--sm">PDF</a>
+                <a href={`/hypothesis-report/${t.report_id}/pdf`} className="btn btn--ghost btn--sm">PDF</a>
               </div>
             ))}
           </div>
