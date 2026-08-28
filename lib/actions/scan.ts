@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireAdmin, UUID_RE } from './shared';
 import { getOrCreateTodayRun, claimScanRun, advanceScanRun } from '../scan/run';
-import { setScanTopicActive, failScanRun } from '../mutations/scan';
+import { setScanTopicActive, setScanEnabled, failScanRun } from '../mutations/scan';
 import { getScanRun } from '../data/scan';
 import type { ScanProgress } from '../types';
 
@@ -55,5 +55,11 @@ export async function setScanTopicActiveAction(slug: string, active: boolean): P
   await requireAdmin();
   if (!SLUG_RE.test(slug)) throw new Error('Bad topic slug.');
   await setScanTopicActive(slug, Boolean(active));
+  revalidatePath('/scan');
+}
+
+export async function setScanEnabledAction(enabled: boolean): Promise<void> {
+  await requireAdmin();
+  await setScanEnabled(Boolean(enabled));
   revalidatePath('/scan');
 }

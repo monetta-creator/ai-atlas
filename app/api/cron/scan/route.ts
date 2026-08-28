@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { getOrCreateTodayRun, claimScanRun, advanceScanRun } from '@/lib/scan/run';
-import { getScanRun } from '@/lib/data/scan';
+import { getScanRun, getScanPrefs } from '@/lib/data/scan';
 import { failScanRun } from '@/lib/mutations/scan';
 
 // The daily External Scan driver: GET /api/cron/scan, invoked by the two
@@ -23,6 +23,12 @@ export async function GET(req: NextRequest): Promise<Response> {
   const auth = req.headers.get('authorization');
   if (!secret || auth !== `Bearer ${secret}`) {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
+  // The runtime switch (0039): a paused scan makes cron firings no-ops without
+  // touching vercel.json. The /scan console's manual Run/resume bypasses this.
+  if (!(await getScanPrefs()).enabled) {
+    return Response.json({ done: false, skipped: 'scan paused (the /scan console toggle re-enables it)' });
   }
 
   const { runId, day } = await getOrCreateTodayRun();

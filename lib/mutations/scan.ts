@@ -206,3 +206,13 @@ export async function skipAllPendingEnrichment(runId: string): Promise<number> {
 export async function setScanTopicActive(slug: string, active: boolean): Promise<void> {
   await exec(`update scan_topics set active = $2 where slug = $1`, [slug, active]);
 }
+
+// The cron on/off switch (0039 singleton, created lazily here). Gates the
+// CRON route only; the console's manual Run/resume ignores it on purpose.
+export async function setScanEnabled(enabled: boolean): Promise<void> {
+  await exec(
+    `insert into scan_prefs (id, enabled) values (true, $1)
+     on conflict (id) do update set enabled = excluded.enabled, updated_at = now()`,
+    [enabled]
+  );
+}

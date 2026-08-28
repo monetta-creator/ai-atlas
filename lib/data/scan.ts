@@ -7,6 +7,13 @@ import type { ScanRun, ScanTopic } from '../types';
 // ONLY public egress for scan data is the key-gated `external-scan` dataset
 // (lib/datasets/builders.ts), which never selects run/lease internals.
 
+// The runtime switch (migration 0039). Missing row = enabled: the singleton
+// is created lazily by the first toggle.
+export async function getScanPrefs(): Promise<{ enabled: boolean }> {
+  const row = await one<{ enabled: boolean }>(`select enabled from scan_prefs where id = true`);
+  return { enabled: row?.enabled ?? true };
+}
+
 export async function getScanTopics(): Promise<ScanTopic[]> {
   return q<ScanTopic>(
     `select slug, name, description, taxonomy_code, search_queries, feed_urls, active, created_at

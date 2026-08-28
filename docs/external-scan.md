@@ -124,6 +124,17 @@ metadata and (when fetched) full text, so import them too.
 
 ## Operating it
 
+- **`/scan` is the whole surface** (admin nav item "Scan"): the daily JSON
+  download links, schedule and config (live from `vercel.json` plus env
+  status and today's spend), the crons on/off toggle, manual Run/resume, the
+  topic registry with every query and feed visible, the import contract
+  rendered from the live dataset registry, and a **Copy importer handoff**
+  button that bundles the full contract as one markdown blob for the
+  importer-side assistant.
+- **Pausing vs rescheduling**: the toggle writes the `scan_prefs` singleton
+  (migration `0039`); a paused scan makes cron firings no-ops while manual
+  runs keep working. Cron TIMES are deploy-time config: edit `vercel.json`
+  and push.
 - Seed or update topics: edit `private/scan-topics.json`, run
   `npm run db:seed:scan` (upserts on slug; never touches `active`, which the
   `/scan` console toggle owns; never deletes).
