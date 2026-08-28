@@ -64,7 +64,13 @@ export async function GET(
 
   const rows = await def.build(q, { lens, day });
   const cache = def.keyGated ? 'no-store' : PUBLIC_CACHE;
-  const filename = datasetFileName(def, format, lens, day);
+  // The filename carries the day the download actually SERVED: when a
+  // day-filtered dataset falls back to its latest-completed default, the rows
+  // know the day (run_day) even though the request named none. The JSON
+  // envelope's `day` stays the REQUESTED filter per the import contract.
+  const servedDay =
+    day ?? (def.filters?.day && typeof rows[0]?.run_day === 'string' ? rows[0].run_day : undefined);
+  const filename = datasetFileName(def, format, lens, servedDay);
 
   if (format === 'json') {
     // JSON is inline by default (quick in-browser inspection; the explorer

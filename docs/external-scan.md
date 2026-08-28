@@ -67,7 +67,10 @@ $0.70, 40 enrichments $0.22.
 portal key cookie (`/datasets/enter?k=<PORTAL_KEY>` sets it). Default is the
 **latest completed day**; `?day=YYYY-MM-DD` selects a specific day (400 on a
 malformed value). JSON renders inline in a browser by default; add
-`&download=1` to force a saved file (CSV always downloads). This section is the interface a downstream importer builds
+`&download=1` to force a saved file (CSV always downloads). The filename is
+date-stamped with the day the download served
+(`atlas-external-scan-YYYY-MM-DD.json`), including on the latest-completed
+default. This section is the interface a downstream importer builds
 against.
 
 JSON envelope:
