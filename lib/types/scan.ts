@@ -61,6 +61,7 @@ export interface ScanHealth {
     taxonomy_code: string;
     name: string;
     searchable: boolean;            // active with search queries
+    hasFeeds: boolean;              // any feed_urls (a topic with neither is dormant: tag-only)
     active: boolean;
     items: number;
     lastItem: string | null;        // 'YYYY-MM-DD'

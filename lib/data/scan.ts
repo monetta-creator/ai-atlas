@@ -119,9 +119,10 @@ export async function getScanHealth(days = 30): Promise<ScanHealth> {
           and created_at > now() - $1::interval`,
       [interval]
     ),
-    q<{ slug: string; taxonomy_code: string; name: string; active: boolean; searchable: boolean; items: number; last_item: string | null }>(
+    q<{ slug: string; taxonomy_code: string; name: string; active: boolean; searchable: boolean; has_feeds: boolean; items: number; last_item: string | null }>(
       `select t.slug, t.taxonomy_code, t.name, t.active,
               (t.active and cardinality(t.search_queries) > 0) as searchable,
+              cardinality(t.feed_urls) > 0 as has_feeds,
               count(i.id)::int as items,
               to_char(max(r.day), 'YYYY-MM-DD') as last_item
          from scan_topics t
@@ -129,7 +130,7 @@ export async function getScanHealth(days = 30): Promise<ScanHealth> {
                     join scan_runs r on r.id = i.run_id
                                     and r.day > current_date - $1::interval)
                 on i.topic_slug = t.slug
-        group by t.slug, t.taxonomy_code, t.name, t.active, t.search_queries
+        group by t.slug, t.taxonomy_code, t.name, t.active, t.search_queries, t.feed_urls
         order by t.taxonomy_code, t.slug`,
       [interval]
     ),
@@ -183,7 +184,8 @@ export async function getScanHealth(days = 30): Promise<ScanHealth> {
     spendUsd: spend?.usd ?? 0,
     topicYield: yieldRows.map((r) => ({
       slug: r.slug, taxonomy_code: r.taxonomy_code, name: r.name,
-      searchable: r.searchable, active: r.active, items: r.items, lastItem: r.last_item,
+      searchable: r.searchable, hasFeeds: r.has_feeds, active: r.active,
+      items: r.items, lastItem: r.last_item,
     })),
     issues: issueRows,
   };

@@ -331,7 +331,11 @@ export default async function ScanPage() {
                         <td style={{ padding: '4px 10px', fontFamily: 'var(--font-mono)', borderBottom: '1px solid var(--line)' }}>{t.taxonomy_code}</td>
                         <td style={{ padding: '4px 10px', borderBottom: '1px solid var(--line)' }}>{t.name}</td>
                         <td style={{ padding: '4px 10px', borderBottom: '1px solid var(--line)' }}>
-                          {!t.active ? 'inactive' : t.searchable ? 'searched' : 'feeds only'}
+                          {!t.active ? 'inactive'
+                            : t.searchable && t.hasFeeds ? 'searched + feeds'
+                            : t.searchable ? 'searched'
+                            : t.hasFeeds ? 'feeds only'
+                            : 'dormant (tag only)'}
                         </td>
                         <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)', color: dry ? 'var(--heat-4)' : undefined }}>
                           {t.items}{dry ? ' · dry' : ''}
