@@ -31,10 +31,41 @@ export interface ScanRun {
   hydrated_count: number;
   enriched_count: number;
   skipped_count: number;
+  notes: string[];                 // persisted issue notes (0040): dead feeds, failed searches, budget trips
   error: string | null;
   created_at: string;
   updated_at: string;
   cost_usd?: number;               // joined-in for the console run history
+}
+
+// The /scan health panel's aggregate read (window = trailing N days).
+export interface ScanHealth {
+  days: number;
+  runs: { completed: number; failed: number; running: number; missedDays: number };
+  items: {
+    total: number;
+    feed: number;
+    search: number;
+    fetchDone: number;
+    fetchFailed: number;
+    enrichDone: number;
+    enrichSkipped: number;
+    enrichError: number;
+    avgRelevance: number | null;
+    highRelevance: number;          // relevance >= 0.7
+    domains: number;                // distinct source domains
+  };
+  spendUsd: number;
+  topicYield: {
+    slug: string;
+    taxonomy_code: string;
+    name: string;
+    searchable: boolean;            // active with search queries
+    active: boolean;
+    items: number;
+    lastItem: string | null;        // 'YYYY-MM-DD'
+  }[];
+  issues: { day: string; note: string }[];
 }
 
 // The step engine's per-invocation report (cron response + console ticks).

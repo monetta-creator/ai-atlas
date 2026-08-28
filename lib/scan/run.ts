@@ -5,6 +5,7 @@ import {
   createScanRun, claimScanRun, renewScanLease, releaseScanLease, setScanStep,
   markScanTopicSearched, bumpScanRunCount, completeScanRun, insertScanItems,
   setScanItemFetchResult, setScanItemEnrichment, sweepUnenrichableItems, skipAllPendingEnrichment,
+  appendScanRunNotes,
 } from '../mutations/scan';
 import { fetchFeed } from './feeds';
 import { searchTopicNews } from './web';
@@ -126,6 +127,12 @@ export async function advanceScanRun(runId: string, deadlineAt: number): Promise
     if (run.status !== 'completed') notes.push('time budget reached: resume to continue');
     return progressOf(run, notes);
   } finally {
+    // Persist issue notes for the health panel (0040); the transient
+    // time-budget line stays out (it is normal operation, not an issue).
+    await appendScanRunNotes(
+      runId,
+      notes.filter((n) => !n.startsWith('time budget reached'))
+    ).catch(() => {});
     await releaseScanLease(runId).catch(() => {});
   }
 }

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { requireAdminPage } from '@/lib/auth';
-import { getScanTopics, getScanRuns, getScanPrefs } from '@/lib/data';
+import { getScanTopics, getScanRuns, getScanPrefs, getScanHealth } from '@/lib/data';
 import { getDataset } from '@/lib/datasets/registry';
 import { checkScanBudget } from '@/lib/scan/budget';
 import { buildScanHandoff, cronLabel } from '@/lib/scan/handoff';
@@ -11,6 +11,8 @@ import ScanConsole from '@/components/scan/ScanConsole';
 import TopicToggle from '@/components/scan/TopicToggle';
 import ScanEnabledToggle from '@/components/scan/ScanEnabledToggle';
 import CopyHandoff from '@/components/scan/CopyHandoff';
+import ScanCalendar from '@/components/scan/ScanCalendar';
+import type { ScanCalDay } from '@/components/scan/ScanCalendar';
 
 export const dynamic = 'force-dynamic';
 // Hosts the scan tick action (at most one bounded work unit per call).
@@ -30,8 +32,8 @@ const panel = {
 // key-gated external-scan dataset.
 export default async function ScanPage() {
   const admin = await requireAdminPage();
-  const [topics, runs, prefs, budget, h] = await Promise.all([
-    getScanTopics(), getScanRuns(14), getScanPrefs(), checkScanBudget(), headers(),
+  const [topics, runs, prefs, budget, health, h] = await Promise.all([
+    getScanTopics(), getScanRuns(130), getScanPrefs(), checkScanBudget(), getScanHealth(30), headers(),
   ]);
   const def = getDataset('external-scan');
   const hostName = h.get('host') ?? 'localhost:3000';
@@ -41,12 +43,38 @@ export default async function ScanPage() {
   const searchable = topics.filter((t) => t.active && t.search_queries.length > 0).length;
   const feedCount = topics.reduce((n, t) => n + (t.active ? t.feed_urls.length : 0), 0);
   const activeTopics = topics.filter((t) => t.active);
+  const now = new Date();
   const handoff = def
     ? buildScanHandoff({
         def, topics, crons, host,
-        generatedOn: new Date().toISOString().slice(0, 10),
+        generatedOn: now.toISOString().slice(0, 10),
       })
     : '';
+
+  // The day grid: the trailing 17 weeks, oldest first, one cell per calendar
+  // day; completed cells link straight to that day's JSON.
+  const GRID_DAYS = 119;
+  const nowMs = now.getTime();
+  const byDay = new Map(runs.map((r) => [r.day, r]));
+  const calDays: ScanCalDay[] = Array.from({ length: GRID_DAYS }, (_, i) => {
+    const d = new Date(nowMs - (GRID_DAYS - 1 - i) * 86_400_000).toISOString().slice(0, 10);
+    const r = byDay.get(d);
+    return {
+      day: d,
+      status: r ? (r.status as ScanCalDay['status']) : null,
+      feed: r?.feed_item_count ?? 0,
+      search: r?.search_item_count ?? 0,
+      hydrated: r?.hydrated_count ?? 0,
+      enriched: r?.enriched_count ?? 0,
+      skipped: r?.skipped_count ?? 0,
+      cost: typeof r?.cost_usd === 'number' ? r.cost_usd : null,
+      downloadHref: r?.status === 'completed'
+        ? `/api/datasets/${DATASET_SLUG}?format=json&day=${d}&download=1`
+        : null,
+    };
+  });
+  const pct = (num: number, den: number): string => (den > 0 ? `${Math.round((num / den) * 100)}%` : '–');
+  const completedRuns = Math.max(1, health.runs.completed);
 
   return (
     <>
@@ -64,7 +92,7 @@ export default async function ScanPage() {
             <a href="#run" className="touch-chip" style={chip}>Run</a>
             <a href="#topics" className="touch-chip" style={chip}>Topics</a>
             <a href="#contract" className="touch-chip" style={chip}>Contract</a>
-            {runs.length > 0 && <a href="#history" className="touch-chip" style={chip}>History</a>}
+            <a href="#history" className="touch-chip" style={chip}>History &amp; health</a>
           </nav>
         </header>
 
@@ -215,11 +243,127 @@ export default async function ScanPage() {
           </section>
         )}
 
-        {runs.length > 0 && (
-          <section id="history" style={{ marginTop: 24, scrollMarginTop: 80 }}>
-            <div className="section-label">Run history</div>
+        <section id="history" style={{ marginTop: 24, scrollMarginTop: 80 }}>
+          <div className="section-label">History &amp; health</div>
+
+          <div className="rounded-[var(--radius)] border p-[var(--card-pad)]" style={{ ...panel, marginTop: 14 }}>
+            <ScanCalendar days={calDays} />
+          </div>
+
+          <div
+            style={{
+              marginTop: 14, display: 'grid', gap: 'var(--gap, 10px)',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+            }}
+          >
+            {[
+              {
+                label: `Runs · ${health.days}d`,
+                value: `${health.runs.completed} ok`,
+                sub: `${health.runs.failed} failed · ${health.runs.missedDays} missed day${health.runs.missedDays === 1 ? '' : 's'}`,
+                warn: health.runs.failed > 0 || health.runs.missedDays > 0,
+              },
+              {
+                label: 'Items / day',
+                value: `${Math.round(health.items.total / completedRuns)}`,
+                sub: `${health.items.total} total · ${health.items.domains} domains`,
+                warn: false,
+              },
+              {
+                label: 'Fetch success',
+                value: pct(health.items.fetchDone, health.items.fetchDone + health.items.fetchFailed),
+                sub: `${health.items.fetchFailed} failed`,
+                warn: health.items.fetchFailed > health.items.fetchDone / 4,
+              },
+              {
+                label: 'Enrichment',
+                value: pct(health.items.enrichDone, health.items.enrichDone + health.items.enrichSkipped + health.items.enrichError),
+                sub: `${health.items.enrichSkipped} skipped · ${health.items.enrichError} errors`,
+                warn: health.items.enrichError > 0,
+              },
+              {
+                label: 'Relevance',
+                value: health.items.avgRelevance === null ? '–' : health.items.avgRelevance.toFixed(2),
+                sub: `${health.items.highRelevance} at 0.7 or higher`,
+                warn: false,
+              },
+              {
+                label: 'Spend',
+                value: `$${health.spendUsd.toFixed(2)}`,
+                sub: `$${(health.spendUsd / completedRuns).toFixed(2)} / run`,
+                warn: false,
+              },
+            ].map((t) => (
+              <div key={t.label} className="rounded-[var(--radius)] border p-3" style={panel}>
+                <div className="text-xs" style={{ color: 'var(--faint-ink)' }}>{t.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 600, color: t.warn ? 'var(--heat-4)' : 'var(--ink)', marginTop: 2 }}>
+                  {t.value}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 2 }}>{t.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          <details style={{ marginTop: 14 }}>
+            <summary className="text-xs" style={{ color: 'var(--faint-ink)', cursor: 'pointer' }}>
+              Topic yield · last {health.days} days
+              {(() => {
+                const dry = health.topicYield.filter((t) => t.searchable && t.items === 0).length;
+                return dry > 0 ? ` · ${dry} searched topic${dry === 1 ? '' : 's'} dry` : '';
+              })()}
+            </summary>
+            <div style={{ marginTop: 10, overflowX: 'auto' }}>
+              <table className="text-xs" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: 'var(--faint-ink)' }}>
+                    <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)' }}>code</th>
+                    <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)' }}>topic</th>
+                    <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)' }}>mode</th>
+                    <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>items</th>
+                    <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)' }}>last item</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {health.topicYield.map((t) => {
+                    const dry = t.searchable && t.items === 0;
+                    return (
+                      <tr key={t.slug} style={{ color: 'var(--dim)', opacity: t.active ? 1 : 0.5 }}>
+                        <td style={{ padding: '4px 10px', fontFamily: 'var(--font-mono)', borderBottom: '1px solid var(--line)' }}>{t.taxonomy_code}</td>
+                        <td style={{ padding: '4px 10px', borderBottom: '1px solid var(--line)' }}>{t.name}</td>
+                        <td style={{ padding: '4px 10px', borderBottom: '1px solid var(--line)' }}>
+                          {!t.active ? 'inactive' : t.searchable ? 'searched' : 'feeds only'}
+                        </td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)', color: dry ? 'var(--heat-4)' : undefined }}>
+                          {t.items}{dry ? ' · dry' : ''}
+                        </td>
+                        <td style={{ padding: '4px 10px', fontFamily: 'var(--font-mono)', borderBottom: '1px solid var(--line)' }}>{t.lastItem ?? '–'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </details>
+
+          {health.issues.length > 0 && (
+            <details style={{ marginTop: 10 }}>
+              <summary className="text-xs" style={{ color: 'var(--faint-ink)', cursor: 'pointer' }}>
+                Recent issues · {health.issues.length}
+              </summary>
+              <div className="text-xs" style={{ color: 'var(--dim)', marginTop: 10, display: 'grid', gap: 3 }}>
+                {health.issues.map((iss, i) => (
+                  <div key={i}>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--faint-ink)' }}>{iss.day}</span>
+                    {' '}{iss.note}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          {runs.length > 0 && (
             <div className="flex flex-col gap-1" style={{ marginTop: 14 }}>
-              {runs.map((r) => (
+              {runs.slice(0, 14).map((r) => (
                 <div
                   key={r.id}
                   className="flex items-center flex-wrap gap-3 text-xs rounded-[var(--radius)] border p-2.5"
@@ -241,12 +385,24 @@ export default async function ScanPage() {
                     enriched {r.enriched_count} · skipped {r.skipped_count}
                     {typeof r.cost_usd === 'number' ? ` · $${r.cost_usd.toFixed(2)}` : ''}
                   </span>
+                  {r.status === 'completed' && (
+                    <span className="flex items-center gap-2">
+                      <a className="touch-chip" style={{ fontSize: 11, padding: '2px 9px' }}
+                         href={`/api/datasets/${DATASET_SLUG}?format=json&day=${r.day}&download=1`}>
+                        JSON
+                      </a>
+                      <a className="touch-chip" style={{ fontSize: 11, padding: '2px 9px' }}
+                         href={`/api/datasets/${DATASET_SLUG}?format=csv&day=${r.day}`}>
+                        CSV
+                      </a>
+                    </span>
+                  )}
                   {r.error && <span style={{ color: 'var(--heat-4)', width: '100%' }}>{r.error}</span>}
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          )}
+        </section>
       </section>
     </>
   );

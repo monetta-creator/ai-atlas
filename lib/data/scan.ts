@@ -1,5 +1,5 @@
 import { q, one } from '../db';
-import type { ScanRun, ScanTopic } from '../types';
+import type { ScanHealth, ScanRun, ScanTopic } from '../types';
 
 // ---- External Scan (migration 0038) -----------------------------------------
 // Reads for the scan engine and the admin console. The whole surface is
@@ -31,7 +31,7 @@ export async function getActiveScanTopics(): Promise<ScanTopic[]> {
 const RUN_COLUMNS = `
   id::text as id, to_char(day, 'YYYY-MM-DD') as day, status, step, searched_topics,
   feed_item_count, search_item_count, hydrated_count, enriched_count, skipped_count,
-  error, created_at, updated_at`;
+  notes, error, created_at, updated_at`;
 
 export async function getScanRun(runId: string): Promise<ScanRun | null> {
   return one<ScanRun>(`select ${RUN_COLUMNS} from scan_runs where id = $1`, [runId]);
@@ -75,6 +75,118 @@ export async function getPendingEnrichItems(
       order by created_at, id limit $2`,
     [runId, limit]
   );
+}
+
+// The /scan health panel: one aggregate pass over the trailing window.
+// Spend sums ai_cost_log by feature over the same window (created_at based,
+// matching the budget guard's semantics). missedDays counts calendar days
+// with no run row, measured from the first run ever (or the window start,
+// whichever is later) so pre-launch days never count as misses.
+export async function getScanHealth(days = 30): Promise<ScanHealth> {
+  const interval = `${Math.max(1, Math.round(days))} days`;
+  const [runAgg, itemAgg, spend, yieldRows, issueRows, firstRun] = await Promise.all([
+    one<{ completed: number; failed: number; running: number }>(
+      `select count(*) filter (where status = 'completed')::int as completed,
+              count(*) filter (where status = 'failed')::int as failed,
+              count(*) filter (where status = 'running')::int as running
+         from scan_runs where day > current_date - $1::interval`,
+      [interval]
+    ),
+    one<{
+      total: number; feed: number; search: number; fetch_done: number; fetch_failed: number;
+      enrich_done: number; enrich_skipped: number; enrich_error: number;
+      avg_relevance: number | null; high_relevance: number; domains: number;
+    }>(
+      `select count(*)::int as total,
+              count(*) filter (where i.discovered_via <> 'web_search')::int as feed,
+              count(*) filter (where i.discovered_via = 'web_search')::int as search,
+              count(*) filter (where i.fetch_status = 'done')::int as fetch_done,
+              count(*) filter (where i.fetch_status = 'failed')::int as fetch_failed,
+              count(*) filter (where i.enrich_status = 'done')::int as enrich_done,
+              count(*) filter (where i.enrich_status = 'skipped')::int as enrich_skipped,
+              count(*) filter (where i.enrich_status = 'error')::int as enrich_error,
+              round(avg(i.relevance)::numeric, 2) as avg_relevance,
+              count(*) filter (where i.relevance >= 0.7)::int as high_relevance,
+              count(distinct i.source_domain)::int as domains
+         from scan_items i
+         join scan_runs r on r.id = i.run_id
+        where r.day > current_date - $1::interval`,
+      [interval]
+    ),
+    one<{ usd: number }>(
+      `select coalesce(sum(cost_usd), 0)::numeric as usd from ai_cost_log
+        where feature in ('scan_search', 'scan_enrich')
+          and created_at > now() - $1::interval`,
+      [interval]
+    ),
+    q<{ slug: string; taxonomy_code: string; name: string; active: boolean; searchable: boolean; items: number; last_item: string | null }>(
+      `select t.slug, t.taxonomy_code, t.name, t.active,
+              (t.active and cardinality(t.search_queries) > 0) as searchable,
+              count(i.id)::int as items,
+              to_char(max(r.day), 'YYYY-MM-DD') as last_item
+         from scan_topics t
+         left join (scan_items i
+                    join scan_runs r on r.id = i.run_id
+                                    and r.day > current_date - $1::interval)
+                on i.topic_slug = t.slug
+        group by t.slug, t.taxonomy_code, t.name, t.active, t.search_queries
+        order by t.taxonomy_code, t.slug`,
+      [interval]
+    ),
+    q<{ day: string; note: string }>(
+      `select to_char(day, 'YYYY-MM-DD') as day, n as note
+         from scan_runs, unnest(notes) as n
+        where day > current_date - $1::interval
+        order by day desc
+        limit 30`,
+      [interval]
+    ),
+    one<{ first: string | null }>(`select to_char(min(day), 'YYYY-MM-DD') as first from scan_runs`),
+  ]);
+
+  // Missed days: calendar days in [max(first run, window start), today] minus
+  // days that have a run row. Zero before the first run ever exists.
+  let missedDays = 0;
+  if (firstRun?.first) {
+    const dayRows = await q<{ n: number }>(
+      `select count(*)::int as n from scan_runs where day > current_date - $1::interval`,
+      [interval]
+    );
+    const start = new Date(`${firstRun.first}T00:00:00Z`);
+    const windowStart = new Date(Date.now() - days * 86_400_000);
+    const from = start > windowStart ? start : windowStart;
+    const elapsed = Math.floor((Date.now() - from.getTime()) / 86_400_000) + 1;
+    missedDays = Math.max(0, elapsed - (dayRows[0]?.n ?? 0));
+  }
+
+  return {
+    days,
+    runs: {
+      completed: runAgg?.completed ?? 0,
+      failed: runAgg?.failed ?? 0,
+      running: runAgg?.running ?? 0,
+      missedDays,
+    },
+    items: {
+      total: itemAgg?.total ?? 0,
+      feed: itemAgg?.feed ?? 0,
+      search: itemAgg?.search ?? 0,
+      fetchDone: itemAgg?.fetch_done ?? 0,
+      fetchFailed: itemAgg?.fetch_failed ?? 0,
+      enrichDone: itemAgg?.enrich_done ?? 0,
+      enrichSkipped: itemAgg?.enrich_skipped ?? 0,
+      enrichError: itemAgg?.enrich_error ?? 0,
+      avgRelevance: itemAgg?.avg_relevance ?? null,
+      highRelevance: itemAgg?.high_relevance ?? 0,
+      domains: itemAgg?.domains ?? 0,
+    },
+    spendUsd: spend?.usd ?? 0,
+    topicYield: yieldRows.map((r) => ({
+      slug: r.slug, taxonomy_code: r.taxonomy_code, name: r.name,
+      searchable: r.searchable, active: r.active, items: r.items, lastItem: r.last_item,
+    })),
+    issues: issueRows,
+  };
 }
 
 export async function getScanStepCounts(runId: string): Promise<{

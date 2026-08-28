@@ -75,6 +75,27 @@ export async function bumpScanRunCount(runId: string, column: string, delta: num
   );
 }
 
+// Persist an invocation's issue notes (0040): appended in first-occurrence
+// order, deduplicated against what the row already holds, capped at 40.
+export async function appendScanRunNotes(runId: string, notes: string[]): Promise<void> {
+  const clean = [...new Set(notes.map((n) => sanitizeText(n).trim().slice(0, 300)).filter(Boolean))].slice(0, 20);
+  if (!clean.length) return;
+  await exec(
+    `update scan_runs
+        set notes = (
+          select coalesce(array_agg(n order by o), '{}') from (
+            select n, min(ord) as o
+              from unnest(notes || $2::text[]) with ordinality as t(n, ord)
+             group by n
+             order by min(ord)
+             limit 40
+          ) d
+        ), updated_at = now()
+      where id = $1`,
+    [runId, clean]
+  );
+}
+
 export async function completeScanRun(runId: string): Promise<void> {
   await exec(
     `update scan_runs
