@@ -18,6 +18,7 @@ export default async function DatasetsPage() {
     { key: 'sources', label: 'Sources' },
     { key: 'research', label: 'Research' },
     { key: 'scout', label: 'Startup Scout' },
+    { key: 'scan', label: 'External scan' },
     { key: 'meta', label: 'Meta' },
   ];
 

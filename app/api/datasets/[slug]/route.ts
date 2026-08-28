@@ -48,13 +48,26 @@ export async function GET(
       lens = v;
     }
   }
+  let day: string | undefined;
+  if (def.filters?.day) {
+    const v = sp.get('day');
+    if (v) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) {
+        return Response.json(
+          { error: 'Bad day. Use YYYY-MM-DD; omit it for the latest completed day.' },
+          { status: 400 }
+        );
+      }
+      day = v;
+    }
+  }
 
-  const rows = await def.build(q, { lens });
+  const rows = await def.build(q, { lens, day });
   const cache = def.keyGated ? 'no-store' : PUBLIC_CACHE;
-  const filename = datasetFileName(def, format, lens);
+  const filename = datasetFileName(def, format, lens, day);
 
   if (format === 'json') {
-    return new Response(datasetToJSON(def, rows, { lens }), {
+    return new Response(datasetToJSON(def, rows, { lens, day }), {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Content-Disposition': `inline; filename="${filename}"`,

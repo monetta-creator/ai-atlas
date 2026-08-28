@@ -12,3 +12,4 @@ export * from './theses';
 export * from './tearsheets';
 export * from './tickets';
 export * from './scout';
+export * from './scan';

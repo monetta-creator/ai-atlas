@@ -265,7 +265,8 @@ Then call submit_developments with every distinct significant development found.
 // Reject URLs that aren't plain http(s) to a public host. Defense-in-depth against
 // SSRF: the candidate URLs come from web-search results (public news) and the trigger
 // is admin-only, but we still refuse loopback / private / link-local / metadata hosts.
-function assertPublicHttpUrl(raw: string): URL {
+// Exported for the scan's feed fetcher (lib/scan/feeds.ts), which shares the guard.
+export function assertPublicHttpUrl(raw: string): URL {
   let u: URL;
   try {
     u = new URL(raw);

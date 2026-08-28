@@ -3,8 +3,8 @@ import type { DatasetColumn, DatasetDef, DatasetRow } from './core';
 // stripping) can load this module chain; the bundler resolves it the same.
 import {
   buildArgumentEdges, buildArgumentNodes, buildArticlesFullText, buildConcepts,
-  buildEvidenceLedger, buildResearchPapers, buildScoutCompanies, buildScoutEvents,
-  buildSignals, buildSignalsByClaim, buildSources, buildThesisReports,
+  buildEvidenceLedger, buildExternalScan, buildResearchPapers, buildScoutCompanies,
+  buildScoutEvents, buildSignals, buildSignalsByClaim, buildSources, buildThesisReports,
 } from './builders.ts';
 
 // The ordered dataset catalog. Registry text is user-facing: plain sentences,
@@ -312,6 +312,41 @@ const BASE: DatasetDef[] = [
     ],
     build: buildScoutEvents,
   },
+  {
+    slug: 'external-scan',
+    title: 'External scan, daily',
+    description:
+      'One day of the automated external news scan: items across financial services and technology topics discovered from public press feeds and web search, with full text, a model summary, taxonomy tags, and named entities.',
+    methodology:
+      'One row per item in one day\'s scan run; the latest completed day by default, or add ?day=YYYY-MM-DD for a specific day. Discovery is public press feeds plus per-topic web searches; page text is fetched directly with a reader fallback; enrichment is a small model pass whose tags come from a fixed topic taxonomy. relevance is advisory and downstream triage is expected. This is a working corpus, not a redistribution channel. Downloading requires the team portal key.',
+    category: 'scan',
+    formats: ['csv', 'json'],
+    heavy: true,
+    keyGated: true,
+    filters: { day: true },
+    columns: [
+      col('item_id', 'Item ID', 'text', 'Stable UUID of the scanned item.'),
+      col('run_day', 'Run day', 'date', 'The scan day (YYYY-MM-DD, UTC).'),
+      col('url', 'URL', 'text', 'The item URL as discovered.'),
+      col('normalized_url', 'Normalized URL', 'text', 'Canonical dedupe form: host plus path plus sorted query, tracking params stripped.'),
+      col('headline', 'Headline', 'text', 'Headline as reported by the feed or search.'),
+      col('source_domain', 'Source domain', 'text', 'Hostname of the URL, www stripped.'),
+      col('published_on', 'Published', 'date', 'Publication date when known (YYYY-MM-DD).'),
+      col('discovered_via', 'Discovered via', 'text', 'The discovering topic\'s slug for a feed item, or web_search.'),
+      col('topic_slug', 'Topic slug', 'text', 'The scan topic that discovered the item.'),
+      col('topic_code', 'Topic code', 'text', 'Taxonomy code of that topic.'),
+      col('summary', 'Summary', 'longtext', 'Two to three model-written sentences; empty when enrichment was skipped.'),
+      col('tags', 'Tags', 'text', 'Taxonomy codes the enrichment assigned, joined with a semicolon.'),
+      col('entities', 'Entities', 'text', 'Companies, agencies, and people named, joined with a semicolon.'),
+      col('relevance', 'Relevance', 'number', 'Advisory 0 to 1 relevance score from enrichment.'),
+      col('enrich_status', 'Enrich status', 'enum', 'done, skipped, error, or pending.'),
+      col('fetch_status', 'Fetch status', 'enum', 'done, failed, skipped, or pending.'),
+      col('fetched_via', 'Fetched via', 'enum', 'direct or jina.'),
+      col('text_chars', 'Text length', 'number', 'Character count of the retained page text.'),
+      col('full_text', 'Full text', 'longtext', 'The complete retained page text, capped at 24,000 characters.'),
+    ],
+    build: buildExternalScan,
+  },
 ];
 
 const CATALOG: DatasetDef = {
@@ -326,7 +361,7 @@ const CATALOG: DatasetDef = {
   columns: [
     col('dataset_slug', 'Dataset slug', 'text', 'Slug of the dataset; its download URL is /api/datasets/<slug>.'),
     col('dataset_title', 'Dataset title', 'text', 'Display title of the dataset.'),
-    col('category', 'Category', 'enum', 'argument-graph, signals, evidence, sources, research, scout, or meta.'),
+    col('category', 'Category', 'enum', 'argument-graph, signals, evidence, sources, research, scout, scan, or meta.'),
     col('column_key', 'Column key', 'text', 'Machine name of the column; the CSV header.'),
     col('column_label', 'Column label', 'text', 'Display name of the column.'),
     col('column_type', 'Column type', 'enum', 'text, number, date, enum, or longtext.'),

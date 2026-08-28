@@ -28,6 +28,7 @@ type DatasetCategory =
   | 'sources'
   | 'research'
   | 'scout'
+  | 'scan'
   | 'meta';
 
 // `longtext` marks prose columns the explorer should truncate and the schema
@@ -43,6 +44,7 @@ export interface DatasetColumn {
 
 export interface DatasetOpts {
   lens?: string;          // validated against SIGNAL_LENSES before it reaches a builder
+  day?: string;           // validated as YYYY-MM-DD in the route before it reaches a builder
 }
 
 export interface DatasetDef {
@@ -55,7 +57,7 @@ export interface DatasetDef {
   formats: ('csv' | 'json')[];
   heavy?: boolean;        // no explorer, truncated preview, download-only posture
   keyGated?: boolean;     // requires the portal key (bulk third-party article text)
-  filters?: { lens?: boolean };  // declares supported download query params
+  filters?: { lens?: boolean; day?: boolean };  // declares supported download query params
   build: (q: Q, opts?: DatasetOpts) => Promise<DatasetRow[]>;
 }
 

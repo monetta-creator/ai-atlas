@@ -12,3 +12,4 @@ export * from './research';
 export * from './theses';
 export * from './desk';
 export * from './scout';
+export * from './scan';

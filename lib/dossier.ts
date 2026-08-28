@@ -236,6 +236,9 @@ export async function runStructured<T>(opts: {
   // tighten the model leg and disable in-call SDK retries. Defaults suit short calls.
   timeoutMs?: number;
   maxRetries?: number;
+  // Model override (default: the module's Sonnet). The scan's enrichment passes
+  // claude-haiku-4-5 for cost; the cost log prices whichever model ran.
+  model?: string;
 }): Promise<T> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is required for AI source tools.');
@@ -246,11 +249,17 @@ export async function runStructured<T>(opts: {
     timeout: opts.timeoutMs ?? 50_000,
     maxRetries: opts.maxRetries ?? 1,
   });
+  const model = opts.model ?? MODEL;
   const params = {
-    model: MODEL,
+    model,
     max_tokens: opts.maxTokens ?? 4000,
-    thinking: { type: 'disabled' },
-    output_config: { effort: opts.effort ?? 'low' },
+    // Live-verified 2026-08-28: claude-haiku-4-5 400s on the effort parameter
+    // ("This model does not support the effort parameter"), so thinking and
+    // output_config ride only on the default Sonnet; an overridden model gets
+    // the bare call, matching the app's other Haiku call sites.
+    ...(opts.model
+      ? {}
+      : { thinking: { type: 'disabled' }, output_config: { effort: opts.effort ?? 'low' } }),
     system: [{ type: 'text', text: opts.system, cache_control: { type: 'ephemeral' } }],
     tools: [{ name: opts.toolName, description: opts.toolDescription, strict: true, input_schema: opts.schema }],
     tool_choice: { type: 'tool', name: opts.toolName },
@@ -262,7 +271,7 @@ export async function runStructured<T>(opts: {
   )) as Anthropic.Message;
   await recordApiCall({
     feature: opts.feature,
-    model: MODEL,
+    model,
     usage: msg.usage,
     wallMs: Date.now() - t0,
     pipelineRunId: opts.pipelineRunId,

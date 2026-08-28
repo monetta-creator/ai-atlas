@@ -12,6 +12,7 @@
     "db:seed": "node scripts/seed.mjs",
     "db:seed:concepts": "node scripts/seed-concepts.mjs",
     "db:seed:threads": "node scripts/seed-threads.mjs",
+    "db:seed:scan": "node scripts/seed-scan-topics.mjs",
     "db:verify": "node scripts/verify.mjs"
   },
   "dependencies": {

@@ -352,3 +352,33 @@ export async function buildScoutEvents(q: Q): Promise<DatasetRow[]> {
       order by e.event_date desc, e.id`
   );
 }
+
+// ---------------------------------------------------------------------------
+
+export async function buildExternalScan(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
+  // One row per item in one day's External Scan run: the latest COMPLETED day
+  // by default (a mid-flight run never shifts the default download), or the
+  // ?day= the route validated. Run internals (lease, counters) never export.
+  return q<DatasetRow>(
+    `select i.id::text as item_id,
+            to_char(r.day, 'YYYY-MM-DD') as run_day,
+            i.url, i.normalized_url, i.headline, i.source_domain,
+            to_char(i.published_date, 'YYYY-MM-DD') as published_on,
+            i.discovered_via, i.topic_slug, t.taxonomy_code as topic_code,
+            i.summary,
+            array_to_string(i.tags, '; ') as tags,
+            array_to_string(i.entities, '; ') as entities,
+            i.relevance,
+            i.enrich_status::text as enrich_status,
+            i.fetch_status::text as fetch_status,
+            i.fetched_via,
+            length(i.raw_content) as text_chars,
+            i.raw_content as full_text
+       from scan_items i
+       join scan_runs r on r.id = i.run_id
+       left join scan_topics t on t.slug = i.topic_slug
+      where r.day = coalesce($1::date, (select max(day) from scan_runs where status = 'completed'))
+      order by i.published_date desc nulls last, i.normalized_url, i.id`,
+    [opts.day ?? null]
+  );
+}
