@@ -130,8 +130,16 @@ metadata and (when fetched) full text, so import them too.
   status and today's spend), the crons on/off toggle, manual Run/resume, the
   topic registry with every query and feed visible, the import contract
   rendered from the live dataset registry, and a **Copy importer handoff**
-  button that bundles the full contract as one markdown blob for the
-  importer-side assistant.
+  button. The handoff (`lib/scan/handoff.ts`) is an orientation document for
+  the assistant building the intake on the far side of a firewall: system
+  overview and division of labor, a **formal JSON Schema (draft 2020-12)**
+  for the envelope and rows generated from the registry columns plus a
+  per-field facts map (nullability, enums, formats; `scripts/test-scan.mjs`
+  fails if a new column misses the map), field guarantees and invariants
+  (stable ids, normalization, ordering, immutability of completed days),
+  status semantics, live taxonomy codes, intake design guidance (idempotent
+  upsert on item_id, additive-change tolerance, drift detection via the
+  envelope's columns array), and transport last.
 - **Pausing vs rescheduling**: the toggle writes the `scan_prefs` singleton
   (migration `0039`); a paused scan makes cron firings no-ops while manual
   runs keep working. Cron TIMES are deploy-time config: edit `vercel.json`

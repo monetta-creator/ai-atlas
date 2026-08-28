@@ -10,6 +10,8 @@ import pg from 'pg';
 import {
   parseFeedXml, decodeEntities, withinWindow, clamp01, nextSearchTopic,
 } from '../lib/scan/core.ts';
+import { buildScanHandoff, buildRowJsonSchema, cronLabel } from '../lib/scan/handoff.ts';
+import { getDataset } from '../lib/datasets/registry.ts';
 
 let pass = 0;
 let fail = 0;
@@ -126,6 +128,49 @@ check('nextSearchTopic skips inactive, feeds-only, and searched topics', () => {
   assert.equal(nextSearchTopic(topics, [])?.slug, 'c');
   assert.equal(nextSearchTopic(topics, ['c'])?.slug, 'd');
   assert.equal(nextSearchTopic(topics, ['c', 'd']), null);
+});
+
+// ---- The importer handoff: schema generation must track the registry ------
+
+const scanDef = getDataset('external-scan');
+
+check('buildRowJsonSchema covers every registry column with real facts', () => {
+  assert.ok(scanDef, 'external-scan def missing from the registry');
+  const schema = buildRowJsonSchema(scanDef);
+  for (const c of scanDef.columns) {
+    const p = schema.properties[c.key];
+    assert.ok(p, `no schema property for ${c.key}`);
+    // The permissive fallback (['string','number','null']) means FIELD_FACTS
+    // in lib/scan/handoff.ts was not updated for a new column: fix it there.
+    assert.ok(
+      !(Array.isArray(p.type) && p.type.length === 3),
+      `${c.key} fell back to the permissive type; add it to FIELD_FACTS`
+    );
+  }
+  assert.deepEqual(schema.required, scanDef.columns.map((c) => c.key));
+});
+
+check('buildScanHandoff embeds every column key and a parseable JSON Schema', () => {
+  const text = buildScanHandoff({
+    def: scanDef,
+    topics: [{ slug: 't', name: 'Topic', description: 'd', taxonomy_code: '1.1', search_queries: ['q'], feed_urls: [], active: true, created_at: '' }],
+    crons: [{ path: '/api/cron/scan', schedule: '0 9 * * *' }],
+    host: 'https://example.test',
+    generatedOn: '2026-08-28',
+  });
+  for (const c of scanDef.columns) assert.ok(text.includes(`| ${c.key} |`), `handoff missing ${c.key}`);
+  const fenced = /```json\n([\s\S]*?)\n```/.exec(text);
+  assert.ok(fenced, 'no fenced JSON Schema block');
+  const parsed = JSON.parse(fenced[1]);
+  assert.equal(parsed.properties.rows.items.title, 'external-scan row');
+  assert.ok(text.includes('1.1'), 'taxonomy codes missing');
+  assert.ok(!text.includes('—'), 'handoff contains an em dash');
+});
+
+check('cronLabel renders daily crons and passes odd schedules through', () => {
+  assert.equal(cronLabel('0 9 * * *'), '09:00 UTC daily');
+  assert.equal(cronLabel('30 11 * * *'), '11:30 UTC daily');
+  assert.equal(cronLabel('0 9 * * 1-5'), '0 9 * * 1-5');
 });
 
 // DB sanity (read-only): the 0038 tables exist and no run holds a duplicate
