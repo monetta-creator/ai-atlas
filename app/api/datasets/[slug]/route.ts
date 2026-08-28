@@ -67,10 +67,14 @@ export async function GET(
   const filename = datasetFileName(def, format, lens, day);
 
   if (format === 'json') {
+    // JSON is inline by default (quick in-browser inspection; the explorer
+    // fetches it anyway); ?download=1 forces a saved file for the flows that
+    // want one, like the /scan daily grab from a work browser.
+    const disposition = sp.get('download') === '1' ? 'attachment' : 'inline';
     return new Response(datasetToJSON(def, rows, { lens, day }), {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Content-Disposition': `inline; filename="${filename}"`,
+        'Content-Disposition': `${disposition}; filename="${filename}"`,
         'Cache-Control': cache,
       },
     });

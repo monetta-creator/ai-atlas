@@ -66,7 +66,8 @@ $0.70, 40 enrichments $0.22.
 `GET /api/datasets/external-scan?format=json` (or `format=csv`) with the
 portal key cookie (`/datasets/enter?k=<PORTAL_KEY>` sets it). Default is the
 **latest completed day**; `?day=YYYY-MM-DD` selects a specific day (400 on a
-malformed value). This section is the interface a downstream importer builds
+malformed value). JSON renders inline in a browser by default; add
+`&download=1` to force a saved file (CSV always downloads). This section is the interface a downstream importer builds
 against.
 
 JSON envelope:

@@ -56,8 +56,10 @@ is the importer's downstream triage. Expect roughly 30 to 80 rows per day.
 1. Unlock once per browser: ${host}/datasets/enter?k=<PORTAL_KEY> (sets a
    30-day cookie; get the key from the scan's operator).
 2. Download the latest completed day:
-   ${host}/api/datasets/external-scan?format=json
+   ${host}/api/datasets/external-scan?format=json&download=1
    A specific day: append &day=YYYY-MM-DD. CSV instead: format=csv.
+   (download=1 forces a saved file; without it the browser renders the JSON
+   inline. Scripted fetches can drop it.)
 3. Fresh data lands daily: scheduled runs at ${schedule}. Download any time
    after the second run; the default always serves the latest COMPLETED day,
    so a mid-flight run never produces a partial file.

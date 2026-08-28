@@ -72,7 +72,7 @@ export default async function ScanPage() {
           <div className="section-label">The daily JSON</div>
           <div className="rounded-[var(--radius)] border p-[var(--card-pad)]" style={{ ...panel, marginTop: 14 }}>
             <div className="flex items-center gap-3 flex-wrap">
-              <a className="btn btn--primary" href={`/api/datasets/${DATASET_SLUG}?format=json`}>
+              <a className="btn btn--primary" href={`/api/datasets/${DATASET_SLUG}?format=json&download=1`}>
                 Download JSON{latestDay ? ` · ${latestDay}` : ''}
               </a>
               <a className="btn" href={`/api/datasets/${DATASET_SLUG}?format=csv`}>CSV</a>
