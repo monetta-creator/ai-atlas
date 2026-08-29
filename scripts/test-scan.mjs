@@ -8,9 +8,11 @@ config({ path: '.env.local' });
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import {
-  parseFeedXml, decodeEntities, withinWindow, clamp01, nextSearchTopic,
+  parseFeedXml, decodeEntities, withinWindow, clamp01, nextSearchTopic, lookbackDays,
 } from '../lib/scan/core.ts';
-import { buildScanHandoff, buildRowJsonSchema, cronLabel } from '../lib/scan/handoff.ts';
+import {
+  buildScanHandoff, buildSignalsExportHandoff, buildRowJsonSchema, cronLabel,
+} from '../lib/scan/handoff.ts';
 import { getDataset } from '../lib/datasets/registry.ts';
 
 let pass = 0;
@@ -118,6 +120,13 @@ check('clamp01 clamps onto numeric(3,2)', () => {
   assert.equal(clamp01(undefined), null);
 });
 
+check('lookbackDays: Monday reaches back through the weekend, other days one', () => {
+  assert.equal(lookbackDays('2026-08-31'), 3); // Monday
+  assert.equal(lookbackDays('2026-08-28'), 1); // Friday
+  assert.equal(lookbackDays('2026-08-29'), 1); // Saturday (manual run)
+  assert.equal(lookbackDays('2026-09-01'), 1); // Tuesday
+});
+
 check('nextSearchTopic skips inactive, feeds-only, and searched topics', () => {
   const topics = [
     { slug: 'a', active: true, search_queries: [] },
@@ -167,10 +176,50 @@ check('buildScanHandoff embeds every column key and a parseable JSON Schema', ()
   assert.ok(!text.includes('—'), 'handoff contains an em dash');
 });
 
-check('cronLabel renders daily crons and passes odd schedules through', () => {
+check('cronLabel renders daily and weekday crons, passes odd schedules through', () => {
   assert.equal(cronLabel('0 9 * * *'), '09:00 UTC daily');
   assert.equal(cronLabel('30 11 * * *'), '11:30 UTC daily');
-  assert.equal(cronLabel('0 9 * * 1-5'), '0 9 * * 1-5');
+  assert.equal(cronLabel('0 9 * * 1-5'), '09:00 UTC weekdays');
+  assert.equal(cronLabel('0 9 * * 6'), '0 9 * * 6');
+});
+
+// ---- The signals-export sibling: same schema machinery, second def --------
+
+const signalsDef = getDataset('signals-export');
+
+check('signals-export: first nineteen columns mirror external-scan key for key', () => {
+  assert.ok(signalsDef, 'signals-export def missing from the registry');
+  const scanKeys = scanDef.columns.map((c) => c.key);
+  const sigKeys = signalsDef.columns.slice(0, scanKeys.length).map((c) => c.key);
+  assert.deepEqual(sigKeys, scanKeys);
+});
+
+check('signals-export: buildRowJsonSchema covers every column with real facts', () => {
+  const schema = buildRowJsonSchema(signalsDef);
+  for (const c of signalsDef.columns) {
+    const p = schema.properties[c.key];
+    assert.ok(p, `no schema property for ${c.key}`);
+    assert.ok(
+      !(Array.isArray(p.type) && p.type.length === 3),
+      `${c.key} fell back to the permissive type; add it to FIELD_FACTS`
+    );
+  }
+  assert.deepEqual(schema.required, signalsDef.columns.map((c) => c.key));
+});
+
+check('buildSignalsExportHandoff embeds every column and a parseable JSON Schema', () => {
+  const text = buildSignalsExportHandoff({
+    def: signalsDef,
+    host: 'https://example.test',
+    generatedOn: '2026-08-29',
+  });
+  for (const c of signalsDef.columns) assert.ok(text.includes(`| ${c.key} |`), `handoff missing ${c.key}`);
+  const fenced = /```json\n([\s\S]*?)\n```/.exec(text);
+  assert.ok(fenced, 'no fenced JSON Schema block');
+  const parsed = JSON.parse(fenced[1]);
+  assert.equal(parsed.properties.rows.items.title, 'signals-export row');
+  assert.equal(parsed.properties.dataset.properties.slug.const, 'signals-export');
+  assert.ok(!text.includes('—'), 'handoff contains an em dash');
 });
 
 // DB sanity (read-only): the 0038 tables exist and no run holds a duplicate

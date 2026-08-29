@@ -39,26 +39,9 @@ function inferPublishedDate(url: string, modelDate: string): string {
   return modelDate;
 }
 
-// Canonical form for dedup: host (no www) + path (no trailing slash) + sorted query, with
-// tracking params and the fragment dropped, and the scheme ignored. Best-effort — returns the
-// input lower-cased if it doesn't parse. Lets a re-discovered URL match one already tracked
-// even when it differs only by http/https, www, a trailing slash, or utm_*/fbclid noise.
-export function normalizeUrl(raw: string): string {
-  try {
-    const u = new URL(raw.trim());
-    const host = u.hostname.replace(/^www\./, '').toLowerCase();
-    const params = new URLSearchParams();
-    [...u.searchParams.entries()]
-      .filter(([k]) => !/^utm_/i.test(k) && !/^(fbclid|gclid|mc_cid|mc_eid|igshid)$/i.test(k))
-      .sort(([a], [b]) => a.localeCompare(b))
-      .forEach(([k, v]) => params.append(k, v));
-    const path = u.pathname.replace(/\/+$/, '');
-    const qs = params.toString();
-    return `${host}${path}${qs ? `?${qs}` : ''}`;
-  } catch {
-    return raw.trim().toLowerCase();
-  }
-}
+// The canonical dedupe form moved to lib/pack-shared.ts (the dependency-light
+// dataset builders share it); re-exported here for the pipeline-side importers.
+export { normalizeUrl } from '../pack-shared';
 
 // Discovery primitive: run a small batch of web searches for one lens and return
 // EVERYTHING found, unfiltered (triage does the filtering). Returns [] if the model

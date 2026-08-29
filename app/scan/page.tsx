@@ -1,10 +1,10 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { requireAdminPage } from '@/lib/auth';
-import { getScanTopics, getScanRuns, getScanPrefs, getScanHealth } from '@/lib/data';
+import { getScanTopics, getScanRuns, getScanPrefs, getScanHealth, getPublishedSignalCount } from '@/lib/data';
 import { getDataset } from '@/lib/datasets/registry';
 import { checkScanBudget } from '@/lib/scan/budget';
-import { buildScanHandoff, cronLabel } from '@/lib/scan/handoff';
+import { buildScanHandoff, buildSignalsExportHandoff, cronLabel } from '@/lib/scan/handoff';
 import vercelConfig from '@/vercel.json';
 import Header from '@/components/Header';
 import ScanConsole from '@/components/scan/ScanConsole';
@@ -32,10 +32,12 @@ const panel = {
 // key-gated external-scan dataset.
 export default async function ScanPage() {
   const admin = await requireAdminPage();
-  const [topics, runs, prefs, budget, health, h] = await Promise.all([
-    getScanTopics(), getScanRuns(130), getScanPrefs(), checkScanBudget(), getScanHealth(30), headers(),
+  const [topics, runs, prefs, budget, health, signalCount, h] = await Promise.all([
+    getScanTopics(), getScanRuns(130), getScanPrefs(), checkScanBudget(), getScanHealth(30),
+    getPublishedSignalCount(), headers(),
   ]);
   const def = getDataset('external-scan');
+  const signalsDef = getDataset('signals-export');
   const hostName = h.get('host') ?? 'localhost:3000';
   const host = `${hostName.startsWith('localhost') ? 'http' : 'https'}://${hostName}`;
   const crons = (vercelConfig as { crons: { path: string; schedule: string }[] }).crons;
@@ -47,6 +49,12 @@ export default async function ScanPage() {
   const handoff = def
     ? buildScanHandoff({
         def, topics, crons, host,
+        generatedOn: now.toISOString().slice(0, 10),
+      })
+    : '';
+  const signalsHandoff = signalsDef
+    ? buildSignalsExportHandoff({
+        def: signalsDef, host,
         generatedOn: now.toISOString().slice(0, 10),
       })
     : '';
@@ -88,6 +96,7 @@ export default async function ScanPage() {
           </p>
           <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
             <a href="#json" className="touch-chip" style={chip}>The JSON</a>
+            <a href="#signals" className="touch-chip" style={chip}>Signals export</a>
             <a href="#config" className="touch-chip" style={chip}>Schedule &amp; config</a>
             <a href="#run" className="touch-chip" style={chip}>Run</a>
             <a href="#topics" className="touch-chip" style={chip}>Topics</a>
@@ -113,6 +122,30 @@ export default async function ScanPage() {
             </p>
           </div>
         </section>
+
+        {signalsDef && (
+          <section id="signals" style={{ marginTop: 24, scrollMarginTop: 80 }}>
+            <div className="section-label">Firewall export · published signals</div>
+            <div className="rounded-[var(--radius)] border p-[var(--card-pad)]" style={{ ...panel, marginTop: 14 }}>
+              <div className="flex items-center gap-3 flex-wrap">
+                <a className="btn btn--primary" href={`/api/datasets/signals-export?format=json&download=1`}>
+                  Download JSON · {signalCount} signal{signalCount === 1 ? '' : 's'}
+                </a>
+                <a className="btn" href={`/api/datasets/signals-export?format=csv`}>CSV</a>
+                <Link className="btn" href="/datasets/signals-export">Dataset page</Link>
+              </div>
+              <p className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 10 }}>
+                Every published signal in the SAME row shape as the daily scan file (the intake
+                ingests both unchanged), with the signal-native columns appended and the full
+                writeup composed into full_text. Full corpus every download; the importer upserts
+                on item_id. Key-gated like the daily file.
+              </p>
+              <div style={{ marginTop: 12 }}>
+                <CopyHandoff text={signalsHandoff} label="Copy signals-export handoff" />
+              </div>
+            </div>
+          </section>
+        )}
 
         <section id="config" style={{ marginTop: 24, scrollMarginTop: 80 }}>
           <div className="section-label">Schedule &amp; config</div>

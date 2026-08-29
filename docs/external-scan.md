@@ -1,9 +1,10 @@
 # The External Scan
 
-A daily, cron-driven sweep of public news across configurable topics (financial
-services, technology, and whatever else the topic registry names), hydrated to
-full text, lightly enriched by a small model, and published as the key-gated
-`external-scan` dataset. The design goal: an **outside** system does the
+A weekday, cron-driven sweep of public news across configurable topics
+(financial services, technology, and whatever else the topic registry names),
+hydrated to full text, lightly enriched by a small model, and published as the
+key-gated `external-scan` dataset. Weekends are scheduled off; Monday's run
+looks back three days, so it collects the weekend's news in one larger file. The design goal: an **outside** system does the
 web-facing work (discovery, fetching, tagging) and ships a clean JSON corpus a
 **downstream tool in a restricted environment** imports and triages on its own
 terms. Nothing here writes signals, claims, or evidence; the scan's judgment
@@ -39,7 +40,9 @@ persisting after each, under a caller-supplied deadline:
 
 1. **feeds** — every active topic's RSS/Atom feeds in parallel
    (`lib/scan/feeds.ts`, hand-rolled parser in `lib/scan/core.ts`); free, and a
-   dead feed is a note, never a failure.
+   dead feed is a note, never a failure. The discovery window is
+   `lookbackDays(day)`: one day normally, three on Mondays (the weekend
+   catch-up); the search leg uses the same window for its "since" date.
 2. **search** — one `web_search` call per active topic with queries
    (`lib/scan/web.ts`, the scout call shape on `claude-sonnet-4-6`, one search
    per topic), checkpointed per topic; the budget is checked before each.
@@ -50,10 +53,12 @@ persisting after each, under a caller-supplied deadline:
    active topics), entities, relevance. Budget-capped; past the cap items ship
    with `enrich_status = 'skipped'`.
 
-Drivers: two daily Vercel crons (`vercel.json`) hit `GET /api/cron/scan`
-(Bearer `CRON_SECRET`, `maxDuration 300`, ~240s work budget per invocation;
-the second cron finishes what the first could not), and the admin `/scan`
-console's Run/Resume button ticks the same engine one unit at a time.
+Drivers: two weekday Vercel crons (`vercel.json`, `0 9 * * 1-5` and
+`0 11 * * 1-5`) hit `GET /api/cron/scan` (Bearer `CRON_SECRET`,
+`maxDuration 300`, ~240s work budget per invocation; the second cron finishes
+what the first could not), and the admin `/scan` console's Run/Resume button
+ticks the same engine one unit at a time (a manual weekend run works and gets
+the normal one-day window; Monday's overlap dedupes away).
 
 Cost discipline: scan model calls log to `ai_cost_log` as `scan_search` /
 `scan_enrich` with provenance in `metadata.scan_run` (NEVER `pipeline_run_id`,
@@ -126,6 +131,35 @@ across rediscovery); treat `tags`/`relevance` as advisory input to your own
 triage, not verdicts; `enrich_status != 'done'` rows still carry discovery
 metadata and (when fetched) full text, so import them too.
 
+## The signals export (the contract's sibling)
+
+`GET /api/datasets/signals-export?format=json&download=1` (key-gated, same
+unlock) serves EVERY published Signal Board signal **in the external-scan row
+shape**: the first nineteen columns mirror the contract above key for key
+(same types, same nullability), so the same firewall intake ingests both
+files unchanged. Differences are semantic, documented in its own handoff
+(`buildSignalsExportHandoff`, copyable from the /scan "Firewall export"
+panel):
+
+- Full corpus every download, not a day; `run_day` varies per row (the
+  signal's editorial date). Idempotent upsert on `item_id` (the signal UUID);
+  a re-download is a full refresh that also picks up post-publish edits.
+- `url` falls back to the signal's Atlas page when no source article is
+  linked, so `normalized_url` may repeat across signals sharing one source;
+  key on `item_id` for this file.
+- `discovered_via` is always `atlas_signal`; `tags` carries the audience
+  lenses; `relevance` encodes significance (high 0.9 / medium 0.6 / low 0.3).
+- `full_text` is always present: a composed document (title, summary, the
+  brief sections, counterpoint, argument-map touches with reasoning, then
+  `SOURCE ARTICLE TEXT` with the retained article), capped at 24,000 chars.
+- Appended signal-native columns (the contract is additive; intakes tolerate
+  them): significance, lenses, origin, claim_touches, `touch_details` (a
+  JSON-encoded array of `{code, direction, reason, statement}`), the three
+  brief fields, counterpoint, atlas_url, source_title. The per-touch
+  direction + editorial reason is admin-only in the app; the portal key is
+  the boundary that lets it ride this dataset (the one scoped exception to
+  the guest-safety ban, enforced in `scripts/test-datasets.mjs`).
+
 ## Operating it
 
 - **`/scan` is the whole surface** (admin nav item "Scan"): the daily JSON
@@ -145,8 +179,10 @@ metadata and (when fetched) full text, so import them too.
   envelope's columns array), and transport last.
 - **Pausing vs rescheduling**: the toggle writes the `scan_prefs` singleton
   (migration `0039`); a paused scan makes cron firings no-ops while manual
-  runs keep working. Cron TIMES are deploy-time config: edit `vercel.json`
-  and push.
+  runs keep working. Cron TIMES and DAYS are deploy-time config: edit
+  `vercel.json` and push (weekday-only since 2026-08-29; the Monday catch-up
+  window lives in `lookbackDays`, `lib/scan/core.ts`). The health panel and
+  day grid treat runless weekends as scheduled off, never as misses.
 - Seed or update topics: edit `private/scan-topics.json`, run
   `npm run db:seed:scan` (upserts on slug; never touches `active`, which the
   `/scan` console toggle owns; never deletes).

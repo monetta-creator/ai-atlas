@@ -62,7 +62,7 @@ export async function GET(
     }
   }
 
-  const rows = await def.build(q, { lens, day });
+  const rows = await def.build(q, { lens, day, host: req.nextUrl.origin });
   const cache = def.keyGated ? 'no-store' : PUBLIC_CACHE;
   // The filename carries the day the download actually SERVED: when a
   // day-filtered dataset falls back to its latest-completed default, the rows

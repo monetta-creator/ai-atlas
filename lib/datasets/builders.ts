@@ -2,7 +2,7 @@ import type { DatasetOpts, DatasetRow, Q } from './core';
 // Explicit .ts extension: this chain is loaded by plain Node in
 // scripts/test-datasets.mjs (type stripping), which resolves no extensionless
 // specifiers. The bundler resolves it identically.
-import { domainOfUrl } from '../pack-shared.ts';
+import { domainOfUrl, normalizeUrl } from '../pack-shared.ts';
 
 // Dataset builders. See core.ts for the contract: injected Q, deterministic
 // ordering, guest-safe by construction (no personal-layer column ever appears in
@@ -381,4 +381,127 @@ export async function buildExternalScan(q: Q, opts: DatasetOpts = {}): Promise<D
       order by i.published_date desc nulls last, i.normalized_url, i.id`,
     [opts.day ?? null]
   );
+}
+
+// ---------------------------------------------------------------------------
+
+interface SignalsExportRow {
+  id: string; title: string; summary: string | null;
+  significance: 'high' | 'medium' | 'low';
+  lenses: string[] | null;
+  run_day: string; published_on: string | null; origin: string;
+  claim_touches: string[] | null;
+  touch_details: Record<string, { direction?: string | null; reason?: string | null }> | null;
+  brief_what_happened: string | null; brief_why_it_matters: string | null;
+  brief_whats_contested: string | null; counterpoint: string | null;
+  source_title: string | null; source_url: string | null;
+  article_text: string | null;
+}
+
+const SIGNIFICANCE_RELEVANCE: Record<string, number> = { high: 0.9, medium: 0.6, low: 0.3 };
+
+export async function buildSignalsExport(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
+  // The whole published-signal corpus mapped onto the external-scan row shape
+  // (same 19 keys, same order) so the same firewall intake ingests both files,
+  // with the signal-native fields appended (the contract is additive). This is
+  // the ONE builder allowed to read touch_details (per-touch direction plus the
+  // editorial reason): the dataset is key-gated, and the portal key is that
+  // boundary. full_text is a composed document, writeup first then the retained
+  // article text, so even a scan-fields-only intake captures the editorial work.
+  const host = (opts.host ?? '').replace(/\/+$/, '') || 'https://ai-atlas-kevin-michel-s-projects.vercel.app';
+  const [signals, nodes] = await Promise.all([
+    q<SignalsExportRow>(
+      `select s.id::text as id, s.title, s.summary,
+              s.significance::text as significance,
+              s.lenses::text[] as lenses,
+              to_char(coalesce(s.published_at, s.created_at), 'YYYY-MM-DD') as run_day,
+              to_char(s.published_at, 'YYYY-MM-DD') as published_on,
+              s.origin::text as origin,
+              s.claim_touches, s.touch_details,
+              s.brief->>'what_happened'   as brief_what_happened,
+              s.brief->>'why_it_matters'  as brief_why_it_matters,
+              s.brief->>'whats_contested' as brief_whats_contested,
+              s.counterpoint->>'the_other_read' as counterpoint,
+              src.title as source_title, src.url as source_url,
+              coalesce(src.raw_text, sc.raw_content) as article_text
+         from signals s
+         left join sources src on src.id = s.source_id
+         left join lateral (
+           select c.raw_content from signal_candidates c
+            where c.signal_id = s.id and c.raw_content is not null
+            order by c.retrieved_at desc, c.id limit 1
+         ) sc on true
+        where s.is_published = true
+        order by s.published_at desc nulls last, s.id`
+    ),
+    q<{ code: string; statement: string }>(
+      `select code, statement from claims where code is not null
+       union all
+       select code, statement from bridge_claims`
+    ),
+  ]);
+  const statements = new Map(nodes.map((n) => [n.code, n.statement]));
+
+  return signals.map((s) => {
+    const atlasUrl = `${host}/signals/${s.id}`;
+    const url = s.source_url ?? atlasUrl;
+    const touches = (s.claim_touches ?? []).map((code) => {
+      const d = s.touch_details?.[code] ?? {};
+      return {
+        code,
+        direction: d.direction ?? null,
+        reason: d.reason ?? null,
+        statement: statements.get(code) ?? null,
+      };
+    });
+
+    const parts: string[] = [s.title];
+    if (s.summary) parts.push(`SUMMARY: ${s.summary}`);
+    if (s.brief_what_happened) parts.push(`WHAT HAPPENED: ${s.brief_what_happened}`);
+    if (s.brief_why_it_matters) parts.push(`WHY IT MATTERS: ${s.brief_why_it_matters}`);
+    if (s.brief_whats_contested) parts.push(`WHAT IS CONTESTED: ${s.brief_whats_contested}`);
+    if (s.counterpoint) parts.push(`COUNTERPOINT: ${s.counterpoint}`);
+    if (touches.length) {
+      const lines = touches.map((t) => {
+        const head = `- ${t.code}${t.direction ? ` (${t.direction})` : ''}${t.statement ? `: ${t.statement}` : ''}`;
+        return t.reason ? `${head}\n  ${t.reason}` : head;
+      });
+      parts.push(`ARGUMENT MAP TOUCHES:\n${lines.join('\n')}`);
+    }
+    if (s.article_text) parts.push(`SOURCE ARTICLE TEXT:\n${s.article_text}`);
+    const fullText = parts.join('\n\n').slice(0, 24_000);
+
+    return {
+      item_id: s.id,
+      run_day: s.run_day,
+      url,
+      normalized_url: normalizeUrl(url),
+      headline: s.title,
+      source_domain: domainOfUrl(url),
+      published_on: s.published_on,
+      discovered_via: 'atlas_signal',
+      topic_slug: null,
+      topic_code: null,
+      summary: s.summary,
+      tags: (s.lenses ?? []).join('; '),
+      entities: '',
+      relevance: SIGNIFICANCE_RELEVANCE[s.significance] ?? 0.3,
+      enrich_status: 'done',
+      fetch_status: 'done',
+      fetched_via: null,
+      text_chars: [...fullText].length,
+      full_text: fullText,
+      significance: s.significance,
+      lenses: (s.lenses ?? []).join('; '),
+      origin: s.origin,
+      claim_touches: (s.claim_touches ?? []).join('; '),
+      touch_details: JSON.stringify(touches),
+      brief_what_happened: s.brief_what_happened,
+      brief_why_it_matters: s.brief_why_it_matters,
+      brief_whats_contested: s.brief_whats_contested,
+      counterpoint: s.counterpoint,
+      atlas_url: atlasUrl,
+      source_title: s.source_title,
+    };
+  });
 }

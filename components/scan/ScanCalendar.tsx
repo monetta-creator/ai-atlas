@@ -25,6 +25,13 @@ const CELL = 15;
 const GAP = 3;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+// The crons run weekdays only, so a runless Sat/Sun is scheduled off, not a
+// miss. Derived from the day string (deterministic; no clock read in render).
+function isWeekend(dayISO: string): boolean {
+  const dow = new Date(`${dayISO}T00:00:00Z`).getUTCDay();
+  return dow === 0 || dow === 6;
+}
+
 function intensity(items: number): number {
   if (items <= 0) return 0.22;
   if (items < 20) return 0.45;
@@ -41,11 +48,12 @@ function cellStyle(d: ScanCalDay | null): React.CSSProperties {
   }
   if (d.status === 'failed') return { ...base, background: 'var(--heat-4)' };
   if (d.status === 'running') return { ...base, background: 'var(--accent)', opacity: 0.7 };
+  if (isWeekend(d.day)) return { ...base, background: 'transparent', border: '1px dotted var(--line)', opacity: 0.55 };
   return { ...base, background: 'transparent', border: '1px solid var(--line)' };
 }
 
 function labelOf(d: ScanCalDay): string {
-  if (!d.status) return `${d.day}: no run`;
+  if (!d.status) return isWeekend(d.day) ? `${d.day}: scheduled off (weekend)` : `${d.day}: no run`;
   const items = d.feed + d.search;
   return `${d.day}: ${d.status}, ${items} items (${d.feed} feed, ${d.search} search), ${d.hydrated} hydrated, ${d.enriched} enriched, ${d.skipped} skipped${
     typeof d.cost === 'number' ? `, $${d.cost.toFixed(2)}` : ''
@@ -117,6 +125,10 @@ export default function ScanCalendar({ days }: { days: ScanCalDay[] }) {
         <span className="flex items-center gap-1">
           <span style={{ ...cellStyle({ day: '', status: null, feed: 0, search: 0, hydrated: 0, enriched: 0, skipped: 0, cost: null, downloadHref: null }), width: 11, height: 11 }} />
           no run
+        </span>
+        <span className="flex items-center gap-1">
+          <span style={{ width: 11, height: 11, borderRadius: 3, background: 'transparent', border: '1px dotted var(--line)', opacity: 0.55 }} />
+          weekend off
         </span>
         <span className="flex items-center gap-1">
           items

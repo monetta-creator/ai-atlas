@@ -11,7 +11,7 @@ import { fetchFeed } from './feeds';
 import { searchTopicNews } from './web';
 import { enrichScanItem } from './enrich';
 import { checkScanBudget } from './budget';
-import { nextSearchTopic, withinWindow } from './core';
+import { lookbackDays, nextSearchTopic, withinWindow } from './core';
 import { resolveDateTokens, LOW_QUALITY_DOMAINS } from '../pipeline/config';
 import { fetchCandidateText, FetchFailure, domainOf } from '../pipeline/web';
 import type { ScanProgress, ScanRun, ScanTopic } from '../types';
@@ -138,15 +138,16 @@ export async function advanceScanRun(runId: string, deadlineAt: number): Promise
 }
 
 // ---- feeds: the free leg. All topic feeds in parallel; a dead feed is a note,
-// never a failure. Window = the day before the run day (press feeds publish
-// same-day; dateless items pass and the dedupe absorbs repeats).
+// never a failure. Window = lookbackDays before the run day (one day normally,
+// three on Mondays to cover the weekend the crons skip; dateless items pass
+// and the dedupe absorbs repeats).
 async function runFeedsStep(run: ScanRun, notes: string[]): Promise<void> {
   const topics = await getActiveScanTopics();
   const jobs: { topic: ScanTopic; feedUrl: string }[] = topics.flatMap((t) =>
     t.feed_urls.map((feedUrl) => ({ topic: t, feedUrl }))
   );
   if (!jobs.length) return;
-  const since = shiftDay(run.day, -1);
+  const since = shiftDay(run.day, -lookbackDays(run.day));
   const results = await Promise.allSettled(jobs.map((j) => fetchFeed(j.feedUrl)));
   for (let i = 0; i < jobs.length; i++) {
     const r = results[i];
@@ -171,7 +172,7 @@ async function runFeedsStep(run: ScanRun, notes: string[]): Promise<void> {
 // ---- search: one topic per unit (one web_search call, ~35-50s), checkpointed
 // in searched_topics so a resumed invocation never repeats a topic.
 async function runSearchUnit(run: ScanRun, topic: ScanTopic, notes: string[]): Promise<void> {
-  const since = shiftDay(run.day, -1);
+  const since = shiftDay(run.day, -lookbackDays(run.day));
   const oldest = shiftDay(run.day, -7); // wire-pickup lag tolerance for the search leg
   try {
     const found = await searchTopicNews({

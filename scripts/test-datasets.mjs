@@ -64,6 +64,11 @@ const BANNED_EXACT = new Set([
   'dossier', 'note', 'touch_details', 'review_note', 'rigor_prior', 'admin_note',
 ]);
 const BANNED_SUBSTRINGS = ['rationale', 'snapshot', 'confidence', 'prior', 'dossier'];
+// The one scoped exception (see lib/datasets/core.ts): per-touch direction +
+// editorial reason may ride KEY-GATED datasets only; the portal key is the
+// boundary, the same as bulk article text. Never widen this to the personal
+// layer proper (confidence, priors, rationales stay banned everywhere).
+const KEY_GATED_ALLOWED = new Set(['touch_details']);
 const EM_DASH = '—';
 
 // Quote-aware CSV parse (RFC-4180-ish, CRLF records) for the round-trip check.
@@ -166,6 +171,7 @@ for (const d of DATASETS) {
 
   check(`${d.slug}: guest-safety, no personal-layer key`, () => {
     for (const k of colKeys) {
+      if (d.keyGated && KEY_GATED_ALLOWED.has(k)) continue;
       assert.ok(!BANNED_EXACT.has(k), `banned key ${k}`);
       for (const sub of BANNED_SUBSTRINGS) {
         assert.ok(!k.includes(sub), `key ${k} contains banned substring ${sub}`);
@@ -218,6 +224,27 @@ async function countUnpublished(signalIds) {
       // Postgres length() counts characters (code points); JS .length counts
       // UTF-16 code units, which diverges on astral characters. Compare points.
       assert.equal(r.text_chars, [...r.full_text].length);
+    }
+  });
+
+  // signals-export: one row per published signal (item_id IS the signal id),
+  // and every touch_details cell parses as the documented JSON array.
+  const signalsExport = await getDataset('signals-export').build(q);
+  check('signals-export: row count equals the published corpus', () =>
+    assert.equal(signalsExport.length, publishedCount));
+  {
+    const ids = idsOf(signalsExport, 'item_id');
+    const bad = await countUnpublished(ids);
+    check(`signals-export: every row is a published signal (${ids.length} distinct)`, () =>
+      assert.equal(bad, 0, `${bad} unpublished signal(s) leaked`));
+  }
+  check('signals-export: touch_details parses and full_text is present', () => {
+    for (const r of signalsExport) {
+      assert.ok(typeof r.full_text === 'string' && r.full_text.length > 0);
+      assert.equal(r.text_chars, [...r.full_text].length);
+      const touches = JSON.parse(r.touch_details);
+      assert.ok(Array.isArray(touches));
+      for (const t of touches) assert.ok(typeof t.code === 'string');
     }
   });
 

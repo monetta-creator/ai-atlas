@@ -14,6 +14,15 @@ export async function getScanPrefs(): Promise<{ enabled: boolean }> {
   return { enabled: row?.enabled ?? true };
 }
 
+// For the /scan Firewall exports panel: how many rows the signals-export
+// dataset will carry (its floor is is_published, same as every dataset).
+export async function getPublishedSignalCount(): Promise<number> {
+  const row = await one<{ n: number }>(
+    `select count(*)::int as n from signals where is_published = true`
+  );
+  return row?.n ?? 0;
+}
+
 export async function getScanTopics(): Promise<ScanTopic[]> {
   return q<ScanTopic>(
     `select slug, name, description, taxonomy_code, search_queries, feed_urls, active, created_at
@@ -145,19 +154,26 @@ export async function getScanHealth(days = 30): Promise<ScanHealth> {
     one<{ first: string | null }>(`select to_char(min(day), 'YYYY-MM-DD') as first from scan_runs`),
   ]);
 
-  // Missed days: calendar days in [max(first run, window start), today] minus
-  // days that have a run row. Zero before the first run ever exists.
+  // Missed days: WEEKDAYS in [max(first run, window start), today] minus
+  // weekdays that have a run row. Weekends are scheduled off (the crons run
+  // Mon to Fri), so a quiet Saturday is never a miss; a manual weekend run
+  // still counts toward runs/items above. Zero before the first run ever.
   let missedDays = 0;
   if (firstRun?.first) {
     const dayRows = await q<{ n: number }>(
-      `select count(*)::int as n from scan_runs where day > current_date - $1::interval`,
+      `select count(*)::int as n from scan_runs
+        where day > current_date - $1::interval and extract(isodow from day) < 6`,
       [interval]
     );
     const start = new Date(`${firstRun.first}T00:00:00Z`);
     const windowStart = new Date(Date.now() - days * 86_400_000);
     const from = start > windowStart ? start : windowStart;
-    const elapsed = Math.floor((Date.now() - from.getTime()) / 86_400_000) + 1;
-    missedDays = Math.max(0, elapsed - (dayRows[0]?.n ?? 0));
+    let elapsedWeekdays = 0;
+    for (let t = from.getTime(); t <= Date.now(); t += 86_400_000) {
+      const dow = new Date(t).getUTCDay();
+      if (dow !== 0 && dow !== 6) elapsedWeekdays += 1;
+    }
+    missedDays = Math.max(0, elapsedWeekdays - (dayRows[0]?.n ?? 0));
   }
 
   return {

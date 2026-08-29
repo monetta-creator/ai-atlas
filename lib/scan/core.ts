@@ -108,6 +108,14 @@ export function withinWindow(publishedISO: string | null, sinceISO: string): boo
   return publishedISO >= sinceISO;
 }
 
+// The discovery window in days for a run day. The crons fire weekdays only,
+// so a Monday run reaches back through the weekend (Fri/Sat/Sun + itself);
+// every other day looks back one day. Manual weekend runs get the normal
+// window, and Monday's window overlapping them is absorbed by the dedupe.
+export function lookbackDays(dayISO: string): number {
+  return new Date(`${dayISO}T00:00:00Z`).getUTCDay() === 1 ? 3 : 1;
+}
+
 // Clamp the model's relevance onto numeric(3,2) [0,1]; null for non-numbers
 // (schema ranges live in descriptions only — the tool validator rejects
 // minimum/maximum on number properties, the 0033 landmine).

@@ -6,10 +6,13 @@
 // GUEST-SAFE BY CONSTRUCTION: every dataset is downloadable from the public
 // portal, so nothing in the personal layer may enter a builder's SELECT list:
 // confidence, confidence_label, domain_note, rationales, snapshots,
-// reliability_prior, dossier, evidence.note, touch_details, papers.review_note,
+// reliability_prior, dossier, evidence.note, papers.review_note,
 // papers.rigor_prior, positions_crosscutting, supply-chain admin notes, and
 // unpublished or draft signals are all banned. scripts/test-datasets.mjs
-// enforces the ban against the serialized output of every builder.
+// enforces the ban against the serialized output of every builder. One scoped
+// exception: signals.touch_details (per-touch direction + editorial reason) may
+// appear in KEY-GATED datasets only; the portal key is that boundary, the same
+// as bulk article text.
 //
 // Determinism: same corpus in, byte-identical rows out. Every ORDER BY carries a
 // stable id tiebreaker; dates are formatted with to_char in SQL (node-pg would
@@ -45,6 +48,7 @@ export interface DatasetColumn {
 export interface DatasetOpts {
   lens?: string;          // validated against SIGNAL_LENSES before it reaches a builder
   day?: string;           // validated as YYYY-MM-DD in the route before it reaches a builder
+  host?: string;          // request origin (https://host), for builders that mint absolute Atlas links
 }
 
 export interface DatasetDef {

@@ -26,6 +26,29 @@ export function domainOfUrl(url: string | null): string | null {
 
 // 'YYYY Qn' quarter buckets over published dates, zero-filled across the span
 // so a timeline reads continuously.
+// Canonical form for dedup: host (no www) + path (no trailing slash) + sorted query, with
+// tracking params and the fragment dropped, and the scheme ignored. Best-effort — returns the
+// input lower-cased if it doesn't parse. Lets a re-discovered URL match one already tracked
+// even when it differs only by http/https, www, a trailing slash, or utm_*/fbclid noise.
+// Lives here (not lib/pipeline/web.ts, which re-exports it) so the dependency-light dataset
+// builders can share the pipeline's exact dedupe identity.
+export function normalizeUrl(raw: string): string {
+  try {
+    const u = new URL(raw.trim());
+    const host = u.hostname.replace(/^www\./, '').toLowerCase();
+    const params = new URLSearchParams();
+    [...u.searchParams.entries()]
+      .filter(([k]) => !/^utm_/i.test(k) && !/^(fbclid|gclid|mc_cid|mc_eid|igshid)$/i.test(k))
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([k, v]) => params.append(k, v));
+    const path = u.pathname.replace(/\/+$/, '');
+    const qs = params.toString();
+    return `${host}${path}${qs ? `?${qs}` : ''}`;
+  } catch {
+    return raw.trim().toLowerCase();
+  }
+}
+
 export function quarterBuckets(dates: (string | null)[]): { bucket: string; n: number }[] {
   const qs = dates
     .filter((d): d is string => !!d && /^\d{4}-\d{2}/.test(d))

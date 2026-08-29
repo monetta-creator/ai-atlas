@@ -6,7 +6,7 @@ import { useState } from 'react';
 // markdown) so the admin can paste it straight into the firewall-side
 // assistant that builds the importer. Preview collapses under a details
 // element; the copy is always the full text.
-export default function CopyHandoff({ text }: { text: string }) {
+export default function CopyHandoff({ text, label = 'Copy importer handoff' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
@@ -20,7 +20,7 @@ export default function CopyHandoff({ text }: { text: string }) {
   return (
     <div>
       <button className="btn btn--primary" onClick={copy}>
-        {copied ? '✓ Copied' : 'Copy importer handoff'}
+        {copied ? '✓ Copied' : label}
       </button>
       <details style={{ marginTop: 12 }}>
         <summary className="text-xs" style={{ color: 'var(--faint-ink)', cursor: 'pointer' }}>

@@ -17,11 +17,13 @@ export interface CronEntry {
   schedule: string;
 }
 
-// '0 9 * * *' -> '09:00 UTC daily'; anything fancier renders raw.
+// '0 9 * * *' -> '09:00 UTC daily'; '0 9 * * 1-5' -> '09:00 UTC weekdays';
+// anything fancier renders raw.
 export function cronLabel(schedule: string): string {
-  const m = /^(\d{1,2}) (\d{1,2}) \* \* \*$/.exec(schedule.trim());
+  const m = /^(\d{1,2}) (\d{1,2}) \* \* (\*|1-5)$/.exec(schedule.trim());
   if (!m) return schedule;
-  return `${m[2].padStart(2, '0')}:${m[1].padStart(2, '0')} UTC daily`;
+  const cadence = m[3] === '1-5' ? 'weekdays' : 'daily';
+  return `${m[2].padStart(2, '0')}:${m[1].padStart(2, '0')} UTC ${cadence}`;
 }
 
 // Per-field facts the registry's display columns do not carry: JSON type,
@@ -29,6 +31,12 @@ export function cronLabel(schedule: string): string {
 // the registry column ORDER plus this map; a registry column missing here
 // falls back to a permissive type so a new column can never break the
 // generator (the intake is told to ignore unknown fields anyway).
+//
+// ONE map serves both firewall exports: external-scan and signals-export
+// share the first nineteen keys byte for byte (that sharing is the point:
+// the same intake validates both files), and the signals-export extras are
+// appended below. scripts/test-scan.mjs asserts every column of BOTH defs
+// is mapped here.
 const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean; enum?: string[]; format?: string }> = {
   item_id: { type: 'string', nullable: false, format: 'uuid' },
   run_day: { type: 'string', nullable: false, format: 'date' },
@@ -49,6 +57,18 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   fetched_via: { type: 'string', nullable: true, enum: ['direct', 'jina'] },
   text_chars: { type: 'number', nullable: true },
   full_text: { type: 'string', nullable: true },
+  // signals-export extras (appended after the shared nineteen).
+  significance: { type: 'string', nullable: false, enum: ['high', 'medium', 'low'] },
+  lenses: { type: 'string', nullable: false },
+  origin: { type: 'string', nullable: false, enum: ['manual', 'pipeline'] },
+  claim_touches: { type: 'string', nullable: false },
+  touch_details: { type: 'string', nullable: false },
+  brief_what_happened: { type: 'string', nullable: true },
+  brief_why_it_matters: { type: 'string', nullable: true },
+  brief_whats_contested: { type: 'string', nullable: true },
+  counterpoint: { type: 'string', nullable: true },
+  atlas_url: { type: 'string', nullable: false, format: 'uri' },
+  source_title: { type: 'string', nullable: true },
 };
 
 // JSON Schema (draft 2020-12) for one row, generated from the live registry
@@ -74,7 +94,7 @@ export function buildRowJsonSchema(def: DatasetDef): Record<string, unknown> {
   }
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    title: 'external-scan row',
+    title: `${def.slug} row`,
     type: 'object',
     properties,
     required,
@@ -83,10 +103,10 @@ export function buildRowJsonSchema(def: DatasetDef): Record<string, unknown> {
   };
 }
 
-function envelopeJsonSchema(rowSchema: Record<string, unknown>): Record<string, unknown> {
+function envelopeJsonSchema(def: DatasetDef, rowSchema: Record<string, unknown>): Record<string, unknown> {
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
-    title: 'external-scan download',
+    title: `${def.slug} download`,
     type: 'object',
     required: ['dataset', 'rows'],
     properties: {
@@ -94,13 +114,13 @@ function envelopeJsonSchema(rowSchema: Record<string, unknown>): Record<string, 
         type: 'object',
         required: ['slug', 'day', 'row_count', 'columns'],
         properties: {
-          slug: { const: 'external-scan' },
+          slug: { const: def.slug },
           title: { type: 'string' },
           description: { type: 'string' },
           methodology: { type: 'string' },
           category: { type: 'string' },
           lens: { type: 'null' },
-          day: { type: ['string', 'null'], format: 'date', description: 'Echoes the ?day= filter; null when the latest-completed default served.' },
+          day: { type: ['string', 'null'], format: 'date', description: 'Echoes the ?day= filter where the dataset supports one; null otherwise.' },
           row_count: { type: 'integer' },
           columns: {
             type: 'array',
@@ -142,7 +162,7 @@ export function buildScanHandoff(opts: {
     })
     .join('\n');
   const schedule = crons.map((c) => cronLabel(c.schedule)).join(', then ');
-  const schemaJson = JSON.stringify(envelopeJsonSchema(buildRowJsonSchema(def)), null, 2);
+  const schemaJson = JSON.stringify(envelopeJsonSchema(def, buildRowJsonSchema(def)), null, 2);
 
   return `# External Scan: import orientation and contract
 
@@ -154,10 +174,12 @@ source of truth if the two ever disagree.
 
 ## 1. What this system is
 
-An external scanner runs once per UTC day OUTSIDE the firewall. It discovers
-news items across financial services and technology topics (public press
-feeds plus per-topic web searches), fetches each item's full page text, and
-runs a light model enrichment per item: a two-to-three sentence summary,
+An external scanner runs once per UTC WEEKDAY outside the firewall (weekends
+are scheduled off; Monday's run looks back three days, so it collects the
+weekend's news and its file is correspondingly larger). It discovers news
+items across financial services and technology topics (public press feeds
+plus per-topic web searches), fetches each item's full page text, and runs a
+light model enrichment per item: a two-to-three sentence summary,
 taxonomy-code tags, named entities, and an advisory relevance score.
 
 The division of labor is deliberate:
@@ -167,8 +189,9 @@ The division of labor is deliberate:
   dedupe against internal state, and ALL triage judgment. Tags and relevance
   arrive as advisory hints, never verdicts.
 
-One file per day, roughly 30 to 80 rows. A day's file is immutable once its
-run completes; re-downloading the same day returns identical content.
+One file per weekday, roughly 30 to 80 rows (Monday larger). A day's file is
+immutable once its run completes; re-downloading the same day returns
+identical content.
 
 ## 2. The file, formally (JSON Schema, draft 2020-12)
 
@@ -254,7 +277,115 @@ ${codes}
    ${host}/api/datasets/external-scan?format=json&download=1
    A specific day: append &day=YYYY-MM-DD. CSV instead: format=csv.
    (download=1 forces a saved file; scripted fetches can drop it.)
-3. Fresh data lands daily via scheduled runs at ${schedule}; the default URL
+3. Fresh data lands via scheduled runs at ${schedule}; the default URL
    always serves the latest COMPLETED day, never a partial one.
+`;
+}
+
+// The companion handoff for the signals-export dataset: the whole published
+// Signal Board corpus, deliberately shaped as external-scan rows so the SAME
+// intake ingests both files. Orientation for the far-side assistant on what
+// differs (full corpus vs one day; the appended signal-native columns; the
+// composed full_text) and how to use it (import, then promote inside).
+export function buildSignalsExportHandoff(opts: {
+  def: DatasetDef; // the signals-export registry def
+  host: string;
+  generatedOn: string; // YYYY-MM-DD
+}): string {
+  const { def, host } = opts;
+  const columns = def.columns
+    .map((c) => {
+      const f = FIELD_FACTS[c.key];
+      const type = f ? `${f.type}${f.nullable ? ' or null' : ''}${f.enum ? ` (${f.enum.join(' | ')})` : ''}` : c.type;
+      return `| ${c.key} | ${type} | ${c.def} |`;
+    })
+    .join('\n');
+  const schemaJson = JSON.stringify(envelopeJsonSchema(def, buildRowJsonSchema(def)), null, 2);
+
+  return `# Signals export: import orientation and contract
+
+Generated ${opts.generatedOn} from the live dataset registry. Audience: the
+assistant that built (or is building) the external-scan intake on the other
+side of a firewall. This file is that contract's sibling: SAME row shape,
+different corpus. Treat the file's own dataset.columns array as the runtime
+source of truth if this document ever disagrees with it.
+
+## 1. What this file is
+
+The complete corpus of PUBLISHED signals from the Atlas Signal Board: every
+tracked development a human reviewed and published, with its editorial
+writeup and its links into the Atlas argument map. Where the daily
+external-scan file is raw discovery awaiting triage, these rows are the
+FINISHED product of that judgment on the outside. The intended flow inside:
+import every row through the same intake as the scan files, then promote
+rows to signals (or your internal equivalent) on your own schedule; the
+writeup gives you most of that work pre-done.
+
+## 2. Relationship to the external-scan contract
+
+- The first NINETEEN columns are the external-scan row keys, in the same
+  order, with the same types and nullability: a row here validates against
+  the external-scan row schema unchanged. Reuse the intake as-is.
+- The remaining columns are signal-native detail, appended: the additive
+  policy already told the intake to tolerate (or store) unknown fields.
+- Differences in semantics, not shape:
+  - FULL CORPUS, not a day: every published signal, every download.
+    run_day varies per row (the signal's editorial date). Re-import
+    replaces; upsert on item_id makes that idempotent.
+  - item_id is the signal's UUID (stable forever). A signal EDITED after
+    export keeps its item_id: a later re-import updates it in place.
+  - url falls back to the signal's Atlas page when no source article is
+    linked, so normalized_url MAY repeat when two signals share one source.
+    Key on item_id, never normalized_url, for this file.
+  - discovered_via is always atlas_signal; tags carries the signal's
+    audience lenses (an open set, like scan tags); entities is always
+    empty; relevance encodes significance (high 0.9, medium 0.6, low 0.3).
+  - full_text is ALWAYS present: a composed document with the title,
+    summary, the brief (WHAT HAPPENED / WHY IT MATTERS / WHAT IS
+    CONTESTED), the counterpoint, the argument-map touches with their
+    reasoning, then SOURCE ARTICLE TEXT with the retained article when one
+    exists. Capped at 24,000 characters.
+
+## 3. The file, formally (JSON Schema, draft 2020-12)
+
+\`\`\`json
+${schemaJson}
+\`\`\`
+
+## 4. Field semantics
+
+| key | type | definition |
+|---|---|---|
+${columns}
+
+touch_details is a JSON-encoded array (parse the string): one entry per
+touched argument-map node, {code, direction, reason, statement}. direction
+is supports, contradicts, or neutral (null when untracked); reason is the
+editorial why behind the touch; statement is the touched claim's own text,
+resolved at export time. claim_touches is the same code list flattened with
+"; " for quick filtering.
+
+## 5. Intake design guidance
+
+- Run it through the external-scan intake unchanged; store the appended
+  columns (or at minimum touch_details and the brief fields) rather than
+  dropping them, since they carry the promotion-ready editorial work.
+- Idempotent upsert on item_id; a re-download is a full refresh, so an
+  upsert also picks up post-publish edits.
+- A row disappearing from a later download means the signal was unpublished
+  or deleted; treat your copy as historical rather than deleting, unless
+  you mirror publication state.
+- The editorial judgments here (directions, reasons, significance) were
+  made for the Atlas argument map; treat them as strong drafts for your
+  internal promotion, not verdicts.
+
+## 6. Transport
+
+1. Unlock once per browser: ${host}/datasets/enter?k=<PORTAL_KEY> (sets a
+   30-day cookie; the key comes from the operator, never this doc).
+2. Download: ${host}/api/datasets/signals-export?format=json&download=1
+   (CSV instead: format=csv). No day parameter; it is always the full
+   corpus. Re-download whenever you want the current state; new signals
+   publish continually.
 `;
 }
