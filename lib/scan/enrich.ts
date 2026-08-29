@@ -108,7 +108,9 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
         maxTokens: 700,
         feature: 'scan_enrich',
         metadata: { scan_run: scanRunId, item: item.id },
-        timeoutMs: 30_000,
+        // 45s, not the Haiku path's 30: OpenRouter tail latency truncated
+        // slow DeepSeek reads at 30s on the first live run.
+        timeoutMs: 45_000,
       })
     : await runStructured<RawEnrichment>({
         system,

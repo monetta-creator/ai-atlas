@@ -32,9 +32,9 @@ export async function searchTopicNewsTavily(opts: {
 
   const t0 = Date.now();
   const byUrl = new Map<string, RawScanItem>();
-  for (const query of opts.queries) {
+  const runQuery = async (query: string): Promise<void> => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15_000);
+    const timer = setTimeout(() => controller.abort(), 20_000);
     try {
       const res = await fetch(TAVILY_URL, {
         method: 'POST',
@@ -55,6 +55,16 @@ export async function searchTopicNewsTavily(opts: {
       }
     } finally {
       clearTimeout(timer);
+    }
+  };
+  for (const query of opts.queries) {
+    // One in-call retry per query: a lost query is a whole topic-day of
+    // coverage (the engine checkpoints the topic as searched either way),
+    // and the retry costs one free-tier credit. Seen live on day one.
+    try {
+      await runQuery(query);
+    } catch {
+      await runQuery(query);
     }
   }
 

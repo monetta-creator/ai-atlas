@@ -33,9 +33,10 @@ export async function chatJSONOpenRouter<T>(opts: {
   // 13-char answer) would burn a small max_tokens budget before emitting
   // content, so the first attempt disables reasoning via OpenRouter's
   // unified param. A model whose endpoint REFUSES that (GLM: "Reasoning is
-  // mandatory") gets one retry with the param dropped and extra headroom for
-  // its thinking; the refused first call bills nothing.
-  const attempt = async (reasoningOff: boolean): Promise<T> => {
+  // mandatory") gets one retry with reasoning BOUNDED instead (live-probed:
+  // GLM accepts reasoning.max_tokens and stays inside it) plus matching
+  // budget headroom; the refused first call bills nothing.
+  const attempt = async (mode: 'off' | 'bounded'): Promise<T> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
     const t0 = Date.now();
@@ -49,17 +50,20 @@ export async function chatJSONOpenRouter<T>(opts: {
         },
         body: JSON.stringify({
           model: opts.model,
-          max_tokens: reasoningOff ? opts.maxTokens : opts.maxTokens + 800,
+          max_tokens: mode === 'off' ? opts.maxTokens : opts.maxTokens + 500,
           response_format: { type: 'json_object' },
-          ...(reasoningOff ? { reasoning: { enabled: false } } : {}),
+          reasoning: mode === 'off' ? { enabled: false } : { max_tokens: 400 },
           messages: [
             { role: 'system', content: opts.system },
             { role: 'user', content: opts.user },
           ],
         }),
       });
-      const body = await res.text().catch(() => '');
+      const body = await res.text();
       if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${body.slice(0, 200)}`);
+      // A truncated read otherwise dies inside JSON.parse as the opaque
+      // "Unexpected end of JSON input" (seen live on slow DeepSeek responses).
+      if (!body.trim()) throw new Error('OpenRouter: empty response body');
       const data = JSON.parse(body) as {
         choices?: { message?: { content?: string | null } }[];
         usage?: { prompt_tokens?: number; completion_tokens?: number };
@@ -84,9 +88,9 @@ export async function chatJSONOpenRouter<T>(opts: {
   };
 
   try {
-    return await attempt(true);
+    return await attempt('off');
   } catch (e) {
-    if (/reasoning is mandatory/i.test(String((e as Error)?.message))) return attempt(false);
+    if (/reasoning is mandatory/i.test(String((e as Error)?.message))) return attempt('bounded');
     throw e;
   }
 }
