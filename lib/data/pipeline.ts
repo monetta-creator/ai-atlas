@@ -27,6 +27,83 @@ export async function getRuns(limit = 20): Promise<PipelineRun[]> {
   );
 }
 
+// The /pipeline prefs singleton (0042). Missing row = enabled with no A/B
+// models (the Sonnet fallback) and the default utility model.
+export async function getPipelinePrefs(): Promise<{
+  enabled: boolean; analysis_models: string[]; utility_model: string | null;
+}> {
+  const row = await one<{ enabled: boolean; analysis_models: string[]; utility_model: string | null }>(
+    `select enabled, analysis_models, utility_model from pipeline_prefs where id = true`
+  );
+  return {
+    enabled: row?.enabled ?? true,
+    analysis_models: row?.analysis_models ?? [],
+    utility_model: row?.utility_model ?? null,
+  };
+}
+
+// Today's daily cron run, if one exists (the engine reuses it across the two
+// cron invocations instead of opening a second run per day).
+export async function getTodayDailyRunId(): Promise<string | null> {
+  const row = await one<{ id: string }>(
+    `select id from pipeline_runs
+      where cadence = 'daily' and created_at >= date_trunc('day', now() at time zone 'utc')
+      order by created_at desc limit 1`
+  );
+  return row?.id ?? null;
+}
+
+// The analysis A/B table: per drafting model over the window, volume and the
+// real quality signal (what the human did with the drafts), plus cost/latency
+// from the cost log. drafted_by is admin-only; this read backs /pipeline.
+export interface AnalysisModelStat {
+  model: string;
+  drafts: number;
+  published: number;
+  archived: number;
+  avgTouches: number | null;
+  avgWallMs: number | null;
+  costUsd: number;
+  costPerDraft: number | null;
+}
+
+export async function getAnalysisModelStats(days = 30): Promise<AnalysisModelStat[]> {
+  const interval = `${Math.max(1, Math.round(days))} days`;
+  const rows = await q<{
+    model: string; drafts: number; published: number; archived: number;
+    avg_touches: number | null; avg_wall_ms: number | null; cost_usd: number | null; calls: number | null;
+  }>(
+    `select s.drafted_by as model,
+            count(*)::int as drafts,
+            count(*) filter (where s.is_published)::int as published,
+            count(*) filter (where s.archived_at is not null)::int as archived,
+            round(avg(cardinality(s.claim_touches))::numeric, 1) as avg_touches,
+            l.avg_wall_ms, l.cost_usd, l.calls
+       from signals s
+       left join (
+         select model, round(avg(wall_ms))::int as avg_wall_ms,
+                sum(cost_usd)::numeric as cost_usd, count(*)::int as calls
+           from ai_cost_log
+          where feature = 'pipeline_analysis' and created_at > now() - $1::interval
+          group by model
+       ) l on l.model = s.drafted_by
+      where s.drafted_by is not null and s.created_at > now() - $1::interval
+      group by s.drafted_by, l.avg_wall_ms, l.cost_usd, l.calls
+      order by drafts desc, s.drafted_by`,
+    [interval]
+  );
+  return rows.map((r) => ({
+    model: r.model,
+    drafts: r.drafts,
+    published: r.published,
+    archived: r.archived,
+    avgTouches: r.avg_touches === null ? null : Number(r.avg_touches),
+    avgWallMs: r.avg_wall_ms,
+    costUsd: r.cost_usd ?? 0,
+    costPerDraft: r.calls ? Number(((r.cost_usd ?? 0) / r.calls).toFixed(4)) : null,
+  }));
+}
+
 export async function getCandidates(runId: string): Promise<SignalCandidate[]> {
   return q<SignalCandidate>(
     `select ${CANDIDATE_LIST_COLUMNS}, null::text as raw_content

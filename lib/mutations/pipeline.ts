@@ -136,6 +136,61 @@ export async function setAnalysisStatus(
   );
 }
 
+// ---- Pipeline 2.0: the cron engine's checkpoint + lease + prefs (0042) ------
+
+// Mark one discovery unit done ('market:0', 'sweep'). Append-if-absent, so a
+// retried unit never double-records.
+export async function markDiscoveryUnitDone(runId: string, unit: string): Promise<void> {
+  await exec(
+    `update pipeline_runs
+        set discovered_units = (select coalesce(array_agg(distinct u), '{}')
+                                  from unnest(discovered_units || $2::text) u),
+            updated_at = now()
+      where id = $1`,
+    [runId, unit]
+  );
+}
+
+// The overlap guard (the scan's claimScanRun pattern): take the lease when the
+// run is workable and no live lease is held. False = another invocation is on it.
+export async function claimPipelineRun(runId: string): Promise<boolean> {
+  const row = await one<{ id: string }>(
+    `update pipeline_runs
+        set lease_until = now() + interval '5 minutes', updated_at = now()
+      where id = $1
+        and status in ('running', 'failed')
+        and (lease_until is null or lease_until < now())
+      returning id`,
+    [runId]
+  );
+  return Boolean(row);
+}
+
+export async function renewPipelineLease(runId: string): Promise<void> {
+  await exec(`update pipeline_runs set lease_until = now() + interval '5 minutes' where id = $1`, [runId]);
+}
+
+export async function releasePipelineLease(runId: string): Promise<void> {
+  await exec(`update pipeline_runs set lease_until = null where id = $1`, [runId]);
+}
+
+// The /pipeline prefs singleton (0042): cron on/off and the analysis A/B picker.
+export async function setPipelineEnabled(enabled: boolean): Promise<void> {
+  await exec(
+    `insert into pipeline_prefs (id, enabled) values (true, $1)
+     on conflict (id) do update set enabled = excluded.enabled, updated_at = now()`,
+    [enabled]
+  );
+}
+
+export async function setPipelineAnalysisModels(models: string[]): Promise<void> {
+  await exec(
+    `insert into pipeline_prefs (id, analysis_models) values (true, $1::text[])
+     on conflict (id) do update set analysis_models = excluded.analysis_models, updated_at = now()`,
+    [models]
+  );
+}
+
 // Reuse an existing source row for a URL, or create a bare one. Returns the source id
 // so a pipeline-created signal can link to it (admin sets the reliability prior later).
 export async function ensureSource(

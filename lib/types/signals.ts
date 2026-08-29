@@ -21,6 +21,9 @@ export interface Signal {
   // editorial narration (no personal layer), read only by getSignal (off SIGNAL_COLUMNS).
   brief?: SignalBrief | null;
   counterpoint?: SignalCounterpoint | null;
+  // Model that drafted a pipeline signal (0042, the analysis A/B stamp).
+  // Admin-only read: getSignal strips it for guests; off SIGNAL_COLUMNS.
+  drafted_by?: string | null;
   created_at: string;
   updated_at: string;
   // joined-in for the feed/detail (not columns on `signals`):
@@ -105,6 +108,8 @@ export interface PipelineRun {
   signal_count: number;
   error: string | null;
   coverage: RunCoverage | null;
+  discovered_units: string[]; // 0042: the cron engine's per-unit discovery checkpoints
+
   created_at: string;
   updated_at: string;
 }

@@ -1,8 +1,12 @@
 import { runStructured } from '../dossier';
-import { LOW_QUALITY_DOMAINS } from './config';
+import { chatJSONOpenRouter } from '../scan/llm';
+import { LOW_QUALITY_DOMAINS, DEFAULT_UTILITY_MODEL } from './config';
 import { normalizeUrl } from './web';
 import * as m from '../mutations';
-import { getPendingCandidates, countPendingCandidates, getSignalsDigestForTriage, getKnownUrls, getDomainStats } from '../data';
+import {
+  getPendingCandidates, countPendingCandidates, getSignalsDigestForTriage, getKnownUrls,
+  getDomainStats, getPipelinePrefs,
+} from '../data';
 import type { SignalCandidate, TriageStatus } from '../types';
 
 // Triage filters the candidate list down to what's worth analyzing. The client drives one
@@ -120,22 +124,41 @@ export async function triageChunk(
       )
       .join('\n');
 
-    const out = await runStructured<{ decisions: { index: number; status: string; reason: string }[] }>({
-      // The signals digest + reliability ratings are identical for every chunk of a run —
-      // they ride in the SYSTEM block (cache_control'd by runStructured) so chunks 2..N
-      // read them from the prompt cache. The chunk-specific track record + candidate
-      // list stay in the user message.
-      system: `${TRIAGE_SYSTEM}\n\nEXISTING SIGNALS (flag a candidate as "duplicate" if it is the same story):\n${existing}\n\nKNOWN SOURCE RELIABILITY (the author's prior ratings, 0–100 — weight these in your credibility judgment):\n${rated}`,
-      user: `DOMAIN TRACK RECORD (this pipeline's own funnel history with these domains — many discovered with zero approved AND zero duplicates is low-value churn, lean reject unless the story itself is materially new; duplicates mean the domain carries real stories we already track, so do not hold them against it):\n${track}\n\nCANDIDATES (with publication date where known — reject items older than the lookback window):\n${list}`,
-      toolName: 'submit_triage',
-      toolDescription: 'Return a triage decision for every candidate index.',
-      schema: TRIAGE_SCHEMA,
-      maxTokens: 4000,
-      effort: 'low',
-      feature: 'pipeline_triage',
-      pipelineRunId: runId,
-      metadata: { candidates: toModel.length },
-    });
+    // The signals digest + reliability ratings are identical for every chunk of a run —
+    // they ride in the SYSTEM block (cache_control'd on the Anthropic path) so chunks
+    // 2..N read them from the prompt cache. The chunk-specific track record + candidate
+    // list stay in the user message.
+    const system = `${TRIAGE_SYSTEM}\n\nEXISTING SIGNALS (flag a candidate as "duplicate" if it is the same story):\n${existing}\n\nKNOWN SOURCE RELIABILITY (the author's prior ratings, 0–100 — weight these in your credibility judgment):\n${rated}`;
+    const user = `DOMAIN TRACK RECORD (this pipeline's own funnel history with these domains — many discovered with zero approved AND zero duplicates is low-value churn, lean reject unless the story itself is materially new; duplicates mean the domain carries real stories we already track, so do not hold them against it):\n${track}\n\nCANDIDATES (with publication date where known — reject items older than the lookback window):\n${list}`;
+
+    // 2.0: the guarded judgment runs on the cheap utility model when OpenRouter is
+    // configured (the status allow-list + fail-closed default below are the real
+    // guard, and a human still gates publication); the Sonnet forced-tool call is
+    // the fallback.
+    const prefs = await getPipelinePrefs();
+    const out = process.env.OPENROUTER_API_KEY
+      ? await chatJSONOpenRouter<{ decisions: { index: number; status: string; reason: string }[] }>({
+          model: prefs.utility_model || DEFAULT_UTILITY_MODEL,
+          system: `${system}\n\nReply with ONLY a JSON object: {"decisions": [{"index": <number>, "status": "approved" | "rejected" | "duplicate", "reason": "<one short clause>"}]} with exactly one decision per candidate index.`,
+          user,
+          maxTokens: 4000,
+          timeoutMs: 45_000,
+          feature: 'pipeline_triage',
+          pipelineRunId: runId,
+          metadata: { candidates: toModel.length },
+        })
+      : await runStructured<{ decisions: { index: number; status: string; reason: string }[] }>({
+          system,
+          user,
+          toolName: 'submit_triage',
+          toolDescription: 'Return a triage decision for every candidate index.',
+          schema: TRIAGE_SCHEMA,
+          maxTokens: 4000,
+          effort: 'low',
+          feature: 'pipeline_triage',
+          pipelineRunId: runId,
+          metadata: { candidates: toModel.length },
+        });
 
     const byIndex = new Map((out.decisions ?? []).map((d) => [d.index, d]));
     const allowed = ['approved', 'rejected', 'duplicate'];

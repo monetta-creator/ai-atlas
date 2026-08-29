@@ -5,11 +5,21 @@ import { useRouter } from 'next/navigation';
 import { setScanEnrichModelsAction } from '@/lib/actions';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 
-// The enrichment model picker: which model(s) the scan's enrich leg uses.
-// One selection = every item on that model; two or more = a deterministic
-// round-robin split across them (the A/B test the Model A/B table reads);
-// none = the Claude Haiku fallback. Saves the whole selection in one action.
-export default function EnrichModelPicker({ selected }: { selected: string[] }) {
+// The model picker shared by the scan's enrichment leg and the pipeline's
+// analysis A/B: one selection = everything on that model; two or more = a
+// deterministic per-item split (the A/B the Model A/B tables read); none =
+// the surface's Anthropic fallback (Haiku for scan enrichment, Sonnet for
+// pipeline analysis — `fallbackNote` names it). `saveAction` is
+// prop-injected so each surface saves to its own prefs.
+export default function EnrichModelPicker({
+  selected,
+  saveAction = setScanEnrichModelsAction,
+  fallbackNote = 'None selected: enrichment falls back to Claude Haiku.',
+}: {
+  selected: string[];
+  saveAction?: (models: string[]) => Promise<void>;
+  fallbackNote?: string;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [choice, setChoice] = useState<Set<string>>(new Set(selected));
@@ -53,7 +63,7 @@ export default function EnrichModelPicker({ selected }: { selected: string[] }) 
           disabled={pending || !dirty}
           onClick={() =>
             startTransition(async () => {
-              await setScanEnrichModelsAction([...choice]);
+              await saveAction([...choice]);
               router.refresh();
             })
           }
@@ -62,7 +72,7 @@ export default function EnrichModelPicker({ selected }: { selected: string[] }) 
         </button>
         <span className="text-xs" style={{ color: 'var(--faint-ink)' }}>
           {choice.size === 0
-            ? 'None selected: enrichment falls back to Claude Haiku.'
+            ? fallbackNote
             : choice.size === 1
             ? 'One model: every item uses it.'
             : `${choice.size} models: items split across them for the A/B comparison.`}

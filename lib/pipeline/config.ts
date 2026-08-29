@@ -1,5 +1,7 @@
 import type { SignalLens } from '../types';
-import { SIGNAL_LENS_SLUGS } from '../format';
+// Explicit .ts extension so plain Node (scripts/test-pipeline2.mjs, type
+// stripping) can load this module chain; the bundler resolves it the same.
+import { SIGNAL_LENS_SLUGS } from '../format.ts';
 
 // Spike-derived: ~3 web searches ≈ 46s — 77% of the Hobby 60s cap with no margin for
 // latency variance, which is exactly what tipped batches over and got them 504'd. We run
@@ -165,4 +167,27 @@ export function resolveDateTokens(queries: string[], sinceISO?: string): string[
 // discoverBatch passes the run's sinceISO so the query text matches the lookback.
 export function lensBatches(lens: SignalLens, sinceISO?: string): string[][] {
   return batchQueries(resolveDateTokens(LENS_QUERIES[lens] ?? [], sinceISO));
+}
+
+// ---- Pipeline 2.0: daily rotation + the utility judge --------------------
+// The cheap model that runs the pipeline's guarded-judgment calls (triage,
+// the sweep judge, the coverage judge) when OPENROUTER_API_KEY is set and
+// pipeline_prefs.utility_model is null. Chosen from the live scan A/B:
+// 14/14 clean structured outputs, 1.8s avg, ~$0.0001/call.
+export const DEFAULT_UTILITY_MODEL = 'qwen/qwen3.7-flash';
+
+// Deterministic day-rotation over a query list: day N serves `count` queries
+// starting at (N*count mod len), wrapping. Daily runs cover a lens's whole
+// list every ceil(len/count) days at a fraction of the per-day search spend;
+// consecutive days never repeat until the list wraps. Pure; test-covered.
+export function rotatedQueries(queries: string[], dayISO: string, count = 2): string[] {
+  if (queries.length <= count) return queries;
+  const day = Math.floor(Date.parse(`${dayISO}T00:00:00Z`) / 86_400_000);
+  const start = ((Number.isFinite(day) ? day : 0) * count) % queries.length;
+  return Array.from({ length: count }, (_, i) => queries[(start + i) % queries.length]);
+}
+
+// The rotated daily slice for one lens (date tokens resolved like lensBatches).
+export function dailyLensQueries(lens: SignalLens, dayISO: string): string[] {
+  return resolveDateTokens(rotatedQueries(LENS_QUERIES[lens] ?? [], dayISO), dayISO);
 }

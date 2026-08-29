@@ -1,4 +1,6 @@
 import { runStructured } from '../dossier';
+import { chatJSONOpenRouter } from '../scan/llm';
+import { SCAN_ENRICH_MODELS } from '../scan/models';
 import { fetchCandidateText, MIN_READABLE_CHARS } from './web';
 import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL } from '../format';
 import * as m from '../mutations';
@@ -6,6 +8,7 @@ import { getCandidate, getTargets, getSourceMeta } from '../data';
 import type { AnalyzedSignal, Direction, Significance, SignalLens } from '../types';
 
 const DIRECTIONS: Direction[] = ['supports', 'contradicts', 'neutral'];
+const SONNET = 'claude-sonnet-4-6';
 
 // Per-candidate analysis: fetch the page text, then a single non-web structured call
 // (live claim list injected so claim_touches cite real codes) produces a draft signal
@@ -13,6 +16,13 @@ const DIRECTIONS: Direction[] = ['supports', 'contradicts', 'neutral'];
 // draft is saved unpublished (origin='pipeline'); a human reviews and publishes.
 // proposed_reliability is a SUGGESTION returned to the UI — never written to the
 // source's prior (the model never sets the prior; that guardrail holds).
+//
+// 2.0 A/B: `model` (an OpenRouter id from the /pipeline picker, assigned per
+// candidate by the caller) routes the call through chatJSONOpenRouter with the
+// same prompts + an explicit JSON contract; undefined or an Anthropic id keeps
+// the Sonnet forced-tool path. Either way the coercion/allow-listing below
+// never trusts the model for codes or enums, and signals.drafted_by records
+// which model wrote the draft (the review queue's A/B evidence).
 
 const ANALYSIS_SYSTEM = [
   'You analyze one source and produce a Signal Board entry for financial-institution analysts.',
@@ -65,7 +75,7 @@ interface AnalysisResult {
   analysis: AnalyzedSignal;
 }
 
-export async function analyzeCandidate(candidateId: string): Promise<AnalysisResult | null> {
+export async function analyzeCandidate(candidateId: string, model?: string): Promise<AnalysisResult | null> {
   const cand = await getCandidate(candidateId);
   if (!cand) throw new Error('Candidate not found.');
   if (cand.triage_status !== 'approved') throw new Error('Candidate is not approved for analysis.');
@@ -116,35 +126,65 @@ export async function analyzeCandidate(candidateId: string): Promise<AnalysisRes
     (bib ? `\n${bib}` : '') +
     `\n\n${text}`;
 
-  const out = await runStructured<AnalyzedSignal>({
-    // The lens guide + target list live in the SYSTEM block (which runStructured marks
-    // cache_control: ephemeral), not the user message: they're identical for every
-    // candidate in a run, so calls 2..N of an analysis pass read the expensive prefix
-    // (tools + system + claim list) from the prompt cache instead of re-billing it.
-    // Only the per-candidate source block rides in the user message.
-    system: [
-      ANALYSIS_SYSTEM,
-      `\nLENSES (use only these codes):\n${lensGuide}`,
-      `\nARGUMENT-MAP CLAIMS & BRIDGE-CLAIMS (use ONLY these codes for claim_touches):\n${targetList || '(none)'}`,
-    ].join('\n'),
-    user: sourceBlock,
-    toolName: 'submit_signal',
-    toolDescription: 'Return the proposed Signal Board entry for this source.',
-    schema: buildSchema(codes),
-    maxTokens: 2000,
-    effort: 'medium',
-    feature: 'pipeline_analysis',
-    pipelineRunId: cand.run_id,
-    metadata: { candidate_id: candidateId, lens: cand.lens },
-    // Near the 60s cap (the backstop fetch can spend up to 8s; the normal path reads the
-    // hydrated cache): bound the model leg to 38s and disable in-call SDK retries so one
-    // analyze call provably fits. Retry is the orchestrator's job (a fresh invocation,
-    // with the page text already cached).
-    timeoutMs: 38_000,
-    maxRetries: 0,
-  });
+  // The lens guide + target list live in the SYSTEM block (cache_control'd on the
+  // Anthropic path), not the user message: they're identical for every candidate in a
+  // run, so calls 2..N read the expensive prefix from the prompt cache instead of
+  // re-billing it. Only the per-candidate source block rides in the user message.
+  const system = [
+    ANALYSIS_SYSTEM,
+    `\nLENSES (use only these codes):\n${lensGuide}`,
+    `\nARGUMENT-MAP CLAIMS & BRIDGE-CLAIMS (use ONLY these codes for claim_touches):\n${targetList || '(none)'}`,
+  ].join('\n');
 
-  // 3) coerce + allow-list everything (never trust the model for codes/enums)
+  const registryEntry = model ? SCAN_ENRICH_MODELS.find((mm) => mm.id === model) : undefined;
+  const openrouter = Boolean(model && !registryEntry?.anthropic);
+  // An Anthropic id from the picker (the Haiku baseline) rides runStructured's
+  // model override (which omits effort/thinking for Haiku); no model = Sonnet.
+  const anthropicOverride = !openrouter && registryEntry?.anthropic ? model : undefined;
+  const out = openrouter
+    ? await chatJSONOpenRouter<AnalyzedSignal>({
+        model: model as string,
+        system: `${system}
+
+Reply with ONLY a single JSON object, no prose and no code fence, with exactly these keys:
+  "title": string
+  "summary": string
+  "significance": "high" | "medium" | "low"
+  "significance_reason": string, one sentence
+  "lenses": array of lens code strings from the LENSES list
+  "claim_touches": array of {"code": "<code from the claims list>", "direction": "supports" | "contradicts" | "neutral", "reason": "<one sentence>"} (empty array if none truly apply)
+  "proposed_reliability": integer 0 to 100`,
+        user: sourceBlock,
+        maxTokens: 2000,
+        timeoutMs: 45_000,
+        feature: 'pipeline_analysis',
+        pipelineRunId: cand.run_id,
+        metadata: { candidate_id: candidateId, lens: cand.lens },
+      })
+    : await runStructured<AnalyzedSignal>({
+        system,
+        user: sourceBlock,
+        toolName: 'submit_signal',
+        toolDescription: 'Return the proposed Signal Board entry for this source.',
+        schema: buildSchema(codes),
+        maxTokens: 2000,
+        effort: 'medium',
+        feature: 'pipeline_analysis',
+        pipelineRunId: cand.run_id,
+        metadata: { candidate_id: candidateId, lens: cand.lens },
+        // Bound the model leg and disable in-call SDK retries so one analyze call
+        // provably fits its invocation. Retry is the orchestrator's job (a fresh
+        // invocation, with the page text already cached).
+        timeoutMs: 38_000,
+        maxRetries: 0,
+        ...(anthropicOverride ? { model: anthropicOverride } : {}),
+      });
+
+  // 3) coerce + allow-list everything (never trust the model for codes/enums).
+  // deBracket: the target list displays codes as [2.3], and some open-weight
+  // models copy the brackets verbatim (live-caught: qwen3.7-flash returned
+  // "[7.4]" for every touch, so the allow-list silently dropped them all).
+  const deBracket = (v: unknown): string => String(v ?? '').trim().replace(/^\[/, '').replace(/\]$/, '');
   const validLens = new Set<string>(SIGNAL_LENS_SLUGS);
   const validCode = new Set(codes);
   const significance: Significance = (['high', 'medium', 'low'] as const).includes(
@@ -153,12 +193,19 @@ export async function analyzeCandidate(candidateId: string): Promise<AnalysisRes
     ? (out.significance as Significance)
     : 'medium';
   const lenses = Array.isArray(out.lenses)
-    ? Array.from(new Set(out.lenses.filter((l): l is SignalLens => validLens.has(l as string))))
+    ? Array.from(
+        new Set(
+          out.lenses
+            .map((l) => deBracket(l))
+            .filter((l): l is SignalLens => validLens.has(l))
+        )
+      )
     : [];
   const validDir = new Set<Direction>(DIRECTIONS);
   const seen = new Set<string>();
   const claim_touches = Array.isArray(out.claim_touches)
     ? out.claim_touches
+        .map((t) => (t ? { ...t, code: deBracket(t.code) } : t))
         .filter((t) => t && validCode.has(t.code) && !seen.has(t.code) && seen.add(t.code))
         .map((t) => ({
           code: t.code,
@@ -200,6 +247,7 @@ export async function analyzeCandidate(candidateId: string): Promise<AnalysisRes
       source_id: sourceId,
       published_at: cand.published_date || null,
       origin: cand.source_id ? 'manual' : 'pipeline',
+      drafted_by: openrouter ? (model as string) : anthropicOverride ?? SONNET,
     },
     candidateId
   );

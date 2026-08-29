@@ -67,6 +67,15 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
             {personal && signal.origin === 'manual' && (
               <span className="badge" style={{ fontSize: 11, padding: '3px 9px' }}>manual</span>
             )}
+            {personal && signal.drafted_by && (
+              <span
+                className="badge"
+                style={{ fontSize: 11, padding: '3px 9px', fontFamily: 'var(--font-mono)' }}
+                title="Model that drafted this signal (the analysis A/B stamp)"
+              >
+                {signal.drafted_by}
+              </span>
+            )}
           </div>
           <h1 style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}>{signal.title}</h1>
           <p className="lede" style={{ fontSize: 14, marginTop: 8 }}>

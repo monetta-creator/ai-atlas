@@ -1,26 +1,31 @@
 import { searchCandidates, searchBreakingSweep } from './web';
+import { searchCandidatesTavily, searchBreakingSweepTavily } from './search';
 import {
-  lensBatches, resolveDateTokens, ALL_LENSES, DAILY_LENSES, MAX_SEARCH_USES,
+  lensBatches, dailyLensQueries, resolveDateTokens, ALL_LENSES, MAX_SEARCH_USES,
   LOW_QUALITY_DOMAINS, SWEEP_QUERIES, BREAKING_SWEEP_DOMAINS,
 } from './config';
 import * as m from '../mutations';
-import { getZeroYieldDomains } from '../data';
+import { getRun, getPipelinePrefs, getZeroYieldDomains } from '../data';
 import type { SignalLens, RunCadence } from '../types';
 
-// One unit of discovery: a single lens's query batch (≤3 searches ≈ 45s, under the
-// Hobby 60s cap). Pure + idempotent (unique(run_id,url) dedups), so the admin
-// orchestrator — or a future cron — can drive it batch by batch and safely retry.
+// One unit of discovery: a single lens's query batch. Pure + idempotent
+// (unique(run_id,url) dedups), so the console orchestrator or the cron engine
+// can drive it batch by batch and safely retry. Provider: Tavily's LLM-free
+// news search when TAVILY_API_KEY is set (seconds per batch), else the
+// original Sonnet + web_search call.
 export interface DiscoveryBatchRef {
   lens: SignalLens;
   batchIndex: number;
 }
 
 // The ordered list of batches a run will execute, derived from its cadence.
-// Daily sweeps only the high-cadence lenses; weekly/manual sweep all six.
+// 2.0: daily sweeps ALL six lenses, one batch each of that day's ROTATED
+// query pair (full per-lens coverage every ~3 days); weekly/manual runs the
+// full batched query set.
 export function discoveryPlan(cadence: RunCadence): DiscoveryBatchRef[] {
-  const lenses = cadence === 'daily' ? DAILY_LENSES : ALL_LENSES;
+  if (cadence === 'daily') return ALL_LENSES.map((lens) => ({ lens, batchIndex: 0 }));
   const plan: DiscoveryBatchRef[] = [];
-  for (const lens of lenses) {
+  for (const lens of ALL_LENSES) {
     lensBatches(lens).forEach((_, batchIndex) => plan.push({ lens, batchIndex }));
   }
   return plan;
@@ -32,16 +37,28 @@ export async function discoverBatch(
   batchIndex: number,
   sinceISO: string
 ): Promise<number> {
-  const queries = lensBatches(lens, sinceISO)[batchIndex];
+  // Daily runs rotate; the cadence comes from the run row so the console and
+  // the cron engine resolve identical queries for the same run.
+  const run = await getRun(runId);
+  const daily = run?.cadence === 'daily';
+  const queries = daily
+    ? batchIndex === 0 ? dailyLensQueries(lens, sinceISO) : []
+    : lensBatches(lens, sinceISO)[batchIndex];
   if (!queries || !queries.length) return 0;
-  // Curated deny-list + domains the funnel has learned never yield (decided candidates
-  // only, so this run can't bias against its own pending discoveries). Filtered at the
-  // search itself: junk stops costing triage tokens AND its result slots go to real items.
-  const learned = await getZeroYieldDomains().catch(() => [] as string[]);
-  const blockedDomains = Array.from(new Set([...LOW_QUALITY_DOMAINS, ...learned]));
-  const candidates = await searchCandidates({
-    lens, queries, sinceISO, maxUses: MAX_SEARCH_USES, pipelineRunId: runId, blockedDomains,
-  });
+
+  let candidates;
+  if (process.env.TAVILY_API_KEY) {
+    candidates = await searchCandidatesTavily({ lens, queries, sinceISO, pipelineRunId: runId });
+  } else {
+    // Curated deny-list + domains the funnel has learned never yield (decided candidates
+    // only, so this run can't bias against its own pending discoveries). Filtered at the
+    // search itself: junk stops costing triage tokens AND its result slots go to real items.
+    const learned = await getZeroYieldDomains().catch(() => [] as string[]);
+    const blockedDomains = Array.from(new Set([...LOW_QUALITY_DOMAINS, ...learned]));
+    candidates = await searchCandidates({
+      lens, queries, sinceISO, maxUses: MAX_SEARCH_USES, pipelineRunId: runId, blockedDomains,
+    });
+  }
   const inserted = await m.insertCandidates(runId, lens, candidates, queries);
   await m.recomputeRunCounts(runId);
   return inserted;
@@ -49,16 +66,24 @@ export async function discoverBatch(
 
 // The breaking-events sweep: one extra, lens-agnostic discovery unit per run that asks
 // "what did the serious press report since the window opened" over a curated
-// quality-outlet allowlist, significance-first. The model assigns each development the
-// lens it best fits; candidates enter the same triage funnel as every other discovery
-// (unique(run_id,url) dedups against the lens batches). Idempotent and retryable like
-// discoverBatch — its own invocation, driven by the console after the lens batches.
+// quality-outlet allowlist, significance-first. 2.0: Tavily fetches the outlets'
+// headlines and a cheap utility model does the significance + lens judgment
+// (lib/pipeline/search.ts); the Sonnet web_search call remains the fallback.
+// Candidates enter the same triage funnel as every other discovery.
 export async function discoverBreakingSweep(runId: string, sinceISO: string): Promise<number> {
   const queries = resolveDateTokens(SWEEP_QUERIES, sinceISO);
-  const found = await searchBreakingSweep({
-    queries, sinceISO, allowedDomains: BREAKING_SWEEP_DOMAINS,
-    maxUses: MAX_SEARCH_USES, pipelineRunId: runId,
-  });
+  let found;
+  if (process.env.TAVILY_API_KEY && process.env.OPENROUTER_API_KEY) {
+    const prefs = await getPipelinePrefs();
+    found = await searchBreakingSweepTavily({
+      queries, sinceISO, pipelineRunId: runId, utilityModel: prefs.utility_model,
+    });
+  } else {
+    found = await searchBreakingSweep({
+      queries, sinceISO, allowedDomains: BREAKING_SWEEP_DOMAINS,
+      maxUses: MAX_SEARCH_USES, pipelineRunId: runId,
+    });
+  }
   let inserted = 0;
   for (const lens of ALL_LENSES) {
     const group = found.filter((c) => c.lens === lens);

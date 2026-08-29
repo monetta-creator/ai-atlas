@@ -24,6 +24,9 @@ export async function chatJSONOpenRouter<T>(opts: {
   timeoutMs: number;
   feature: string;
   metadata?: Record<string, unknown>;
+  // ONLY for calls belonging to a pipeline_runs row (the column is FK'd there;
+  // recordApiCall swallows violations silently). Scan callers never set it.
+  pipelineRunId?: string | null;
 }): Promise<T> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY is not set.');
@@ -78,6 +81,7 @@ export async function chatJSONOpenRouter<T>(opts: {
           output_tokens: data.usage?.completion_tokens ?? 0,
         },
         wallMs: Date.now() - t0,
+        pipelineRunId: opts.pipelineRunId ?? null,
         metadata: opts.metadata,
       });
       const content = data.choices?.[0]?.message?.content ?? '';

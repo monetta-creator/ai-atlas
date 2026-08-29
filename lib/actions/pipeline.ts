@@ -4,14 +4,15 @@ import { revalidatePath } from 'next/cache';
 import * as m from '../mutations';
 import {
   getLastCompletedRunAt, getApprovedCandidates, getCandidateArchive, getDedupeScan,
-  countPendingCandidates,
-  getCandidate, isFetchHostileDomain } from '../data';
+  countPendingCandidates, getPipelinePrefs } from '../data';
+import { hydrateCandidate } from '../pipeline/hydrate';
+import { pickEnrichModel, isScanEnrichModel } from '../scan/models';
 import { SIGNAL_LENS_SLUGS } from '../format';
 import { discoverBatch, discoverBreakingSweep, discoveryPlan, type DiscoveryBatchRef } from '../pipeline/discovery';
 import { runCoverageCheck } from '../pipeline/coverage';
 import { triageChunk } from '../pipeline/triage';
 import { analyzeCandidate } from '../pipeline/analysis';
-import { domainOf, fetchCandidateText, FetchFailure } from '../pipeline/web';
+import { FetchFailure } from '../pipeline/web';
 import { dedupeAllDrafts } from '../pipeline/dedupe';
 import type {
   Significance, SignalLens, RunCadence, TriageStatus,
@@ -107,24 +108,8 @@ export async function hydrateCandidateAction(candidateId: string): Promise<{
 }> {
   await requireAdmin();
   if (!UUID_RE.test(candidateId)) throw new Error('Bad candidate id.');
-  try {
-    const cand = await getCandidate(candidateId);
-    if (!cand) return { ok: false, error: 'candidate not found', terminal: true };
-    if (cand.signal_id || cand.raw_content) return { ok: true, skipped: true };
-    // Learned routing: a domain whose history says direct fetches are doomed (reader-only
-    // successes, terminal access walls) goes straight to the reader.
-    const domain = (cand.source_domain || domainOf(cand.url)).toLowerCase().replace(/^www\./, '');
-    const preferJina = domain ? await isFetchHostileDomain(domain).catch(() => false) : false;
-    const { text, via } = await fetchCandidateText(cand.url, { preferJina });
-    await m.setCandidateRawContent(candidateId, text, via);
-    return { ok: true, via };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'fetch error';
-    const terminal = e instanceof FetchFailure ? e.terminal : false;
-    // Record the failed attempt (analysis-health view); a later success overwrites it.
-    await m.setAnalysisStatus(candidateId, 'error', msg.slice(0, 500)).catch(() => {});
-    return { ok: false, error: msg, terminal };
-  }
+  // Shared with the cron engine: lib/pipeline/hydrate.ts is the one implementation.
+  return hydrateCandidate(candidateId);
 }
 
 export async function analyzeCandidateAction(candidateId: string): Promise<{
@@ -141,7 +126,11 @@ export async function analyzeCandidateAction(candidateId: string): Promise<{
   // back off appropriately and flag with a useful reason. A null result is the idempotent
   // no-op (already drafted / claimed by a peer).
   try {
-    const res = await analyzeCandidate(candidateId);
+    // The console path A/Bs exactly like the cron engine: the /pipeline
+    // picker's models, assigned deterministically per candidate.
+    const prefs = await getPipelinePrefs();
+    const model = pickEnrichModel(prefs.analysis_models, candidateId);
+    const res = await analyzeCandidate(candidateId, model ?? undefined);
     if (!res) return { ok: true, skipped: true };
     return {
       ok: true,
@@ -325,4 +314,23 @@ export async function discardDraftSignalAction(signalId: string): Promise<void> 
   revalidatePath('/signals/drafts');
   revalidatePath('/pipeline');
   revalidatePath('/', 'layout');
+}
+
+// ---- Pipeline 2.0 prefs (0042) ---------------------------------------------
+
+// Cron on/off: gates the daily cron leg only; the console's buttons bypass.
+export async function setPipelineEnabledAction(enabled: boolean): Promise<void> {
+  await requireAdmin();
+  await m.setPipelineEnabled(Boolean(enabled));
+  revalidatePath('/pipeline');
+}
+
+// The analysis A/B picker. Ids allow-listed against the shared model registry;
+// empty selection = the Sonnet fallback path.
+export async function setPipelineAnalysisModelsAction(models: string[]): Promise<void> {
+  await requireAdmin();
+  const clean = [...new Set((models ?? []).map(String))].filter(isScanEnrichModel);
+  if (clean.length > 8) throw new Error('Too many models selected.');
+  await m.setPipelineAnalysisModels(clean);
+  revalidatePath('/pipeline');
 }

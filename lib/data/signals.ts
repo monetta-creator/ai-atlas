@@ -243,7 +243,7 @@ export async function getSignal(
   const signal = await one<Signal>(
     // brief/counterpoint (cached AI analysis, migration 0022) are read here only — kept off
     // SIGNAL_COLUMNS so the feed/digest payloads stay lean. They are public (no personal layer).
-    `select ${SIGNAL_COLUMNS}, s.touch_details, s.brief, s.counterpoint
+    `select ${SIGNAL_COLUMNS}, s.touch_details, s.brief, s.counterpoint, s.drafted_by
        from signals s
        left join sources src on src.id = s.source_id
       where s.id = $1`,
@@ -251,8 +251,12 @@ export async function getSignal(
   );
   if (!signal) return null;
   const touches = await resolveTouches(signal.claim_touches, signal.touch_details, personal);
-  // touch_details (the model's reasons) is personal-layer — keep it off the wire for guests.
-  if (!personal) signal.touch_details = undefined;
+  // touch_details (the model's reasons) and drafted_by (the A/B stamp, 0042)
+  // are personal-layer — keep them off the wire for guests.
+  if (!personal) {
+    signal.touch_details = undefined;
+    signal.drafted_by = undefined;
+  }
   return { signal, touches };
 }
 

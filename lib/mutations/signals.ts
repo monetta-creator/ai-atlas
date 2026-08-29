@@ -20,6 +20,9 @@ interface SignalInput {
   touch_details?: Record<string, { direction: Direction; reason: string }>;
   source_id?: string | null;
   published_at?: string | null;
+  // Model that drafted a pipeline signal (0042; the analysis A/B stamp).
+  // Null for human-authored signals; admin-only surface, never SELECTed publicly.
+  drafted_by?: string | null;
 }
 
 // Sync a signal's materialized evidence to its publish state — the structural joint
@@ -86,8 +89,8 @@ async function insertSignalRow(
   const row = (
     await c.query(
       `insert into signals
-         (title, summary, significance, lenses, claim_touches, touch_details, source_id, published_at, is_published, origin)
-       values ($1, $2, $3, $4::signal_lens_t[], $5::text[], $6::jsonb, $7, coalesce($8::timestamptz, now()), $9, $10)
+         (title, summary, significance, lenses, claim_touches, touch_details, source_id, published_at, is_published, origin, drafted_by)
+       values ($1, $2, $3, $4::signal_lens_t[], $5::text[], $6::jsonb, $7, coalesce($8::timestamptz, now()), $9, $10, $11)
        returning id`,
       [
         input.title,
@@ -100,6 +103,7 @@ async function insertSignalRow(
         input.published_at || null,
         input.is_published,
         input.origin,
+        input.drafted_by ?? null,
       ]
     )
   ).rows[0] as { id: string };

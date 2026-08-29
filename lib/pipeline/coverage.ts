@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { recordApiCall } from '../cost';
 import { COVERAGE_QUERIES, BREAKING_SWEEP_DOMAINS, MAX_SEARCH_USES, resolveDateTokens } from './config';
-import { getRun, getCandidates, getSignalsDigestForTriage } from '../data';
+import { coverageDevelopmentsTavily } from './search';
+import { getRun, getCandidates, getSignalsDigestForTriage, getPipelinePrefs } from '../data';
 import * as m from '../mutations';
 import type { CoverageDevelopment, RunCoverage } from '../types';
 
@@ -42,6 +43,24 @@ export async function runCoverageCheck(runId: string): Promise<RunCoverage> {
     .slice(0, MAX_TRACKED_LINES);
 
   const queries = resolveDateTokens(COVERAGE_QUERIES, sinceISO);
+
+  // 2.0: Tavily fetches the quality outlets' headlines and the cheap utility
+  // model does the covered-vs-missed comparison; the Sonnet web_search call
+  // below is the fallback when either key is absent. Same RunCoverage shape.
+  if (process.env.TAVILY_API_KEY && process.env.OPENROUTER_API_KEY) {
+    const prefs = await getPipelinePrefs();
+    const developments = await coverageDevelopmentsTavily({
+      queries, sinceISO, tracked, pipelineRunId: runId, utilityModel: prefs.utility_model,
+    });
+    const coverage: RunCoverage = {
+      since: sinceISO,
+      checked_at: new Date().toISOString(),
+      developments: developments.slice(0, 12),
+    };
+    await m.setRunCoverage(runId, coverage);
+    return coverage;
+  }
+
   const client = new Anthropic({ apiKey, timeout: 50_000, maxRetries: 0 });
 
   const tools = [

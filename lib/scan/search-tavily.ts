@@ -1,6 +1,6 @@
 import { recordApiCall } from '../cost';
 import { LOW_QUALITY_DOMAINS } from '../pipeline/config';
-import { mapTavilyResults } from './core';
+import { mapTavilyResults, type TavilyResult } from './core';
 import type { RawScanItem } from './web';
 
 // The scan's LLM-free search leg: Tavily's news search replaces the
@@ -14,6 +14,44 @@ import type { RawScanItem } from './web';
 // per-run call counts without inventing a token price for a search API.
 
 const TAVILY_URL = 'https://api.tavily.com/search';
+
+// One raw Tavily news query (shared with the pipeline's search legs,
+// lib/pipeline/search.ts): 20s abort, throws on non-2xx, returns the
+// unmapped results array. include_domains restricts to an allowlist (the
+// pipeline's breaking sweep / coverage legs).
+export async function tavilyQuery(opts: {
+  query: string;
+  days: number;
+  maxResults?: number;
+  includeDomains?: string[];
+}): Promise<TavilyResult[]> {
+  const apiKey = process.env.TAVILY_API_KEY;
+  if (!apiKey) throw new Error('TAVILY_API_KEY is not set.');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fetch(TAVILY_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: opts.query,
+        topic: 'news',
+        days: opts.days,
+        max_results: opts.maxResults ?? 12,
+        ...(opts.includeDomains?.length ? { include_domains: opts.includeDomains } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Tavily ${res.status}: ${body.slice(0, 160)}`);
+    }
+    const data = (await res.json()) as { results?: TavilyResult[] };
+    return data.results ?? [];
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export async function searchTopicNewsTavily(opts: {
   topicName: string;
