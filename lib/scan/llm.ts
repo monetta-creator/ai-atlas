@@ -28,48 +28,65 @@ export async function chatJSONOpenRouter<T>(opts: {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY is not set.');
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
-  const t0 = Date.now();
-  try {
-    const res = await fetch(OPENROUTER_URL, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: opts.model,
-        max_tokens: opts.maxTokens,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: opts.system },
-          { role: 'user', content: opts.user },
-        ],
-      }),
-    });
-    if (!res.ok) {
+  // Reasoning discipline, self-adapting per model: shortlist models that
+  // think by default (GLM flash measured: 439 chars of reasoning before a
+  // 13-char answer) would burn a small max_tokens budget before emitting
+  // content, so the first attempt disables reasoning via OpenRouter's
+  // unified param. A model whose endpoint REFUSES that (GLM: "Reasoning is
+  // mandatory") gets one retry with the param dropped and extra headroom for
+  // its thinking; the refused first call bills nothing.
+  const attempt = async (reasoningOff: boolean): Promise<T> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), opts.timeoutMs);
+    const t0 = Date.now();
+    try {
+      const res = await fetch(OPENROUTER_URL, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: opts.model,
+          max_tokens: reasoningOff ? opts.maxTokens : opts.maxTokens + 800,
+          response_format: { type: 'json_object' },
+          ...(reasoningOff ? { reasoning: { enabled: false } } : {}),
+          messages: [
+            { role: 'system', content: opts.system },
+            { role: 'user', content: opts.user },
+          ],
+        }),
+      });
       const body = await res.text().catch(() => '');
-      throw new Error(`OpenRouter ${res.status}: ${body.slice(0, 200)}`);
+      if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${body.slice(0, 200)}`);
+      const data = JSON.parse(body) as {
+        choices?: { message?: { content?: string | null } }[];
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+        error?: { message?: string };
+      };
+      if (data.error?.message) throw new Error(`OpenRouter: ${data.error.message.slice(0, 200)}`);
+      await recordApiCall({
+        feature: opts.feature,
+        model: opts.model,
+        usage: {
+          input_tokens: data.usage?.prompt_tokens ?? 0,
+          output_tokens: data.usage?.completion_tokens ?? 0,
+        },
+        wallMs: Date.now() - t0,
+        metadata: opts.metadata,
+      });
+      const content = data.choices?.[0]?.message?.content ?? '';
+      return extractJsonObject(content) as T;
+    } finally {
+      clearTimeout(timer);
     }
-    const data = (await res.json()) as {
-      choices?: { message?: { content?: string | null } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-    await recordApiCall({
-      feature: opts.feature,
-      model: opts.model,
-      usage: {
-        input_tokens: data.usage?.prompt_tokens ?? 0,
-        output_tokens: data.usage?.completion_tokens ?? 0,
-      },
-      wallMs: Date.now() - t0,
-      metadata: opts.metadata,
-    });
-    const content = data.choices?.[0]?.message?.content ?? '';
-    return extractJsonObject(content) as T;
-  } finally {
-    clearTimeout(timer);
+  };
+
+  try {
+    return await attempt(true);
+  } catch (e) {
+    if (/reasoning is mandatory/i.test(String((e as Error)?.message))) return attempt(false);
+    throw e;
   }
 }
