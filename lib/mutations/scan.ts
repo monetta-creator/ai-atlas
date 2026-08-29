@@ -188,11 +188,13 @@ export async function setScanItemEnrichment(
     tags?: string[];
     entities?: string[];
     relevance?: number | null;
+    enrichedBy?: string | null; // model id stamp (0041), set on success AND error for the A/B stats
   }
 ): Promise<void> {
   await exec(
     `update scan_items
-        set enrich_status = $2, summary = $3, tags = $4::text[], entities = $5::text[], relevance = $6
+        set enrich_status = $2, summary = $3, tags = $4::text[], entities = $5::text[], relevance = $6,
+            enriched_by = coalesce($7, enriched_by)
       where id = $1`,
     [
       id, e.status,
@@ -200,7 +202,18 @@ export async function setScanItemEnrichment(
       e.tags ?? [],
       (e.entities ?? []).map((x) => sanitizeText(x)),
       e.relevance ?? null,
+      e.enrichedBy ?? null,
     ]
+  );
+}
+
+// The /scan picker's model selection (0041). Ids are validated against the
+// registry in the action layer; empty array = the Haiku fallback path.
+export async function setScanEnrichModels(models: string[]): Promise<void> {
+  await exec(
+    `insert into scan_prefs (id, enrich_models) values (true, $1::text[])
+     on conflict (id) do update set enrich_models = excluded.enrich_models, updated_at = now()`,
+    [models]
   );
 }
 

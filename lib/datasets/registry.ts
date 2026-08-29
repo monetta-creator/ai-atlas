@@ -345,6 +345,7 @@ const BASE: DatasetDef[] = [
       col('fetched_via', 'Fetched via', 'enum', 'direct or jina.'),
       col('text_chars', 'Text length', 'number', 'Character count of the retained page text.'),
       col('full_text', 'Full text', 'longtext', 'The complete retained page text, capped at 24,000 characters.'),
+      col('enriched_by', 'Enriched by', 'text', 'Model that produced the enrichment (summary, tags, relevance); null before model tracking began.'),
     ],
     build: buildExternalScan,
   },
@@ -354,7 +355,7 @@ const BASE: DatasetDef[] = [
     description:
       'Every published signal in the same row shape as the external-scan dataset, for a downstream intake that already speaks that schema: discovery metadata, the full editorial writeup composed into full_text, and the signal-native fields appended.',
     methodology:
-      'One row per published signal, full corpus on every download (re-import replaces; upsert on item_id). The first nineteen columns mirror the external-scan contract key for key so the same importer ingests both files; the appended columns carry the signal-native detail, including per-touch direction and editorial reasoning. That per-touch detail plus retained article text is why the download requires the team portal key. This is a working corpus, not a redistribution channel.',
+      'One row per published signal, full corpus on every download (re-import replaces; upsert on item_id). The leading columns mirror the external-scan contract key for key so the same importer ingests both files; the appended columns carry the signal-native detail, including per-touch direction and editorial reasoning. That per-touch detail plus retained article text is why the download requires the team portal key. This is a working corpus, not a redistribution channel.',
     category: 'signals',
     formats: ['csv', 'json'],
     heavy: true,
@@ -379,6 +380,7 @@ const BASE: DatasetDef[] = [
       col('fetched_via', 'Fetched via', 'enum', 'Always null.'),
       col('text_chars', 'Text length', 'number', 'Character count of full_text.'),
       col('full_text', 'Full text', 'longtext', 'Composed document, capped at 24,000 characters: title, summary, brief sections, counterpoint, argument-map touches, then SOURCE ARTICLE TEXT with the retained article when one exists.'),
+      col('enriched_by', 'Enriched by', 'text', 'Always null here: signals are human-edited editorial work, not model enrichment. Present to mirror the external-scan shape.'),
       col('significance', 'Significance', 'enum', 'high, medium, or low.'),
       col('lenses', 'Lenses', 'text', 'Audience lenses, joined with a semicolon: market, labor, geopolitics, regulatory, capability, society.'),
       col('origin', 'Origin', 'enum', 'manual (curated by hand) or pipeline (web discovery).'),

@@ -43,15 +43,29 @@ persisting after each, under a caller-supplied deadline:
    dead feed is a note, never a failure. The discovery window is
    `lookbackDays(day)`: one day normally, three on Mondays (the weekend
    catch-up); the search leg uses the same window for its "since" date.
-2. **search** — one `web_search` call per active topic with queries
-   (`lib/scan/web.ts`, the scout call shape on `claude-sonnet-4-6`, one search
-   per topic), checkpointed per topic; the budget is checked before each.
+2. **search** — one unit per active topic with queries, checkpointed per
+   topic, budget-checked before each. Provider: with `TAVILY_API_KEY` set,
+   Tavily's LLM-free news search (`lib/scan/search-tavily.ts`, one API call
+   per query, free tier; the old Sonnet call's own prompt forbade judgment
+   and returned only url/headline/date lists, which is exactly what a search
+   API returns directly); without the key, the original Sonnet + `web_search`
+   call (`lib/scan/web.ts`). Tavily topics log $0 `ai_cost_log` rows (model
+   `tavily-search`, no rate card by design) so run history keeps its counts.
 3. **hydrate** — `fetchCandidateText` (direct + reader fallback) in small
    waves; failures mark the item and ship it textless.
-4. **enrich** — one `claude-haiku-4-5` `runStructured` call per item
-   (`lib/scan/enrich.ts`): summary, taxonomy codes (allow-listed from the
-   active topics), entities, relevance. Budget-capped; past the cap items ship
-   with `enrich_status = 'skipped'`.
+4. **enrich** — one small-model call per item (`lib/scan/enrich.ts`): summary,
+   taxonomy codes (allow-listed from the active topics), entities, relevance.
+   Provider: the /scan picker's OpenRouter models (`scan_prefs.enrich_models`,
+   migration `0041`; `lib/scan/llm.ts` is the OpenAI-compatible fetch client,
+   JSON-object output with a tolerant extractor, `OPENROUTER_API_KEY`).
+   Selecting two or more models splits items across them deterministically
+   (hash of the item UUID) — the A/B test — and `scan_items.enriched_by`
+   stamps every item so the /scan "Model A/B" table can compare items,
+   errors, avg relevance, latency, and cost per model. No selection =
+   `claude-haiku-4-5` via `runStructured` (the baseline, also in the picker).
+   Budget-capped either way; past the cap items ship
+   `enrich_status = 'skipped'`. The curated model list + rate cards:
+   `lib/scan/models.ts` + migration `0041` (test-guarded against drift).
 
 Drivers: two weekday Vercel crons (`vercel.json`, `0 9 * * 1-5` and
 `0 11 * * 1-5`) hit `GET /api/cron/scan` (Bearer `CRON_SECRET`,
@@ -63,8 +77,11 @@ the normal one-day window; Monday's overlap dedupes away).
 Cost discipline: scan model calls log to `ai_cost_log` as `scan_search` /
 `scan_enrich` with provenance in `metadata.scan_run` (NEVER `pipeline_run_id`,
 which is FK'd to `pipeline_runs`); `checkScanBudget` (`lib/scan/budget.ts`)
-sums them against `SCAN_DAILY_BUDGET_USD`. Measured day one: 9 searches
-$0.70, 40 enrichments $0.22.
+sums them against `SCAN_DAILY_BUDGET_USD`. On the all-Anthropic stack the
+measured day cost was ~$1.65 (18 Sonnet searches + Haiku enrichment); on the
+Tavily + OpenRouter stack the search leg is $0 and enrichment runs
+$0.02-0.06/day depending on the picked model, so a steady week is a few cents
+per day and the budget cap is generous headroom.
 
 ## The export contract
 
@@ -125,6 +142,7 @@ headers, UTF-8 BOM, CRLF):
 | `fetched_via` | string or null | `direct` or `jina`. |
 | `text_chars` | number or null | Character count of the retained text. |
 | `full_text` | string or null | The complete retained page text, capped at 24,000 chars. |
+| `enriched_by` | string or null | Model that produced the enrichment; null before model tracking began. |
 
 Importer guidance: key on `item_id` (stable) or `normalized_url` (stable
 across rediscovery); treat `tags`/`relevance` as advisory input to your own
@@ -186,8 +204,16 @@ panel):
 - Seed or update topics: edit `private/scan-topics.json`, run
   `npm run db:seed:scan` (upserts on slug; never touches `active`, which the
   `/scan` console toggle owns; never deletes).
-- Env: `CRON_SECRET` (required for the cron route; it fails closed unset) and
-  `SCAN_DAILY_BUDGET_USD` (default 1.50). Set both in Vercel and redeploy.
+- Env: `CRON_SECRET` (required for the cron route; it fails closed unset),
+  `SCAN_DAILY_BUDGET_USD` (default 1.50), `TAVILY_API_KEY` (the free search
+  leg; unset falls back to the Sonnet call), `OPENROUTER_API_KEY` (the picked
+  enrichment models; unset or nothing picked falls back to Haiku). Set in
+  Vercel and redeploy.
+- **The model picker** lives in /scan's Schedule & config: pick one model to
+  run everything on it, two or more to A/B them, none for the Haiku
+  fallback. The "Model A/B" table under History & health compares them; the
+  quality judgment (read the summaries) stays yours. The exported dataset's
+  `enriched_by` column carries the same stamp for work-side comparison.
 - Manual run/resume: the `/scan` console (admin), or
   `curl -H "Authorization: Bearer $CRON_SECRET" <host>/api/cron/scan`
   repeatedly until `"done": true`.

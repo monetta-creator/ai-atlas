@@ -1,5 +1,6 @@
 import {
-  getActiveScanTopics, getScanRun, getPendingFetchItems, getPendingEnrichItems, getScanStepCounts,
+  getActiveScanTopics, getScanRun, getScanPrefs, getPendingFetchItems, getPendingEnrichItems,
+  getScanStepCounts,
 } from '../data/scan';
 import {
   createScanRun, claimScanRun, renewScanLease, releaseScanLease, setScanStep,
@@ -9,7 +10,9 @@ import {
 } from '../mutations/scan';
 import { fetchFeed } from './feeds';
 import { searchTopicNews } from './web';
+import { searchTopicNewsTavily } from './search-tavily';
 import { enrichScanItem } from './enrich';
+import { pickEnrichModel } from './models';
 import { checkScanBudget } from './budget';
 import { lookbackDays, nextSearchTopic, withinWindow } from './core';
 import { resolveDateTokens, LOW_QUALITY_DOMAINS } from '../pipeline/config';
@@ -169,21 +172,31 @@ async function runFeedsStep(run: ScanRun, notes: string[]): Promise<void> {
   }
 }
 
-// ---- search: one topic per unit (one web_search call, ~35-50s), checkpointed
-// in searched_topics so a resumed invocation never repeats a topic.
+// ---- search: one topic per unit, checkpointed in searched_topics so a
+// resumed invocation never repeats a topic. Provider: Tavily's LLM-free news
+// search when TAVILY_API_KEY is set (a few seconds per topic, free tier),
+// else the original Sonnet + web_search call (~35-50s).
 async function runSearchUnit(run: ScanRun, topic: ScanTopic, notes: string[]): Promise<void> {
   const since = shiftDay(run.day, -lookbackDays(run.day));
   const oldest = shiftDay(run.day, -7); // wire-pickup lag tolerance for the search leg
+  const queries = resolveDateTokens(topic.search_queries, run.day).slice(0, 2);
   try {
-    const found = await searchTopicNews({
-      topicName: topic.name,
-      topicDescription: topic.description,
-      queries: resolveDateTokens(topic.search_queries, run.day).slice(0, 2),
-      sinceISO: since,
-      maxUses: 1,
-      scanRunId: run.id,
-      blockedDomains: LOW_QUALITY_DOMAINS,
-    });
+    const found = process.env.TAVILY_API_KEY
+      ? await searchTopicNewsTavily({
+          topicName: topic.name,
+          queries,
+          sinceISO: since,
+          scanRunId: run.id,
+        })
+      : await searchTopicNews({
+          topicName: topic.name,
+          topicDescription: topic.description,
+          queries,
+          sinceISO: since,
+          maxUses: 1,
+          scanRunId: run.id,
+          blockedDomains: LOW_QUALITY_DOMAINS,
+        });
     const fresh = found.filter(
       (it) => !/^\d{4}-\d{2}-\d{2}$/.test(it.published_date) || it.published_date >= oldest
     );
@@ -220,22 +233,28 @@ async function runHydrateWave(run: ScanRun, notes: string[]): Promise<void> {
   if (hydrated < items.length) notes.push(`hydrate: ${items.length - hydrated} of ${items.length} failed this wave`);
 }
 
-// ---- enrich: a small parallel wave of Haiku calls. A per-item model failure
-// marks 'error' (raw text still ships); the wave never throws.
+// ---- enrich: a small parallel wave of model calls. The /scan picker's
+// selection assigns each item a model deterministically (2+ selected =
+// the round-robin A/B split; empty = the Haiku fallback), and enriched_by
+// stamps the item either way. A per-item model failure marks 'error' (raw
+// text still ships); the wave never throws.
 async function runEnrichWave(run: ScanRun, notes: string[]): Promise<void> {
-  const topics = await getActiveScanTopics();
+  const [topics, prefs] = await Promise.all([getActiveScanTopics(), getScanPrefs()]);
   const items = await getPendingEnrichItems(run.id, ENRICH_POOL);
   if (!items.length) return;
   let enriched = 0;
   await Promise.all(
     items.map(async (item) => {
+      const model = pickEnrichModel(prefs.enrich_models, item.id);
       try {
-        const e = await enrichScanItem(item, topics, run.id);
-        await setScanItemEnrichment(item.id, { status: 'done', ...e });
+        const e = await enrichScanItem(item, topics, run.id, model ?? undefined);
+        await setScanItemEnrichment(item.id, {
+          status: 'done', ...e, enrichedBy: model ?? 'claude-haiku-4-5',
+        });
         enriched += 1;
       } catch (err) {
-        await setScanItemEnrichment(item.id, { status: 'error' });
-        notes.push(`enrich failed (${item.source_domain ?? 'item'}): ${String((err as Error)?.message ?? 'error').slice(0, 120)}`);
+        await setScanItemEnrichment(item.id, { status: 'error', enrichedBy: model ?? 'claude-haiku-4-5' });
+        notes.push(`enrich failed (${model ?? 'haiku'} · ${item.source_domain ?? 'item'}): ${String((err as Error)?.message ?? 'error').slice(0, 120)}`);
       }
     })
   );

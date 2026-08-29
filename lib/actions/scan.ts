@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { requireAdmin, UUID_RE } from './shared';
 import { getOrCreateTodayRun, claimScanRun, advanceScanRun } from '../scan/run';
-import { setScanTopicActive, setScanEnabled, failScanRun } from '../mutations/scan';
+import { setScanTopicActive, setScanEnabled, setScanEnrichModels, failScanRun } from '../mutations/scan';
 import { getScanRun } from '../data/scan';
+import { isScanEnrichModel } from '../scan/models';
 import type { ScanProgress } from '../types';
 
 // External Scan actions (admin). The cron route is the scheduled driver; these
@@ -61,5 +62,15 @@ export async function setScanTopicActiveAction(slug: string, active: boolean): P
 export async function setScanEnabledAction(enabled: boolean): Promise<void> {
   await requireAdmin();
   await setScanEnabled(Boolean(enabled));
+  revalidatePath('/scan');
+}
+
+// The enrichment model picker (0041). Ids allow-listed against the registry;
+// empty selection = the Haiku fallback path.
+export async function setScanEnrichModelsAction(models: string[]): Promise<void> {
+  await requireAdmin();
+  const clean = [...new Set((models ?? []).map(String))].filter(isScanEnrichModel);
+  if (clean.length > 8) throw new Error('Too many models selected.');
+  await setScanEnrichModels(clean);
   revalidatePath('/scan');
 }

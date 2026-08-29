@@ -7,11 +7,71 @@ import type { ScanHealth, ScanRun, ScanTopic } from '../types';
 // ONLY public egress for scan data is the key-gated `external-scan` dataset
 // (lib/datasets/builders.ts), which never selects run/lease internals.
 
-// The runtime switch (migration 0039). Missing row = enabled: the singleton
-// is created lazily by the first toggle.
-export async function getScanPrefs(): Promise<{ enabled: boolean }> {
-  const row = await one<{ enabled: boolean }>(`select enabled from scan_prefs where id = true`);
-  return { enabled: row?.enabled ?? true };
+// The runtime switches (migrations 0039 + 0041). Missing row = enabled with
+// no models selected (the Haiku fallback): the singleton is created lazily by
+// the first toggle or picker save.
+export async function getScanPrefs(): Promise<{ enabled: boolean; enrich_models: string[] }> {
+  const row = await one<{ enabled: boolean; enrich_models: string[] }>(
+    `select enabled, enrich_models from scan_prefs where id = true`
+  );
+  return { enabled: row?.enabled ?? true, enrich_models: row?.enrich_models ?? [] };
+}
+
+// The A/B comparison behind the /scan "Model A/B" table: per enriching model
+// over the trailing window, quality proxies from scan_items joined with
+// latency + spend from ai_cost_log (feature scan_enrich, grouped by model).
+// Human judgment stays the real evaluator; these are the measurable halves.
+export interface EnrichModelStat {
+  model: string;
+  items: number;
+  errors: number;
+  avgRelevance: number | null;
+  avgTags: number | null;
+  avgSummaryChars: number | null;
+  avgWallMs: number | null;
+  costUsd: number;
+  costPerItem: number | null;
+}
+
+export async function getEnrichModelStats(days = 30): Promise<EnrichModelStat[]> {
+  const interval = `${Math.max(1, Math.round(days))} days`;
+  const rows = await q<{
+    model: string; items: number; errors: number;
+    avg_relevance: number | null; avg_tags: number | null; avg_summary_chars: number | null;
+    avg_wall_ms: number | null; cost_usd: number | null; calls: number | null;
+  }>(
+    `select i.enriched_by as model,
+            count(*) filter (where i.enrich_status = 'done')::int as items,
+            count(*) filter (where i.enrich_status = 'error')::int as errors,
+            round(avg(i.relevance) filter (where i.enrich_status = 'done')::numeric, 2) as avg_relevance,
+            round(avg(cardinality(i.tags)) filter (where i.enrich_status = 'done')::numeric, 1) as avg_tags,
+            round(avg(length(i.summary)) filter (where i.enrich_status = 'done')::numeric, 0) as avg_summary_chars,
+            l.avg_wall_ms, l.cost_usd, l.calls
+       from scan_items i
+       join scan_runs r on r.id = i.run_id and r.day > current_date - $1::interval
+       left join (
+         select model, round(avg(wall_ms))::int as avg_wall_ms,
+                sum(cost_usd)::numeric as cost_usd, count(*)::int as calls
+           from ai_cost_log
+          where feature = 'scan_enrich' and created_at > now() - $1::interval
+          group by model
+       ) l on l.model = i.enriched_by
+      where i.enriched_by is not null
+      group by i.enriched_by, l.avg_wall_ms, l.cost_usd, l.calls
+      order by items desc, i.enriched_by`,
+    [interval]
+  );
+  return rows.map((r) => ({
+    model: r.model,
+    items: r.items,
+    errors: r.errors,
+    avgRelevance: r.avg_relevance,
+    avgTags: r.avg_tags === null ? null : Number(r.avg_tags),
+    avgSummaryChars: r.avg_summary_chars === null ? null : Number(r.avg_summary_chars),
+    avgWallMs: r.avg_wall_ms,
+    costUsd: r.cost_usd ?? 0,
+    costPerItem: r.calls ? Number(((r.cost_usd ?? 0) / r.calls).toFixed(4)) : null,
+  }));
 }
 
 // For the /scan Firewall exports panel: how many rows the signals-export

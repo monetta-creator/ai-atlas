@@ -57,7 +57,8 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   fetched_via: { type: 'string', nullable: true, enum: ['direct', 'jina'] },
   text_chars: { type: 'number', nullable: true },
   full_text: { type: 'string', nullable: true },
-  // signals-export extras (appended after the shared nineteen).
+  enriched_by: { type: 'string', nullable: true },
+  // signals-export extras (appended after the shared scan-shaped columns).
   significance: { type: 'string', nullable: false, enum: ['high', 'medium', 'low'] },
   lenses: { type: 'string', nullable: false },
   origin: { type: 'string', nullable: false, enum: ['manual', 'pipeline'] },
@@ -323,9 +324,9 @@ writeup gives you most of that work pre-done.
 
 ## 2. Relationship to the external-scan contract
 
-- The first NINETEEN columns are the external-scan row keys, in the same
-  order, with the same types and nullability: a row here validates against
-  the external-scan row schema unchanged. Reuse the intake as-is.
+- The leading columns are the external-scan row keys, in the same order,
+  with the same types and nullability: a row here validates against the
+  external-scan row schema unchanged. Reuse the intake as-is.
 - The remaining columns are signal-native detail, appended: the additive
   policy already told the intake to tolerate (or store) unknown fields.
 - Differences in semantics, not shape:

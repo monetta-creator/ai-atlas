@@ -125,6 +125,72 @@ export function clamp01(n: unknown): number | null {
   return Math.round(Math.min(1, Math.max(0, v)) * 100) / 100;
 }
 
+// First balanced {...} block in a model response that may wrap its JSON in
+// prose or a ```json fence (open-weight models are sloppier than a forced
+// tool). The caller's schema validation is the real guard; this just finds
+// and parses the object. Pure; the OpenRouter client (lib/scan/llm.ts) uses it.
+export function extractJsonObject(text: string): unknown {
+  const s = String(text ?? '');
+  const start = s.indexOf('{');
+  if (start < 0) throw new Error('no JSON object in model response');
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return JSON.parse(s.slice(start, i + 1));
+    }
+  }
+  throw new Error('unterminated JSON object in model response');
+}
+
+// Map one Tavily news-search response's results onto the scan item shape:
+// drop non-http URLs and deny-listed domains (suffix match, so a subdomain of
+// a listed domain is caught too), normalize dates to YYYY-MM-DD. Pure and
+// injected-deny-list so the plain-Node test drives it directly.
+export interface TavilyResult {
+  title?: string;
+  url?: string;
+  published_date?: string;
+}
+
+export function mapTavilyResults(
+  results: TavilyResult[] | undefined,
+  blockedDomains: string[] = []
+): { url: string; headline: string; source_domain: string; published_date: string }[] {
+  const out: { url: string; headline: string; source_domain: string; published_date: string }[] = [];
+  for (const r of results ?? []) {
+    const url = String(r.url ?? '').trim();
+    if (!/^https?:\/\//i.test(url)) continue;
+    let domain = '';
+    try {
+      domain = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+    } catch {
+      continue;
+    }
+    if (blockedDomains.some((b) => domain === b || domain.endsWith(`.${b}`))) continue;
+    const rawDate = String(r.published_date ?? '').trim();
+    const parsed = rawDate ? Date.parse(rawDate) : NaN;
+    out.push({
+      url,
+      headline: String(r.title ?? '').trim().slice(0, 500),
+      source_domain: domain,
+      published_date: Number.isNaN(parsed) ? '' : new Date(parsed).toISOString().slice(0, 10),
+    });
+  }
+  return out;
+}
+
 // The next topic the search leg should run: active, has queries, not yet
 // checkpointed in searched_topics. Null when the leg is done.
 export function nextSearchTopic<T extends { slug: string; active: boolean; search_queries: string[] }>(

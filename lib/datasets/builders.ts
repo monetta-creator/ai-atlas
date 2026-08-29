@@ -373,7 +373,8 @@ export async function buildExternalScan(q: Q, opts: DatasetOpts = {}): Promise<D
             i.fetch_status::text as fetch_status,
             i.fetched_via,
             length(i.raw_content) as text_chars,
-            i.raw_content as full_text
+            i.raw_content as full_text,
+            i.enriched_by
        from scan_items i
        join scan_runs r on r.id = i.run_id
        left join scan_topics t on t.slug = i.topic_slug
@@ -491,6 +492,7 @@ export async function buildSignalsExport(q: Q, opts: DatasetOpts = {}): Promise<
       fetched_via: null,
       text_chars: [...fullText].length,
       full_text: fullText,
+      enriched_by: null,
       significance: s.significance,
       lenses: (s.lenses ?? []).join('; '),
       origin: s.origin,

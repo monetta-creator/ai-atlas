@@ -1,16 +1,20 @@
 import { runStructured } from '../dossier';
 import { clamp01 } from './core';
+import { chatJSONOpenRouter } from './llm';
+import { SCAN_ENRICH_MODELS } from './models';
 import type { ScanTopic } from '../types';
 
-// The scan's light enrichment: one Haiku call per hydrated item producing a
-// short summary, taxonomy tags (allow-listed against the active topics),
-// named entities, and an advisory relevance. Deliberately judgment-light: the
-// downstream tool decides what is a signal; off-topic items get LOW RELEVANCE,
-// never dropped.
+// The scan's light enrichment: one small-model call per hydrated item
+// producing a short summary, taxonomy tags (allow-listed against the active
+// topics), named entities, and an advisory relevance. Deliberately
+// judgment-light: the downstream tool decides what is a signal; off-topic
+// items get LOW RELEVANCE, never dropped.
 //
-// The taxonomy digest rides in the system block (cache_control ephemeral via
-// runStructured), so sequential per-item calls within the cache TTL pay for it
-// once. Cost-log discipline: feature 'scan_enrich', provenance in
+// Two provider paths, same prompts, same validation: the /scan picker's
+// OpenRouter models (lib/scan/llm.ts, JSON-object output) or the Haiku
+// baseline via runStructured (forced tool; also the fallback when no model is
+// selected). The taxonomy digest rides in the system block either way.
+// Cost-log discipline: feature 'scan_enrich', provenance in
 // metadata.scan_run, NEVER pipelineRunId (the ai_cost_log FK trap).
 
 const ENRICH_MODEL = 'claude-haiku-4-5';
@@ -70,7 +74,8 @@ function taxonomyDigest(topics: Pick<ScanTopic, 'taxonomy_code' | 'name' | 'desc
 export async function enrichScanItem(
   item: { id: string; url: string; headline: string | null; source_domain: string | null; raw_content: string },
   topics: Pick<ScanTopic, 'taxonomy_code' | 'name' | 'description'>[],
-  scanRunId: string
+  scanRunId: string,
+  model?: string
 ): Promise<ScanEnrichment> {
   const codes = [...new Set(topics.map((t) => t.taxonomy_code))];
   const system = `You are the enrichment pass of an external news scan for a financial services strategy team. For each item you receive, write a short factual summary, tag it with taxonomy codes, list the named entities, and score its relevance.
@@ -88,26 +93,46 @@ HEADLINE: ${item.headline ?? ''}
 TEXT:
 ${item.raw_content.slice(0, MAX_INPUT_CHARS)}`;
 
-  const raw = await runStructured<RawEnrichment>({
-    system,
-    user,
-    toolName: 'submit_enrichment',
-    toolDescription: 'Return the enrichment for this item.',
-    schema: enrichSchema(codes),
-    maxTokens: 700,
-    effort: 'low',
-    feature: 'scan_enrich',
-    metadata: { scan_run: scanRunId, item: item.id },
-    timeoutMs: 30_000,
-    maxRetries: 0,
-    model: ENRICH_MODEL,
-  });
+  const openrouter = model && !SCAN_ENRICH_MODELS.find((m) => m.id === model)?.anthropic;
+  const raw = openrouter
+    ? await chatJSONOpenRouter<RawEnrichment>({
+        model: model as string,
+        system: `${system}
 
+Reply with ONLY a single JSON object, no prose and no code fence, with exactly these keys:
+  "summary": string, two to three sentences (what happened, why it matters to banking and financial services strategy)
+  "taxonomy_codes": array of code strings, from the taxonomy list only, usually one or two
+  "entities": array of proper names (companies, agencies, regulators, people) named in the item
+  "relevance": number from 0.0 (unrelated) to 1.0 (directly material)`,
+        user,
+        maxTokens: 700,
+        feature: 'scan_enrich',
+        metadata: { scan_run: scanRunId, item: item.id },
+        timeoutMs: 30_000,
+      })
+    : await runStructured<RawEnrichment>({
+        system,
+        user,
+        toolName: 'submit_enrichment',
+        toolDescription: 'Return the enrichment for this item.',
+        schema: enrichSchema(codes),
+        maxTokens: 700,
+        effort: 'low',
+        feature: 'scan_enrich',
+        metadata: { scan_run: scanRunId, item: item.id },
+        timeoutMs: 30_000,
+        maxRetries: 0,
+        model: ENRICH_MODEL,
+      });
+
+  // Open-weight models can return sloppier shapes than the forced tool, so
+  // coerce arrays defensively; the allow-list and clamp do the real guarding.
+  const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
   const allowed = new Set(codes);
   return {
     summary: String(raw.summary ?? '').trim().slice(0, 1500),
-    tags: [...new Set((raw.taxonomy_codes ?? []).filter((c) => allowed.has(c)))],
-    entities: [...new Set((raw.entities ?? []).map((e) => String(e).trim()).filter(Boolean))].slice(0, 20),
+    tags: [...new Set(arr(raw.taxonomy_codes).map((c) => String(c).trim()).filter((c) => allowed.has(c)))],
+    entities: [...new Set(arr(raw.entities).map((e) => String(e).trim()).filter(Boolean))].slice(0, 20),
     relevance: clamp01(raw.relevance),
   };
 }

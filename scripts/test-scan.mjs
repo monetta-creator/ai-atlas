@@ -9,7 +9,9 @@ import assert from 'node:assert/strict';
 import pg from 'pg';
 import {
   parseFeedXml, decodeEntities, withinWindow, clamp01, nextSearchTopic, lookbackDays,
+  mapTavilyResults, extractJsonObject,
 } from '../lib/scan/core.ts';
+import { SCAN_ENRICH_MODELS, pickEnrichModel, isScanEnrichModel } from '../lib/scan/models.ts';
 import {
   buildScanHandoff, buildSignalsExportHandoff, buildRowJsonSchema, cronLabel,
 } from '../lib/scan/handoff.ts';
@@ -139,6 +141,50 @@ check('nextSearchTopic skips inactive, feeds-only, and searched topics', () => {
   assert.equal(nextSearchTopic(topics, ['c', 'd']), null);
 });
 
+check('mapTavilyResults: maps, blocks by suffix, normalizes dates, drops junk', () => {
+  const items = mapTavilyResults(
+    [
+      { title: 'Fed rule', url: 'https://www.example.gov/a', published_date: 'Fri, 28 Aug 2026 10:00:00 GMT' },
+      { title: 'PR spam', url: 'https://news.prnewswire.com/x', published_date: '2026-08-28' },
+      { title: 'No date', url: 'https://example.com/b' },
+      { title: 'Junk', url: 'not-a-url' },
+    ],
+    ['prnewswire.com']
+  );
+  assert.equal(items.length, 2);
+  assert.equal(items[0].source_domain, 'example.gov');
+  assert.equal(items[0].published_date, '2026-08-28');
+  assert.equal(items[1].published_date, '');
+});
+
+check('extractJsonObject: clean, fenced, prose-wrapped, nested, braces in strings', () => {
+  assert.deepEqual(extractJsonObject('{"a":1}'), { a: 1 });
+  assert.deepEqual(extractJsonObject('Sure!\n```json\n{"a":{"b":2}}\n```\nDone.'), { a: { b: 2 } });
+  assert.deepEqual(extractJsonObject('note {"s":"has } brace","n":3} trailing'), { s: 'has } brace', n: 3 });
+  assert.throws(() => extractJsonObject('no json here'));
+  assert.throws(() => extractJsonObject('{"unterminated": tr'));
+});
+
+check('pickEnrichModel: deterministic, roughly balanced, null on empty', () => {
+  assert.equal(pickEnrichModel([], 'abc'), null);
+  const models = ['m1', 'm2'];
+  const id = '872251fe-0000-0000-0000-000000000000';
+  assert.equal(pickEnrichModel(models, id), pickEnrichModel(models, id));
+  const counts = { m1: 0, m2: 0 };
+  for (let i = 0; i < 200; i++) {
+    const fake = i.toString(16).padStart(8, '0') + '-x';
+    counts[pickEnrichModel(models, fake)] += 1;
+  }
+  assert.ok(counts.m1 > 50 && counts.m2 > 50, `skewed split ${counts.m1}/${counts.m2}`);
+});
+
+check('model registry: valid ids, exactly one Anthropic baseline', () => {
+  assert.ok(SCAN_ENRICH_MODELS.length >= 3);
+  for (const m of SCAN_ENRICH_MODELS) assert.ok(isScanEnrichModel(m.id));
+  assert.ok(!isScanEnrichModel('gpt-nonexistent'));
+  assert.equal(SCAN_ENRICH_MODELS.filter((m) => m.anthropic).length, 1);
+});
+
 // ---- The importer handoff: schema generation must track the registry ------
 
 const scanDef = getDataset('external-scan');
@@ -187,7 +233,7 @@ check('cronLabel renders daily and weekday crons, passes odd schedules through',
 
 const signalsDef = getDataset('signals-export');
 
-check('signals-export: first nineteen columns mirror external-scan key for key', () => {
+check('signals-export: leading columns mirror external-scan key for key', () => {
   assert.ok(signalsDef, 'signals-export def missing from the registry');
   const scanKeys = scanDef.columns.map((c) => c.key);
   const sigKeys = signalsDef.columns.slice(0, scanKeys.length).map((c) => c.key);
@@ -250,6 +296,18 @@ const { rows: dupes } = await client.query(
 );
 check('no duplicate normalized_url within any run', () => {
   assert.equal(dupes.length, 0);
+});
+
+// Every non-Anthropic registry model must have a rate card (0041), or its
+// calls log at cost 0 and checkScanBudget goes blind on that model.
+const orIds = SCAN_ENRICH_MODELS.filter((m) => !m.anthropic).map((m) => m.id);
+const { rows: carded } = await client.query(
+  `select distinct model from ai_rate_cards where model = any($1::text[])`,
+  [orIds]
+);
+check('every OpenRouter registry model has a rate card', () => {
+  const have = new Set(carded.map((r) => r.model));
+  for (const id of orIds) assert.ok(have.has(id), `no rate card for ${id}`);
 });
 
 await client.end();

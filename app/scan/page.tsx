@@ -1,7 +1,11 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
 import { requireAdminPage } from '@/lib/auth';
-import { getScanTopics, getScanRuns, getScanPrefs, getScanHealth, getPublishedSignalCount } from '@/lib/data';
+import {
+  getScanTopics, getScanRuns, getScanPrefs, getScanHealth, getPublishedSignalCount,
+  getEnrichModelStats,
+} from '@/lib/data';
+import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import { getDataset } from '@/lib/datasets/registry';
 import { checkScanBudget } from '@/lib/scan/budget';
 import { buildScanHandoff, buildSignalsExportHandoff, cronLabel } from '@/lib/scan/handoff';
@@ -11,6 +15,7 @@ import ScanConsole from '@/components/scan/ScanConsole';
 import TopicToggle from '@/components/scan/TopicToggle';
 import ScanEnabledToggle from '@/components/scan/ScanEnabledToggle';
 import CopyHandoff from '@/components/scan/CopyHandoff';
+import EnrichModelPicker from '@/components/scan/EnrichModelPicker';
 import ScanCalendar from '@/components/scan/ScanCalendar';
 import type { ScanCalDay } from '@/components/scan/ScanCalendar';
 
@@ -32,10 +37,13 @@ const panel = {
 // key-gated external-scan dataset.
 export default async function ScanPage() {
   const admin = await requireAdminPage();
-  const [topics, runs, prefs, budget, health, signalCount, h] = await Promise.all([
+  const [topics, runs, prefs, budget, health, signalCount, modelStats, h] = await Promise.all([
     getScanTopics(), getScanRuns(130), getScanPrefs(), checkScanBudget(), getScanHealth(30),
-    getPublishedSignalCount(), headers(),
+    getPublishedSignalCount(), getEnrichModelStats(30), headers(),
   ]);
+  const tavily = Boolean(process.env.TAVILY_API_KEY);
+  const openrouter = Boolean(process.env.OPENROUTER_API_KEY);
+  const modelLabel = new Map(SCAN_ENRICH_MODELS.map((m) => [m.id, m.label]));
   const def = getDataset('external-scan');
   const signalsDef = getDataset('signals-export');
   const hostName = h.get('host') ?? 'localhost:3000';
@@ -163,15 +171,29 @@ export default async function ScanPage() {
               </span>
               <span>
                 CRON_SECRET: {process.env.CRON_SECRET ? 'set' : 'MISSING, the cron route refuses everything'} ·
-                {' '}JINA_API_KEY: {process.env.JINA_API_KEY ? 'set' : 'unset (keyless reader fallback, rate-limited)'}
+                {' '}JINA_API_KEY: {process.env.JINA_API_KEY ? 'set' : 'unset (keyless reader fallback, rate-limited)'} ·
+                {' '}TAVILY_API_KEY: {tavily ? 'set' : 'unset'} ·
+                {' '}OPENROUTER_API_KEY: {openrouter ? 'set' : 'unset'}
               </span>
               <span>
-                Models: claude-sonnet-4-6 (one web search per query-bearing topic) · claude-haiku-4-5 (per-item enrichment)
+                Search: {tavily
+                  ? 'Tavily news search (LLM-free, free tier)'
+                  : 'claude-sonnet-4-6 + web_search (set TAVILY_API_KEY to switch to the free leg)'}
+                {' '}· Enrichment: {prefs.enrich_models.length
+                  ? prefs.enrich_models.map((id) => modelLabel.get(id) ?? id).join(' / ') + ' via OpenRouter'
+                  : 'claude-haiku-4-5 (fallback; pick models below)'}
               </span>
               <span>
                 Cron SCHEDULES are deploy-time config (vercel.json, shown live above): changing the times is a
                 one-line edit plus a push. The toggle here pauses or resumes what the crons actually do.
               </span>
+            </div>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
+              <div className="text-xs" style={{ color: 'var(--faint-ink)', marginBottom: 8 }}>
+                Enrichment model{prefs.enrich_models.length > 1 ? 's' : ''} · picking two or more splits items
+                across them for the A/B table below{openrouter ? '' : '. OPENROUTER_API_KEY is unset, so non-Claude picks will error until it is added'}
+              </div>
+              <EnrichModelPicker selected={prefs.enrich_models} />
             </div>
           </div>
         </section>
@@ -336,6 +358,48 @@ export default async function ScanPage() {
               </div>
             ))}
           </div>
+
+          {modelStats.length > 0 && (
+            <div style={{ marginTop: 14 }}>
+              <div className="text-xs" style={{ color: 'var(--faint-ink)', marginBottom: 8 }}>
+                Model A/B · last {health.days} days · quality is yours to judge from the summaries; these are the measurable halves
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="text-xs" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: 'var(--faint-ink)' }}>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)' }}>model</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>items</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>errors</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>avg relevance</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>avg tags</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>summary chars</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>avg ms</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>$/item</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>total $</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modelStats.map((m) => (
+                      <tr key={m.model} style={{ color: 'var(--dim)' }}>
+                        <td style={{ padding: '4px 10px', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', borderBottom: '1px solid var(--line)' }}>
+                          {modelLabel.get(m.model) ?? m.model}
+                        </td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{m.items}</td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)', color: m.errors > 0 ? 'var(--heat-4)' : undefined }}>{m.errors}</td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{m.avgRelevance === null ? '–' : m.avgRelevance.toFixed(2)}</td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{m.avgTags === null ? '–' : m.avgTags.toFixed(1)}</td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{m.avgSummaryChars === null ? '–' : m.avgSummaryChars}</td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{m.avgWallMs ?? '–'}</td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{m.costPerItem === null ? '–' : `$${m.costPerItem.toFixed(4)}`}</td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>${m.costUsd.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           <details style={{ marginTop: 14 }}>
             <summary className="text-xs" style={{ color: 'var(--faint-ink)', cursor: 'pointer' }}>
