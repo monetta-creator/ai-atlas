@@ -1,5 +1,5 @@
 import { q, one } from '../db';
-import type { IntelCompany, IntelRun, IntelPrefs, IntelTier } from '../types';
+import type { IntelCompany, IntelRun, IntelPrefs, IntelTier, IntelMetricSource } from '../types';
 
 // ---- Intel Desk (migration 0043) --------------------------------------------
 // Reads for the collection engine and the admin console. The whole surface is
@@ -231,6 +231,48 @@ export async function getIntelHealth(days = 30): Promise<IntelHealth> {
     spendUsd: spend?.usd ?? 0,
     issues: issueRows,
   };
+}
+
+// The metrics-coverage readout behind an /intel history panel: per source
+// (edgar_xbrl, fdic, cfpb, y9c) how many rows, over what period range, and
+// across how many companies. stale is derived in JS rather than SQL: true for
+// the three quarterly sources when the newest period is older than 200 days
+// (two missed quarters); cfpb is monthly and cron-owned, so it never flags.
+const QUARTERLY_METRIC_SOURCES: ReadonlySet<IntelMetricSource> = new Set(['edgar_xbrl', 'fdic', 'y9c']);
+
+export interface IntelMetricsCoverage {
+  source: IntelMetricSource;
+  rows: number;
+  oldest: string | null;
+  newest: string | null;
+  companies: number;
+  stale: boolean;
+}
+
+export async function getIntelMetricsCoverage(): Promise<IntelMetricsCoverage[]> {
+  const rows = await q<{
+    source: IntelMetricSource; rows: number; oldest: string | null; newest: string | null; companies: number;
+  }>(
+    `select source, count(*)::int as rows,
+            to_char(min(period), 'YYYY-MM-DD') as oldest,
+            to_char(max(period), 'YYYY-MM-DD') as newest,
+            count(distinct company_slug)::int as companies
+       from intel_metrics
+      group by source
+      order by source`
+  );
+  const now = Date.now();
+  return rows.map((r) => {
+    const ageDays = r.newest ? (now - new Date(`${r.newest}T00:00:00Z`).getTime()) / 86_400_000 : null;
+    return {
+      source: r.source,
+      rows: r.rows,
+      oldest: r.oldest,
+      newest: r.newest,
+      companies: r.companies,
+      stale: QUARTERLY_METRIC_SOURCES.has(r.source) && ageDays !== null && ageDays > 200,
+    };
+  });
 }
 
 // The A/B comparison behind an /intel "Model A/B" table: per enriching model

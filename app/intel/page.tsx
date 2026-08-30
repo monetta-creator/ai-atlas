@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { requireAdminPage } from '@/lib/auth';
 import {
   getIntelPrefs, getIntelCompanies, getIntelRuns, getIntelHealth, getIntelModelStats,
-  getIntelCompanyYield, getTavilyQuota,
+  getIntelCompanyYield, getTavilyQuota, getIntelMetricsCoverage,
 } from '@/lib/data';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import { checkIntelBudget } from '@/lib/intel/budget';
@@ -52,9 +52,9 @@ const TIER_LABEL: Record<IntelTier, string> = {
 // datasets.
 export default async function IntelPage() {
   const admin = await requireAdminPage();
-  const [companies, runs, prefs, budget, health, modelStats, companyYield, quota, h] = await Promise.all([
+  const [companies, runs, prefs, budget, health, modelStats, companyYield, quota, metricsCoverage, h] = await Promise.all([
     getIntelCompanies(), getIntelRuns(130), getIntelPrefs(), checkIntelBudget(), getIntelHealth(30),
-    getIntelModelStats(30), getIntelCompanyYield(30), getTavilyQuota(), headers(),
+    getIntelModelStats(30), getIntelCompanyYield(30), getTavilyQuota(), getIntelMetricsCoverage(), headers(),
   ]);
   const tavily = Boolean(process.env.TAVILY_API_KEY);
   const openrouter = Boolean(process.env.OPENROUTER_API_KEY);
@@ -379,6 +379,49 @@ export default async function IntelPage() {
               </div>
             ))}
           </div>
+
+          {metricsCoverage.length > 0 && (
+            <div className="rounded-[var(--radius)] border p-[var(--card-pad)]" style={{ ...panel, marginTop: 14 }}>
+              <div className="text-xs" style={{ color: 'var(--faint-ink)', marginBottom: 8 }}>
+                Metrics coverage
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="text-xs" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: 'var(--faint-ink)' }}>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)' }}>source</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>rows</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>companies</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)' }}>oldest → newest</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {metricsCoverage.map((m) => (
+                      <tr key={m.source} style={{ color: 'var(--dim)' }}>
+                        <td style={{ padding: '4px 10px', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', borderBottom: '1px solid var(--line)' }}>
+                          {m.source}
+                        </td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{m.rows.toLocaleString()}</td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{m.companies.toLocaleString()}</td>
+                        <td style={{ padding: '4px 10px', fontFamily: 'var(--font-mono)', borderBottom: '1px solid var(--line)' }}>
+                          {m.oldest ?? '–'} → {m.newest ?? '–'}
+                        </td>
+                        <td style={{ padding: '4px 10px', borderBottom: '1px solid var(--line)', color: 'var(--heat-4)' }}>
+                          {m.stale ? 'stale: update needed' : ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 8 }}>
+                fdic, edgar_xbrl and cfpb refresh on the Monday cron. y9c refreshes by the quarterly ritual:
+                download the newest BHCF ZIP from NIC&apos;s Financial Data Download in a browser, then run
+                node scripts/backfill-intel-metrics.mjs --y9c-file=&lt;path&gt;.
+              </div>
+            </div>
+          )}
 
           {modelStats.length > 0 && (
             <div style={{ marginTop: 14 }}>
