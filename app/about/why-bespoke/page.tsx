@@ -19,7 +19,7 @@ const SECTIONS = [
   {
     id: 'market',
     heading: 'Against commercial platforms',
-    body: 'Commercial market-intelligence platforms are genuinely good at what they license: transcripts, broker research, curated financial data. But they are one-size-fits-all by construction: their taxonomy, their schemas, their models, their per-seat pricing, and no say over what gets collected or how it is structured. This system covers the public-source half of that ground (news, filings, regulatory data, a deep structured metrics history) while being the opposite in shape: every layer is ours to change. It is also built to complement licensed platforms rather than replace them: exports carry standard identifiers precisely so licensed data can be joined on top downstream.',
+    body: 'Commercial enterprise research platforms are genuinely good at what they license: transcripts, broker research, curated financial data. But they are one-size-fits-all by construction: their taxonomy, their schemas, their models, their per-seat pricing, and no say over what gets collected or how it is structured. This system covers the public-source half of that ground (news, filings, regulatory data, a deep structured metrics history) while being the opposite in shape: every layer is ours to change. It is also built to complement licensed platforms rather than replace them: exports carry standard identifiers precisely so licensed data can be joined on top downstream.',
   },
   {
     id: 'custom',
@@ -59,7 +59,7 @@ export default async function WhyBespokePage() {
           k="about.whybespoke.lede"
           value={txt(
             'about.whybespoke.lede',
-            'What this does that a general chatbot cannot, where it stands against commercial market-intelligence platforms, and why every layer of it is changeable.'
+            'What this does that a general chatbot cannot, where it stands against commercial enterprise research platforms, and why every layer of it is changeable.'
           )}
           editing={editing}
         />

@@ -144,7 +144,7 @@ export async function buildStoryDeckData(): Promise<CostDeck> {
         ['1x (today)', '~300', `~$${runningUsd}`, 'nothing: the proof of concept as it runs today', 'about 3 percent of one entry-level CI subscription'],
         ['10x', '~3,000', 'under $400', 'higher API allowances; zero structural change', 'about one 10-user enterprise news license'],
         ['100x', '~30,000', 'under $3,600', 'firehose sources in place of polling; object storage', 'about one enterprise media-monitoring contract'],
-        ['1000x', '~300,000', 'under $36,000', 'dedicated inference and pipeline infrastructure', 'about a 10-seat market-intelligence deployment, reading 100M documents a year'],
+        ['1000x', '~300,000', 'under $36,000', 'dedicated inference and pipeline infrastructure', 'about a 10-seat enterprise research platform deployment, reading 100M documents a year'],
       ],
       note: 'These are CEILINGS, not forecasts: straight-line arithmetic at today’s retail prices. The real curve bends below linear four separate ways: token prices fall roughly 10x per year; volume moves inference from retail calls to batch and dedicated serving; a tiered read (a cheap classifier pass over everything, full enrichment only on what clears it) cuts effective per-document cost several-fold; and deduplication means marginal novelty grows slower than raw intake. The frame that matters: this table was paid retail, by one person, to prove the concept. Inside an enterprise, every row is a rounding error against existing data and tooling budgets.',
       takeaway: 'Linear at retail is the worst case, and even the worst case is a rounding error inside the firewall. The build is proven; adoption is a decision.',

@@ -189,7 +189,7 @@ const SAVINGS: { label: string; before: DeckStat; after: DeckStat; factor: strin
 // content is the commercial products' genuine exclusive and is marked as such.
 const MATRIX_COLS = [
   'This system',
-  'Market-intelligence platform',
+  'Enterprise research platform',
   'Financial data terminal',
   'Enterprise news service',
   'CI platform',
@@ -212,7 +212,7 @@ const MATRIX_ROWS: { label: string; cells: ('yes' | 'partial' | 'no')[] }[] = [
 // by editing numbers in place.
 const COMPS: { label: string; example: string; lowUsd: number; highUsd: number; unit: string; source: string }[] = [
   {
-    label: 'Market-intelligence platform',
+    label: 'Enterprise research platform',
     example: 'e.g. AlphaSense',
     lowUsd: 10_000,
     highUsd: 40_000,
