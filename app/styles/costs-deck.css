@@ -1,0 +1,302 @@
+/* ============================================================
+   THE COST DECK (/costs/deck) — a live 16:9 presentation stage.
+   Fixed-aspect letterbox on a dark presentation ground, container-query
+   type so every slide scales with the stage instead of the viewport.
+   Broadsheet voice re-proportioned: Anton headlines, mono kickers, a
+   hairline rule, a standing takeaway band. All classes .cdk-*.
+   ============================================================ */
+
+.cdk-root {
+  position: fixed; inset: 0;
+  min-height: 100dvh; width: 100vw;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in oklab, var(--ink) 92%, black);
+  overflow: hidden;
+  z-index: 40;
+}
+[data-theme="dark"] .cdk-root { background: #05070c; }
+
+.cdk-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: min(100vw, calc(100dvh * 16 / 9));
+  height: min(100dvh, calc(100vw * 9 / 16));
+  background: var(--bg);
+  border: 1px solid color-mix(in oklab, var(--ink) 30%, transparent);
+  box-shadow: 0 40px 100px -30px rgba(0, 0, 0, 0.65);
+  container-type: size;
+  overflow: hidden;
+}
+
+.cdk-slide {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  padding: 4cqw 4.4cqw 0;
+  animation: cdkIn .3s var(--ease-soft);
+}
+@keyframes cdkIn { from { opacity: 0; transform: translateY(1cqh); } to { opacity: 1; transform: none; } }
+
+.cdk-kicker {
+  font-family: var(--font-mono); font-weight: 600;
+  font-size: 1.5cqw; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--accent);
+}
+.cdk-rule { border-top: 0.28cqw solid var(--ink); border-bottom: 0.09cqw solid var(--ink); height: 0.5cqw; margin-top: 0.8cqh; }
+
+.cdk-h2 {
+  font-family: var(--font-headline); font-weight: 400;
+  font-size: 4.4cqw; line-height: 1.05; letter-spacing: 0.002em;
+  margin: 1.6cqh 0 0; text-wrap: balance; color: var(--ink);
+}
+.cdk-subtitle {
+  font-size: 1.7cqw; line-height: 1.5; color: var(--dim);
+  margin: 1.4cqh 0 0; max-width: 76cqw;
+}
+
+/* body region below the header block, fills remaining stage height */
+.cdk-body {
+  flex: 1; min-height: 0;
+  display: flex; flex-direction: column;
+  margin-top: 2cqh;
+}
+
+/* ---- takeaway band: standing footer on every content slide ---- */
+.cdk-takeaway {
+  margin-top: auto;
+  padding: 1.6cqh 0 3cqh;
+  border-top: 0.09cqw solid var(--line);
+}
+.cdk-takeaway-k {
+  font-family: var(--font-mono); font-size: 1cqw; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint-ink);
+  margin-bottom: 0.5cqh;
+}
+.cdk-takeaway-t { font-size: 1.65cqw; line-height: 1.4; color: var(--ink); max-width: 92cqw; }
+
+/* ---- title slide ---- */
+.cdk-title { justify-content: center; align-items: flex-start; text-align: left; }
+.cdk-title .cdk-h2 { font-size: 5.6cqw; }
+.cdk-title .cdk-subtitle { font-size: 1.85cqw; max-width: 82cqw; margin-top: 2cqh; }
+.cdk-title-stat { margin-top: 4cqh; display: flex; flex-direction: column; gap: 0.6cqh; }
+.cdk-bigstat-n {
+  font-family: var(--font-headline); font-weight: 400;
+  font-size: 7cqw; line-height: 1; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.cdk-bigstat-l { font-size: 1.4cqw; color: var(--dim); max-width: 60cqw; }
+.cdk-title-date {
+  position: absolute; bottom: 3cqh; right: 4cqw;
+  font-family: var(--font-mono); font-size: 1.1cqw; color: var(--faint-ink);
+}
+
+/* ---- generic mono figure ---- */
+.cdk-fig { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* ---- bill slide ---- */
+.cdk-bill-cols { display: grid; grid-template-columns: 1.1fr 1fr; gap: 3.5cqw; flex: 1; min-height: 0; }
+.cdk-bill-running {
+  display: flex; align-items: baseline; gap: 1cqw;
+  margin-bottom: 1.6cqh;
+}
+.cdk-bill-running .cdk-bigstat-n { font-size: 6cqw; }
+.cdk-bill-running-l { font-size: 1.3cqw; color: var(--dim); }
+.cdk-table { width: 100%; border-collapse: collapse; }
+.cdk-table th {
+  text-align: left; font-family: var(--font-mono); font-size: 1cqw;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint-ink);
+  font-weight: 600; padding: 0 0.6cqw 0.8cqh;
+}
+.cdk-table th.cdk-num { text-align: right; }
+.cdk-table td {
+  padding: 1cqh 0.6cqw; border-top: 0.07cqw solid var(--line);
+  font-size: 1.45cqw; color: var(--dim); vertical-align: top;
+}
+.cdk-table td.cdk-num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.cdk-table td .cdk-cell-main { color: var(--ink); }
+.cdk-table td .cdk-cell-sub { font-size: 1.1cqw; color: var(--faint-ink); margin-top: 0.3cqh; }
+.cdk-table tr.cdk-total td { border-top: 0.14cqw solid var(--ink); font-weight: 600; color: var(--ink); }
+
+.cdk-metered-stats { display: flex; flex-direction: column; gap: 2cqh; margin-top: 0.6cqh; }
+.cdk-metered-row { display: flex; align-items: baseline; justify-content: space-between; gap: 1cqw; border-top: 0.07cqw solid var(--line); padding-top: 1.2cqh; }
+.cdk-metered-row:first-child { border-top: none; padding-top: 0; }
+.cdk-metered-n { font-family: var(--font-headline); font-size: 2.6cqw; color: var(--ink); font-variant-numeric: tabular-nums; }
+.cdk-metered-l { font-size: 1.25cqw; color: var(--faint-ink); }
+
+/* ---- bar-table slide ---- */
+.cdk-bars { display: flex; flex-direction: column; gap: 1.4cqh; flex: 1; overflow: auto; }
+.cdk-bar-row { display: grid; grid-template-columns: 15cqw 1fr auto; align-items: center; gap: 1.4cqw; }
+.cdk-bar-label { font-size: 1.4cqw; color: var(--ink); line-height: 1.3; }
+.cdk-bar-sub { font-size: 1cqw; color: var(--faint-ink); margin-top: 0.2cqh; }
+.cdk-bar-track { position: relative; height: 2.2cqh; background: color-mix(in oklab, var(--ink) 6%, transparent); border-radius: 0.2cqw; overflow: hidden; }
+.cdk-bar-fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); opacity: 0.75; }
+.cdk-bar-cols { display: flex; gap: 1.6cqw; font-family: var(--font-mono); font-size: 1.15cqw; color: var(--dim); font-variant-numeric: tabular-nums; }
+.cdk-bar-cols span { min-width: 5cqw; text-align: right; }
+.cdk-bar-colheads { display: grid; grid-template-columns: 15cqw 1fr auto; gap: 1.4cqw; margin-bottom: 0.8cqh; }
+.cdk-bar-colheads-cols { display: flex; gap: 1.6cqw; font-family: var(--font-mono); font-size: 1cqw; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint-ink); }
+.cdk-bar-colheads-cols span { min-width: 5cqw; text-align: right; }
+
+/* ---- forecast-chart slide ---- */
+.cdk-forecast-head { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1cqh; }
+.cdk-forecast-figs { display: flex; gap: 2.4cqw; }
+.cdk-forecast-fig { text-align: right; }
+.cdk-forecast-fig .cdk-fig-n { font-family: var(--font-headline); font-size: 2.2cqw; color: var(--ink); }
+.cdk-forecast-fig .cdk-fig-l { font-family: var(--font-mono); font-size: 0.95cqw; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint-ink); }
+.cdk-forecast-svg { flex: 1; min-height: 0; width: 100%; }
+
+/* ---- before-after slide ---- */
+.cdk-ba-list { display: flex; flex-direction: column; gap: 1.6cqh; flex: 1; overflow: auto; }
+.cdk-ba-row {
+  display: grid; grid-template-columns: 14cqw 1fr auto 1fr auto; align-items: center; gap: 1.6cqw;
+  padding: 1.4cqh 0; border-top: 0.07cqw solid var(--line);
+}
+.cdk-ba-row:first-child { border-top: none; }
+.cdk-ba-label { font-size: 1.4cqw; color: var(--ink); line-height: 1.3; }
+.cdk-ba-stat-n { font-family: var(--font-headline); font-variant-numeric: tabular-nums; }
+.cdk-ba-before .cdk-ba-stat-n { font-size: 2.2cqw; color: var(--faint-ink); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--faint-ink) 60%, transparent); }
+.cdk-ba-before .cdk-ba-stat-l { font-size: 1cqw; color: var(--faint-ink); }
+.cdk-ba-after .cdk-ba-stat-n { font-size: 3cqw; color: var(--accent); }
+.cdk-ba-after .cdk-ba-stat-l { font-size: 1.05cqw; color: var(--dim); }
+.cdk-ba-arrow { font-size: 2cqw; color: var(--accent); text-align: center; }
+.cdk-ba-factor {
+  justify-self: end; font-family: var(--font-mono); font-weight: 600; font-size: 1.3cqw;
+  padding: 0.5cqh 1cqw; border-radius: 999px; background: color-mix(in oklab, var(--accent) 14%, transparent);
+  color: var(--accent); white-space: nowrap;
+}
+.cdk-ba-footnote { font-size: 1.1cqw; color: var(--faint-ink); margin-top: 1cqh; }
+
+/* ---- plain table slide ---- */
+.cdk-table-wrap { flex: 1; min-height: 0; overflow: auto; }
+.cdk-table-note { font-size: 1.1cqw; color: var(--faint-ink); margin-top: 1.2cqh; }
+
+/* ---- stat-grid slide ---- */
+.cdk-stat-grid {
+  flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
+  gap: 2cqh 2.4cqw; align-content: center;
+}
+.cdk-stat-cell { display: flex; flex-direction: column; gap: 0.5cqh; padding: 1.6cqh 0; border-top: 0.07cqw solid var(--line); }
+.cdk-stat-n { font-family: var(--font-headline); font-size: 3.2cqw; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1; }
+.cdk-stat-l { font-family: var(--font-mono); font-size: 1cqw; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint-ink); }
+.cdk-stat-sub { font-size: 1.1cqw; color: var(--dim); }
+.cdk-stat-note { font-size: 1.1cqw; color: var(--faint-ink); margin-top: auto; padding-top: 1.2cqh; }
+
+/* ---- divider slide ---- */
+.cdk-divider { justify-content: center; align-items: center; text-align: center; }
+.cdk-divider .cdk-kicker { font-size: 1.4cqw; }
+.cdk-divider .cdk-h2 { font-size: 5.6cqw; margin-top: 1.8cqh; }
+.cdk-divider .cdk-subtitle { font-size: 1.7cqw; margin: 1.6cqh auto 0; text-align: center; }
+
+/* ---- matrix slide ---- */
+.cdk-matrix-wrap { flex: 1; min-height: 0; overflow: auto; }
+.cdk-matrix { width: 100%; border-collapse: collapse; }
+.cdk-matrix th { text-align: center; font-family: var(--font-mono); font-size: 0.95cqw; letter-spacing: 0.04em; color: var(--faint-ink); font-weight: 600; padding: 0 0.6cqw 0.9cqh; vertical-align: bottom; }
+.cdk-matrix th:first-child { text-align: left; }
+.cdk-matrix td { padding: 1cqh 0.6cqw; border-top: 0.07cqw solid var(--line); text-align: center; }
+.cdk-matrix td:first-child { text-align: left; font-size: 1.25cqw; color: var(--ink); }
+.cdk-matrix-cell { display: inline-flex; align-items: center; justify-content: center; }
+.cdk-dot-yes { width: 0.9cqw; height: 0.9cqw; border-radius: 50%; background: var(--accent); display: inline-block; }
+.cdk-dot-partial {
+  width: 0.9cqw; height: 0.9cqw; border-radius: 50%; display: inline-block;
+  border: 0.13cqw solid var(--accent); background: transparent;
+}
+.cdk-partial-label { font-family: var(--font-mono); font-size: 0.85cqw; color: var(--accent); margin-left: 0.4cqw; }
+.cdk-dot-no { color: var(--faint-ink); font-size: 1.2cqw; }
+.cdk-matrix-note { font-size: 1.05cqw; color: var(--faint-ink); line-height: 1.5; margin-top: 1.2cqh; max-width: 96cqw; }
+
+/* ---- price-compare slide ---- */
+.cdk-pc-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 1.3cqh; }
+.cdk-pc-ours {
+  display: flex; align-items: baseline; gap: 1cqw; padding: 1.2cqh 1.4cqw;
+  border: 0.09cqw solid var(--accent); border-radius: 0.3cqw;
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  margin-bottom: 0.6cqh;
+}
+.cdk-pc-ours-n { font-family: var(--font-headline); font-size: 2.6cqw; color: var(--accent); font-variant-numeric: tabular-nums; }
+.cdk-pc-ours-l { font-size: 1.2cqw; color: var(--dim); }
+.cdk-pc-sources { display: flex; flex-direction: column; gap: 0.4cqh; margin-top: 0.6cqh; }
+.cdk-pc-source-row { font-size: 0.95cqw; line-height: 1.4; color: var(--faint-ink); }
+.cdk-pc-source-row strong { color: var(--dim); font-weight: 600; }
+.cdk-pc-footnote { font-size: 1.05cqw; color: var(--faint-ink); line-height: 1.5; margin-top: 1cqh; max-width: 96cqw; }
+
+/* ============================================================
+   CHROME — controller frame around the stage: nav zones, dots,
+   counter, escape overview, back link, PDF button.
+   ============================================================ */
+.cdk-chrome-top {
+  position: fixed; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px; z-index: 50; pointer-events: none;
+}
+.cdk-chrome-top > * { pointer-events: auto; }
+.cdk-back {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.85); text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(15, 23, 42, 0.55); border-radius: 999px; padding: 6px 12px;
+  backdrop-filter: blur(4px);
+  transition: color .18s, background .18s;
+}
+.cdk-back:hover { color: #fff; background: rgba(15, 23, 42, 0.75); }
+.cdk-chrome-actions { display: flex; align-items: center; gap: 10px; }
+.cdk-pdf-btn {
+  font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.85); background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 999px; backdrop-filter: blur(4px);
+  padding: 6px 14px; cursor: pointer; transition: background .18s, color .18s;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+}
+.cdk-pdf-btn:hover { background: rgba(15, 23, 42, 0.75); color: #fff; }
+.cdk-count {
+  font-family: var(--font-mono); font-size: 12px; color: rgba(255, 255, 255, 0.85);
+  font-variant-numeric: tabular-nums;
+  background: rgba(15, 23, 42, 0.55); border-radius: 999px; padding: 6px 12px;
+  backdrop-filter: blur(4px);
+}
+
+.cdk-tap {
+  position: absolute; top: 0; bottom: 0; width: 11%;
+  background: none; border: none; cursor: pointer; z-index: 5;
+}
+.cdk-tap--left { left: 0; }
+.cdk-tap--right { right: 0; }
+
+.cdk-dots {
+  position: fixed; bottom: 20px; left: 0; right: 0;
+  display: flex; justify-content: center; gap: 8px; z-index: 50;
+}
+.cdk-dot {
+  width: 7px; height: 7px; border-radius: 50%; padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.3); background: transparent; cursor: pointer;
+  transition: background .18s, border-color .18s;
+}
+.cdk-dot[data-active] { background: var(--accent); border-color: var(--accent); }
+
+.cdk-overview {
+  position: fixed; inset: 0; z-index: 55;
+  background: color-mix(in oklab, var(--ink) 92%, black);
+  min-height: 100dvh; padding: 40px 32px;
+  display: flex; flex-direction: column; gap: 16px;
+  overflow-y: auto;
+}
+[data-theme="dark"] .cdk-overview { background: #05070c; }
+.cdk-overview-head {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+.cdk-overview-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px;
+  max-width: 1200px; margin: 0 auto; width: 100%;
+}
+.cdk-overview-card {
+  display: flex; flex-direction: column; gap: 8px; text-align: left;
+  aspect-ratio: 16 / 9; padding: 14px; border-radius: 6px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.85); font-family: var(--font-display); font-size: 13px;
+  transition: border-color .18s, background .18s;
+}
+.cdk-overview-card:hover, .cdk-overview-card[data-active] { border-color: var(--accent); background: rgba(255, 255, 255, 0.08); }
+.cdk-overview-n { font-family: var(--font-mono); font-size: 11px; color: var(--accent); }
+
+@media (max-width: 720px) {
+  .cdk-bill-cols { grid-template-columns: 1fr; }
+  .cdk-stat-grid { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(3, 1fr); }
+}

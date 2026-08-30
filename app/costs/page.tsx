@@ -1,5 +1,6 @@
+import Link from 'next/link';
 import { requireAdminPage } from '@/lib/auth';
-import { getCostDashboard, getMonthlyBill } from '@/lib/data';
+import { getCostDashboard, getMonthlyBill, FIXED_MONTHLY } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { cronLabel } from '@/lib/scan/handoff';
 import vercelConfig from '@/vercel.json';
@@ -17,13 +18,6 @@ export const metadata = { title: 'AI costs · The AI Atlas' };
 // Fixed platform subscriptions, NOT read off any bill: this is the config, edit it here
 // when a subscription changes. Paired at render time with the metered spend rolled up by
 // getMonthlyBill (lib/data/costs.ts) into one "running cost of the whole system" headline.
-const FIXED_MONTHLY = [
-  { name: 'Vercel Pro', usd: 20, note: 'hosting, crons, functions' },
-  { name: 'Supabase Pro', usd: 25, note: 'database (org plan, shared across projects)' },
-  { name: 'Tavily', usd: 0, note: 'news search, free tier' },
-  { name: 'OpenRouter', usd: 0, note: 'pay as you go, metered below' },
-] as const;
-
 const panel = { background: 'var(--surface)', borderColor: 'var(--line)' } as const;
 const usd2 = (n: number): string => `$${n.toFixed(2)}`;
 
@@ -70,6 +64,9 @@ export default async function CostsPage() {
             )}
             editing={editing}
           />
+          <Link href="/costs/deck" className="btn btn--primary" style={{ marginTop: 16 }}>
+            Produce cost report
+          </Link>
         </header>
         <WorkspaceTabs tabs={ANALYTICS_TABS} active="/costs" />
 

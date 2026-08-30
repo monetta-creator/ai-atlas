@@ -12,6 +12,7 @@ const nextConfig: NextConfig = {
     "/reports/sheet/[id]/pdf": ["./lib/pdf/fonts/*.ttf"],
     "/reports/[id]/pdf": ["./lib/pdf/fonts/*.ttf"],
     "/thesis-report/[id]/pdf": ["./lib/pdf/fonts/*.ttf"],
+    "/costs/deck/pdf": ["./lib/pdf/fonts/*.ttf"],
   },
 };
 

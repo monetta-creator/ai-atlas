@@ -173,3 +173,14 @@ export async function getMonthlyBill(): Promise<MonthlyBill> {
 
   return { mtdUsd, todayUsd, allTimeUsd, mtdCalls, projectedUsd, subsystems };
 }
+
+// The fixed platform subscriptions, the other half of the monthly bill (the
+// metered half is getMonthlyBill). A code constant on purpose: it changes
+// only when a subscription changes, and both /costs and the cost deck must
+// agree on the same figures. Edit here.
+export const FIXED_MONTHLY = [
+  { name: 'Vercel Pro', usd: 20, note: 'hosting, crons, functions' },
+  { name: 'Supabase Pro', usd: 25, note: 'database (org plan, shared across projects)' },
+  { name: 'Tavily', usd: 0, note: 'news search, free tier' },
+  { name: 'OpenRouter', usd: 0, note: 'pay as you go, metered below' },
+] as const;
