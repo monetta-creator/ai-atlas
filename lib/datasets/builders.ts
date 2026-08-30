@@ -1,4 +1,5 @@
 import type { DatasetOpts, DatasetRow, Q } from './core';
+import { isPositiveInt } from './core.ts';
 // Explicit .ts extension: this chain is loaded by plain Node in
 // scripts/test-datasets.mjs (type stripping), which resolves no extensionless
 // specifiers. The bundler resolves it identically.
@@ -23,6 +24,11 @@ export async function buildSignals(q: Q, opts: DatasetOpts = {}): Promise<Datase
     params.push(opts.lens);
     lensClause = `and $${params.length} = any(s.lenses::text[])`;
   }
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   const rows = await q<DatasetRow & { source_url: string | null }>(
     `select s.id::text as signal_id, s.title, s.summary,
             s.significance::text as significance,
@@ -38,7 +44,7 @@ export async function buildSignals(q: Q, opts: DatasetOpts = {}): Promise<Datase
        from signals s
        left join sources src on src.id = s.source_id
       where s.is_published = true ${lensClause}
-      order by s.published_at desc nulls last, s.id`,
+      order by s.published_at desc nulls last, s.id${limitClause}`,
     params
   );
   return rows.map((r) => ({ ...r, source_domain: domainOfUrl(r.source_url) }));
@@ -48,7 +54,7 @@ export async function buildSignals(q: Q, opts: DatasetOpts = {}): Promise<Datase
 
 interface LensTagRow { target_type: string; target_id: string; lens_tags: string }
 
-export async function buildArgumentNodes(q: Q): Promise<DatasetRow[]> {
+export async function buildArgumentNodes(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   const [questions, stances, claims, bridges, lensTags] = await Promise.all([
     q<DatasetRow>(
       `select slug as code, title, summary, primary_lens::text as primary_lens, id::text as _id
@@ -112,14 +118,20 @@ export async function buildArgumentNodes(q: Q): Promise<DatasetRow[]> {
       href: `/bridge/${r.code}`,
     });
   }
-  return out;
+  return isPositiveInt(opts.limit) ? out.slice(0, opts.limit) : out;
 }
 
 // ---------------------------------------------------------------------------
 
-export async function buildArgumentEdges(q: Q): Promise<DatasetRow[]> {
+export async function buildArgumentEdges(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // edges carries no FK (polymorphic uuids); dangling rows resolve to null codes
   // and are dropped here, matching how the app tolerates orphans at read time.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select e.from_type::text as from_type,
             coalesce(fs.code, fc.code, fb.code) as from_code,
@@ -135,16 +147,23 @@ export async function buildArgumentEdges(q: Q): Promise<DatasetRow[]> {
        left join bridge_claims tb on e.to_type   = 'bridge_claim' and tb.id = e.to_id
       where coalesce(fs.code, fc.code, fb.code) is not null
         and coalesce(ts.code, tc.code, tb.code) is not null
-      order by 2, 4, 5`
+      order by 2, 4, 5${limitClause}`,
+    params
   );
 }
 
 // ---------------------------------------------------------------------------
 
-export async function buildEvidenceLedger(q: Q): Promise<DatasetRow[]> {
+export async function buildEvidenceLedger(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // Never selects evidence.note (admin-only) or the source's reliability_prior.
   // The signal guard is belt and braces: syncSignalEvidence removes rows on
   // unpublish, so signal-anchored evidence should already be published-only.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select e.id::text as evidence_id,
             e.target_type::text as target_type,
@@ -166,16 +185,23 @@ export async function buildEvidenceLedger(q: Q): Promise<DatasetRow[]> {
        left join sources       src on src.id = e.source_id
       where coalesce(c.code, b.code) is not null
         and (e.signal_id is null or sig.is_published = true)
-      order by e.created_at desc, e.id`
+      order by e.created_at desc, e.id${limitClause}`,
+    params
   );
 }
 
 // ---------------------------------------------------------------------------
 
-export async function buildSources(q: Q): Promise<DatasetRow[]> {
+export async function buildSources(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // Bibliography of publicly referenced sources only: a source enters when it
   // backs at least one evidence row or one published signal. Admin working rows
   // (unreferenced uploads) stay out. No reliability_prior, no dossier.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   const rows = await q<DatasetRow & { url: string | null }>(
     `select s.id::text as source_id, s.title, s.author, s.outlet, s.url,
             to_char(s.published_at, 'YYYY-MM-DD') as published_on,
@@ -192,17 +218,24 @@ export async function buildSources(q: Q): Promise<DatasetRow[]> {
        from sources s
       where exists (select 1 from evidence e where e.source_id = s.id)
          or exists (select 1 from signals sig where sig.source_id = s.id and sig.is_published = true)
-      order by s.published_at desc nulls last, s.id`
+      order by s.published_at desc nulls last, s.id${limitClause}`,
+    params
   );
   return rows.map((r) => ({ ...r, source_domain: domainOfUrl(r.url) }));
 }
 
 // ---------------------------------------------------------------------------
 
-export async function buildArticlesFullText(q: Q): Promise<DatasetRow[]> {
+export async function buildArticlesFullText(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // One row per published signal that has article text. Curated source text wins
   // over the pipeline's cached page text; the lateral picks the newest candidate
   // deterministically when several carry text for the same signal.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select s.id::text as signal_id, s.title as signal_title,
             to_char(s.published_at, 'YYYY-MM-DD') as published_on,
@@ -220,13 +253,20 @@ export async function buildArticlesFullText(q: Q): Promise<DatasetRow[]> {
        ) sc on true
       where s.is_published = true
         and coalesce(src.raw_text, sc.raw_content) is not null
-      order by s.published_at desc nulls last, s.id`
+      order by s.published_at desc nulls last, s.id${limitClause}`,
+    params
   );
 }
 
 // ---------------------------------------------------------------------------
 
-export async function buildConcepts(q: Q): Promise<DatasetRow[]> {
+export async function buildConcepts(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select c.slug, c.name, c.short_definition, c.explanation, c.status::text as status,
             (select string_agg(p.slug, '; ' order by p.slug)
@@ -236,17 +276,24 @@ export async function buildConcepts(q: Q): Promise<DatasetRow[]> {
                from concept_claims cc
               where cc.concept_id = c.id and cc.status = 'confirmed') as linked_claims
        from concepts c
-      order by c.slug`
+      order by c.slug${limitClause}`,
+    params
   );
 }
 
 // ---------------------------------------------------------------------------
 
-export async function buildSignalsByClaim(q: Q): Promise<DatasetRow[]> {
+export async function buildSignalsByClaim(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // The touch matrix in long form: one row per (published signal, touched code).
   // direction comes from the evidence row syncSignalEvidence materialized on
   // publish (at most one per pair, by the 0006 unique partial index); a null
   // direction means the touch predates the sync or cites a frame.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select t.code as claim_code,
             case when b.code is not null then 'bridge_claim' else 'claim' end as claim_type,
@@ -265,15 +312,22 @@ export async function buildSignalsByClaim(q: Q): Promise<DatasetRow[]> {
               or (e.target_type = 'bridge_claim' and e.target_id = b.id))
       where s.is_published = true
         and coalesce(c.code, b.code) is not null
-      order by t.code, s.published_at desc nulls last, s.id`
+      order by t.code, s.published_at desc nulls last, s.id${limitClause}`,
+    params
   );
 }
 
 // ---------------------------------------------------------------------------
 
-export async function buildThesisReports(q: Q): Promise<DatasetRow[]> {
+export async function buildThesisReports(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // Reads the frozen guest-safe pack stats straight off thesis_reports; the
   // statement is the frozen one (theses.statement may have moved on).
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select tr.id::text as report_id,
             tr.statement as thesis_statement,
@@ -293,17 +347,24 @@ export async function buildThesisReports(q: Q): Promise<DatasetRow[]> {
             '/thesis-report/' || tr.id as report_url
        from thesis_reports tr
        join theses t on t.id = tr.thesis_id
-      order by tr.generated_at desc, tr.id`
+      order by tr.generated_at desc, tr.id${limitClause}`,
+    params
   );
 }
 
 // ---------------------------------------------------------------------------
 
-export async function buildResearchPapers(q: Q): Promise<DatasetRow[]> {
+export async function buildResearchPapers(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // The curated library only (triage kept), never the raw funnel. claim_touches
   // here is ADVISORY: papers never write evidence; the only road into the map is
   // promotion to a signal. Excludes the reviewer's private fields (review_note,
   // rigor_prior) by construction.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select p.arxiv_id, p.title, p.url, p.abstract,
             array_to_string(p.categories, '; ') as categories,
@@ -315,15 +376,22 @@ export async function buildResearchPapers(q: Q): Promise<DatasetRow[]> {
             p.signal_id::text as promoted_signal_id
        from papers p
       where p.triage_status = 'kept'
-      order by p.published_at desc nulls last, p.id`
+      order by p.published_at desc nulls last, p.id${limitClause}`,
+    params
   );
 }
 
-export async function buildScoutCompanies(q: Q): Promise<DatasetRow[]> {
+export async function buildScoutCompanies(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // The tracked watchlist only, descriptive facts only. The review funnel, the
   // scoring agent's advisory verdicts and scores, review notes, and the dossier
   // never enter a dataset (a public pursue verdict on a named startup would
   // disclose M&A intent).
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select c.id::text as company_id, c.name, c.domain, c.url,
             c.vertical, v.name as vertical_name,
@@ -334,13 +402,20 @@ export async function buildScoutCompanies(q: Q): Promise<DatasetRow[]> {
        from companies c
        join scout_verticals v on v.slug = c.vertical
       where c.status = 'tracked'
-      order by c.reviewed_at desc nulls last, c.id`
+      order by c.reviewed_at desc nulls last, c.id${limitClause}`,
+    params
   );
 }
 
-export async function buildScoutEvents(q: Q): Promise<DatasetRow[]> {
+export async function buildScoutEvents(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // Events on tracked companies: the same rows the public profile timeline
   // renders. The note column stays out (it can carry working provenance).
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select e.id::text as event_id, e.company_id::text as company_id,
             c.name as company_name, c.vertical,
@@ -349,7 +424,8 @@ export async function buildScoutEvents(q: Q): Promise<DatasetRow[]> {
        from company_events e
        join companies c on c.id = e.company_id
       where c.status = 'tracked'
-      order by e.event_date desc, e.id`
+      order by e.event_date desc, e.id${limitClause}`,
+    params
   );
 }
 
@@ -359,6 +435,12 @@ export async function buildExternalScan(q: Q, opts: DatasetOpts = {}): Promise<D
   // One row per item in one day's External Scan run: the latest COMPLETED day
   // by default (a mid-flight run never shifts the default download), or the
   // ?day= the route validated. Run internals (lease, counters) never export.
+  const params: unknown[] = [opts.day ?? null];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select i.id::text as item_id,
             to_char(r.day, 'YYYY-MM-DD') as run_day,
@@ -379,8 +461,8 @@ export async function buildExternalScan(q: Q, opts: DatasetOpts = {}): Promise<D
        join scan_runs r on r.id = i.run_id
        left join scan_topics t on t.slug = i.topic_slug
       where r.day = coalesce($1::date, (select max(day) from scan_runs where status = 'completed'))
-      order by i.published_date desc nulls last, i.normalized_url, i.id`,
-    [opts.day ?? null]
+      order by i.published_date desc nulls last, i.normalized_url, i.id${limitClause}`,
+    params
   );
 }
 
@@ -410,6 +492,12 @@ export async function buildSignalsExport(q: Q, opts: DatasetOpts = {}): Promise<
   // boundary. full_text is a composed document, writeup first then the retained
   // article text, so even a scan-fields-only intake captures the editorial work.
   const host = (opts.host ?? '').replace(/\/+$/, '') || 'https://ai-atlas-kevin-michel-s-projects.vercel.app';
+  const signalParams: unknown[] = [];
+  let signalLimitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    signalParams.push(opts.limit);
+    signalLimitClause = ` limit $${signalParams.length}`;
+  }
   const [signals, nodes] = await Promise.all([
     q<SignalsExportRow>(
       `select s.id::text as id, s.title, s.summary,
@@ -433,7 +521,8 @@ export async function buildSignalsExport(q: Q, opts: DatasetOpts = {}): Promise<
             order by c.retrieved_at desc, c.id limit 1
          ) sc on true
         where s.is_published = true
-        order by s.published_at desc nulls last, s.id`
+        order by s.published_at desc nulls last, s.id${signalLimitClause}`,
+      signalParams
     ),
     q<{ code: string; statement: string }>(
       `select code, statement from claims where code is not null
@@ -537,6 +626,12 @@ export async function buildIntelItems(q: Q, opts: DatasetOpts = {}): Promise<Dat
   // facts, then the raw article text), not the raw retained text alone, so
   // its text_chars is the composed length; the day resolution mirrors
   // buildExternalScan's latest-completed-day default.
+  const params: unknown[] = [opts.day ?? null];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   const rows = await q<IntelItemQueryRow>(
     `select i.id::text as item_id,
             to_char(r.day, 'YYYY-MM-DD') as run_day,
@@ -571,8 +666,8 @@ export async function buildIntelItems(q: Q, opts: DatasetOpts = {}): Promise<Dat
           where f.item_id = i.id
        ) fx on true
       where r.day = coalesce($1::date, (select max(day) from intel_runs where status = 'completed'))
-      order by i.published_date desc nulls last, i.normalized_url, i.id`,
-    [opts.day ?? null]
+      order by i.published_date desc nulls last, i.normalized_url, i.id${limitClause}`,
+    params
   );
 
   return rows.map((r) => {
@@ -612,12 +707,18 @@ export async function buildIntelItems(q: Q, opts: DatasetOpts = {}): Promise<Dat
 
 // ---------------------------------------------------------------------------
 
-export async function buildIntelCompanies(q: Q): Promise<DatasetRow[]> {
+export async function buildIntelCompanies(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // The full registry (tracked and queued alike; the Intel Desk has no
   // review-funnel visibility split like Scout's). Booleans render 'yes'/'no'
   // (the is_frame/one_sided house convention). The dossier is the machine's
   // own merged record (lib/scout/core.ts mergeDossier); products/customers
   // are jsonb arrays, flattened the same way array columns are elsewhere.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select c.slug, c.name, c.tier::text as tier, c.niche, c.ticker, c.cik,
             c.rssd_id, c.fdic_cert, c.lei, c.domain,
@@ -638,17 +739,24 @@ export async function buildIntelCompanies(q: Q): Promise<DatasetRow[]> {
             to_char(c.created_at, 'YYYY-MM-DD') as created_at,
             to_char(c.updated_at, 'YYYY-MM-DD') as updated_at
        from intel_companies c
-      order by c.slug`
+      order by c.slug${limitClause}`,
+    params
   );
 }
 
 // ---------------------------------------------------------------------------
 
-export async function buildIntelFacts(q: Q): Promise<DatasetRow[]> {
+export async function buildIntelFacts(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // Every extracted fact, provenance intact: source_url resolves through the
   // originating item (nullable; a fact can outlive nothing since both carry
   // on-delete-cascade, but the item join stays a left join for the rare row
   // ingested without one).
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select f.id::text as fact_id,
             f.company_slug,
@@ -663,15 +771,22 @@ export async function buildIntelFacts(q: Q): Promise<DatasetRow[]> {
        from intel_facts f
        join intel_companies c on c.slug = f.company_slug
        left join intel_items it on it.id = f.item_id
-      order by f.company_slug, f.created_at desc, f.id`
+      order by f.company_slug, f.created_at desc, f.id${limitClause}`,
+    params
   );
 }
 
 // ---------------------------------------------------------------------------
 
-export async function buildIntelMetrics(q: Q): Promise<DatasetRow[]> {
+export async function buildIntelMetrics(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // LLM-free structured series (EDGAR XBRL, FDIC, CFPB); no model ever
   // touches this table, so there is no enrichment status to carry.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
   return q<DatasetRow>(
     `select m.company_slug,
             c.name as company_name,
@@ -683,6 +798,7 @@ export async function buildIntelMetrics(q: Q): Promise<DatasetRow[]> {
             to_char(m.fetched_at, 'YYYY-MM-DD') as fetched_at
        from intel_metrics m
        join intel_companies c on c.slug = m.company_slug
-      order by m.company_slug, m.metric_code, m.period desc, m.source, m.id`
+      order by m.company_slug, m.metric_code, m.period desc, m.source, m.id${limitClause}`,
+    params
   );
 }

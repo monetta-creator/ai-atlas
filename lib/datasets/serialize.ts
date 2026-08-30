@@ -24,7 +24,8 @@ export function datasetToCSV(def: DatasetDef, rows: DatasetRow[]): string {
 // The JSON envelope carries the schema alongside the rows so a consumer never
 // needs a second request to interpret a download.
 export function datasetToJSON(
-  def: DatasetDef, rows: DatasetRow[], opts: { lens?: string; day?: string } = {}
+  def: DatasetDef, rows: DatasetRow[],
+  opts: { lens?: string; day?: string; preview?: boolean } = {}
 ): string {
   return JSON.stringify({
     dataset: {
@@ -37,6 +38,7 @@ export function datasetToJSON(
       day: opts.day ?? null,
       row_count: rows.length,
       columns: def.columns,
+      ...(opts.preview ? { preview: true } : {}),
     },
     rows,
   });

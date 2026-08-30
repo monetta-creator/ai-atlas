@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { DatasetColumn, DatasetRow } from '@/lib/datasets/core';
 import type { ViewDataset } from '@/lib/types';
 import ViewData from '@/components/ViewData';
+import DatasetPreviewTable from '@/components/datasets/DatasetPreviewTable';
 
 // The lightweight in-page explorer on a dataset page: filter, group, chart,
 // export. It fetches the dataset's own public JSON endpoint (never lib/db; this
@@ -18,13 +19,6 @@ import ViewData from '@/components/ViewData';
 type Agg = 'count' | 'sum' | 'avg';
 
 const PREVIEW_ROWS = 200;
-const CLIP = 140;
-
-const clip = (v: string | number | null): string => {
-  if (v === null) return '';
-  const s = String(v);
-  return s.length > CLIP ? `${s.slice(0, CLIP)}…` : s;
-};
 
 export default function DatasetExplorer({
   slug, columns,
@@ -249,26 +243,7 @@ export default function DatasetExplorer({
             {filtered.length} of {rows.length} rows{filtered.length > PREVIEW_ROWS ? `, first ${PREVIEW_ROWS} shown` : ''}
           </p>
           <div style={{ overflowX: 'auto' }}>
-            <table className="viewdata-table">
-              <thead>
-                <tr>
-                  {shownCols.map((c) => (
-                    <th key={c.key} className="vd-label" title={c.def}>{c.key}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.slice(0, PREVIEW_ROWS).map((r, i) => (
-                  <tr key={i}>
-                    {shownCols.map((c) => (
-                      <td key={c.key} className={c.type === 'number' ? 'vd-num' : 'vd-label'}>
-                        {clip(r[c.key] ?? null)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DatasetPreviewTable columns={shownCols} rows={filtered.slice(0, PREVIEW_ROWS)} />
           </div>
         </div>
       )}

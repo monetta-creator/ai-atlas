@@ -20,6 +20,7 @@ import CopyHandoff from '@/components/scan/CopyHandoff';
 import EnrichModelPicker from '@/components/scan/EnrichModelPicker';
 import ScanCalendar from '@/components/scan/ScanCalendar';
 import type { ScanCalDay } from '@/components/scan/ScanCalendar';
+import DatasetPreview from '@/components/datasets/DatasetPreview';
 
 export const dynamic = 'force-dynamic';
 // Hosts the scan tick action (at most one bounded work unit per call).
@@ -144,6 +145,11 @@ export default async function ScanPage() {
               browser without the portal cookie (a work machine), unlock first:{' '}
               <code>{host}/datasets/enter?k=&lt;PORTAL_KEY&gt;</code>, then download the same URL.
             </p>
+            {def && (
+              <div style={{ marginTop: 12 }}>
+                <DatasetPreview slug={DATASET_SLUG} columns={def.columns} day={latestDay ?? undefined} />
+              </div>
+            )}
           </div>
         </section>
 
@@ -166,6 +172,9 @@ export default async function ScanPage() {
               </p>
               <div style={{ marginTop: 12 }}>
                 <CopyHandoff text={signalsHandoff} label="Copy signals-export handoff" />
+              </div>
+              <div style={{ marginTop: 12 }}>
+                <DatasetPreview slug="signals-export" columns={signalsDef.columns} />
               </div>
             </div>
           </section>

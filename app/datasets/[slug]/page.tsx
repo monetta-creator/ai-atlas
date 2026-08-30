@@ -1,12 +1,12 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { isAdmin, isPortal } from '@/lib/auth';
-import { q } from '@/lib/db';
-import { SIGNAL_LENSES, type DatasetRow } from '@/lib/datasets/core';
+import { SIGNAL_LENSES } from '@/lib/datasets/core';
 import { getDataset } from '@/lib/datasets/registry';
 import Header from '@/components/Header';
 import DatasetSchemaTable from '@/components/datasets/DatasetSchemaTable';
 import DatasetExplorer from '@/components/datasets/DatasetExplorer';
+import DatasetPreview from '@/components/datasets/DatasetPreview';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Dataset · The AI Atlas' };
@@ -21,24 +21,6 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
 
   const [admin, portal] = await Promise.all([isAdmin(), isPortal()]);
   const unlocked = !def.keyGated || portal;
-
-  // Heavy datasets get a small server-rendered preview instead of the explorer;
-  // longtext cells are clipped hard so bulk text never ships to the page.
-  let heavyPreview: DatasetRow[] = [];
-  if (def.heavy && unlocked) {
-    const rows = await def.build(q);
-    heavyPreview = rows.slice(0, 5).map((r) => {
-      const out: DatasetRow = {};
-      for (const c of def.columns) {
-        const v = r[c.key] ?? null;
-        out[c.key] =
-          c.type === 'longtext' && typeof v === 'string' && v.length > 160
-            ? `${v.slice(0, 160)}…`
-            : v;
-      }
-      return out;
-    });
-  }
 
   return (
     <>
@@ -99,32 +81,7 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
             {!def.heavy ? (
               <DatasetExplorer slug={def.slug} columns={def.columns} />
             ) : unlocked ? (
-              heavyPreview.length ? (
-                <div style={{ overflowX: 'auto' }}>
-                  <table className="viewdata-table">
-                    <thead>
-                      <tr>
-                        {def.columns.map((c) => (
-                          <th key={c.key} className="vd-label">{c.key}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {heavyPreview.map((r, i) => (
-                        <tr key={i}>
-                          {def.columns.map((c) => (
-                            <td key={c.key} className={c.type === 'number' ? 'vd-num' : 'vd-label'}>
-                              {r[c.key] ?? ''}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p style={{ fontSize: 13, color: 'var(--faint-ink)' }}>No rows yet.</p>
-              )
+              <DatasetPreview slug={def.slug} columns={def.columns} />
             ) : (
               <p style={{ fontSize: 13, color: 'var(--faint-ink)', maxWidth: 640, lineHeight: 1.7 }}>
                 This dataset holds the complete retained article text, so the preview and download

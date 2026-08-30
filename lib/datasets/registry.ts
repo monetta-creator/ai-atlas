@@ -1,4 +1,5 @@
-import type { DatasetColumn, DatasetDef, DatasetRow } from './core';
+import type { DatasetColumn, DatasetDef, DatasetOpts, DatasetRow, Q } from './core';
+import { isPositiveInt } from './core.ts';
 // Explicit .ts extension so plain Node (scripts/test-datasets.mjs, type
 // stripping) can load this module chain; the bundler resolves it the same.
 import {
@@ -536,7 +537,7 @@ const CATALOG: DatasetDef = {
     col('column_type', 'Column type', 'enum', 'text, number, date, enum, or longtext.'),
     col('column_def', 'Column definition', 'text', 'One-line gloss of what the column holds.'),
   ],
-  build: async () => {
+  build: async (_q: Q, opts: DatasetOpts = {}) => {
     const rows: DatasetRow[] = [];
     for (const d of BASE) {
       for (const c of d.columns) {
@@ -552,7 +553,7 @@ const CATALOG: DatasetDef = {
         column_key: c.key, column_label: c.label, column_type: c.type, column_def: c.def,
       });
     }
-    return rows;
+    return isPositiveInt(opts.limit) ? rows.slice(0, opts.limit) : rows;
   },
 };
 

@@ -31,13 +31,33 @@ export async function GET(
 
   if (def.keyGated && !(await isPortal())) {
     return new Response(
-      'This dataset needs the team portal key. Unlock it at /datasets/ask, then retry the download.',
+      'This dataset needs the team portal key. Unlock it at /ask, then retry the download.',
       { status: 401, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } }
     );
   }
 
   const sp = req.nextUrl.searchParams;
-  const format = sp.get('format') === 'json' ? 'json' : 'csv';
+
+  // ?preview=N: a limit-capable, JSON-only peek, for a quick in-browser look
+  // at a heavy or key-gated dataset without pulling the whole corpus. Parsed
+  // as a plain non-negative integer string; anything else (decimals, signs,
+  // words) is a 400, not a silent fallback. In range it's clamped to 1..100
+  // rather than rejected, so an over-eager caller still gets a capped preview.
+  let previewLimit: number | undefined;
+  const previewRaw = sp.get('preview');
+  if (previewRaw !== null) {
+    if (!/^\d+$/.test(previewRaw)) {
+      return Response.json(
+        { error: 'Bad preview. Use an integer between 1 and 100.' },
+        { status: 400 }
+      );
+    }
+    previewLimit = Math.min(100, Math.max(1, Number.parseInt(previewRaw, 10)));
+  }
+  const isPreview = previewLimit !== undefined;
+
+  let format: 'csv' | 'json' = sp.get('format') === 'json' ? 'json' : 'csv';
+  if (isPreview) format = 'json';
   let lens: string | undefined;
   if (def.filters?.lens) {
     const v = sp.get('lens');
@@ -65,8 +85,12 @@ export async function GET(
     }
   }
 
-  const rows = await def.build(q, { lens, day, host: req.nextUrl.origin });
-  const cache = def.keyGated ? 'no-store' : PUBLIC_CACHE;
+  const rows = await def.build(q, { lens, day, host: req.nextUrl.origin, limit: previewLimit });
+  // A preview never writes the no-store full-download header, even key-gated:
+  // it's a small, cheap peek, so it's safe to cache briefly per-viewer.
+  const cache = isPreview
+    ? (def.keyGated ? 'private, max-age=60' : PUBLIC_CACHE)
+    : (def.keyGated ? 'no-store' : PUBLIC_CACHE);
   // The filename carries the day the download actually SERVED: when a
   // day-filtered dataset falls back to its latest-completed default, the rows
   // know the day (run_day) even though the request named none. The JSON
@@ -78,9 +102,10 @@ export async function GET(
   if (format === 'json') {
     // JSON is inline by default (quick in-browser inspection; the explorer
     // fetches it anyway); ?download=1 forces a saved file for the flows that
-    // want one, like the /scan daily grab from a work browser.
-    const disposition = sp.get('download') === '1' ? 'attachment' : 'inline';
-    return new Response(datasetToJSON(def, rows, { lens, day }), {
+    // want one, like the /scan daily grab from a work browser. A preview is
+    // always inline: it's a peek, never a file to save.
+    const disposition = !isPreview && sp.get('download') === '1' ? 'attachment' : 'inline';
+    return new Response(datasetToJSON(def, rows, { lens, day, preview: isPreview }), {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Content-Disposition': `${disposition}; filename="${filename}"`,

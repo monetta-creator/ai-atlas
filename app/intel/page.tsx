@@ -21,6 +21,7 @@ import EnrichModelPicker from '@/components/scan/EnrichModelPicker';
 import { setIntelEnrichModelsAction } from '@/lib/actions';
 import { getDataset } from '@/lib/datasets/registry';
 import { buildIntelHandoff } from '@/lib/intel/handoff';
+import DatasetPreview from '@/components/datasets/DatasetPreview';
 import { getEditContext } from '@/lib/content';
 import Editable from '@/components/Editable';
 import type { IntelTier } from '@/lib/types';
@@ -175,6 +176,15 @@ export default async function IntelPage() {
                     {datasetStatsLine[slug]}
                     {slug === 'intel-items' ? ' · add ?day=YYYY-MM-DD for a specific day' : ''}
                   </p>
+                  {def && (
+                    <div style={{ marginTop: 10 }}>
+                      <DatasetPreview
+                        slug={slug}
+                        columns={def.columns}
+                        day={slug === 'intel-items' ? latestDay ?? undefined : undefined}
+                      />
+                    </div>
+                  )}
                 </div>
               );
             })}

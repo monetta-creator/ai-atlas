@@ -53,6 +53,7 @@ export interface DatasetOpts {
   lens?: string;          // validated against SIGNAL_LENSES before it reaches a builder
   day?: string;           // validated as YYYY-MM-DD in the route before it reaches a builder
   host?: string;          // request origin (https://host), for builders that mint absolute Atlas links
+  limit?: number;         // preview row cap; clamped to 1..100 in the route before it reaches a builder
 }
 
 export interface DatasetDef {
@@ -77,4 +78,13 @@ export const SIGNAL_LENSES = [
 
 export function isSignalLens(v: string): boolean {
   return (SIGNAL_LENSES as readonly string[]).includes(v);
+}
+
+// A builder's own guard against a malformed opts.limit: undefined, zero,
+// negative, or non-integer values all mean "no limit" so a builder's SQL
+// stays byte-identical to the unlimited build. The route clamps to 1..100
+// before this ever runs, but builders (and the test script, which drives
+// them directly) must not trust that.
+export function isPositiveInt(n: number | undefined): n is number {
+  return typeof n === 'number' && Number.isInteger(n) && n > 0;
 }

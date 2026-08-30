@@ -195,6 +195,22 @@ for (const d of DATASETS) {
   });
 }
 
+// ---- limit-capable preview (opts.limit) --------------------------------------
+// Three representative shapes: a non-heavy plain-SQL builder, a heavy plain-SQL
+// builder, and the JS-composed union builder. build(q, { limit: 3 }) must both
+// cap the row count and agree with the first 3 rows of the unlimited build, so
+// a preview is a prefix, never a reordering or a resample.
+console.log('\nPreview limit (opts.limit):');
+for (const slug of ['signals', 'intel-metrics', 'argument-nodes']) {
+  const d = getDataset(slug);
+  const unlimited = await d.build(q);
+  const limited = await d.build(q, { limit: 3 });
+  check(`${slug}: limit caps to at most 3 rows (${limited.length})`, () =>
+    assert.ok(limited.length <= 3, `got ${limited.length} rows`));
+  check(`${slug}: limit is a prefix of the unlimited build`, () =>
+    assert.deepEqual(limited, unlimited.slice(0, 3)));
+}
+
 // ---- 1) published-only recounts (independent SQL) ---------------------------
 const idsOf = (rows, key) => [...new Set(rows.map((r) => r[key]).filter(Boolean))];
 async function countUnpublished(signalIds) {
