@@ -101,12 +101,13 @@
 .cdk-bill-running .cdk-bigstat-n { font-size: 6cqw; }
 .cdk-bill-running-l { font-size: 1.3cqw; color: var(--dim); }
 .cdk-table { width: 100%; border-collapse: collapse; }
-.cdk-table th {
+.cdk-table th { white-space: nowrap;
   text-align: left; font-family: var(--font-mono); font-size: 1cqw;
   letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint-ink);
   font-weight: 600; padding: 0 0.6cqw 0.8cqh;
 }
 .cdk-table th.cdk-num { text-align: right; }
+.cdk-table td:first-child { white-space: nowrap; padding-right: 1.6cqw; }
 .cdk-table td {
   padding: 1cqh 0.6cqw; border-top: 0.07cqw solid var(--line);
   font-size: 1.45cqw; color: var(--dim); vertical-align: top;
