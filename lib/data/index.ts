@@ -14,3 +14,4 @@ export * from './desk';
 export * from './scout';
 export * from './scan';
 export * from './intel';
+export * from './ingestion';

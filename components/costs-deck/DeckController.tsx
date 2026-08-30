@@ -15,7 +15,15 @@ export interface DeckSlideItem {
 // button) that opens the react-pdf export in a new tab. Slides are
 // server-rendered nodes from renderDeckSlides; this component only decides
 // which one is on stage.
-export default function DeckController({ slides }: { slides: DeckSlideItem[] }) {
+export default function DeckController({
+  slides,
+  backHref = '/costs',
+  pdfHref = '/costs/deck/pdf',
+}: {
+  slides: DeckSlideItem[];
+  backHref?: string;
+  pdfHref?: string;
+}) {
   const [index, setIndex] = useState(0);
   const [overview, setOverview] = useState(false);
   const touchX = useRef<number | null>(null);
@@ -25,7 +33,7 @@ export default function DeckController({ slides }: { slides: DeckSlideItem[] }) 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setOverview((v) => !v); return; }
       if (e.key === 'p' || e.key === 'P') {
-        window.open('/costs/deck/pdf', '_blank', 'noopener');
+        window.open(pdfHref, '_blank', 'noopener');
         return;
       }
       if (overview) return;
@@ -43,16 +51,16 @@ export default function DeckController({ slides }: { slides: DeckSlideItem[] }) 
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [count, overview]);
+  }, [count, overview, pdfHref]);
 
   const chrome = (
     <div className="cdk-chrome-top">
-      <Link href="/costs" className="cdk-back">&larr; /costs</Link>
+      <Link href={backHref} className="cdk-back">&larr; {backHref}</Link>
       <div className="cdk-chrome-actions">
         <span className="cdk-count">{index + 1} / {count}</span>
         <a
           className="cdk-pdf-btn"
-          href="/costs/deck/pdf"
+          href={pdfHref}
           target="_blank"
           rel="noopener noreferrer"
         >

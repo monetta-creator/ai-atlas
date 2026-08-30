@@ -5,6 +5,18 @@ import type { ReactNode } from 'react';
 import type { CostDeck, DeckSlide, DeckStat } from '@/lib/costs-deck';
 import { registerFonts, COBALT, INK, DIM, LINE, PdfFooter, StatBand } from './shell';
 
+// The deck renderer serves more than one deck (the cost report and the
+// ingestion story). React context is off the table in a server module (the
+// Next bundler rejects createContext imports even though react-pdf runs its
+// own reconciler), so the footer label is module state and renders are
+// serialized through a promise chain: no two decks can interleave, so the
+// label can never bleed across documents.
+let currentFooterLabel = 'COST REPORT';
+let renderChain: Promise<unknown> = Promise.resolve();
+function DeckFooter(): ReactNode {
+  return <PdfFooter label={currentFooterLabel} />;
+}
+
 // The 16:9 PDF export of the cost deck: one Page (960x540, true 16:9) per
 // DeckSlide. Renders EXACTLY the CostDeck payload built by buildCostDeckData
 // (lib/costs-deck.ts) - no reformatting of already-formatted strings, only
@@ -208,7 +220,7 @@ function SlideBody({ kicker, title, children, takeaway }: {
           <Text style={s.takeawayText}>{takeaway}</Text>
         </View>
       )}
-      <PdfFooter label="COST REPORT" />
+      <DeckFooter />
     </Page>
   );
 }
@@ -231,7 +243,7 @@ function TitleSlide({ slide }: { slide: Extract<DeckSlide, { kind: 'title' }> })
       <View wrap={false}>
         <Text style={s.coverDate}>{slide.date}</Text>
       </View>
-      <PdfFooter label="COST REPORT" />
+      <DeckFooter />
     </Page>
   );
 }
@@ -246,7 +258,7 @@ function DividerSlide({ slide }: { slide: Extract<DeckSlide, { kind: 'divider' }
         <Text style={s.dividerTitle}>{slide.title}</Text>
         <Text style={s.dividerSubtitle}>{slide.subtitle}</Text>
       </View>
-      <PdfFooter label="COST REPORT" />
+      <DeckFooter />
     </Page>
   );
 }
@@ -590,17 +602,27 @@ function SlideForKind({ slide }: { slide: DeckSlide }): ReactNode {
   }
 }
 
-function CostDeckPdf({ deck }: { deck: CostDeck }): ReactNode {
+function CostDeckPdf({ deck, docTitle }: { deck: CostDeck; docTitle: string }): ReactNode {
   return (
-    <Document title="Cost report, The AI Atlas" author="The AI Atlas">
+    <Document title={docTitle} author="The AI Atlas">
       {deck.slides.map((slide, i) => <SlideForKind key={i} slide={slide} />)}
     </Document>
   );
 }
 
-export function renderCostDeckPdf(deck: CostDeck): Promise<Buffer> {
-  registerFonts();
-  return renderToBuffer(<CostDeckPdf deck={deck} />);
+export function renderCostDeckPdf(
+  deck: CostDeck,
+  opts: { footerLabel?: string; docTitle?: string } = {}
+): Promise<Buffer> {
+  const run = renderChain.then(() => {
+    currentFooterLabel = opts.footerLabel ?? 'COST REPORT';
+    registerFonts();
+    return renderToBuffer(
+      <CostDeckPdf deck={deck} docTitle={opts.docTitle ?? 'Cost report, The AI Atlas'} />
+    );
+  });
+  renderChain = run.catch(() => {});
+  return run;
 }
 
 export function costDeckPdfFilename(deck: CostDeck): string {
