@@ -14,7 +14,7 @@ import { fetchCandidateText, FetchFailure, domainOf } from '../pipeline/web';
 import { pickEnrichModel } from '../scan/models';
 import { searchCompanyNewsTavily } from './search';
 import { fetchRecentFilings } from './edgar';
-import { fetchEdgarMetrics, fetchFdicMetrics, fetchCfpbComplaints } from './metrics';
+import { fetchEdgarMetrics, fetchFdicMetricsFull, fetchCfpbComplaints } from './metrics';
 import { enrichIntelItem } from './enrich';
 import { synthesizeCompanyDossier } from './synthesis';
 import { checkIntelBudget } from './budget';
@@ -245,9 +245,11 @@ async function runFilingsUnit(run: IntelRun, company: IntelCompany, notes: strin
       }
     }
     if (lookbackDays(run.day) > 1) {
+      // Full FDIC field set, current quarter + one back (restatements); the
+      // deep history came from the one-time backfill script.
       const results = await Promise.allSettled([
         fetchEdgarMetrics(company, run.id),
-        fetchFdicMetrics(company, run.id),
+        fetchFdicMetricsFull(company, 2, run.id),
         fetchCfpbComplaints(company, run.day, run.id),
       ]);
       const rows = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));

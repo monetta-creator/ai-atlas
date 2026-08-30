@@ -28,7 +28,8 @@ missing CIKs from SEC's public ticker map, upserts on slug, never touches
   company on a normalized `fact_key` (generated column, mirrored by
   `intelFactKey` in `lib/intel/core.ts`).
 - **`intel_metrics`** — LLM-free quarterly series keyed
-  (company, metric, period, source).
+  (company, metric, period, source); `source` is one of `edgar_xbrl`,
+  `fdic`, `cfpb`, `y9c` (migration `0044` widened the CHECK for `y9c`).
 - **`intel_prefs`** — singleton: cron toggle, enrichment model picker,
   utility model override.
 
@@ -44,10 +45,23 @@ missing CIKs from SEC's public ticker map, upserts on slug, never touches
    with a note when `TAVILY_API_KEY` is unset.
 3. **filings** — SEC EDGAR submissions per company (8-K, 10-Q, 10-K, S-1,
    DEF 14A, 20-F, 6-K) as items whose primary document hydrates like any
-   URL. Monday runs additionally pull the structured metrics: EDGAR XBRL
-   companyconcept (curated concept map with per-filer fallbacks), FDIC
-   BankFind financials (per cert), and CFPB complaint counts (per company
-   name; a name mismatch yields zero, tune the registry name).
+   URL. Monday runs additionally refresh the structured metrics: EDGAR
+   XBRL companyfacts (curated concept codes such as revenue and
+   net_income, per-filer fallbacks, trailing 8 quarters), FDIC BankFind
+   financials (the FULL RIS field set, roughly 2,300 numeric mnemonics,
+   per cert per quarter via batched API calls, dictionary-driven off
+   FDIC's own risview_properties.yaml with a curated 6-field fallback if
+   that dictionary fetch fails), and CFPB complaint counts (a calendar-
+   month series plus the trailing-30-day point sample; matched per
+   company name, a name mismatch yields zero, tune the registry name).
+   `scripts/backfill-intel-metrics.mjs` (one-off, re-runnable) loads the
+   history the weekly sweep does not reach on its own: EDGAR's full
+   reporting history on first run, and FR Y-9C holding-company
+   consolidated series (MDRM-coded, `y9c_<mdrm>`) from the Chicago Fed's
+   public archive files through 2021Q1, with recent quarters pending the
+   NIC route, which is captcha-walled and not yet automated. Every metric
+   write upserts on (company_slug, metric_code, period, source), so
+   re-runs of the backfill converge rather than duplicate.
 4. **hydrate** — `fetchCandidateText` waves of 4.
 5. **enrich** — cheap-model waves of 3 (`lib/intel/enrich.ts`): summary,
    company linkage + dimensions (both allow-listed, deBracketed first: the

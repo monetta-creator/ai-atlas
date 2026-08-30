@@ -168,6 +168,22 @@ ${fieldTable(facts)}
 One row per (company, metric, period, source). No model output anywhere in
 this file: every value traces to a public structured API.
 
+Metric naming:
+- fdic_<mnemonic>: FDIC RIS call-report-derived fields for the bank
+  subsidiary. Mnemonics follow FDIC's own data dictionary at
+  https://api.fdic.gov/banks/docs/risview_properties.yaml.
+- y9c_<mdrm>: FR Y-9C holding-company consolidated items. Codes follow the
+  Federal Reserve's MDRM data dictionary at
+  https://www.federalreserve.gov/apps/mdrm/.
+- edgar_xbrl metric codes are the desk's own curated concept names
+  (revenue, net_income, and so on), not raw XBRL tags.
+- cfpb_complaints_month is a calendar-month consumer-complaint count;
+  cfpb_complaints_30d is a trailing-30-day point sample. Both are counts,
+  not the same series at different granularities.
+
+Quarterly sources are period-stamped by report date. Every row upserts
+idempotently on (company_slug, metric_code, period, source).
+
 \`\`\`json
 ${schemaBlock(metrics)}
 \`\`\`

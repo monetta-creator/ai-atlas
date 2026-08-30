@@ -115,7 +115,7 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   period: { type: 'string', nullable: false, format: 'date' },
   value: { type: 'number', nullable: true },
   unit: { type: 'string', nullable: true },
-  source: { type: 'string', nullable: false, enum: ['edgar_xbrl', 'fdic', 'cfpb'] },
+  source: { type: 'string', nullable: false, enum: ['edgar_xbrl', 'fdic', 'cfpb', 'y9c'] },
   fetched_at: { type: 'string', nullable: false, format: 'date' },
 };
 

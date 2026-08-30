@@ -10,7 +10,7 @@ export type IntelTier =
   | 'self' | 'card_issuer' | 'consumer_bank' | 'fintech' | 'tech_platform' | 'wildcard';
 export type IntelStep = 'feeds' | 'search' | 'filings' | 'hydrate' | 'enrich' | 'complete';
 export type IntelDocType = 'news' | 'press' | 'filing' | 'transcript' | 'report';
-export type IntelMetricSource = 'edgar_xbrl' | 'fdic' | 'cfpb';
+export type IntelMetricSource = 'edgar_xbrl' | 'fdic' | 'cfpb' | 'y9c';
 
 export interface IntelCompany {
   slug: string;

@@ -272,7 +272,11 @@ export async function insertIntelFacts(rows: {
 }
 
 // LLM-free structured metrics: idempotent upsert on the natural key, so a
-// re-fetch of the same period just refreshes the value.
+// re-fetch of the same period just refreshes the value. Batched 200 rows per
+// insert statement (multi-row VALUES) instead of one statement per row: the
+// callers are a historical backfill (hundreds of thousands of rows) and the
+// ~1,400-row Monday cron sweep per bank, and per-row round-trips through the
+// transaction pooler are too slow at that scale.
 export async function upsertIntelMetrics(rows: {
   company_slug: string;
   metric_code: string;
@@ -282,15 +286,24 @@ export async function upsertIntelMetrics(rows: {
   source: IntelMetricSource;
 }[]): Promise<number> {
   if (!rows.length) return 0;
+  const BATCH_SIZE = 200;
+  const COLS = 6;
   return withTx(async (c) => {
     let n = 0;
-    for (const r of rows) {
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      const batch = rows.slice(i, i + BATCH_SIZE);
+      const params: unknown[] = [];
+      const tuples = batch.map((r, j) => {
+        const base = j * COLS;
+        params.push(r.company_slug, r.metric_code, r.period, r.value, r.unit ?? null, r.source);
+        return `($${base + 1}, $${base + 2}, $${base + 3}::date, $${base + 4}, $${base + 5}, $${base + 6})`;
+      });
       const res = await c.query(
         `insert into intel_metrics (company_slug, metric_code, period, value, unit, source)
-         values ($1, $2, $3::date, $4, $5, $6)
+         values ${tuples.join(', ')}
          on conflict (company_slug, metric_code, period, source) do update
            set value = excluded.value, unit = excluded.unit, fetched_at = now()`,
-        [r.company_slug, r.metric_code, r.period, r.value, r.unit ?? null, r.source]
+        params
       );
       n += res.rowCount ?? 0;
     }

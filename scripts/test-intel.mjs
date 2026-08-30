@@ -138,6 +138,26 @@ await checkAsync('intel_prefs singleton exists', async () => {
   assert.equal(rows.length, 1);
 });
 
+await checkAsync('intel_metrics.source values stay within the 4-value enum', async () => {
+  const { rows } = await client.query(`select distinct source from intel_metrics`);
+  const allowed = new Set(['edgar_xbrl', 'fdic', 'cfpb', 'y9c']);
+  for (const r of rows) assert.ok(allowed.has(r.source), `unexpected source ${r.source}`);
+});
+
+await checkAsync('intel_metrics has a unique constraint on (company_slug, metric_code, period, source)', async () => {
+  const { rows } = await client.query(`
+    select tc.constraint_name, array_agg(kcu.column_name::text order by kcu.ordinal_position) as cols
+      from information_schema.table_constraints tc
+      join information_schema.key_column_usage kcu
+        on kcu.constraint_name = tc.constraint_name and kcu.table_schema = tc.table_schema
+     where tc.table_name = 'intel_metrics' and tc.constraint_type = 'UNIQUE'
+     group by tc.constraint_name
+  `);
+  const expected = ['company_slug', 'metric_code', 'period', 'source'];
+  const match = rows.find((r) => JSON.stringify([...r.cols].sort()) === JSON.stringify([...expected].sort()));
+  assert.ok(match, `no unique constraint on intel_metrics covering ${expected.join(', ')} (found: ${rows.map((r) => r.cols.join('+')).join('; ') || 'none'})`);
+});
+
 await client.end();
 
 console.log(`\n${pass} passed, ${fail} failed`);

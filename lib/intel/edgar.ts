@@ -1,5 +1,5 @@
-import { recordApiCall } from '../cost';
-import { EDGAR_FORMS } from './core';
+import { recordApiCall } from '../cost.ts';
+import { EDGAR_FORMS } from './core.ts';
 
 // The filings leg: SEC EDGAR's free JSON APIs, LLM-free. One submissions
 // fetch per company surfaces new filings (8-K, 10-Q, 10-K, S-1, DEF 14A,

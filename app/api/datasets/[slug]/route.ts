@@ -8,8 +8,11 @@ import { datasetFileName, datasetToCSV, datasetToJSON } from '@/lib/datasets/ser
 // The Datasets portal download route: /api/datasets/<slug>?format=csv|json[&lens=...].
 // Public (allow-listed in proxy.ts; its matcher does not exempt /api/*), except
 // key-gated datasets (bulk article text), which require the portal cookie.
-// Node runtime: builders run on lib/db's pg pool. No model call, no maxDuration.
+// Node runtime: builders run on lib/db's pg pool. No model call; maxDuration
+// raised for the million-row intel-metrics export (measured ~10s locally, but
+// prod pooler latency deserves headroom over the platform default).
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 // Datasets change only when the admin publishes, so public downloads are safe to
 // cache at the CDN for a few minutes. Key-gated responses are cookie-dependent

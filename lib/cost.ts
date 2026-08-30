@@ -1,4 +1,6 @@
-import { one, exec } from './db';
+// Explicit .ts extension so plain-Node type stripping can load this chain
+// (the backfill/ops scripts import the intel fetchers directly).
+import { one, exec } from './db.ts';
 import type { RateCard } from './types';
 
 // Server-only AI cost monitoring (migration 0014). Every successful Anthropic call in the
