@@ -13,6 +13,8 @@ const TABS = [
   { href: '/about/guardrails', label: 'Guardrails' },
   { href: '/about/glossary', label: 'Glossary' },
   { href: '/about/limitations', label: 'Limitations' },
+  { href: '/about/ingestion', label: 'Ingestion' },
+  { href: '/about/why-bespoke', label: 'Why bespoke' },
 ];
 
 export default function AboutNav() {
