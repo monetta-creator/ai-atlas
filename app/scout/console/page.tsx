@@ -6,7 +6,9 @@ import {
 } from '@/lib/data';
 import { DEFAULT_RUBRIC } from '@/lib/scout/agent';
 import { timeAgo } from '@/lib/format';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import ScoutConsole from '@/components/scout/ScoutConsole';
 import ScoutAgentPanel from '@/components/scout/ScoutAgentPanel';
 import CompanyReviewList from '@/components/scout/CompanyReviewList';
@@ -24,6 +26,7 @@ export const metadata = { title: 'Scout console · The AI Atlas' };
 // requireAdmin().
 export default async function ScoutConsolePage() {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
 
   const [verticals, queue, runs, prefs, queueIds, agentSummary] = await Promise.all([
     getScoutVerticals(true), getScoutQueue(), getScoutRuns(),
@@ -45,7 +48,13 @@ export default async function ScoutConsolePage() {
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <h1 style={{ marginBottom: 10 }}>Scout console</h1>
+          <Editable
+            as="h1"
+            style={{ marginBottom: 10 }}
+            k="scout-console.title"
+            value={txt('scout-console.title', 'Scout console')}
+            editing={editing}
+          />
           <p className="lede" style={{ marginBottom: 20 }}>
             The working side of Startup Scout: review discovered companies, add candidates
             by hand, tend the verticals. The watchlist lives at <Link href="/scout">/scout</Link>.

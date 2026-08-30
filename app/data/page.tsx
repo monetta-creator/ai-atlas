@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { requireAdminPage } from '@/lib/auth';
 import { getAllDomainRows, getNodeLensMap } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import DataField from '@/components/DataField';
 import LensTagger from '@/components/LensTagger';
 import WorkspaceTabs, { MAP_EDITOR_TABS } from '@/components/WorkspaceTabs';
@@ -10,6 +12,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function DataPage() {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
 
   const [{ questions, stances, claims, bridges }, lensMap] = await Promise.all([
     getAllDomainRows(),
@@ -25,12 +28,17 @@ export default async function DataPage() {
           <Link href="/map">Map</Link> / Data
         </div>
         <header className="pagehead" style={{ padding: '24px 0 22px' }}>
-          <h1>Data</h1>
-          <p className="lede">
-            Edit the text of the records directly. Saves write straight to the database and show
-            across the site. Confidence keeps its own editor on the detail pages, and codes stay
-            fixed.
-          </p>
+          <Editable as="h1" k="data.title" value={txt('data.title', 'Data')} editing={editing} />
+          <Editable
+            as="p"
+            className="lede"
+            k="data.lede"
+            value={txt(
+              'data.lede',
+              'Edit the text of the records directly. Saves write straight to the database and show across the site. Confidence keeps its own editor on the detail pages, and codes stay fixed.'
+            )}
+            editing={editing}
+          />
         </header>
         <WorkspaceTabs tabs={MAP_EDITOR_TABS} active="/data" />
 

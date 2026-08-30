@@ -2,9 +2,11 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireAdminPage } from '@/lib/auth';
 import { getQuestion, getTargets, getArgumentGapScan, getThesis, nextClaimCode } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import { createClaimAction } from '@/lib/actions';
 import type { Domain, Resolvability, Relation } from '@/lib/types';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import ClaimForm, { type ClaimEdgeInitial } from '@/components/ClaimForm';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +22,7 @@ export default async function NewClaimPage({
   searchParams: Promise<{ gap?: string; thesis?: string }>;
 }) {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
 
   const { slug } = await params;
   const { gap, thesis: thesisParam } = await searchParams;
@@ -76,7 +79,14 @@ export default async function NewClaimPage({
           <Link href="/map">Map</Link> / <Link href={`/q/${slug}`}>Q{question.question.sort_order}</Link> / New claim
         </div>
         <header className="pagehead" style={{ padding: '20px 0 18px' }}>
-          <h1 style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}>New claim</h1>
+          <Editable
+            as="h1"
+            k="claim-new.title"
+            value={txt('claim-new.title', 'New claim')}
+            editing={editing}
+            style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}
+          />
+          {/* lede branches on fromGap and interpolates question.question.title. Left static. */}
           <p className="lede" style={{ fontSize: 14, marginTop: 8 }}>
             {fromGap
               ? 'Pre-filled from the gap diagnosis: the statement, test, and wiring below are the model’s draft, grounded in recent evidence. Review and edit everything before creating.'

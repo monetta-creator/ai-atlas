@@ -8,10 +8,12 @@ import { isAdmin, isEditMode, isPreview } from './auth';
 // This module is server-only by construction (it imports lib/db, which throws in
 // the browser, and lib/auth, which reads next/headers cookies).
 
-// Keys are a dotted namespace. A prefix allow-list (not a registry of every key)
-// keeps it open to new editable spots in JSX without touching this file, while
-// still rejecting junk / path-ish / oversized keys.
-const KEY_RE = /^(home|about|glossary)\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+// Keys are a dotted namespace. Shape-validated rather than prefix-listed
+// (2026-08-30: the sitewide edit pass put Editable headers on every editorial
+// surface, so the old home|about|glossary prefix allow-list would reject
+// them): a kebab-case namespace, then dotted kebab segments. Still rejects
+// junk, path-ish, and oversized keys; writes stay admin-gated regardless.
+const KEY_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 export const CONTENT_MAX_VALUE_LEN = 8000;
 
 export function isValidContentKey(key: string): boolean {

@@ -6,7 +6,9 @@ import {
 import { setPipelineAnalysisModelsAction } from '@/lib/actions';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import { timeAgo } from '@/lib/format';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import PipelineConsole from '@/components/PipelineConsole';
 import PipelineCandidates from '@/components/PipelineCandidates';
 import PipelineEnabledToggle from '@/components/PipelineEnabledToggle';
@@ -20,6 +22,7 @@ export const metadata = { title: 'Discovery pipeline · The AI Atlas' };
 
 export default async function PipelinePage() {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
 
   const [runs, textCoverage, prefs, modelStats] = await Promise.all([
     getRuns(15), getTextCoverage(), getPipelinePrefs(), getAnalysisModelStats(30),
@@ -38,7 +41,12 @@ export default async function PipelinePage() {
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <header className="pagehead">
-          <h1>Discovery pipeline</h1>
+          <Editable
+            as="h1"
+            k="pipeline.title"
+            value={txt('pipeline.title', 'Discovery pipeline')}
+            editing={editing}
+          />
           <p className="lede">
             Discover → triage → analyze candidate developments into draft signals. Review and publish
             on the <Link href="/signals">Signal Board</Link>.

@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { isAdmin } from '@/lib/auth';
 import { listSavedReports, getLatestThesisReports, listGeneratedReports, getTargets } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import { formatDateRange, dateLabel } from '@/lib/format';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import SheetConsole from '@/components/reports/SheetConsole';
 import SheetRow from '@/components/reports/SheetRow';
 
@@ -21,6 +23,7 @@ export default async function ReportPortal({
   searchParams: Promise<{ generate?: string | string[]; code?: string | string[] }>;
 }) {
   const [admin, sp] = await Promise.all([isAdmin(), searchParams]);
+  const { editing, txt } = await getEditContext();
   const [reports, theses, generated, targets] = await Promise.all([
     listSavedReports(),
     getLatestThesisReports(20),
@@ -38,11 +41,22 @@ export default async function ReportPortal({
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1080, paddingBottom: 100 }}>
         <header className="pagehead" style={{ paddingBottom: 26 }}>
-          <h1>Report Portal</h1>
-          <p className="lede">
-            Grounded reports from the Atlas corpus at claim, lens, thesis, and whole-Atlas
-            granularity: cited, synthesized, and downloadable as branded PDFs.
-          </p>
+          <Editable
+            as="h1"
+            k="reports.title"
+            value={txt('reports.title', 'Report Portal')}
+            editing={editing}
+          />
+          <Editable
+            as="p"
+            className="lede"
+            k="reports.lede"
+            value={txt(
+              'reports.lede',
+              'Grounded reports from the Atlas corpus at claim, lens, thesis, and whole-Atlas granularity: cited, synthesized, and downloadable as branded PDFs.'
+            )}
+            editing={editing}
+          />
         </header>
 
         {admin && (

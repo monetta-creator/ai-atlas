@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { requireAdminPage } from '@/lib/auth';
 import { getTargets, getArgumentGapScan, getThesis, nextBridgeCode } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import { createBridgeAction } from '@/lib/actions';
 import type { Domain, Resolvability, Relation } from '@/lib/types';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import BridgeForm, { type BridgeFeederInitial } from '@/components/BridgeForm';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +19,7 @@ export default async function NewBridgePage({
   searchParams: Promise<{ gap?: string; thesis?: string }>;
 }) {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
 
   const { gap, thesis: thesisParam } = await searchParams;
   const { claims, bridges } = await getTargets();
@@ -66,7 +69,14 @@ export default async function NewBridgePage({
           <Link href="/map">Map</Link> / <Link href="/bridges">Bridges</Link> / New bridge-claim
         </div>
         <header className="pagehead" style={{ padding: '20px 0 18px' }}>
-          <h1 style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}>New bridge-claim</h1>
+          <Editable
+            as="h1"
+            k="bridge-new.title"
+            value={txt('bridge-new.title', 'New bridge-claim')}
+            editing={editing}
+            style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}
+          />
+          {/* lede branches on fromGap (a runtime condition, not a fixed string). Left static. */}
           <p className="lede" style={{ fontSize: 14, marginTop: 8 }}>
             {fromGap
               ? 'Pre-filled from the gap diagnosis: the statement, test, domains, and feeders below are the model’s draft, grounded in recent evidence. Review and edit everything before creating.'

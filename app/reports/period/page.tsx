@@ -3,7 +3,9 @@ import { buildReportData } from '@/lib/report';
 import { listSavedReports } from '@/lib/data';
 import { SIGNAL_LENS_SLUGS } from '@/lib/format';
 import type { SignalLens } from '@/lib/types';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import ReportGenerator from '@/components/ReportGenerator';
 import ReportPreview from '@/components/ReportPreview';
 import WorkspaceTabs, { REPORTS_TABS } from '@/components/WorkspaceTabs';
@@ -25,6 +27,7 @@ export default async function PeriodReportPage({
   searchParams: Promise<{ from?: string; to?: string; lenses?: string }>;
 }) {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
   const sp = await searchParams;
 
   // Default range: the last 90 days (so the preview is populated on first load).
@@ -52,11 +55,22 @@ export default async function PeriodReportPage({
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <header className="pagehead">
-          <h1>Period report generator</h1>
-          <p className="lede">
-            Compile a period intelligence report from the Signal Board: pick a date range and the
-            lenses to cover, generate the narrative, edit it, and save or export to PDF.
-          </p>
+          <Editable
+            as="h1"
+            k="reports-period.title"
+            value={txt('reports-period.title', 'Period report generator')}
+            editing={editing}
+          />
+          <Editable
+            as="p"
+            className="lede"
+            k="reports-period.lede"
+            value={txt(
+              'reports-period.lede',
+              'Compile a period intelligence report from the Signal Board: pick a date range and the lenses to cover, generate the narrative, edit it, and save or export to PDF.'
+            )}
+            editing={editing}
+          />
         </header>
         <WorkspaceTabs tabs={REPORTS_TABS} active="/reports/period" />
 

@@ -1,9 +1,12 @@
 import { requireAdminPage } from '@/lib/auth';
 import { getCostDashboard, getMonthlyBill } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import { cronLabel } from '@/lib/scan/handoff';
 import vercelConfig from '@/vercel.json';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import CostsDashboard from '@/components/CostsDashboard';
+import SpendForecast from '@/components/SpendForecast';
 import WorkspaceTabs, { ANALYTICS_TABS } from '@/components/WorkspaceTabs';
 
 // Admin-only AI cost console. force-dynamic (reads cookies + DB); no maxDuration needed —
@@ -35,6 +38,7 @@ function cronSubsystemName(path: string): string | null {
 
 export default async function CostsPage() {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
 
   const [data, bill] = await Promise.all([getCostDashboard(), getMonthlyBill()]);
 
@@ -49,13 +53,23 @@ export default async function CostsPage() {
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1080, paddingBottom: 100 }}>
         <header className="pagehead">
-          <h1>AI costs</h1>
-          <p className="lede">
-            The whole running cost of the system: fixed platform subscriptions plus every
-            metered model call the app makes (Anthropic and OpenRouter alike, spend, tokens,
-            latency, and context-window use), priced from the active rate card and frozen at
-            call time.
-          </p>
+          <Editable
+            as="h1"
+            k="costs.title"
+            value={txt('costs.title', 'AI costs')}
+            editing={editing}
+          />
+          <Editable
+            as="p"
+            className="lede"
+            multiline
+            k="costs.lede"
+            value={txt(
+              'costs.lede',
+              'The whole running cost of the system: fixed platform subscriptions plus every metered model call the app makes (Anthropic and OpenRouter alike, spend, tokens, latency, and context-window use), priced from the active rate card and frozen at call time.'
+            )}
+            editing={editing}
+          />
         </header>
         <WorkspaceTabs tabs={ANALYTICS_TABS} active="/costs" />
 
@@ -195,6 +209,8 @@ export default async function CostsPage() {
             edited in code when subscriptions change.
           </p>
         </section>
+
+        <SpendForecast daily={data.daily} fixedMonthly={fixedTotal} />
 
         <CostsDashboard data={data} />
       </section>

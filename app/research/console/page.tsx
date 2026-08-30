@@ -7,7 +7,9 @@ import {
 } from '@/lib/data';
 import { createThreadFormAction } from '@/lib/actions';
 import { timeAgo } from '@/lib/format';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import ResearchConsole from '@/components/ResearchConsole';
 import PaperReviewList from '@/components/PaperReviewList';
 import AddPaperForm from '@/components/AddPaperForm';
@@ -27,6 +29,7 @@ export const metadata = { title: 'Research console · The AI Atlas' };
 // (the /reports/period pattern). Every server action re-checks requireAdmin().
 export default async function ResearchConsolePage() {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
 
   const [runs, queue, rising, rawScan, threads, coverage, steering, unprocessed, agentSummary] = await Promise.all([
     getResearchRuns(15), getReviewQueuePapers(), getRisingRejects(), getThreadScan(),
@@ -56,7 +59,13 @@ export default async function ResearchConsolePage() {
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <h1 style={{ marginBottom: 10 }}>Research console</h1>
+          <Editable
+            as="h1"
+            style={{ marginBottom: 10 }}
+            k="research-console.title"
+            value={txt('research-console.title', 'Research console')}
+            editing={editing}
+          />
           <p className="lede" style={{ marginBottom: 20 }}>
             The working side of the Research Portal: pull and triage arXiv, review the queue,
             tend the threads. The reading surface lives at <Link href="/research">/research</Link>.

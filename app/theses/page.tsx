@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { requireAdminPage } from '@/lib/auth';
 import { getTheses } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import { dateLabel } from '@/lib/format';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import WorkspaceTabs, { REPORTS_TABS } from '@/components/WorkspaceTabs';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +15,7 @@ export const metadata = { title: 'Theses · The AI Atlas' };
 // /thesis-report links to share.
 export default async function ThesesPage() {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
   const theses = await getTheses();
 
   return (
@@ -20,11 +23,22 @@ export default async function ThesesPage() {
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 900, paddingBottom: 100 }}>
         <header className="pagehead">
-          <h1>Theses</h1>
-          <p className="lede">
-            Standing hypotheses tracked against the signal corpus. State a thesis, confirm which
-            Atlas claims it bears on, and generate a deterministic, cited report to share.
-          </p>
+          <Editable
+            as="h1"
+            k="theses.title"
+            value={txt('theses.title', 'Theses')}
+            editing={editing}
+          />
+          <Editable
+            as="p"
+            className="lede"
+            k="theses.lede"
+            value={txt(
+              'theses.lede',
+              'Standing hypotheses tracked against the signal corpus. State a thesis, confirm which Atlas claims it bears on, and generate a deterministic, cited report to share.'
+            )}
+            editing={editing}
+          />
         </header>
         <WorkspaceTabs tabs={REPORTS_TABS} active="/theses" />
 

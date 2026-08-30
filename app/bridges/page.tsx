@@ -1,8 +1,10 @@
 import Link from 'next/link';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getBridges, getAsOf } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import { DOMAIN_LABEL, relationColor } from '@/lib/format';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import ShareNotice from '@/components/ShareNotice';
 
@@ -12,6 +14,7 @@ export default async function BridgesPage() {
   const admin = await isAdmin();
   const preview = await isPreview();
   const personal = admin && !preview;
+  const { editing, txt } = await getEditContext();
   const [bridges, asOf] = await Promise.all([getBridges(personal), getAsOf()]);
 
   return (
@@ -27,7 +30,14 @@ export default async function BridgesPage() {
         <header className="pagehead" style={{ padding: '24px 0 32px' }}>
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h1>Bridge-claims · the spine</h1>
+              <Editable
+                as="h1"
+                k="bridges.title"
+                value={txt('bridges.title', 'Bridge-claims · the spine')}
+                editing={editing}
+              />
+              {/* lede has embedded <em> markup (between/within emphasis); Editable's value is
+                  plain text, so converting it would flatten that emphasis. Left static. */}
               <p className="lede">
                 Bridge-claims are statements about the causal link <em>between</em> domains, not claims{' '}
                 <em>within</em> one. Each has its own test and confidence, and is fed by claims from either

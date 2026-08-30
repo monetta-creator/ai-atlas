@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { isAdmin } from '@/lib/auth';
 import { SIGNAL_LENSES } from '@/lib/datasets/core';
 import { DATASETS } from '@/lib/datasets/registry';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Data Portal · The AI Atlas' };
@@ -11,6 +13,7 @@ export const metadata = { title: 'Data Portal · The AI Atlas' };
 // datasets plus the door to the team Ask surface. Nothing here calls a model.
 export default async function DatasetsPage() {
   const admin = await isAdmin();
+  const { editing, txt } = await getEditContext();
   const categories: { key: string; label: string }[] = [
     { key: 'signals', label: 'Signals' },
     { key: 'evidence', label: 'Evidence' },
@@ -30,13 +33,22 @@ export default async function DatasetsPage() {
         <header className="pagehead" style={{ padding: '24px 0 28px' }}>
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h1>Data Portal</h1>
-              <p className="lede">
-                The Atlas as data: every published signal, claim, evidence row, concept, and report,
-                downloadable as CSV or JSON with a documented schema. Built for analysts: filter and
-                group in the browser, pull a file into Sheets or a notebook, or ask in plain language
-                and get a cited answer with the right dataset attached.
-              </p>
+              <Editable
+                as="h1"
+                k="datasets.title"
+                value={txt('datasets.title', 'Data Portal')}
+                editing={editing}
+              />
+              <Editable
+                as="p"
+                className="lede"
+                k="datasets.lede"
+                value={txt(
+                  'datasets.lede',
+                  'The Atlas as data: every published signal, claim, evidence row, concept, and report, downloadable as CSV or JSON with a documented schema. Built for analysts: filter and group in the browser, pull a file into Sheets or a notebook, or ask in plain language and get a cited answer with the right dataset attached.'
+                )}
+                editing={editing}
+              />
             </div>
             <Link href="/ask" className="btn btn--primary" style={{ marginTop: 6, whiteSpace: 'nowrap' }}>
               Ask the Atlas

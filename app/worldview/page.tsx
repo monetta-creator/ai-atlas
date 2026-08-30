@@ -8,7 +8,9 @@ import {
   deletePositionAction,
 } from '@/lib/actions';
 import { DOMAIN_LABEL } from '@/lib/format';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import ConfidenceEditor from '@/components/ConfidenceEditor';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import PositionStatementEditor from '@/components/PositionStatementEditor';
@@ -19,6 +21,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function WorldviewPage() {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
 
   const [{ spine, positions }, nodes] = await Promise.all([getWorldview(), getNodeOptions()]);
 
@@ -40,11 +43,17 @@ export default async function WorldviewPage() {
           <Link href="/map">Map</Link> / Worldview
         </div>
         <header className="pagehead" style={{ padding: '24px 0 22px' }}>
-          <h1>Worldview &amp; spine</h1>
-          <p className="lede">
-            The bridge-claims that link domains, and the cross-cutting positions that span more than
-            one question.
-          </p>
+          <Editable as="h1" k="worldview.title" value={txt('worldview.title', 'Worldview & spine')} editing={editing} />
+          <Editable
+            as="p"
+            className="lede"
+            k="worldview.lede"
+            value={txt(
+              'worldview.lede',
+              'The bridge-claims that link domains, and the cross-cutting positions that span more than one question.'
+            )}
+            editing={editing}
+          />
         </header>
         <WorkspaceTabs tabs={MAP_EDITOR_TABS} active="/worldview" />
 

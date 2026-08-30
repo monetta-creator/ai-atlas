@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { requireAdminPage } from '@/lib/auth';
 import { getConceptForEdit, getConceptGraph, getTargets } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import { updateConceptAction, deleteConceptAction } from '@/lib/actions';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import ConceptForm from '@/components/ConceptForm';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +19,7 @@ export default async function EditConceptPage({
   params: Promise<{ slug: string }>;
 }) {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
 
   const { slug } = await params;
   const [data, { concepts }, { claims, bridges }] = await Promise.all([
@@ -36,7 +39,13 @@ export default async function EditConceptPage({
           <Link href={`/concepts/${concept.slug}`}>{concept.name}</Link> / Edit
         </div>
         <header className="pagehead" style={{ padding: '20px 0 18px' }}>
-          <h1 style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}>Edit concept</h1>
+          <Editable
+            as="h1"
+            k="concepts-edit.title"
+            value={txt('concepts-edit.title', 'Edit concept')}
+            editing={editing}
+            style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}
+          />
         </header>
 
         <ConceptForm

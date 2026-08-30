@@ -3,7 +3,9 @@ import Link from 'next/link';
 import { requireAdminPage, isPreview } from '@/lib/auth';
 import { getQuestionBySlug, getQuestionSummaries, getAsOf } from '@/lib/data';
 import { LENS_LABEL } from '@/lib/format';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import GenerateSummaryButton from '@/components/GenerateSummaryButton';
 import QuestionSummaryView from '@/components/QuestionSummaryView';
 import ShareNotice from '@/components/ShareNotice';
@@ -24,6 +26,7 @@ export default async function QuestionSummaryHistoryPage({
   const admin = await requireAdminPage();
   const preview = await isPreview();
   const personal = admin && !preview;
+  const { editing, txt } = await getEditContext();
 
   const question = await getQuestionBySlug(slug);
   if (!question) notFound();
@@ -44,7 +47,13 @@ export default async function QuestionSummaryHistoryPage({
             Q{question.sort_order}
             {question.primary_lens && <span className="lens">· lens: {LENS_LABEL[question.primary_lens]}</span>}
           </div>
-          <h1 style={{ fontSize: 'clamp(22px, 3vw, 34px)' }}>State summaries</h1>
+          <Editable
+            as="h1"
+            style={{ fontSize: 'clamp(22px, 3vw, 34px)' }}
+            k="q-summary.title"
+            value={txt('q-summary.title', 'State summaries')}
+            editing={editing}
+          />
           <p className="lede" style={{ fontSize: 15, marginTop: 8 }}>{question.title}</p>
         </header>
 

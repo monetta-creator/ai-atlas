@@ -9,8 +9,10 @@ import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import { getDataset } from '@/lib/datasets/registry';
 import { checkScanBudget } from '@/lib/scan/budget';
 import { buildScanHandoff, buildSignalsExportHandoff, cronLabel } from '@/lib/scan/handoff';
+import { getEditContext } from '@/lib/content';
 import vercelConfig from '@/vercel.json';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import ScanConsole from '@/components/scan/ScanConsole';
 import TopicToggle from '@/components/scan/TopicToggle';
 import ScanEnabledToggle from '@/components/scan/ScanEnabledToggle';
@@ -37,6 +39,7 @@ const panel = {
 // key-gated external-scan dataset.
 export default async function ScanPage() {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
   const [topics, runs, prefs, budget, health, signalCount, modelStats, h] = await Promise.all([
     getScanTopics(), getScanRuns(130), getScanPrefs(), checkScanBudget(), getScanHealth(30),
     getPublishedSignalCount(), getEnrichModelStats(30), headers(),
@@ -97,11 +100,24 @@ export default async function ScanPage() {
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <h1 style={{ marginBottom: 10 }}>External scan</h1>
-          <p className="lede" style={{ marginBottom: 20 }}>
-            The daily outside-the-firewall sweep: press feeds and topic web searches, hydrated
-            to full text and lightly enriched. The output that matters is one JSON file per day.
-          </p>
+          <Editable
+            as="h1"
+            style={{ marginBottom: 10 }}
+            k="scan.title"
+            value={txt('scan.title', 'External scan')}
+            editing={editing}
+          />
+          <Editable
+            as="p"
+            className="lede"
+            style={{ marginBottom: 20 }}
+            k="scan.lede"
+            value={txt(
+              'scan.lede',
+              'The daily outside-the-firewall sweep: press feeds and topic web searches, hydrated to full text and lightly enriched. The output that matters is one JSON file per day.'
+            )}
+            editing={editing}
+          />
           <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
             <a href="#json" className="touch-chip" style={chip}>The JSON</a>
             <a href="#signals" className="touch-chip" style={chip}>Signals export</a>

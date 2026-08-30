@@ -21,6 +21,8 @@ import EnrichModelPicker from '@/components/scan/EnrichModelPicker';
 import { setIntelEnrichModelsAction } from '@/lib/actions';
 import { getDataset } from '@/lib/datasets/registry';
 import { buildIntelHandoff } from '@/lib/intel/handoff';
+import { getEditContext } from '@/lib/content';
+import Editable from '@/components/Editable';
 import type { IntelTier } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -52,6 +54,7 @@ const TIER_LABEL: Record<IntelTier, string> = {
 // datasets.
 export default async function IntelPage() {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
   const [companies, runs, prefs, budget, health, modelStats, companyYield, quota, metricsCoverage, dsStats, h] = await Promise.all([
     getIntelCompanies(), getIntelRuns(130), getIntelPrefs(), checkIntelBudget(), getIntelHealth(30),
     getIntelModelStats(30), getIntelCompanyYield(30), getTavilyQuota(), getIntelMetricsCoverage(),
@@ -121,12 +124,24 @@ export default async function IntelPage() {
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <h1 style={{ marginBottom: 10 }}>Intel desk</h1>
-          <p className="lede" style={{ marginBottom: 20 }}>
-            A daily company-intelligence sweep: press feeds, rotating web search, and EDGAR
-            filings across a curated registry, hydrated to full text and enriched into structured
-            facts and tags. The output that matters is four key-gated datasets.
-          </p>
+          <Editable
+            as="h1"
+            style={{ marginBottom: 10 }}
+            k="intel.title"
+            value={txt('intel.title', 'Intel desk')}
+            editing={editing}
+          />
+          <Editable
+            as="p"
+            className="lede"
+            style={{ marginBottom: 20 }}
+            k="intel.lede"
+            value={txt(
+              'intel.lede',
+              'A daily company-intelligence sweep: press feeds, rotating web search, and EDGAR filings across a curated registry, hydrated to full text and enriched into structured facts and tags. The output that matters is four key-gated datasets.'
+            )}
+            editing={editing}
+          />
           <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
             <a href="#downloads" className="touch-chip" style={chip}>Downloads</a>
             <a href="#config" className="touch-chip" style={chip}>Schedule &amp; config</a>

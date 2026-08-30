@@ -2,7 +2,9 @@ import Link from 'next/link';
 import { requireAdminPage } from '@/lib/auth';
 import { getTickets } from '@/lib/data';
 import type { TicketKind, TicketStatus } from '@/lib/types';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import TicketRow from '@/components/TicketRow';
 
 export const dynamic = 'force-dynamic';
@@ -19,6 +21,7 @@ export default async function TicketsPage({
   searchParams: Promise<{ kind?: string; status?: string }>;
 }) {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
   const sp = await searchParams;
   const kind = sp.kind && KINDS.has(sp.kind) ? (sp.kind as TicketKind) : undefined;
   const status = sp.status && STATUSES.has(sp.status) ? (sp.status as TicketStatus) : undefined;
@@ -37,10 +40,24 @@ export default async function TicketsPage({
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 900, paddingBottom: 100 }}>
         <header className="pagehead" style={{ paddingBottom: 26 }}>
-          <h1 style={{ marginBottom: 10 }}>Tickets</h1>
-          <p className="lede" style={{ marginBottom: 20 }}>
-            The feedback box: bugs found and features wished for, filed from the rail dialogs.
-          </p>
+          <Editable
+            as="h1"
+            style={{ marginBottom: 10 }}
+            k="tickets.title"
+            value={txt('tickets.title', 'Tickets')}
+            editing={editing}
+          />
+          <Editable
+            as="p"
+            className="lede"
+            style={{ marginBottom: 20 }}
+            k="tickets.lede"
+            value={txt(
+              'tickets.lede',
+              'The feedback box: bugs found and features wished for, filed from the rail dialogs.'
+            )}
+            editing={editing}
+          />
           <nav aria-label="Filters" className="flex items-center gap-2 flex-wrap">
             {chip('/tickets', 'All', !kind && !status)}
             {chip('/tickets?kind=bug', 'Bugs', kind === 'bug')}

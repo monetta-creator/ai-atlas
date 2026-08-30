@@ -4,8 +4,10 @@ import {
   getResearchThreads, getWatchlist, getNotedPapers,
   getTrackedSince, getRecentThreadRevisions, getResearchTouchRollup, getNavCounts,
 } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import { timeAgo } from '@/lib/format';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import ResearchInfo from '@/components/ResearchInfo';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +27,7 @@ const excerpt = (html: string, n = 190) => {
 // fetched for guests, so nothing private reaches the RSC payload.
 export default async function ResearchPage() {
   const personal = await isAdmin();
+  const { editing, txt } = await getEditContext();
 
   const [threads, tracked, noted, freshPapers, freshRevisions, touchRollup] = await Promise.all([
     getResearchThreads(), getWatchlist(), getNotedPapers(),
@@ -38,11 +41,24 @@ export default async function ResearchPage() {
       <Header admin={personal} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <h1 style={{ marginBottom: 10 }}>Research</h1>
-          <p className="lede" style={{ marginBottom: 20 }}>
-            What the recent AI literature says, and what it changes: living syntheses by
-            question, a tracked watchlist, and every paper&apos;s finding one click away.
-          </p>
+          <Editable
+            as="h1"
+            k="research.title"
+            value={txt('research.title', 'Research')}
+            editing={editing}
+            style={{ marginBottom: 10 }}
+          />
+          <Editable
+            as="p"
+            className="lede"
+            k="research.lede"
+            value={txt(
+              'research.lede',
+              "What the recent AI literature says, and what it changes: living syntheses by question, a tracked watchlist, and every paper's finding one click away."
+            )}
+            editing={editing}
+            style={{ marginBottom: 20 }}
+          />
           <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
             {fresh > 0 && <a href="#new" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>New</a>}
             <a href="#threads" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Threads</a>

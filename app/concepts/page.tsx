@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getConceptGraph, getConceptGapScan, reconcileConceptGapScan } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import ConceptGraph from '@/components/ConceptGraph';
 import ConceptGapPanel from '@/components/ConceptGapPanel';
 
@@ -14,6 +16,7 @@ export default async function ConceptsPage() {
   const admin = await isAdmin();
   const preview = await isPreview();
   const personal = admin && !preview;
+  const { editing, txt } = await getEditContext();
   const [{ concepts, edges }, rawGapScan] = await Promise.all([
     getConceptGraph(),
     personal ? getConceptGapScan() : Promise.resolve(null),
@@ -45,13 +48,22 @@ export default async function ConceptsPage() {
         <header className="pagehead" style={{ padding: '24px 0 28px' }}>
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h1>Concepts · the semantic scaffold</h1>
-              <p className="lede">
-                The vocabulary the AI-economy debate is conducted in, stacked by dependency:
-                foundational ideas at the bottom, the concepts built on them above. Most terms
-                have settled technical meanings; the contested ones are where arguments
-                quietly talk past each other.
-              </p>
+              <Editable
+                as="h1"
+                k="concepts.title"
+                value={txt('concepts.title', 'Concepts · the semantic scaffold')}
+                editing={editing}
+              />
+              <Editable
+                as="p"
+                className="lede"
+                k="concepts.lede"
+                value={txt(
+                  'concepts.lede',
+                  'The vocabulary the AI-economy debate is conducted in, stacked by dependency: foundational ideas at the bottom, the concepts built on them above. Most terms have settled technical meanings; the contested ones are where arguments quietly talk past each other.'
+                )}
+                editing={editing}
+              />
             </div>
             {personal && (
               <Link href="/concepts/new" className="btn btn--primary" style={{ marginTop: 6 }}>

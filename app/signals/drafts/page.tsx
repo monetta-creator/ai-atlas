@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { requireAdminPage } from '@/lib/auth';
 import { getSignalsPage, getDedupeScan, getActiveDraftIds, reconcileDedupeScan } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import DraftQueue from '@/components/DraftQueue';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +15,7 @@ export const metadata = { title: 'Draft queue · The AI Atlas' };
 // from the public published feed at /signals so neither page is one long scroll.
 export default async function DraftsPage() {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
 
   const [active, archived, persisted, activeIds] = await Promise.all([
     getSignalsPage({ admin: true, status: 'unpublished' }),
@@ -31,7 +34,12 @@ export default async function DraftsPage() {
           <div className="crumbs">
             <Link href="/signals">Signal Board</Link> / Draft queue
           </div>
-          <h1>Draft queue</h1>
+          <Editable
+            as="h1"
+            k="signals-drafts.title"
+            value={txt('signals-drafts.title', 'Draft queue')}
+            editing={editing}
+          />
           <p className="lede">
             Your unpublished working queue, admin-only. Publishing a draft adds its findings to the{' '}
             <Link href="/map">Argument Map</Link>. Scan for duplicates before publishing to consolidate

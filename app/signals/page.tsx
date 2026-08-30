@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getSignalsPage } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import SignalFeed from '@/components/SignalFeed';
 
 export const dynamic = 'force-dynamic';
@@ -15,6 +17,7 @@ export default async function SignalsPage() {
   const admin = await isAdmin();
   const preview = await isPreview();
   const personal = admin && !preview;
+  const { editing, txt } = await getEditContext();
 
   const published = await getSignalsPage({ admin: personal, status: 'published' });
 
@@ -23,7 +26,14 @@ export default async function SignalsPage() {
       <Header admin={admin} />
       <section className="wrap">
         <header className="pagehead">
-          <h1>Signal Board</h1>
+          <Editable
+            as="h1"
+            k="signals.title"
+            value={txt('signals.title', 'Signal Board')}
+            editing={editing}
+          />
+          {/* lede embeds a <Link> to /map; Editable's value is plain text, so
+              converting it would drop the in-line link. Left static. */}
           <p className="lede">
             Tracked developments in AI, organized by lens, each linked to the claims it touches on the{' '}
             <Link href="/map">Argument Map</Link>.

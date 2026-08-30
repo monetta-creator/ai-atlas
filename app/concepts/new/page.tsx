@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { requireAdminPage } from '@/lib/auth';
 import { getConceptGraph, getConceptGapScan, getTargets } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import { createConceptAction } from '@/lib/actions';
 import type { ConceptStatus } from '@/lib/types';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import ConceptForm from '@/components/ConceptForm';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +19,7 @@ export default async function NewConceptPage({
   searchParams: Promise<{ gap?: string }>;
 }) {
   const admin = await requireAdminPage();
+  const { editing, txt } = await getEditContext();
 
   const { gap } = await searchParams;
   const [{ concepts }, { claims, bridges }] = await Promise.all([getConceptGraph(), getTargets()]);
@@ -59,7 +62,14 @@ export default async function NewConceptPage({
           <Link href="/concepts">Concepts</Link> / New concept
         </div>
         <header className="pagehead" style={{ padding: '20px 0 18px' }}>
-          <h1 style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}>New concept</h1>
+          <Editable
+            as="h1"
+            k="concepts-new.title"
+            value={txt('concepts-new.title', 'New concept')}
+            editing={editing}
+            style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}
+          />
+          {/* lede branches on fromGap (a runtime condition, not a fixed string). Left static. */}
           <p className="lede" style={{ fontSize: 14, marginTop: 8 }}>
             {fromGap
               ? 'Pre-filled from the gap diagnosis: the definition, explanation, and wiring below are the model’s draft. Review and edit everything before creating.'

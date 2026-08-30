@@ -4,8 +4,10 @@ import {
   getScoutVerticals, getTrackedCompanies, getRecentCompanyEvents, getScoutQueue,
   getQueuedCompaniesPublic,
 } from '@/lib/data';
+import { getEditContext } from '@/lib/content';
 import { COMPANY_STAGE_LABEL, COMPANY_EVENT_LABEL, timeAgo } from '@/lib/format';
 import Header from '@/components/Header';
+import Editable from '@/components/Editable';
 import AddCompanyForm from '@/components/scout/AddCompanyForm';
 
 export const dynamic = 'force-dynamic';
@@ -19,6 +21,7 @@ export const metadata = { title: 'Startup Scout · The AI Atlas' };
 export default async function ScoutPage() {
   const personal = await isAdmin();
   const portal = await isPortal();
+  const { editing, txt } = await getEditContext();
 
   const [verticals, tracked, events] = await Promise.all([
     getScoutVerticals(personal), getTrackedCompanies(personal), getRecentCompanyEvents(),
@@ -40,12 +43,24 @@ export default async function ScoutPage() {
       <Header admin={personal} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <h1 style={{ marginBottom: 10 }}>Startup Scout</h1>
-          <p className="lede" style={{ marginBottom: 20 }}>
-            Young AI companies tracked as acquisition candidates, organized by vertical.
-            Each profile carries what the company does, the AI tech itself, and a running
-            event timeline.
-          </p>
+          <Editable
+            as="h1"
+            k="scout.title"
+            value={txt('scout.title', 'Startup Scout')}
+            editing={editing}
+            style={{ marginBottom: 10 }}
+          />
+          <Editable
+            as="p"
+            className="lede"
+            k="scout.lede"
+            value={txt(
+              'scout.lede',
+              'Young AI companies tracked as acquisition candidates, organized by vertical. Each profile carries what the company does, the AI tech itself, and a running event timeline.'
+            )}
+            editing={editing}
+            style={{ marginBottom: 20 }}
+          />
           <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
             {events.length > 0 && <a href="#activity" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Activity</a>}
             {verticals.filter((v) => v.active).map((v) => (
