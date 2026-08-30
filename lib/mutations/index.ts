@@ -14,3 +14,4 @@ export * from './tickets';
 export * from './scout';
 export * from './scan';
 export * from './intel';
+export * from './home';

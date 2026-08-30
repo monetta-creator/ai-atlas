@@ -260,6 +260,23 @@ export async function getSignal(
   return { signal, touches };
 }
 
+// ---- Home widget read (the "latest-signals" widget, migration 0045) -------
+// Guest-safe by construction: published only, and only the columns a public
+// card needs (title aliased to headline, no summary/source/touches).
+export async function getRecentSignals(limit = 3): Promise<{
+  id: string; headline: string; lenses: string[]; significance: string; published_on: string;
+}[]> {
+  return q(
+    `select id, title as headline, lenses::text[] as lenses, significance::text as significance,
+            to_char(published_at, 'YYYY-MM-DD') as published_on
+       from signals
+      where is_published = true
+      order by published_at desc
+      limit $1`,
+    [limit]
+  );
+}
+
 // Reverse lookup: every signal whose claim_touches names this code (GIN-backed). Drafts
 // are admin-only; guests see published signals. Powers the claim/bridge "Related signals"
 // cross-link to the Signal Board.

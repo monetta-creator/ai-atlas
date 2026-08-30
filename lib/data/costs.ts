@@ -174,6 +174,46 @@ export async function getMonthlyBill(): Promise<MonthlyBill> {
   return { mtdUsd, todayUsd, allTimeUsd, mtdCalls, projectedUsd, subsystems };
 }
 
+// ---- Home widget read (the "todays-spend" widget, migration 0045) ---------
+// A lean trio for the Lobby card: today's spend, month-to-date, and a
+// forecast. forecast30Usd is NOT computeForecast (lib/costs-deck.ts) — that
+// module imports getCostDashboard from this file, so importing it back here
+// would create a cycle. Instead: the trailing-14-day mean daily spend
+// (zero-filled, so a quiet weekend pulls the mean down like it should) times
+// 30, a simpler version of the same idea without the weekday/weekend split.
+export async function getSpendWidgetData(): Promise<{
+  todayUsd: number; monthToDateUsd: number; forecast30Usd: number;
+}> {
+  const [today, mtd, avgDaily] = await Promise.all([
+    one<{ usd: number }>(
+      `select coalesce(sum(cost_usd), 0)::float8 as usd from ai_cost_log
+        where created_at >= date_trunc('day', now() at time zone 'utc')`
+    ),
+    one<{ usd: number }>(
+      `select coalesce(sum(cost_usd), 0)::float8 as usd from ai_cost_log
+        where created_at >= date_trunc('month', now() at time zone 'utc')`
+    ),
+    one<{ avg: number }>(
+      `with days as (
+         select generate_series(current_date - interval '13 days', current_date, interval '1 day')::date as day
+       ),
+       agg as (
+         select created_at::date as day, sum(cost_usd) as cost
+           from ai_cost_log
+          where created_at >= current_date - interval '13 days'
+          group by created_at::date
+       )
+       select coalesce(avg(coalesce(a.cost, 0)), 0)::float8 as avg
+         from days d left join agg a on a.day = d.day`
+    ),
+  ]);
+  return {
+    todayUsd: today?.usd ?? 0,
+    monthToDateUsd: mtd?.usd ?? 0,
+    forecast30Usd: (avgDaily?.avg ?? 0) * 30,
+  };
+}
+
 // The fixed platform subscriptions, the other half of the monthly bill (the
 // metered half is getMonthlyBill). A code constant on purpose: it changes
 // only when a subscription changes, and both /costs and the cost deck must

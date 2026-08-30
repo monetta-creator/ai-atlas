@@ -15,3 +15,5 @@ export * from './scout';
 export * from './scan';
 export * from './intel';
 export * from './ingestion';
+export * from './home';
+export * from './readiness';
