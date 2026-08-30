@@ -420,3 +420,38 @@ export async function getTavilyQuota(): Promise<TavilyQuota> {
     capHit: scanNotes.some((r) => quotaRe.test(r.note)) || intelNotes.some((r) => quotaRe.test(r.note)),
   };
 }
+
+// Per-dataset headline numbers for the /intel downloads cards: enough for an
+// at-a-glance read of what each export currently holds (the metrics dataset's
+// numbers come from getIntelMetricsCoverage, fetched alongside).
+export interface IntelDatasetStats {
+  items: { total: number; latestDay: string | null; latestDayCount: number };
+  facts: { total: number; companies: number };
+  companies: { total: number; active: number };
+}
+
+export async function getIntelDatasetStats(): Promise<IntelDatasetStats> {
+  const [items, facts, companies] = await Promise.all([
+    one<{ total: number; latest_day: string | null; latest_count: number }>(
+      `select count(*)::int as total,
+              to_char(max(r.day), 'YYYY-MM-DD') as latest_day,
+              count(*) filter (where r.day = (select max(day) from intel_runs where status = 'completed'))::int as latest_count
+         from intel_items i join intel_runs r on r.id = i.run_id`
+    ),
+    one<{ total: number; companies: number }>(
+      `select count(*)::int as total, count(distinct company_slug)::int as companies from intel_facts`
+    ),
+    one<{ total: number; active: number }>(
+      `select count(*)::int as total, count(*) filter (where active)::int as active from intel_companies`
+    ),
+  ]);
+  return {
+    items: {
+      total: items?.total ?? 0,
+      latestDay: items?.latest_day ?? null,
+      latestDayCount: items?.latest_count ?? 0,
+    },
+    facts: { total: facts?.total ?? 0, companies: facts?.companies ?? 0 },
+    companies: { total: companies?.total ?? 0, active: companies?.active ?? 0 },
+  };
+}

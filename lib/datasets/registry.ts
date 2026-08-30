@@ -497,9 +497,9 @@ const BASE: DatasetDef[] = [
     slug: 'intel-metrics',
     title: 'Intel Desk: metrics',
     description:
-      'LLM-free quarterly structured series for tracked companies, pulled directly from SEC EDGAR XBRL, FDIC, and CFPB public APIs: one metric-period value per row.',
+      'LLM-free structured series for tracked companies, about a decade deep: the full FDIC call-report field set per bank, FR Y-9C holding-company consolidated items, curated SEC EDGAR XBRL concepts, and CFPB complaint counts: one metric-period value per row.',
     methodology:
-      'One row per (company, metric, period, source). No model ever touches this table; every value traces to a public structured API. Re-fetches upsert idempotently, so a re-download reflects the latest pull for a period without duplicating it. This is a working corpus, not a redistribution channel. Downloading requires the team portal key.',
+      'One row per (company, metric, period, source). Metric codes name their origin: fdic_<mnemonic> (FDIC RIS dictionary), y9c_<mdrm> (Federal Reserve MDRM), curated concept names for edgar_xbrl, cfpb_complaints_month/_30d. No model ever touches this table; every value traces to a public structured source. Quarterly sources refresh on the Monday cron (Y-9C by a quarterly file ingest); re-fetches upsert idempotently, so a re-download reflects the latest pull for a period without duplicating it. This is a working corpus, not a redistribution channel. Downloading requires the team portal key.',
     category: 'intel',
     formats: ['csv', 'json'],
     heavy: true,

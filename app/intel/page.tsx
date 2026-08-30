@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { requireAdminPage } from '@/lib/auth';
 import {
   getIntelPrefs, getIntelCompanies, getIntelRuns, getIntelHealth, getIntelModelStats,
-  getIntelCompanyYield, getTavilyQuota, getIntelMetricsCoverage,
+  getIntelCompanyYield, getTavilyQuota, getIntelMetricsCoverage, getIntelDatasetStats,
 } from '@/lib/data';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import { checkIntelBudget } from '@/lib/intel/budget';
@@ -52,9 +52,10 @@ const TIER_LABEL: Record<IntelTier, string> = {
 // datasets.
 export default async function IntelPage() {
   const admin = await requireAdminPage();
-  const [companies, runs, prefs, budget, health, modelStats, companyYield, quota, metricsCoverage, h] = await Promise.all([
+  const [companies, runs, prefs, budget, health, modelStats, companyYield, quota, metricsCoverage, dsStats, h] = await Promise.all([
     getIntelCompanies(), getIntelRuns(130), getIntelPrefs(), checkIntelBudget(), getIntelHealth(30),
-    getIntelModelStats(30), getIntelCompanyYield(30), getTavilyQuota(), getIntelMetricsCoverage(), headers(),
+    getIntelModelStats(30), getIntelCompanyYield(30), getTavilyQuota(), getIntelMetricsCoverage(),
+    getIntelDatasetStats(), headers(),
   ]);
   const tavily = Boolean(process.env.TAVILY_API_KEY);
   const openrouter = Boolean(process.env.OPENROUTER_API_KEY);
@@ -65,6 +66,18 @@ export default async function IntelPage() {
   const allCrons = (vercelConfig as { crons: { path: string; schedule: string }[] }).crons;
   const crons = allCrons.filter((c) => c.path.startsWith('/api/cron/intel'));
   const latestDay = runs.find((r) => r.status === 'completed')?.day ?? null;
+
+  // At-a-glance lines for the download cards: what each dataset is (the
+  // registry description) plus its live size, coverage, and cadence.
+  const metricsTotal = metricsCoverage.reduce((s, r) => s + r.rows, 0);
+  const metricsOldest = metricsCoverage.map((r) => r.oldest).filter(Boolean).sort()[0] ?? null;
+  const metricsNewest = metricsCoverage.map((r) => r.newest).filter(Boolean).sort().at(-1) ?? null;
+  const datasetStatsLine: Record<string, string> = {
+    'intel-items': `${dsStats.items.latestDayCount} items on ${dsStats.items.latestDay ?? 'n/a'} · ${dsStats.items.total.toLocaleString()} collected all-time · grows every weekday`,
+    'intel-companies': `${dsStats.companies.active} active of ${dsStats.companies.total} tracked, in six tiers · changes with the registry`,
+    'intel-facts': `${dsStats.facts.total.toLocaleString()} facts across ${dsStats.facts.companies} companies · grows every weekday`,
+    'intel-metrics': `${metricsTotal.toLocaleString()} values · ${metricsCoverage.map((r) => `${r.source} ${r.rows.toLocaleString()}`).join(' · ')}${metricsOldest && metricsNewest ? ` · ${metricsOldest.slice(0, 7)} to ${metricsNewest.slice(0, 7)}` : ''} · Mondays + the quarterly Y-9C ingest`,
+  };
   const now = new Date();
   const handoff = defs.length === DATASET_SLUGS.length
     ? buildIntelHandoff({
@@ -127,22 +140,29 @@ export default async function IntelPage() {
         <section id="downloads" style={{ scrollMarginTop: 80 }}>
           <div className="section-label">Downloads</div>
           <div className="flex flex-col gap-2" style={{ marginTop: 14 }}>
-            {DATASET_SLUGS.map((slug) => (
-              <div key={slug} className="rounded-[var(--radius)] border p-[var(--card-pad)]" style={panel}>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <a className="btn btn--primary" href={`/api/datasets/${slug}?format=json&download=1`}>
-                    Download {slug} JSON{slug === 'intel-items' && latestDay ? ` · ${latestDay}` : ''}
-                  </a>
-                  <a className="btn" href={`/api/datasets/${slug}?format=csv`}>CSV</a>
-                  <Link className="btn" href={`/datasets/${slug}`}>Dataset page</Link>
-                </div>
-                {slug === 'intel-items' && (
-                  <p className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 10 }}>
-                    Serves the latest completed day; add ?day=YYYY-MM-DD for a specific one.
+            {DATASET_SLUGS.map((slug) => {
+              const def = defs.find((d) => d.slug === slug);
+              return (
+                <div key={slug} className="rounded-[var(--radius)] border p-[var(--card-pad)]" style={panel}>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <a className="btn btn--primary" href={`/api/datasets/${slug}?format=json&download=1`}>
+                      Download {slug} JSON{slug === 'intel-items' && latestDay ? ` · ${latestDay}` : ''}
+                    </a>
+                    <a className="btn" href={`/api/datasets/${slug}?format=csv`}>CSV</a>
+                    <Link className="btn" href={`/datasets/${slug}`}>Dataset page</Link>
+                  </div>
+                  {def && (
+                    <p className="text-sm" style={{ color: 'var(--dim)', marginTop: 10, maxWidth: 760, lineHeight: 1.55 }}>
+                      {def.description}
+                    </p>
+                  )}
+                  <p className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 6 }}>
+                    {datasetStatsLine[slug]}
+                    {slug === 'intel-items' ? ' · add ?day=YYYY-MM-DD for a specific day' : ''}
                   </p>
-                )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
           <p className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 10 }}>
             From a browser without the portal cookie (a work machine), unlock first:{' '}
