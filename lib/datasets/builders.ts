@@ -507,3 +507,182 @@ export async function buildSignalsExport(q: Q, opts: DatasetOpts = {}): Promise<
     };
   });
 }
+
+// ---------------------------------------------------------------------------
+// The Intel Desk (migration 0043). All four builders are KEY-GATED, HEAVY
+// datasets: a company-intelligence registry, its daily collected items,
+// extracted facts, and LLM-free metrics never ship un-gated. See
+// scripts/test-intel-datasets.mjs for the coverage/guest-safety guard.
+
+interface IntelItemQueryRow {
+  item_id: string; run_day: string; url: string; normalized_url: string;
+  headline: string | null; source_domain: string | null; published_on: string | null;
+  discovered_via: string; topic_slug: string | null;
+  summary: string | null; tags: string; entities: string;
+  relevance: number | null;
+  enrich_status: string; fetch_status: string; fetched_via: string | null;
+  enriched_by: string | null;
+  raw_content: string | null; facts_text: string | null;
+  doc_type: string; company_slugs: string; tier: string | null;
+}
+
+export async function buildIntelItems(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
+  // Mirrors external-scan's twenty columns key for key, in order, so the same
+  // firewall intake ingests both files: topic_slug carries the item's primary
+  // company_slug, tags carries its dimension tags, relevance carries its
+  // significance score. topic_code has no company-level analogue (the
+  // taxonomy codes live on dimensions, already riding tags) and is always
+  // null here, the same deliberate null buildSignalsExport uses for the same
+  // reason. full_text is a COMPOSED document (headline, summary, extracted
+  // facts, then the raw article text), not the raw retained text alone, so
+  // its text_chars is the composed length; the day resolution mirrors
+  // buildExternalScan's latest-completed-day default.
+  const rows = await q<IntelItemQueryRow>(
+    `select i.id::text as item_id,
+            to_char(r.day, 'YYYY-MM-DD') as run_day,
+            i.url, i.normalized_url, i.headline, i.source_domain,
+            to_char(i.published_date, 'YYYY-MM-DD') as published_on,
+            i.discovered_via,
+            i.company_slug as topic_slug,
+            i.summary,
+            array_to_string(i.dimensions, '; ') as tags,
+            array_to_string(i.entities, '; ') as entities,
+            i.significance as relevance,
+            i.enrich_status::text as enrich_status,
+            i.fetch_status::text as fetch_status,
+            i.fetched_via,
+            i.enriched_by,
+            i.raw_content,
+            fx.facts_text,
+            i.doc_type::text as doc_type,
+            array_to_string(i.company_slugs, '; ') as company_slugs,
+            c.tier::text as tier
+       from intel_items i
+       join intel_runs r on r.id = i.run_id
+       left join intel_companies c on c.slug = i.company_slug
+       left join lateral (
+         select string_agg(
+                  '- [' || f.dimension || '] ' || f.fact
+                    || case when f.value_text is not null then ' = ' || f.value_text else '' end
+                    || case when f.as_of is not null then ' (as of ' || to_char(f.as_of, 'YYYY-MM-DD') || ')' else '' end,
+                  E'\n' order by f.created_at, f.id
+                ) as facts_text
+           from intel_facts f
+          where f.item_id = i.id
+       ) fx on true
+      where r.day = coalesce($1::date, (select max(day) from intel_runs where status = 'completed'))
+      order by i.published_date desc nulls last, i.normalized_url, i.id`,
+    [opts.day ?? null]
+  );
+
+  return rows.map((r) => {
+    const parts: string[] = [];
+    if (r.headline) parts.push(r.headline);
+    if (r.summary) parts.push(`SUMMARY: ${r.summary}`);
+    if (r.facts_text) parts.push(`EXTRACTED FACTS:\n${r.facts_text}`);
+    if (r.raw_content) parts.push(`ARTICLE TEXT:\n${r.raw_content}`);
+    const fullText = parts.join('\n\n').slice(0, 24_000);
+    return {
+      item_id: r.item_id,
+      run_day: r.run_day,
+      url: r.url,
+      normalized_url: r.normalized_url,
+      headline: r.headline,
+      source_domain: r.source_domain,
+      published_on: r.published_on,
+      discovered_via: r.discovered_via,
+      topic_slug: r.topic_slug,
+      topic_code: null,
+      summary: r.summary,
+      tags: r.tags,
+      entities: r.entities,
+      relevance: r.relevance,
+      enrich_status: r.enrich_status,
+      fetch_status: r.fetch_status,
+      fetched_via: r.fetched_via,
+      text_chars: [...fullText].length,
+      full_text: fullText,
+      enriched_by: r.enriched_by,
+      doc_type: r.doc_type,
+      company_slugs: r.company_slugs,
+      tier: r.tier,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+
+export async function buildIntelCompanies(q: Q): Promise<DatasetRow[]> {
+  // The full registry (tracked and queued alike; the Intel Desk has no
+  // review-funnel visibility split like Scout's). Booleans render 'yes'/'no'
+  // (the is_frame/one_sided house convention). The dossier is the machine's
+  // own merged record (lib/scout/core.ts mergeDossier); products/customers
+  // are jsonb arrays, flattened the same way array columns are elsewhere.
+  return q<DatasetRow>(
+    `select c.slug, c.name, c.tier::text as tier, c.niche, c.ticker, c.cik,
+            c.rssd_id, c.fdic_cert, c.lei, c.domain,
+            array_to_string(c.aliases, '; ') as aliases,
+            case when c.active then 'yes' else 'no' end as active,
+            c.dossier->>'summary' as dossier_summary,
+            coalesce(
+              (select string_agg(x, '; ')
+                 from jsonb_array_elements_text(coalesce(c.dossier->'products', '[]'::jsonb)) x),
+              ''
+            ) as dossier_initiatives,
+            coalesce(
+              (select string_agg(x, '; ')
+                 from jsonb_array_elements_text(coalesce(c.dossier->'customers', '[]'::jsonb)) x),
+              ''
+            ) as dossier_segments,
+            c.dossier->>'updated_at' as dossier_updated_at,
+            to_char(c.created_at, 'YYYY-MM-DD') as created_at,
+            to_char(c.updated_at, 'YYYY-MM-DD') as updated_at
+       from intel_companies c
+      order by c.slug`
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+export async function buildIntelFacts(q: Q): Promise<DatasetRow[]> {
+  // Every extracted fact, provenance intact: source_url resolves through the
+  // originating item (nullable; a fact can outlive nothing since both carry
+  // on-delete-cascade, but the item join stays a left join for the rare row
+  // ingested without one).
+  return q<DatasetRow>(
+    `select f.id::text as fact_id,
+            f.company_slug,
+            c.name as company_name,
+            f.dimension,
+            f.fact,
+            f.value_text,
+            to_char(f.as_of, 'YYYY-MM-DD') as as_of,
+            it.url as source_url,
+            f.item_id::text as item_id,
+            to_char(f.created_at, 'YYYY-MM-DD') as created_at
+       from intel_facts f
+       join intel_companies c on c.slug = f.company_slug
+       left join intel_items it on it.id = f.item_id
+      order by f.company_slug, f.created_at desc, f.id`
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+export async function buildIntelMetrics(q: Q): Promise<DatasetRow[]> {
+  // LLM-free structured series (EDGAR XBRL, FDIC, CFPB); no model ever
+  // touches this table, so there is no enrichment status to carry.
+  return q<DatasetRow>(
+    `select m.company_slug,
+            c.name as company_name,
+            m.metric_code,
+            to_char(m.period, 'YYYY-MM-DD') as period,
+            m.value,
+            m.unit,
+            m.source,
+            to_char(m.fetched_at, 'YYYY-MM-DD') as fetched_at
+       from intel_metrics m
+       join intel_companies c on c.slug = m.company_slug
+      order by m.company_slug, m.metric_code, m.period desc, m.source, m.id`
+  );
+}

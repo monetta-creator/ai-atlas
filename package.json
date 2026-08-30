@@ -13,6 +13,7 @@
     "db:seed:concepts": "node scripts/seed-concepts.mjs",
     "db:seed:threads": "node scripts/seed-threads.mjs",
     "db:seed:scan": "node scripts/seed-scan-topics.mjs",
+    "db:seed:intel": "node scripts/seed-intel-companies.mjs",
     "db:verify": "node scripts/verify.mjs"
   },
   "dependencies": {

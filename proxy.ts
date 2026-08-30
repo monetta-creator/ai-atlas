@@ -99,12 +99,12 @@ export function proxy(req: NextRequest) {
     // dialogs). The route validates everything; the admin image route stays off
     // this list (admins carry the cookie).
     pathname === '/api/tickets' ||
-    // The External Scan's cron drivers (the 9:00 primary and the /sweep
-    // second invocation — Vercel keys crons by path, so the sweeper has its
-    // own): cron invocations carry no app cookie, so both must be reachable
-    // sessionless; the route enforces its own gate (Authorization: Bearer
+    // The cron drivers (scan, pipeline, intel — each with a /sweep second
+    // invocation, since Vercel keys crons by path): cron invocations carry no
+    // app cookie, so every route under /api/cron must be reachable
+    // sessionless; each route enforces its own gate (Authorization: Bearer
     // CRON_SECRET, failing closed when unset).
-    pathname.startsWith('/api/cron/scan') ||
+    pathname.startsWith('/api/cron/') ||
     pathname.startsWith('/claim/') ||
     // /q/<slug> is public; the admin summary timeline and the claim authoring page stay gated.
     (pathname.startsWith('/q/') && !pathname.endsWith('/summary') && !pathname.endsWith('/claim/new'));

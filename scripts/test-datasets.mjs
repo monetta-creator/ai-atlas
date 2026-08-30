@@ -64,11 +64,18 @@ const BANNED_EXACT = new Set([
   'dossier', 'note', 'touch_details', 'review_note', 'rigor_prior', 'admin_note',
 ]);
 const BANNED_SUBSTRINGS = ['rationale', 'snapshot', 'confidence', 'prior', 'dossier'];
-// The one scoped exception (see lib/datasets/core.ts): per-touch direction +
-// editorial reason may ride KEY-GATED datasets only; the portal key is the
-// boundary, the same as bulk article text. Never widen this to the personal
-// layer proper (confidence, priors, rationales stay banned everywhere).
-const KEY_GATED_ALLOWED = new Set(['touch_details']);
+// The scoped exceptions (see lib/datasets/core.ts): per-touch direction +
+// editorial reason, and the Intel Desk's merged dossier fields, may ride
+// KEY-GATED datasets only; the portal key is the boundary, the same as bulk
+// article text. dossier_* here is the Intel Desk's own machine-merged
+// research record (lib/scout/core.ts mergeDossier), not the admin note/prior
+// personal layer the ban exists to protect; intel-companies is key-gated.
+// Never widen this to the personal layer proper (confidence, priors,
+// rationales stay banned everywhere).
+const KEY_GATED_ALLOWED = new Set([
+  'touch_details',
+  'dossier_summary', 'dossier_initiatives', 'dossier_segments', 'dossier_updated_at',
+]);
 const EM_DASH = '—';
 
 // Quote-aware CSV parse (RFC-4180-ish, CRLF records) for the round-trip check.

@@ -1,6 +1,10 @@
 {
   "crons": [
     { "path": "/api/cron/scan", "schedule": "0 9 * * 1-5" },
-    { "path": "/api/cron/scan/sweep", "schedule": "0 11 * * 1-5" }
+    { "path": "/api/cron/scan/sweep", "schedule": "0 11 * * 1-5" },
+    { "path": "/api/cron/pipeline", "schedule": "20 9 * * 1-5" },
+    { "path": "/api/cron/pipeline/sweep", "schedule": "20 11 * * 1-5" },
+    { "path": "/api/cron/intel", "schedule": "40 9 * * 1-5" },
+    { "path": "/api/cron/intel/sweep", "schedule": "40 11 * * 1-5" }
   ]
 }

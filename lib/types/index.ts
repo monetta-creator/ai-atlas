@@ -13,3 +13,4 @@ export * from './tearsheets';
 export * from './tickets';
 export * from './scout';
 export * from './scan';
+export * from './intel';

@@ -55,6 +55,7 @@ interface AdminItem {
 const ADMIN_ITEMS: AdminItem[] = [
   { href: '/pipeline', label: 'Pipeline', badge: 'pipeline' },
   { href: '/scan', label: 'Scan' },
+  { href: '/intel', label: 'Intel' },
   { href: '/signals/drafts', label: 'Drafts', badge: 'drafts' },
   { href: '/theses', label: 'Theses' },
   { href: '/research/console', label: 'Papers', badge: 'papers' },

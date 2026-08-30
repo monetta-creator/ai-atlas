@@ -1,5 +1,12 @@
 import type { DatasetDef } from '../datasets/core';
 import type { ScanTopic } from '../types';
+// Explicit .ts extension: this chain is loaded by plain Node in
+// scripts/test-scan.mjs (type stripping), which resolves no extensionless
+// specifiers for real (non-type-only) imports.
+import {
+  buildRowJsonSchema, cronLabel, describeFieldType, envelopeJsonSchema,
+} from '../datasets/handoff-shared.ts';
+import type { CronEntry } from '../datasets/handoff-shared.ts';
 
 // Builds the importer handoff the /scan console renders: an orientation
 // document for the coding assistant on the OTHER side of a firewall that
@@ -11,137 +18,14 @@ import type { ScanTopic } from '../types';
 // judgment stays downstream), then the formal JSON Schema (the thing an
 // intake validates against), then semantics, invariants, and design
 // guidance. Transport mechanics come last; they are the least stable part.
-
-export interface CronEntry {
-  path: string;
-  schedule: string;
-}
-
-// '0 9 * * *' -> '09:00 UTC daily'; '0 9 * * 1-5' -> '09:00 UTC weekdays';
-// anything fancier renders raw.
-export function cronLabel(schedule: string): string {
-  const m = /^(\d{1,2}) (\d{1,2}) \* \* (\*|1-5)$/.exec(schedule.trim());
-  if (!m) return schedule;
-  const cadence = m[3] === '1-5' ? 'weekdays' : 'daily';
-  return `${m[2].padStart(2, '0')}:${m[1].padStart(2, '0')} UTC ${cadence}`;
-}
-
-// Per-field facts the registry's display columns do not carry: JSON type,
-// nullability, closed enum sets, formats. The row schema is generated from
-// the registry column ORDER plus this map; a registry column missing here
-// falls back to a permissive type so a new column can never break the
-// generator (the intake is told to ignore unknown fields anyway).
 //
-// ONE map serves both firewall exports: external-scan and signals-export
-// share the first nineteen keys byte for byte (that sharing is the point:
-// the same intake validates both files), and the signals-export extras are
-// appended below. scripts/test-scan.mjs asserts every column of BOTH defs
-// is mapped here.
-const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean; enum?: string[]; format?: string }> = {
-  item_id: { type: 'string', nullable: false, format: 'uuid' },
-  run_day: { type: 'string', nullable: false, format: 'date' },
-  url: { type: 'string', nullable: false, format: 'uri' },
-  normalized_url: { type: 'string', nullable: false },
-  headline: { type: 'string', nullable: true },
-  source_domain: { type: 'string', nullable: true },
-  published_on: { type: 'string', nullable: true, format: 'date' },
-  discovered_via: { type: 'string', nullable: false },
-  topic_slug: { type: 'string', nullable: true },
-  topic_code: { type: 'string', nullable: true },
-  summary: { type: 'string', nullable: true },
-  tags: { type: 'string', nullable: false },
-  entities: { type: 'string', nullable: false },
-  relevance: { type: 'number', nullable: true },
-  enrich_status: { type: 'string', nullable: false, enum: ['done', 'skipped', 'error', 'pending'] },
-  fetch_status: { type: 'string', nullable: false, enum: ['done', 'failed', 'skipped', 'pending'] },
-  fetched_via: { type: 'string', nullable: true, enum: ['direct', 'jina'] },
-  text_chars: { type: 'number', nullable: true },
-  full_text: { type: 'string', nullable: true },
-  enriched_by: { type: 'string', nullable: true },
-  // signals-export extras (appended after the shared scan-shaped columns).
-  significance: { type: 'string', nullable: false, enum: ['high', 'medium', 'low'] },
-  lenses: { type: 'string', nullable: false },
-  origin: { type: 'string', nullable: false, enum: ['manual', 'pipeline'] },
-  claim_touches: { type: 'string', nullable: false },
-  touch_details: { type: 'string', nullable: false },
-  brief_what_happened: { type: 'string', nullable: true },
-  brief_why_it_matters: { type: 'string', nullable: true },
-  brief_whats_contested: { type: 'string', nullable: true },
-  counterpoint: { type: 'string', nullable: true },
-  atlas_url: { type: 'string', nullable: false, format: 'uri' },
-  source_title: { type: 'string', nullable: true },
-};
-
-// JSON Schema (draft 2020-12) for one row, generated from the live registry
-// columns in order. Exported for the test script's coverage check.
-export function buildRowJsonSchema(def: DatasetDef): Record<string, unknown> {
-  const properties: Record<string, unknown> = {};
-  const required: string[] = [];
-  for (const c of def.columns) {
-    const f = FIELD_FACTS[c.key];
-    if (!f) {
-      properties[c.key] = { type: ['string', 'number', 'null'], description: c.def };
-      required.push(c.key);
-      continue;
-    }
-    const p: Record<string, unknown> = {
-      type: f.nullable ? [f.type, 'null'] : f.type,
-      description: c.def,
-    };
-    if (f.enum) p.enum = f.nullable ? [...f.enum, null] : f.enum;
-    if (f.format) p.format = f.format;
-    properties[c.key] = p;
-    required.push(c.key); // every key is PRESENT on every row; nullability is in the type
-  }
-  return {
-    $schema: 'https://json-schema.org/draft/2020-12/schema',
-    title: `${def.slug} row`,
-    type: 'object',
-    properties,
-    required,
-    // Additive change policy: new fields may appear; intakes ignore them.
-    additionalProperties: true,
-  };
-}
-
-function envelopeJsonSchema(def: DatasetDef, rowSchema: Record<string, unknown>): Record<string, unknown> {
-  return {
-    $schema: 'https://json-schema.org/draft/2020-12/schema',
-    title: `${def.slug} download`,
-    type: 'object',
-    required: ['dataset', 'rows'],
-    properties: {
-      dataset: {
-        type: 'object',
-        required: ['slug', 'day', 'row_count', 'columns'],
-        properties: {
-          slug: { const: def.slug },
-          title: { type: 'string' },
-          description: { type: 'string' },
-          methodology: { type: 'string' },
-          category: { type: 'string' },
-          lens: { type: 'null' },
-          day: { type: ['string', 'null'], format: 'date', description: 'Echoes the ?day= filter where the dataset supports one; null otherwise.' },
-          row_count: { type: 'integer' },
-          columns: {
-            type: 'array',
-            description: 'The authoritative runtime schema: key, label, type, def per column. Diff against expectations to detect drift.',
-            items: {
-              type: 'object',
-              required: ['key', 'label', 'type', 'def'],
-              properties: {
-                key: { type: 'string' }, label: { type: 'string' },
-                type: { enum: ['text', 'number', 'date', 'enum', 'longtext'] },
-                def: { type: 'string' },
-              },
-            },
-          },
-        },
-      },
-      rows: { type: 'array', items: rowSchema },
-    },
-  };
-}
+// The per-field type/nullability/enum facts, the JSON Schema generator, the
+// cron-label helper, and the CronEntry shape live in
+// lib/datasets/handoff-shared.ts (shared with the Intel Desk's
+// lib/intel/handoff.ts); re-exported here so scripts/test-scan.mjs keeps
+// importing buildRowJsonSchema and cronLabel from this module.
+export { buildRowJsonSchema, cronLabel };
+export type { CronEntry };
 
 export function buildScanHandoff(opts: {
   def: DatasetDef;
@@ -156,11 +40,7 @@ export function buildScanHandoff(opts: {
     .map((t) => `- ${t.taxonomy_code}  ${t.name}${t.description ? `: ${t.description}` : ''}`)
     .join('\n');
   const columns = def.columns
-    .map((c) => {
-      const f = FIELD_FACTS[c.key];
-      const type = f ? `${f.type}${f.nullable ? ' or null' : ''}${f.enum ? ` (${f.enum.join(' | ')})` : ''}` : c.type;
-      return `| ${c.key} | ${type} | ${c.def} |`;
-    })
+    .map((c) => `| ${c.key} | ${describeFieldType(c.key, c.type)} | ${c.def} |`)
     .join('\n');
   const schedule = crons.map((c) => cronLabel(c.schedule)).join(', then ');
   const schemaJson = JSON.stringify(envelopeJsonSchema(def, buildRowJsonSchema(def)), null, 2);
@@ -295,11 +175,7 @@ export function buildSignalsExportHandoff(opts: {
 }): string {
   const { def, host } = opts;
   const columns = def.columns
-    .map((c) => {
-      const f = FIELD_FACTS[c.key];
-      const type = f ? `${f.type}${f.nullable ? ' or null' : ''}${f.enum ? ` (${f.enum.join(' | ')})` : ''}` : c.type;
-      return `| ${c.key} | ${type} | ${c.def} |`;
-    })
+    .map((c) => `| ${c.key} | ${describeFieldType(c.key, c.type)} | ${c.def} |`)
     .join('\n');
   const schemaJson = JSON.stringify(envelopeJsonSchema(def, buildRowJsonSchema(def)), null, 2);
 

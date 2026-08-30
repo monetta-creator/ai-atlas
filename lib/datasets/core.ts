@@ -9,10 +9,13 @@
 // reliability_prior, dossier, evidence.note, papers.review_note,
 // papers.rigor_prior, positions_crosscutting, supply-chain admin notes, and
 // unpublished or draft signals are all banned. scripts/test-datasets.mjs
-// enforces the ban against the serialized output of every builder. One scoped
-// exception: signals.touch_details (per-touch direction + editorial reason) may
-// appear in KEY-GATED datasets only; the portal key is that boundary, the same
-// as bulk article text.
+// enforces the ban against the serialized output of every builder. Two scoped
+// exceptions, both KEY-GATED-only (the portal key is the boundary, the same
+// as bulk article text): signals.touch_details (per-touch direction +
+// editorial reason), and the Intel Desk's intel_companies.dossier fields
+// (dossier_summary/initiatives/segments/updated_at on intel-companies) -- the
+// dossier there is a machine-merged research record on a tracked company, not
+// the admin note/prior personal layer the ban otherwise protects.
 //
 // Determinism: same corpus in, byte-identical rows out. Every ORDER BY carries a
 // stable id tiebreaker; dates are formatted with to_char in SQL (node-pg would
@@ -32,6 +35,7 @@ type DatasetCategory =
   | 'research'
   | 'scout'
   | 'scan'
+  | 'intel'
   | 'meta';
 
 // `longtext` marks prose columns the explorer should truncate and the schema
