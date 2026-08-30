@@ -85,3 +85,24 @@ export interface CostDashboard {
   activeRateCards: RateCard[];      // the currently-active card per model
   rateCardHistory: RateCard[];      // every card, model then effective_date desc
 }
+
+// ---- Monthly bill (/costs "showpiece" header) ------------------------------
+// One subsystem's metered rollup, features already merged by the SUBSYSTEMS map in
+// lib/data/costs.ts (first-match prefix, catch-all 'Atlas core').
+export interface SubsystemCost {
+  name: string;
+  cron: boolean;      // true for External Scan, Discovery Pipeline, Intel Desk
+  mtdUsd: number;      // month-to-date spend (created_at >= date_trunc('month', now()))
+  todayUsd: number;    // today's spend (created_at >= date_trunc('day', now()))
+  calls: number;       // month-to-date call count
+  allTimeUsd: number;
+}
+
+export interface MonthlyBill {
+  mtdUsd: number;
+  todayUsd: number;
+  allTimeUsd: number;
+  mtdCalls: number;
+  projectedUsd: number;              // mtd / dayOfMonth * daysInMonth
+  subsystems: SubsystemCost[];       // sorted mtdUsd desc
+}

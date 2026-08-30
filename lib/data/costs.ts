@@ -1,6 +1,7 @@
 import { q, one } from '../db';
 import type {
   CostDashboard, RateCard, CostSummary, DailyCostPoint, FeatureCost, RunCost, CostLogRow,
+  MonthlyBill, SubsystemCost,
   } from '../types';
 
 // ---- AI cost dashboard (/costs, admin-only; migration 0014) -----------------
@@ -110,4 +111,65 @@ export async function getCostDashboard(): Promise<CostDashboard> {
     summaryRow ?? { calls: 0, total: 0, d30: 0, d7: 0, calls30: 0, calls7: 0, avgCost: 0 };
 
   return { summary, daily, features, runs, recent, activeRateCards, rateCardHistory };
+}
+
+// ---- Monthly bill (/costs "showpiece" header) ------------------------------
+// Rolls the flat feature-slug log into the handful of subsystems the app's README talks in
+// terms of. First-match-wins, prefix-based, with a catch-all — edit here when a new feature
+// slug ships (lib/cost.ts recordApiCall call sites are the source of truth for slugs; their
+// human labels live in lib/format.ts featureLabel, a separate map for the per-feature table).
+const SUBSYSTEM_RULES: { test: (feature: string) => boolean; name: string; cron: boolean }[] = [
+  { test: (f) => f.startsWith('scan_'), name: 'External Scan', cron: true },
+  { test: (f) => f.startsWith('pipeline_') || f === 'signal_analysis' || f === 'draft_dedupe', name: 'Discovery Pipeline', cron: true },
+  { test: (f) => f.startsWith('intel_'), name: 'Intel Desk', cron: true },
+  { test: (f) => f.startsWith('research_'), name: 'Research Portal', cron: false },
+  { test: (f) => f.startsWith('scout_'), name: 'Startup Scout', cron: false },
+  { test: (f) => f.startsWith('portal_'), name: 'Team Portal', cron: false },
+  { test: (f) => f === 'ask' || f.startsWith('ask_'), name: 'Ask', cron: false },
+  { test: (f) => f.startsWith('report_') || f.startsWith('tearsheet_') || f.startsWith('thesis_'), name: 'Reports & Theses', cron: false },
+];
+const CATCH_ALL_SUBSYSTEM = { name: 'Atlas core', cron: false };
+
+function subsystemFor(feature: string): { name: string; cron: boolean } {
+  const rule = SUBSYSTEM_RULES.find((r) => r.test(feature));
+  return rule ? { name: rule.name, cron: rule.cron } : CATCH_ALL_SUBSYSTEM;
+}
+
+// One query over ai_cost_log grouped by feature (month-to-date cost + calls, today's cost,
+// all-time cost), then rolled into subsystems in JS. Powers the /costs page's monthly-bill
+// header, alongside the FIXED_MONTHLY const the page renders it beside.
+export async function getMonthlyBill(): Promise<MonthlyBill> {
+  const rows = await q<{ feature: string; mtdCalls: number; mtdUsd: number; todayUsd: number; allTimeUsd: number }>(
+    `select feature,
+            count(*) filter (where created_at >= date_trunc('month', now()))::int as "mtdCalls",
+            coalesce(sum(cost_usd) filter (where created_at >= date_trunc('month', now())), 0) as "mtdUsd",
+            coalesce(sum(cost_usd) filter (where created_at >= date_trunc('day', now())), 0) as "todayUsd",
+            coalesce(sum(cost_usd), 0) as "allTimeUsd"
+       from ai_cost_log
+      group by feature`
+  );
+
+  const bySubsystem = new Map<string, SubsystemCost>();
+  for (const r of rows) {
+    const { name, cron } = subsystemFor(r.feature);
+    const cur = bySubsystem.get(name) ?? { name, cron, mtdUsd: 0, todayUsd: 0, calls: 0, allTimeUsd: 0 };
+    cur.mtdUsd += r.mtdUsd;
+    cur.todayUsd += r.todayUsd;
+    cur.calls += r.mtdCalls;
+    cur.allTimeUsd += r.allTimeUsd;
+    bySubsystem.set(name, cur);
+  }
+  const subsystems = [...bySubsystem.values()].sort((a, b) => b.mtdUsd - a.mtdUsd);
+
+  const mtdUsd = subsystems.reduce((s, x) => s + x.mtdUsd, 0);
+  const todayUsd = subsystems.reduce((s, x) => s + x.todayUsd, 0);
+  const allTimeUsd = subsystems.reduce((s, x) => s + x.allTimeUsd, 0);
+  const mtdCalls = subsystems.reduce((s, x) => s + x.calls, 0);
+
+  const now = new Date();
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const projectedUsd = dayOfMonth > 0 ? (mtdUsd / dayOfMonth) * daysInMonth : mtdUsd;
+
+  return { mtdUsd, todayUsd, allTimeUsd, mtdCalls, projectedUsd, subsystems };
 }
