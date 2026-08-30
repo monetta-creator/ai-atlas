@@ -399,20 +399,10 @@ function MatrixSlide(s: Extract<DeckSlide, { kind: 'matrix' }>) {
   );
 }
 
-function PriceCompareSlide(s: Extract<DeckSlide, { kind: 'price-compare' }>) {
-  const allValues = [s.ours.usd, ...s.items.flatMap((i) => [i.lowUsd, i.highUsd])].filter((v) => v > 0);
-  const minV = Math.max(1, Math.min(...allValues) * 0.6);
-  const maxV = Math.max(...allValues) * 1.15;
-  const logMin = Math.log10(minV);
-  const logMax = Math.log10(maxV);
+// Fixed log10 domain shared with the PDF renderer ($500-$100k) so the two
+// exports read as the same chart, not just the same numbers.
 
-  const W = 1500;
-  const padL = 300, padR = 40, padT = 16, padB = 8;
-  const chartW = W - padL - padR;
-  const rowH = 96;
-  const H = padT + s.items.length * rowH + padB;
-  const x = (v: number) => padL + ((Math.log10(Math.max(v, 1)) - logMin) / (logMax - logMin)) * chartW;
-  const oursX = x(s.ours.usd);
+function PriceCompareSlide(s: Extract<DeckSlide, { kind: 'price-compare' }>) {
 
   return (
     <div className="cdk-slide">
@@ -420,41 +410,42 @@ function PriceCompareSlide(s: Extract<DeckSlide, { kind: 'price-compare' }>) {
       <div className="cdk-body">
         <div className="cdk-pc-ours">
           <div className="cdk-pc-ours-n">{usdWhole(s.ours.usd)}</div>
-          <div className="cdk-pc-ours-l">{s.ours.label} &middot; {s.ours.unit}</div>
+          <div className="cdk-pc-ours-meta">
+            <div className="cdk-pc-ours-l">{s.ours.label}</div>
+            <div className="cdk-pc-ours-u">{s.ours.unit}</div>
+          </div>
         </div>
 
-        <div className="cdk-pc-body">
-          <svg
-            viewBox={`0 0 ${W} ${H}`}
-            className="cdk-forecast-svg"
-            role="img"
-            aria-label="annual cost against market comparisons, log scale"
-          >
-            <line x1={oursX} y1={0} x2={oursX} y2={H} stroke="var(--accent)" strokeWidth={2} strokeDasharray="6 5" opacity={0.55} />
-            {s.items.map((it, i) => {
-              const cy = padT + i * rowH + rowH / 2;
-              const bx1 = x(it.lowUsd);
-              const bx2 = x(it.highUsd);
-              return (
-                <g key={it.label}>
-                  <text x={0} y={cy - 16} fontSize="18" fontFamily="var(--font-display)" fontWeight={600} fill="var(--ink)">
-                    {it.label}
-                  </text>
-                  <text x={0} y={cy + 8} fontSize="14" fontFamily="var(--font-mono)" fill="var(--faint-ink)">
-                    {it.example}
-                  </text>
-                  <rect x={bx1} y={cy - 12} width={Math.max(3, bx2 - bx1)} height={24} rx={4} fill="var(--dim)" fillOpacity={0.32} />
-                  <rect x={bx1} y={cy - 12} width={Math.max(3, bx2 - bx1)} height={24} rx={4} fill="none" stroke="var(--dim)" strokeOpacity={0.5} />
-                </g>
-              );
-            })}
-          </svg>
+        <div className="cdk-pc-rows">
+          {s.items.map((it) => {
+            return (
+              <div className="cdk-pc-row" key={it.label}>
+                <div className="cdk-pc-cat">
+                  <div className="cdk-pc-cat-label">{it.label}</div>
+                  <div className="cdk-pc-cat-example">{it.example}</div>
+                </div>
+
+                <div className="cdk-pc-range">
+                  <div className="cdk-pc-range-n">
+                    {usdWhole(it.lowUsd)}&ndash;{usdWhole(it.highUsd)}
+                  </div>
+                  <div className="cdk-pc-range-u">{it.unit}</div>
+                </div>
+
+
+                <div className="cdk-pc-mult">
+                  <div className="cdk-pc-mult-n">{it.multiple}</div>
+                  <div className="cdk-pc-mult-c">this system&apos;s annual cost</div>
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <div className="cdk-pc-sources">
           {s.items.map((it) => (
             <div className="cdk-pc-source-row" key={it.label}>
-              <strong>{it.label}:</strong> {usdWhole(it.lowUsd)}&ndash;{usdWhole(it.highUsd)} {it.unit}. {it.source}
+              <strong>{it.label}:</strong> {it.source}
             </div>
           ))}
         </div>

@@ -139,7 +139,16 @@ export type DeckSlide =
       kicker: string;
       title: string;
       ours: { label: string; usd: number; unit: string };
-      items: { label: string; example: string; lowUsd: number; highUsd: number; unit: string; source: string }[];
+      items: {
+        label: string;
+        example: string;
+        lowUsd: number;
+        highUsd: number;
+        unit: string;
+        source: string;
+        // "12x to 46x", precomputed against ours.usd so both renderers agree
+        multiple: string;
+      }[];
       footnote: string;
       takeaway: string;
     };
@@ -396,7 +405,10 @@ export async function buildCostDeckData(): Promise<CostDeck> {
       kicker: 'Appendix · price',
       title: 'Annual cost against the market',
       ours: { label: 'This system, all-in', usd: runningUsd * 12, unit: 'per year, unlimited internal readers of the exports' },
-      items: COMPS,
+      items: COMPS.map((c) => ({
+        ...c,
+        multiple: `${Math.round(c.lowUsd / (runningUsd * 12))}x to ${Math.round(c.highUsd / (runningUsd * 12))}x`,
+      })),
       footnote:
         'Public reported figures, researched 2026-08-30 from procurement-data aggregators and vendor sources; most vendors quote-price, so ranges are shown. Commercial products include licensed content, SLAs, and support this system does not.',
       takeaway: 'Comparable coverage of the PUBLIC-source slice, at roughly one percent of the cheapest commercial entry point.',

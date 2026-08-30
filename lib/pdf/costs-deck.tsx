@@ -146,16 +146,44 @@ const s = StyleSheet.create({
   chartWrap: { position: 'relative' },
   chartLabel: { position: 'absolute', fontFamily: 'JetBrains', fontSize: 7, color: DIM },
 
-  // price-compare (kept tight so the 5 comps plus source lines never crowd
-  // the absolute takeaway band)
-  priceRow: { marginBottom: 6 },
-  priceRowTop: { flexDirection: 'row', alignItems: 'center' },
-  priceLabelBlock: { width: 200 },
-  priceLabelText: { fontSize: 9.5, fontWeight: 'bold', lineHeight: 1.2 },
-  priceExampleText: { fontSize: 7.5, color: DIM, marginTop: 1, lineHeight: 1.2 },
-  priceRangeText: { fontFamily: 'JetBrains', fontSize: 8.5, width: 110, textAlign: 'right' },
-  priceSourceText: { fontSize: 6.5, color: DIM, marginTop: 2, maxWidth: 780, lineHeight: 1.2 },
-  axisLabel: { fontFamily: 'JetBrains', fontSize: 7, color: FAINT },
+  // price-compare: the ours callout, one hero row per comp (category / big
+  // range / thin log bar under it / loud multiple chip), then a small-print
+  // sources block. Heights are budgeted tight (ours ~60pt, rows ~50pt each,
+  // sources ~50pt, all with lineHeight pinned rather than inherited) so 5
+  // rows never crowd the absolute takeaway band.
+  priceOursBox: {
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1.5, borderColor: COBALT, borderRadius: 3,
+    backgroundColor: '#eef1ff', paddingVertical: 5, paddingHorizontal: 14,
+    marginBottom: 6,
+  },
+  priceOursN: { fontFamily: 'Anton', fontSize: 28, color: COBALT, lineHeight: 1, marginRight: 16 },
+  priceOursLabel: { fontSize: 10, fontWeight: 'bold', color: INK, lineHeight: 1.15 },
+  priceOursUnit: { fontSize: 8, color: DIM, marginTop: 2, lineHeight: 1.15 },
+
+  priceRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderBottomWidth: 1, borderBottomColor: LINE,
+    paddingVertical: 3,
+  },
+  priceCatCol: { paddingRight: 8 },
+  priceCatLabel: { fontSize: 9, fontWeight: 'bold', lineHeight: 1.15 },
+  priceCatExample: { fontSize: 7, color: DIM, marginTop: 1, lineHeight: 1.15 },
+  priceRangeCol: { paddingRight: 10 },
+  priceRangeN: { fontFamily: 'JetBrains', fontWeight: 'bold', fontSize: 20, color: INK, lineHeight: 1 },
+  priceRangeUnit: { fontSize: 7, color: DIM, marginTop: 1, lineHeight: 1.15 },
+  priceBarWrap: { marginTop: 3 },
+  priceChipCol: { alignItems: 'center' },
+  priceChip: { backgroundColor: COBALT, borderRadius: 3, paddingVertical: 4, paddingHorizontal: 4, alignItems: 'center', width: '100%' },
+  priceChipN: { fontFamily: 'JetBrains', fontWeight: 'bold', fontSize: 11, color: '#ffffff', lineHeight: 1.05, textAlign: 'center' },
+  priceChipCaption: {
+    fontFamily: 'JetBrains', fontSize: 5.5, color: 'rgba(255,255,255,0.85)',
+    textTransform: 'uppercase', letterSpacing: 0.3, marginTop: 2, textAlign: 'center', lineHeight: 1.15,
+  },
+
+  priceSourcesBlock: { marginTop: 5 },
+  priceSourceLabel: { fontWeight: 'bold' },
+  priceSourceLine: { fontSize: 6.5, color: DIM, marginBottom: 1.5, lineHeight: 1.2 },
 });
 
 // -------------------------------------------------------------- slide shell
@@ -473,60 +501,70 @@ function MatrixSlide({ slide }: { slide: Extract<DeckSlide, { kind: 'matrix' }> 
 // ---------------------------------------------------------- price-compare
 
 function PriceCompareSlide({ slide }: { slide: Extract<DeckSlide, { kind: 'price-compare' }> }): ReactNode {
-  const LABEL_W = 200;
-  const CHART_X0 = LABEL_W + 10;
-  const CHART_W = CONTENT_W - CHART_X0 - 110;
-  const ROW_H = 29;
+  // Fixed log10 domain shared with the live renderer ($500-$100k) so both
+  // exports read as the same chart, not just the same numbers.
+  const CAT_W = 150;
+  const CHIP_W = 115;
+  const GAP = 10;
+  const BAR_W = CONTENT_W - CAT_W - CHIP_W - GAP * 2;
+  const BAR_H = 5;
   const logMin = Math.log10(500);
   const logMax = Math.log10(100_000);
   const scaleX = (usd: number): number => {
     const v = Math.min(Math.max(usd, 500), 100_000);
-    return ((Math.log10(v) - logMin) / (logMax - logMin)) * CHART_W;
+    return ((Math.log10(v) - logMin) / (logMax - logMin)) * BAR_W;
   };
   const oursX = scaleX(slide.ours.usd);
-  const totalH = slide.items.length * ROW_H;
 
   return (
     <SlideBody kicker={slide.kicker} title={slide.title} takeaway={slide.takeaway}>
-      <View style={s.chartWrap}>
+      <View style={s.priceOursBox} wrap={false}>
+        <Text style={s.priceOursN}>{usd0(slide.ours.usd)}</Text>
         <View>
-          {slide.items.map((item, i) => {
-            const x1 = scaleX(item.lowUsd);
-            const x2 = scaleX(item.highUsd);
-            return (
-              <View key={i} style={s.priceRow} wrap={false}>
-                <View style={s.priceRowTop}>
-                  <View style={[s.priceLabelBlock, { width: LABEL_W }]}>
-                    <Text style={s.priceLabelText}>{item.label}</Text>
-                    <Text style={s.priceExampleText}>{`${item.example}, ${item.unit}`}</Text>
-                  </View>
-                  <Svg width={CHART_W} height={12}>
-                    <Rect x={x1} y={0} width={Math.max(2, x2 - x1)} height={12} fill={COBALT} fillOpacity={0.5} />
-                  </Svg>
-                  <Text style={s.priceRangeText}>{`${usd0(item.lowUsd)} to ${usd0(item.highUsd)}`}</Text>
-                </View>
-                <Text style={s.priceSourceText}>{item.source}</Text>
+          <Text style={s.priceOursLabel}>{slide.ours.label}</Text>
+          <Text style={s.priceOursUnit}>{slide.ours.unit}</Text>
+        </View>
+      </View>
+
+      {slide.items.map((item, i) => {
+        const x1 = scaleX(item.lowUsd);
+        const x2 = scaleX(item.highUsd);
+        return (
+          <View key={i} style={s.priceRow} wrap={false}>
+            <View style={[s.priceCatCol, { width: CAT_W }]}>
+              <Text style={s.priceCatLabel}>{item.label}</Text>
+              <Text style={s.priceCatExample}>{item.example}</Text>
+            </View>
+            <View style={[s.priceRangeCol, { width: BAR_W }]}>
+              <Text style={s.priceRangeN}>{`${usd0(item.lowUsd)}–${usd0(item.highUsd)}`}</Text>
+              <Text style={s.priceRangeUnit}>{item.unit}</Text>
+              <View style={s.priceBarWrap}>
+                <Svg width={BAR_W} height={BAR_H}>
+                  <Rect x={0} y={0} width={BAR_W} height={BAR_H} fill={LINE} />
+                  <Rect x={x1} y={0} width={Math.max(3, x2 - x1)} height={BAR_H} fill={DIM} fillOpacity={0.55} />
+                  <Rect x={Math.max(0, oursX - 1.5)} y={0} width={3} height={BAR_H} fill={COBALT} />
+                </Svg>
               </View>
-            );
-          })}
-        </View>
-        <View style={{ position: 'absolute', left: CHART_X0, top: 0, width: CHART_W, height: totalH }}>
-          <Svg width={CHART_W} height={totalH}>
-            <Line x1={oursX} y1={0} x2={oursX} y2={totalH} stroke={COBALT} strokeWidth={1.5} strokeDasharray="3,2" />
-          </Svg>
-          <Text style={[s.chartLabel, { left: Math.min(oursX + 4, CHART_W - 140), top: 0, color: COBALT, fontWeight: 'bold' }]}>
-            {`${slide.ours.label}, ${usd0(slide.ours.usd)}/${slide.ours.unit.includes('year') ? 'yr' : slide.ours.unit}`}
+            </View>
+            <View style={[s.priceChipCol, { width: CHIP_W }]}>
+              <View style={s.priceChip}>
+                <Text style={s.priceChipN}>{item.multiple}</Text>
+                <Text style={s.priceChipCaption}>this system&apos;s annual cost</Text>
+              </View>
+            </View>
+          </View>
+        );
+      })}
+
+      <View style={s.priceSourcesBlock} wrap={false}>
+        {slide.items.map((item, i) => (
+          <Text key={i} style={s.priceSourceLine}>
+            <Text style={s.priceSourceLabel}>{item.label}</Text>
+            {`: ${item.source}`}
           </Text>
-        </View>
+        ))}
+        <Text style={[s.priceSourceLine, { marginTop: 2 }]}>{slide.footnote}</Text>
       </View>
-      <View style={{ flexDirection: 'row', marginTop: 2, marginBottom: 10 }}>
-        <View style={{ width: CHART_X0 }} />
-        <View style={{ width: CHART_W, flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={s.axisLabel}>$500</Text>
-          <Text style={s.axisLabel}>$100,000, log scale</Text>
-        </View>
-      </View>
-      <Text style={s.tableNote}>{slide.footnote}</Text>
     </SlideBody>
   );
 }
