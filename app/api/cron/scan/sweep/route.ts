@@ -2,7 +2,7 @@
 // vercel.json entries on /api/cron/scan collapsed to one (observed live
 // 2026-08-28: `vercel crons ls` showed a single job); the second daily
 // invocation needs its own path. Same handler, same gate, same behavior:
-// it resumes whatever the first invocation's 240s could not finish.
+// it resumes whatever the first invocation's budget could not finish.
 export { GET } from '../route';
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
+export const maxDuration = 800;

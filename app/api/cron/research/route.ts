@@ -10,9 +10,9 @@ import { failResearchRun } from '@/lib/mutations/research';
 // second daily invocation that resumes whatever this one's budget could not
 // finish.
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
+export const maxDuration = 800;
 
-const WORK_BUDGET_MS = 270_000;
+const WORK_BUDGET_MS = 700_000;
 
 export async function GET(req: NextRequest): Promise<Response> {
   const secret = process.env.CRON_SECRET;

@@ -15,11 +15,14 @@ import { failScanRun } from '@/lib/mutations/scan';
 // env var is unset. Not the admin cookie: the console's server actions cover
 // the human path.
 export const dynamic = 'force-dynamic';
-export const maxDuration = 300;
+export const maxDuration = 800;
 
-// Soft work budget under the 300s cap: the engine checks it between units, and
-// the longest single unit (a 50s-bounded model call) still fits before 300.
-const WORK_BUDGET_MS = 270_000;
+// Soft work budget under the 800s cap (the Vercel Pro fluid ceiling; raised
+// from 300/270 on 2026-08-31 after Monday's 3-day batch overran two windows
+// and one unit straddled the 30s headroom into a gateway 504). The engine
+// checks it between units; 100s of headroom covers the longest single unit
+// (a 90s-bounded model call).
+const WORK_BUDGET_MS = 700_000;
 
 export async function GET(req: NextRequest): Promise<Response> {
   const secret = process.env.CRON_SECRET;
