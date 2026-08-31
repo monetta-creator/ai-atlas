@@ -135,6 +135,13 @@ export type DeckSlide =
       takeaway: string;
     }
   | {
+      kind: 'bullets';
+      kicker: string;
+      title: string;
+      bullets: { lead: string; text: string }[];
+      takeaway: string;
+    }
+  | {
       kind: 'price-compare';
       kicker: string;
       title: string;

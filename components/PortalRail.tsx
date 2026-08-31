@@ -95,6 +95,16 @@ export default function PortalRail() {
       </div>
 
       <Link
+        href="/education"
+        className="portal-rail-link"
+        data-active={isActive('/education') ? '' : undefined}
+        data-tip="Education"
+        aria-label="Education"
+      >
+        {NAV_ICONS.education}
+      </Link>
+
+      <Link
         href="/ask"
         className="portal-rail-link"
         data-active={isActive('/ask') ? '' : undefined}

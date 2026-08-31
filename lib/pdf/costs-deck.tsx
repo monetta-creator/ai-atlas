@@ -196,6 +196,15 @@ const s = StyleSheet.create({
   priceSourcesBlock: { marginTop: 5 },
   priceSourceLabel: { fontWeight: 'bold' },
   priceSourceLine: { fontSize: 6.5, color: DIM, marginBottom: 1.5, lineHeight: 1.2 },
+
+  // bullets: a vertical list, bold lead then body text, one small square
+  // marker per row. Generous spacing budgeted for 3-5 rows above the
+  // absolute takeaway band.
+  bulletsList: { flexGrow: 1, justifyContent: 'center', marginTop: 6 },
+  bulletRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
+  bulletMark: { width: 6, height: 6, marginTop: 5, marginRight: 12, backgroundColor: COBALT },
+  bulletCopy: { flex: 1, fontSize: 11, lineHeight: 1.5, color: DIM },
+  bulletLead: { fontWeight: 'bold', color: INK },
 });
 
 // -------------------------------------------------------------- slide shell
@@ -510,6 +519,27 @@ function MatrixSlide({ slide }: { slide: Extract<DeckSlide, { kind: 'matrix' }> 
   );
 }
 
+// ------------------------------------------------------------------ bullets
+
+function BulletsSlide({ slide }: { slide: Extract<DeckSlide, { kind: 'bullets' }> }): ReactNode {
+  return (
+    <SlideBody kicker={slide.kicker} title={slide.title} takeaway={slide.takeaway}>
+      <View style={s.bulletsList}>
+        {slide.bullets.map((b, i) => (
+          <View key={i} style={s.bulletRow} wrap={false}>
+            <View style={s.bulletMark} />
+            <Text style={s.bulletCopy}>
+              <Text style={s.bulletLead}>{b.lead}</Text>
+              {' '}
+              {b.text}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </SlideBody>
+  );
+}
+
 // ---------------------------------------------------------- price-compare
 
 function PriceCompareSlide({ slide }: { slide: Extract<DeckSlide, { kind: 'price-compare' }> }): ReactNode {
@@ -594,6 +624,7 @@ function SlideForKind({ slide }: { slide: DeckSlide }): ReactNode {
     case 'stat-grid': return <StatGridSlide slide={slide} />;
     case 'divider': return <DividerSlide slide={slide} />;
     case 'matrix': return <MatrixSlide slide={slide} />;
+    case 'bullets': return <BulletsSlide slide={slide} />;
     case 'price-compare': return <PriceCompareSlide slide={slide} />;
     default: {
       const exhaustive: never = slide;

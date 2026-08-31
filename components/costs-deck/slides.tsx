@@ -399,6 +399,29 @@ function MatrixSlide(s: Extract<DeckSlide, { kind: 'matrix' }>) {
   );
 }
 
+function BulletsSlide(s: Extract<DeckSlide, { kind: 'bullets' }>) {
+  return (
+    <div className="cdk-slide">
+      <Head kicker={s.kicker} title={s.title} />
+      <div className="cdk-body">
+        <div className="cdk-bullets">
+          {s.bullets.map((b, i) => (
+            <div className="cdk-bullet-row" key={i}>
+              <span className="cdk-bullet-mark" aria-hidden="true" />
+              <div className="cdk-bullet-copy">
+                <span className="cdk-bullet-lead">{b.lead}</span>
+                {' '}
+                <span className="cdk-bullet-text">{b.text}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <Takeaway text={s.takeaway} />
+    </div>
+  );
+}
+
 // Fixed log10 domain shared with the PDF renderer ($500-$100k) so the two
 // exports read as the same chart, not just the same numbers.
 
@@ -468,6 +491,7 @@ function renderSlide(slide: DeckSlide) {
     case 'stat-grid': return <StatGridSlide {...slide} />;
     case 'divider': return <DividerSlide {...slide} />;
     case 'matrix': return <MatrixSlide {...slide} />;
+    case 'bullets': return <BulletsSlide {...slide} />;
     case 'price-compare': return <PriceCompareSlide {...slide} />;
   }
 }

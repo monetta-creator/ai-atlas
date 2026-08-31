@@ -17,6 +17,8 @@ export function proxy(req: NextRequest) {
     pathname === '/share' ||
     pathname === '/about' ||
     pathname.startsWith('/about/') ||
+    pathname === '/education' ||
+    pathname.startsWith('/education/') ||
     // Signal Board is public (feed + detail). The admin-only /signals/new, /signals/digest,
     // /signals/drafts, and /signals/<id>/edit stay gated here so the routing layer agrees with
     // the pages' own isAdmin() redirects (defense-in-depth — the pages remain the real boundary).

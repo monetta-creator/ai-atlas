@@ -97,6 +97,13 @@ export const NAV_ICONS: Record<string, ReactNode> = {
       <circle cx="12" cy="7.8" r="0.4" fill="currentColor" stroke="none" />
     </svg>
   ),
+  education: (
+    <svg {...ICON_ATTRS}>
+      <path d="M2.5 9.5L12 5l9.5 4.5L12 14z" />
+      <path d="M6.5 11.9v3.9c0 1.2 2.5 2.2 5.5 2.2s5.5-1 5.5-2.2v-3.9" />
+      <path d="M21.5 9.5v5" />
+    </svg>
+  ),
 };
 
 // The rail's link list, in the lobby tiles' order.

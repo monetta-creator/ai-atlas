@@ -23,6 +23,7 @@
 @import "./styles/home.css"; /* Console Broadsheet layer — scoped to .bs (the home page) */
 @import "./styles/traceroute.css"; /* Traceroute explainer — scoped to .tr (/traceroute) */
 @import "./styles/costs-deck.css"; /* /costs/deck live 16:9 presentation stage (.cdk-*) */
+@import "./styles/education.css"; /* /education hub + guides (.edu) */
 
 /* Re-base the app's semantic Tailwind color/font utilities onto the design
    tokens so any utility usage (layout helpers, admin tooling, etc.) stays

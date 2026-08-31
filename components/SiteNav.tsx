@@ -319,6 +319,7 @@ export default function SiteNav({
             {exploreLinks}
           </details>
           <Link href="/ask" className="navmenu-item" data-active={isActive('/ask') ? '' : undefined}>Ask</Link>
+          <Link href="/education" className="navmenu-item" data-active={isActive('/education') ? '' : undefined}>Education</Link>
           <Link href="/about" className="navmenu-item" data-active={isActive('/about') ? '' : undefined}>About</Link>
           <FeedbackButtons variant="menu" />
           {showAdmin && (

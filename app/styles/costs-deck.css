@@ -180,6 +180,15 @@
 .cdk-stat-sub { font-size: 1.1cqw; color: var(--dim); }
 .cdk-stat-note { font-size: 1.1cqw; color: var(--faint-ink); margin-top: auto; padding-top: 1.2cqh; }
 
+/* ---- bullets slide: a vertical list, bold lead then body, one small square
+   marker per row. Roomy enough for 3-5 rows on the 16:9 stage. ---- */
+.cdk-bullets { display: flex; flex-direction: column; gap: 2.6cqh; flex: 1; justify-content: center; overflow: auto; }
+.cdk-bullet-row { display: flex; align-items: flex-start; gap: 1.4cqw; }
+.cdk-bullet-mark { width: 0.9cqw; height: 0.9cqw; margin-top: 0.55cqw; flex: none; background: var(--accent); border-radius: 1px; }
+.cdk-bullet-copy { font-size: 1.6cqw; line-height: 1.5; color: var(--dim); max-width: 84cqw; }
+.cdk-bullet-lead { font-weight: 700; color: var(--ink); }
+.cdk-bullet-text { color: var(--dim); }
+
 /* ---- divider slide ---- */
 .cdk-divider { justify-content: center; align-items: center; text-align: center; }
 .cdk-divider .cdk-kicker { font-size: 1.4cqw; }
