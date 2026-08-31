@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import * as m from '../mutations';
 import {
-  getSource, getCandidate, getCandidateBySourceId, getSignal, getLastResearchRunAt, countPendingPapers, getPaper, getThreadBySlug, getThreadScan } from '../data';
+  getSource, getCandidate, getCandidateBySourceId, getSignal, getLastResearchRunAt, countPendingPapers, getPaper, getThreadBySlug, getThreadScan, getResearchRun } from '../data';
 import { triageChunk } from '../pipeline/triage';
 import { domainOf, FetchFailure } from '../pipeline/web';
 import { pullPage } from '../research/pull';
@@ -15,9 +15,11 @@ import { recommendQueueChunk } from '../research/queue-agent';
 import { updateThreadSynthesis } from '../research/synthesis';
 import { diagnoseThreadGaps } from '../research/thread-scan';
 import { refreshCitations } from '../research/citations';
+import { getOrCreateTodayResearchRun, claimResearchRun, advanceResearchRun } from '../research/engine';
+import { isScanEnrichModel } from '../scan/models';
 import type {
   TriageStatus,
-  PaperReviewStatus, ThreadRelation, ThreadStatus, ResearchThreadScan,
+  PaperReviewStatus, ThreadRelation, ThreadStatus, ResearchThreadScan, ResearchProgress,
   } from '../types';
 import { UUID_RE, parsePrior, requireAdmin, str } from './shared';
 
@@ -464,4 +466,68 @@ export async function acceptAgentRecommendationsAction(decision: string): Promis
   revalidatePath('/research');
   revalidatePath('/research/console');
   return { ids };
+}
+
+// ---- Research engine (migration 0046) ---------------------------------------
+// The day-keyed checkpointed engine (lib/research/engine.ts): the cron route
+// is the scheduled driver, this backs a future console's manual tick. Always
+// operates on TODAY's run (day-keyed, singleton per UTC day) rather than a
+// client-held run id. Failures return as DATA (never thrown): production
+// server actions redact thrown messages, and the console needs the real note
+// (the scanTickAction pattern).
+export async function researchTickAction(): Promise<
+  (ResearchProgress & { busy?: boolean; error?: string }) | { error: string }
+> {
+  await requireAdmin();
+  const { runId, day } = await getOrCreateTodayResearchRun();
+  const run = await getResearchRun(runId);
+  if (!run) return { error: 'Run not found.' };
+  if (!(await claimResearchRun(runId))) {
+    return {
+      runId, day: run.day, step: run.step, done: run.status === 'completed',
+      counters: {
+        scanned: run.scanned_count, pulled: run.pulled_count,
+        kept: run.kept_count, rejected: run.rejected_count,
+        agentProcessed: 0, analyzed: 0,
+      },
+      notes: [], busy: true,
+    };
+  }
+  try {
+    const progress = await advanceResearchRun(runId, Date.now() + 50_000);
+    revalidatePath('/research/console');
+    return progress;
+  } catch (e) {
+    const msg = String((e as Error)?.message ?? 'research error');
+    await m.failResearchRun(runId, msg).catch(() => {});
+    return { day, done: false, error: msg };
+  }
+}
+
+export async function setResearchEnabledAction(enabled: boolean): Promise<void> {
+  await requireAdmin();
+  await m.setResearchEnabled(Boolean(enabled));
+  revalidatePath('/research/console');
+}
+
+// The console's model pickers: triageModel (a single utility model) and
+// analysisModels (the A/B picker selection), each validated against the
+// shared scan enrichment registry (which already carries 'claude-haiku-4-5'
+// as its Anthropic baseline entry) — the setScanEnrichModelsAction pattern.
+// Either field may be omitted to leave the other picker's selection alone.
+export async function setResearchModelsAction(
+  opts: { triageModel?: string | null; analysisModels?: string[] }
+): Promise<void> {
+  await requireAdmin();
+  const clean: { triageModel?: string | null; analysisModels?: string[] } = {};
+  if (opts.triageModel !== undefined) {
+    clean.triageModel = opts.triageModel && isScanEnrichModel(opts.triageModel) ? opts.triageModel : null;
+  }
+  if (opts.analysisModels !== undefined) {
+    const models = [...new Set((opts.analysisModels ?? []).map(String))].filter(isScanEnrichModel);
+    if (models.length > 8) throw new Error('Too many models selected.');
+    clean.analysisModels = models;
+  }
+  await m.setResearchModels(clean);
+  revalidatePath('/research/console');
 }

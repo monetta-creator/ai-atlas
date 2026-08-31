@@ -1,8 +1,8 @@
-import { runStructured } from '../dossier';
+import { researchStructured } from './model-route';
 import { fetchPedigreeBatch } from './citations';
 import * as m from '../mutations';
 import {
-  getTargets, countPendingPapers, getConceptDigest, getThreadDigest,
+  getTargets, countPendingPapers, getConceptDigest, getThreadDigest, getResearchPrefs,
 } from '../data';
 
 // Research triage: metadata-only (title + abstract) relevance filtering against the
@@ -14,9 +14,14 @@ import {
 const TRIAGE_SYSTEM = [
   'You triage new AI research papers for The AI Atlas, a tool for staying oriented in the AI-economy debate.',
   'For each paper decide keep (worth the author\'s attention) or reject, from the title and abstract alone.',
-  'KEEP a paper only when it genuinely bears on the Atlas: it is evidence for or against a listed claim or bridge-claim, it moves a listed research thread, it materially changes what a listed concept means in practice, or it is a significant capability, cost, agent-reliability, or labor-automation result that the AI-economy debate will have to absorb.',
-  'REJECT the rest: incremental architecture or training tweaks, narrow domain applications, benchmark-only papers with no broader implication, and work whose relevance to the economics of AI requires a stretch. Most papers are incremental; a keep rate of a few percent is normal and correct.',
-  'A strong venue signal in the comment field (accepted at a major conference) or an unusually strong result can justify keeping a borderline paper. When genuinely unsure whether a result is material, keep it: the human makes the final call.',
+  // The triage charter (ratified 2026-08-30): keep-worthiness is defined by the
+  // argument graph, not taste. Edit the charter, not ad-hoc prompt tweaks; the
+  // gold set (scripts/ab-research-triage.mjs replays) is the regression test.
+  'Judge by the CHARTER below: a paper is kept if and only if its central contribution lands in a listed family.',
+  'KEEP, Tier A (direct evidence): A1 agent reliability: multi-step completion, failure modes, memory and recovery, long-horizon evals, agent infrastructure with measured reliability effects. A2 capability trajectory: returns to scale or inference-time compute continuing or saturating, benchmark contamination or measurement-validity results, frontier capability versus expert judgment on real tasks. A3 cost and efficiency: inference or training cost reductions with numbers, quantization, serving systems, KV-cache and attention runtimes, hardware co-design, MoE serving, training-efficiency gains that cut compute needs, token economics of deployed agents. A4 open-weight parity and commoditization: open models nearing frontier on economic use cases, switching and multi-homing evidence. A5 RL on verifiable rewards: what it changes about capability generalization versus narrowness, not routine RLVR engineering. A6 labor and productivity: empirical effects of AI on real work, productivity measurement, staffing effects, telemetry of AI use at work, human-AI collaboration economics. A7 deployment trust: prompt-injection exposure, monitoring reliability, policy-violation failure modes, agent auditing and release gates, whatever gates enterprise adoption.',
+  'KEEP, Tier B (context): B1 frontier or near-frontier lab capability reports, including open-weight agent and model technical reports. B2 significant new benchmarks or evals for agentic work or economics-relevant capabilities, including cost-aware and real-task evals. B3 consolidating surveys of an A family.',
+  'REJECT everything else, including: RL and training-technique engineering that does not change what RLVR or scaling means for the debate (GRPO variants, distillation frameworks, optimizer and batch-size theory), incremental architecture tweaks, narrow domain applications (medical, bio, quantum, robotics manipulation, geospatial, single-language or single-task NLP) with no economic or deployment angle, benchmark-only work on non-listed capabilities, pure theory, and interpretability or alignment work unless it bears on deployment reliability (A7).',
+  'Tie-breaker when unsure between B and reject: would a fortnight report on the AI economy cite this paper? If genuinely unsure after that, keep it.',
   'For each KEPT paper: summary = 1-2 plain-language sentences on what the paper claims and shows, written for a smart non-specialist deciding whether to read it (what was done, what was found, how big). Start with a capital letter, no jargon walls. reason = one short sentence on why it matters to the Atlas specifically (distinct from the summary). claim_codes = ONLY codes from the provided list the paper genuinely bears on (advisory, often empty); concept_slugs = listed concepts the paper directly concerns; thread_slugs = listed threads the paper would move. Never invent a code or slug.',
   'For each REJECTED paper: summary = an empty string; reason = one short sentence. Start every reason with a capital letter. Never use an em dash anywhere; use a comma or a colon instead.',
 ].join(' ');
@@ -101,15 +106,21 @@ export async function triagePapersChunk(runId: string, chunkSize = TRIAGE_CHUNK)
     })
     .join('\n\n');
 
-  const out = await runStructured<{
+  // Cheap-model routing (Kevin's no-Sonnet-in-the-research-loop decision): the
+  // triage utility pick from research_prefs, null falling back to Haiku inside
+  // researchStructured.
+  const prefs = await getResearchPrefs();
+  const out = await researchStructured<{
     decisions: {
       index: number; keep: boolean; summary: string; reason: string;
       claim_codes: string[]; concept_slugs: string[]; thread_slugs: string[];
     }[];
   }>({
+    model: prefs.triage_model,
     // The claim/concept/thread digests are identical for every chunk of a run — they
-    // ride in the SYSTEM block (cache_control'd by runStructured) so chunks 2..N read
-    // them from the prompt cache. Only the paper list rides in the user message.
+    // ride in the SYSTEM block (cache_control'd by runStructured on the Anthropic
+    // path) so chunks 2..N read them from the prompt cache. Only the paper list
+    // rides in the user message.
     system: [
       TRIAGE_SYSTEM,
       `\nARGUMENT-MAP CLAIMS & BRIDGE-CLAIMS (use ONLY these codes):\n${targetList || '(none)'}`,
@@ -120,8 +131,8 @@ export async function triagePapersChunk(runId: string, chunkSize = TRIAGE_CHUNK)
     toolName: 'submit_triage',
     toolDescription: 'Return a keep/reject decision for every paper index.',
     schema: buildSchema(codes, conceptSlugs, threadSlugs),
-    maxTokens: 4000,
-    effort: 'low',
+    maxTokens: 8000,
+    timeoutMs: 90_000,
     feature: 'research_triage',
     metadata: { research_run_id: runId, papers: pending.length },
   });

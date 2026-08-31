@@ -3,6 +3,7 @@ import { isAdmin } from '@/lib/auth';
 import {
   getResearchThreads, getWatchlist, getNotedPapers,
   getTrackedSince, getRecentThreadRevisions, getResearchTouchRollup, getNavCounts,
+  getLatestRoundup, getPastRoundups,
 } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { timeAgo } from '@/lib/format';
@@ -29,10 +30,12 @@ export default async function ResearchPage() {
   const personal = await isAdmin();
   const { editing, txt } = await getEditContext();
 
-  const [threads, tracked, noted, freshPapers, freshRevisions, touchRollup] = await Promise.all([
+  const [threads, tracked, noted, freshPapers, freshRevisions, touchRollup, latestRoundup] = await Promise.all([
     getResearchThreads(), getWatchlist(), getNotedPapers(),
     getTrackedSince(null), getRecentThreadRevisions(null), getResearchTouchRollup(),
+    getLatestRoundup(),
   ]);
+  const pastRoundups = latestRoundup ? await getPastRoundups(latestRoundup.id) : [];
   const counts = personal ? await getNavCounts() : null;
   const fresh = freshPapers.length + freshRevisions.length;
 
@@ -60,6 +63,7 @@ export default async function ResearchPage() {
             style={{ marginBottom: 20 }}
           />
           <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
+            {latestRoundup && <a href="#roundup" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>This week</a>}
             {fresh > 0 && <a href="#new" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>New</a>}
             <a href="#threads" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Threads</a>
             {touchRollup.length > 0 && <a href="#map" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Map</a>}
@@ -89,6 +93,60 @@ export default async function ResearchPage() {
               <Link href="/research/digest" className="btn btn--quiet btn--sm">Digest</Link>
             </span>
           </div>
+        )}
+
+        {latestRoundup && (
+          <section id="roundup" style={{ scrollMarginTop: 80, marginBottom: 26 }}>
+            <div className="section-label">This week · the roundup</div>
+            <div
+              className="rounded-[var(--radius)] border p-[var(--card-pad)]"
+              style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
+            >
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <Link
+                  href={`/reports/sheet/${latestRoundup.id}`}
+                  className="hover:underline"
+                  style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 16, color: 'var(--ink)' }}
+                >
+                  {latestRoundup.title}
+                </Link>
+                <span className="text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' }}>
+                  {latestRoundup.scope_from ?? ''}{latestRoundup.scope_from && latestRoundup.scope_to ? ' to ' : ''}{latestRoundup.scope_to ?? ''}
+                </span>
+              </div>
+              {latestRoundup.abstract && (
+                <p className="text-sm" style={{ color: 'var(--dim)', marginTop: 6, lineHeight: 1.55 }}>
+                  {latestRoundup.abstract}
+                </p>
+              )}
+              <p style={{ marginTop: 10 }} className="flex items-center gap-2">
+                <Link href={`/reports/sheet/${latestRoundup.id}`} className="btn btn--ghost btn--sm">Read the roundup →</Link>
+                <a href={`/reports/sheet/${latestRoundup.id}/pdf`} className="btn btn--quiet btn--sm">PDF</a>
+              </p>
+            </div>
+            {pastRoundups.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <div className="text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>
+                  Past roundups
+                </div>
+                <div className="flex flex-col gap-1">
+                  {pastRoundups.map((r) => (
+                    <Link
+                      key={r.id}
+                      href={`/reports/sheet/${r.id}`}
+                      className="text-sm hover:underline flex items-baseline gap-2"
+                      style={{ color: 'var(--dim)' }}
+                    >
+                      <span style={{ flex: 1 }}>{r.title}</span>
+                      <span className="text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>
+                        {r.scope_to ?? ''}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
         )}
 
         {fresh > 0 && (

@@ -191,7 +191,10 @@ export async function saveSheetAction(input: {
   await requireAdmin();
   const pack = input.pack;
   if (!pack || !pack.kind || !pack.stats) throw new Error('No pack. Build the evidence pack first.');
-  if (!['claim', 'bridge', 'lens', 'atlas'].includes(pack.kind)) throw new Error('Bad pack kind.');
+  // 'roundup' rides here too so a re-save of an already-generated weekly roundup
+  // is accepted (the console itself never offers roundup generation; see
+  // lib/research/roundup.ts, which saves directly via the mutation on a cron).
+  if (!['claim', 'bridge', 'lens', 'atlas', 'roundup'].includes(pack.kind)) throw new Error('Bad pack kind.');
   if ((pack.kind === 'claim' || pack.kind === 'bridge') && !(pack.subject && SHEET_CODE_RE.test(pack.subject))) {
     throw new Error('Bad pack subject.');
   }

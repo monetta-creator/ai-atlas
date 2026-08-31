@@ -8,7 +8,7 @@ export type PaperTriageStatus = 'pending' | 'kept' | 'rejected';
 export type PaperReviewStatus = 'pending' | 'noted' | 'tracked' | 'dismissed';
 export type ThreadStatus = 'open' | 'settled' | 'dormant';
 export type ThreadRelation = 'supports' | 'complicates' | 'contradicts' | 'context';
-export type ResearchStep = 'pull' | 'triage' | 'review' | 'complete';
+export type ResearchStep = 'pull' | 'triage' | 'review' | 'agent' | 'analyze' | 'complete';
 
 export interface Paper {
   id: string;
@@ -79,6 +79,50 @@ export interface ResearchRun {
   error: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// ---- Research engine (migration 0046) ---------------------------------------
+// The day-keyed checkpointed run driven by lib/research/engine.ts (the
+// intel_runs shape applied to research_runs): distinct from ResearchRun above
+// (the manual console flow's row, keyed by since_date, day null) because the
+// engine's row carries day/notes and walks two extra steps (agent, analyze)
+// the manual flow never used. Both shapes read the same table.
+export interface ResearchEngineRun {
+  id: string;
+  day: string;                     // 'YYYY-MM-DD' (cast in the getter)
+  status: RunStatus;
+  step: ResearchStep;
+  since_date: string;              // YYYY-MM-DD, the pull window's start
+  scanned_count: number;
+  pulled_count: number;
+  kept_count: number;
+  rejected_count: number;
+  notes: string[];
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResearchProgress {
+  runId: string;
+  day: string;
+  step: ResearchStep;
+  done: boolean;
+  counters: {
+    scanned: number;
+    pulled: number;
+    kept: number;
+    rejected: number;
+    agentProcessed: number;        // this invocation only (not persisted)
+    analyzed: number;              // this invocation only (not persisted)
+  };
+  notes: string[];
+}
+
+export interface ResearchPrefs {
+  enabled: boolean;
+  triage_model: string | null;
+  analysis_models: string[];       // empty = the Sonnet-only fallback path
 }
 
 export interface ResearchThread {
@@ -161,4 +205,43 @@ export interface RisingReject {
   triage_reason: string | null;
   review_status: PaperReviewStatus;
   citation_count: number;
+}
+
+// ---- Research console operations (the /research/console overhaul) ----------
+// The /research/console health panel's aggregate read (window = trailing N
+// days), the ScanHealth shape applied to the research engine's day-keyed
+// runs. missedDays only ever counts day-keyed rows (research_runs.day is
+// null for the OLD manual console-driven flow, which never enters this).
+export interface ResearchHealth {
+  days: number;
+  runs: { completed: number; failed: number; running: number; missedDays: number };
+  papers: {
+    pulled: number;
+    kept: number;
+    rejected: number;
+    keptRate: number | null;         // kept / (kept + rejected)
+  };
+  findings: {
+    reviewed: number;                // tracked + noted, reviewed within the window
+    withFinding: number;             // of those, extraction is not null
+    coverage: number | null;         // withFinding / reviewed
+  };
+  spendUsd: number;                  // research_triage + research_analysis + research_agent + research_synthesis
+  issues: { day: string; note: string }[];
+}
+
+// The /research/console Model A/B table: per analyzing model, volume and the
+// real quality signal (what the human did with the paper afterward), plus
+// cost/latency from the cost log. Mirrors getAnalysisModelStats (pipeline)
+// and getEnrichModelStats (scan).
+export interface ResearchModelStat {
+  model: string;
+  analyzed: number;
+  tracked: number;
+  noted: number;
+  dismissed: number;
+  avgAgentConfidence: number | null;
+  avgWallMs: number | null;
+  costUsd: number;
+  costPerPaper: number | null;
 }

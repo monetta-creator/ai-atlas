@@ -381,6 +381,53 @@ export async function buildResearchPapers(q: Q, opts: DatasetOpts = {}): Promise
   );
 }
 
+// The Research Portal's firewall handoff: every tracked or noted paper, full
+// corpus every download (no day filter, like signals-export), with its
+// extraction jsonb flattened and its CONFIRMED thread placements resolved via
+// a join (not the denormalized papers.suggested_threads column, which can
+// carry proposals a human never confirmed). review_note never appears here or
+// anywhere; rigor_prior rides only because this dataset is key-gated (see the
+// scoped exception in scripts/test-datasets.mjs).
+export async function buildResearchExport(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
+  return q<DatasetRow>(
+    `select p.id::text as id, p.arxiv_id, p.url, p.title,
+            p.review_status::text as review_status,
+            to_char(p.published_at, 'YYYY-MM-DD') as published_on,
+            to_char(p.reviewed_at, 'YYYY-MM-DD') as reviewed_on,
+            p.rigor_prior, p.citation_count, p.author_hindex,
+            p.extraction->>'headline_claim'   as headline_claim,
+            p.extraction->>'the_test'         as the_test,
+            p.extraction->>'effect_size'      as effect_size,
+            p.extraction->>'limitations'      as limitations,
+            p.extraction->>'counterpoint'     as counterpoint,
+            p.extraction->>'econ_implication' as econ_implication,
+            (p.extraction->'who_cares')::text as who_cares,
+            array_to_string(coalesce((
+              select array_agg(t.slug order by t.slug)
+                from thread_papers tp
+                join research_threads t on t.id = tp.thread_id
+               where tp.paper_id = p.id and tp.status = 'confirmed'
+            ), '{}'), '; ') as thread_slugs,
+            array_to_string(p.claim_touches, '; ') as advisory_claim_touches,
+            p.signal_id::text as promoted_signal_id,
+            p.analyzed_by,
+            p.abstract,
+            p.raw_content as full_text
+       from papers p
+      where p.review_status in ('tracked', 'noted')
+      order by p.reviewed_at desc, p.id${limitClause}`,
+    params
+  );
+}
+
+// ---------------------------------------------------------------------------
+
 export async function buildScoutCompanies(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // The tracked watchlist only, descriptive facts only. The review funnel, the
   // scoring agent's advisory verdicts and scores, review notes, and the dossier

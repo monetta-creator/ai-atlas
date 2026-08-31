@@ -65,8 +65,11 @@ export async function addRateCard(input: {
 // ---- Generated reports (the Report Portal's tear sheets, migration 0030) ----
 // Insert-only like thesis reports: a re-run is a NEW row. The caller
 // (saveSheetAction) re-gates the narrative against the pack at the save boundary.
+// isPublished defaults to false (the human publish gate every other kind keeps);
+// only the weekly research roundup cron (lib/research/roundup.ts) passes true
+// (Kevin's 2026-08-30 decision to auto-publish that one kind).
 export async function saveGeneratedReport(input: {
-  kind: 'claim' | 'bridge' | 'lens' | 'atlas';
+  kind: 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup';
   subject: string | null;
   title: string;
   scope_from: string | null;
@@ -74,14 +77,16 @@ export async function saveGeneratedReport(input: {
   pack: unknown;
   narrative: unknown;
   generated_at: string;
+  isPublished?: boolean;
 }): Promise<string> {
   const row = await one<{ id: string }>(
-    `insert into generated_reports (kind, subject, title, scope_from, scope_to, pack, narrative, generated_at)
-     values ($1::report_kind_t, $2, $3, $4::date, $5::date, $6::jsonb, $7::jsonb, $8::timestamptz)
+    `insert into generated_reports (kind, subject, title, scope_from, scope_to, pack, narrative, generated_at, is_published)
+     values ($1::report_kind_t, $2, $3, $4::date, $5::date, $6::jsonb, $7::jsonb, $8::timestamptz, $9)
      returning id`,
     [
       input.kind, input.subject, input.title, input.scope_from, input.scope_to,
       JSON.stringify(input.pack), JSON.stringify(input.narrative), input.generated_at,
+      input.isPublished ?? false,
     ]
   );
   return row!.id;

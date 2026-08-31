@@ -1,12 +1,13 @@
 import type { Direction, Domain, Lens, Relation, Resolvability, SignalLens, SignalOrigin, Significance, Weight } from './core';
 import type { ConceptStatus } from './concepts';
+import type { PaperReviewStatus, RisingReject } from './research';
 // ---- The Report Portal's generated reports (tear sheets; migration 0030) ----
 // Claim/bridge tear sheets, lens deep reports, and the whole-Atlas executive
 // briefing share one storage row (generated_reports) and one narrative shape.
 // Packs are guest-safe by construction, like ThesisPack: a published report's
 // PDF is publicly downloadable, so nothing personal may enter a pack.
 
-export type SheetKind = 'claim' | 'bridge' | 'lens' | 'atlas';
+export type SheetKind = 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup';
 
 // 'YYYY-MM-DD' bounds; both null = the full corpus.
 export interface SheetScope { from: string | null; to: string | null }
@@ -175,6 +176,79 @@ export interface AtlasSheetPack {
 
 export type SheetPack = ClaimSheetPack | LensSheetPack | AtlasSheetPack;
 
+// ---- Weekly research roundup (kind 'roundup'; migration 0046 added the enum
+// value) --------------------------------------------------------------------
+// A guest-safe weekly digest of tracked+noted papers, thread updates, rising
+// rejects, and Argument Map touches, auto-published by the Friday cron
+// (lib/research/roundup.ts). Deliberately NOT folded into the SheetPack union
+// above: lib/tearsheet/generate.ts's shared helpers (allowlistForSheet,
+// fmtSheetPack, SECTION_BRIEFS) access `.signals`/`.node` unconditionally on
+// every SheetPack member, which a roundup pack does not carry, and that file
+// is outside this task's lane. RoundupPack instead rides its own citation
+// gate + narrative generator in lib/research/roundup.ts, and joins SheetPack
+// only through AnySheetPack, where generic "saved sheet" readers already key
+// purely off `kind` (the portal row/PDF cover/kind label).
+
+export interface RoundupPaper {
+  id: string;
+  title: string;
+  arxiv_id: string | null;
+  url: string;
+  published_on: string | null;
+  review_status: PaperReviewStatus;      // 'tracked' | 'noted' in practice
+  rigor_prior: number | null;
+  citation_count: number | null;
+  headline_claim: string | null;
+  effect_size: string | null;
+  econ_implication: string | null;
+  thread_slugs: string[];
+  claim_touches: string[];
+}
+
+export interface RoundupThreadUpdate {
+  slug: string;
+  title: string;
+  question: string;
+  synthesis_excerpt: string;
+  updated_papers: number;                // confirmed thread_papers rows added this week
+}
+
+export interface RoundupTouch {
+  code: string;
+  statement: string | null;
+  href: string | null;
+  paper_count: number;
+}
+
+export interface RoundupStats {
+  papersTracked: number;
+  papersNoted: number;
+  findings: number;
+  threadsUpdated: number;
+  risingRejects: number;
+  // Discovery-run context for the week (optional: absent runs a quiet week).
+  runsCompleted?: number;
+  papersPulled?: number;
+  papersKept?: number;
+}
+
+export interface RoundupPack {
+  kind: 'roundup';
+  generatedAt: string;                   // ISO
+  scopeFrom: string;                      // 'YYYY-MM-DD', the week's start
+  scopeTo: string;                        // 'YYYY-MM-DD', the week's end (the run day)
+  stats: RoundupStats;
+  papers: RoundupPaper[];
+  threads: RoundupThreadUpdate[];
+  risingRejects: RisingReject[];
+  touchRollup: RoundupTouch[];
+}
+
+// The union a generic "saved sheet" reader may see (the portal row, the PDF
+// shell, the read view's header). RoundupPack rides alongside SheetPack
+// rather than inside it, per the note above.
+export type AnySheetPack = SheetPack | RoundupPack;
+
 // The narrative half: three gated sections + the close, uniform across kinds
 // (headings differ per kind at render time). citedTags/dropped are the citation
 // gate's audit, same discipline as ThesisNarrative.
@@ -205,11 +279,17 @@ export interface GeneratedReportMeta {
     signals?: SheetSignalStats;
     codes?: number;
     corpusNote?: string;
+    // Roundups project their own RoundupStats shape into this same bag.
+    papersTracked?: number;
+    papersNoted?: number;
+    findings?: number;
+    threadsUpdated?: number;
+    risingRejects?: number;
   } | null;
   health?: AtlasSheetPack['health'] | null;   // atlas briefings carry health, not stats
 }
 
 export interface SavedSheet extends GeneratedReportMeta {
-  pack: SheetPack;
+  pack: AnySheetPack;
   narrative: SheetNarrative;
 }

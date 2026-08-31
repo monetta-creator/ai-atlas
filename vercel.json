@@ -5,6 +5,9 @@
     { "path": "/api/cron/pipeline", "schedule": "20 9 * * 1-5" },
     { "path": "/api/cron/pipeline/sweep", "schedule": "20 11 * * 1-5" },
     { "path": "/api/cron/intel", "schedule": "40 9 * * 1-5" },
-    { "path": "/api/cron/intel/sweep", "schedule": "40 11 * * 1-5" }
+    { "path": "/api/cron/intel/sweep", "schedule": "40 11 * * 1-5" },
+    { "path": "/api/cron/research", "schedule": "0 10 * * 1-5" },
+    { "path": "/api/cron/research/sweep", "schedule": "50 11 * * 1-5" },
+    { "path": "/api/cron/roundup", "schedule": "0 21 * * 5" }
   ]
 }

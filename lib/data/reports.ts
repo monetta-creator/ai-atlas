@@ -204,3 +204,40 @@ export async function getGeneratedReport(id: string): Promise<SavedSheet | null>
     [id]
   );
 }
+
+// ---- Weekly research roundup (kind 'roundup') --------------------------------
+// The roundup's natural key is its week-ending date (scope_to): the cron's
+// idempotency check before it does any model work.
+export async function getRoundupForWeek(weekEnd: string): Promise<{ id: string } | null> {
+  return one<{ id: string }>(
+    `select id from generated_reports where kind = 'roundup' and scope_to = $1::date limit 1`,
+    [weekEnd]
+  );
+}
+
+// The Research Portal's "This week" strip: the latest published roundup, meta
+// only (same guest-safe preview projection as listGeneratedReports).
+export async function getLatestRoundup(): Promise<GeneratedReportMeta | null> {
+  const row = await one<GeneratedReportMeta & { bottom_line: string | null }>(
+    `select ${GEN_REPORT_META}, narrative->>'bottomLine' as bottom_line
+       from generated_reports
+      where kind = 'roundup' and is_published = true
+      order by generated_at desc, id
+      limit 1`
+  );
+  if (!row) return null;
+  const { bottom_line, ...meta } = row;
+  return { ...meta, abstract: textExcerpt(bottom_line, 320).replace(/^bottom line[:.]?\s*/i, '') || null };
+}
+
+// Past published roundups (excludes the one already shown as "latest"), for
+// the portal's inline "Past roundups" list.
+export async function getPastRoundups(excludeId: string, limit = 4): Promise<GeneratedReportMeta[]> {
+  return q<GeneratedReportMeta>(
+    `select ${GEN_REPORT_META} from generated_reports
+      where kind = 'roundup' and is_published = true and id <> $1
+      order by generated_at desc, id
+      limit $2`,
+    [excludeId, limit]
+  );
+}

@@ -117,6 +117,26 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   unit: { type: 'string', nullable: true },
   source: { type: 'string', nullable: false, enum: ['edgar_xbrl', 'fdic', 'cfpb', 'y9c'] },
   fetched_at: { type: 'string', nullable: false, format: 'date' },
+  // ---- research-export (url, published_on, counterpoint, full_text shared above) --
+  id: { type: 'string', nullable: false, format: 'uuid' },
+  arxiv_id: { type: 'string', nullable: true },
+  title: { type: 'string', nullable: false },
+  review_status: { type: 'string', nullable: false, enum: ['tracked', 'noted'] },
+  reviewed_on: { type: 'string', nullable: true, format: 'date' },
+  rigor_prior: { type: 'number', nullable: true },
+  citation_count: { type: 'number', nullable: true },
+  author_hindex: { type: 'number', nullable: true },
+  headline_claim: { type: 'string', nullable: true },
+  the_test: { type: 'string', nullable: true },
+  effect_size: { type: 'string', nullable: true },
+  limitations: { type: 'string', nullable: true },
+  econ_implication: { type: 'string', nullable: true },
+  who_cares: { type: 'string', nullable: true },
+  thread_slugs: { type: 'string', nullable: false },
+  advisory_claim_touches: { type: 'string', nullable: false },
+  promoted_signal_id: { type: 'string', nullable: true, format: 'uuid' },
+  analyzed_by: { type: 'string', nullable: true },
+  abstract: { type: 'string', nullable: true },
 };
 
 // The one-line human type description used in every handoff's field table

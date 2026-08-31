@@ -20,16 +20,28 @@ export default function SheetRow({ meta, admin }: { meta: GeneratedReportMeta; a
 
   const subjectLabel =
     meta.kind === 'lens' ? SIGNAL_LENS_LABEL[meta.subject as SignalLens] ?? meta.subject :
-    meta.kind === 'atlas' ? 'Whole Atlas' : meta.subject;
+    meta.kind === 'atlas' ? 'Whole Atlas' :
+    meta.kind === 'roundup'
+      ? (meta.scope_from && meta.scope_to
+          ? `Week of ${dateLabel(meta.scope_from)} to ${dateLabel(meta.scope_to)}`
+          : 'This week')
+      : meta.subject;
   const scope = meta.scope_from || meta.scope_to
     ? `${meta.scope_from ?? 'start'} to ${meta.scope_to ?? 'now'}`
     : 'full corpus';
 
   // The deterministic stat line, per kind (claim/bridge carry evidence stats,
-  // lens carries signal stats + code coverage, atlas carries map health).
+  // lens carries signal stats + code coverage, atlas carries map health,
+  // roundup carries its own weekly counts).
   const chips: string[] = [];
   const s = meta.stats;
-  if (s?.evidence) {
+  if (meta.kind === 'roundup' && s) {
+    const papers = (s.papersTracked ?? 0) + (s.papersNoted ?? 0);
+    chips.push(`${papers} papers`);
+    if (s.findings !== undefined) chips.push(`${s.findings} findings`);
+    if (s.threadsUpdated) chips.push(`${s.threadsUpdated} threads updated`);
+    if (s.risingRejects) chips.push(`${s.risingRejects} rising rejects`);
+  } else if (s?.evidence) {
     chips.push(`${s.evidence.total} evidence: ${s.evidence.supports} support / ${s.evidence.contradicts} contradict / ${s.evidence.neutral} neutral`);
     if (s.signals?.total !== undefined) chips.push(`${s.signals.total} signals`);
     if (s.evidence.oneSided) chips.push('⚠ one-sided');

@@ -6,6 +6,117 @@ import type {
 import { sanitizeText } from '../pipeline/web';
 import type { ArxivEntry } from '../research/arxiv';
 
+// ---- Research engine (migration 0046) ----------------------------------------
+// Writers for the day-keyed checkpointed engine (the intel_runs pattern
+// applied to research_runs): createDayResearchRun IS the checkpoint row (day
+// is unique among non-null rows, so a second call the same day resumes rather
+// than duplicating), the lease trio guards overlapping cron invocations, and
+// appendResearchRunNotes persists per-invocation issues (the scan 0040
+// pattern). updateResearchRun (below) still drives step/status transitions —
+// both flows share it.
+
+export async function createDayResearchRun(day: string, sinceISO: string): Promise<{ id: string; created: boolean }> {
+  const inserted = await one<{ id: string }>(
+    `insert into research_runs (day, since_date, status, step) values ($1::date, $2::date, 'running', 'pull')
+     on conflict (day) where day is not null do nothing
+     returning id::text as id`,
+    [day, sinceISO]
+  );
+  if (inserted) return { id: inserted.id, created: true };
+  const existing = await one<{ id: string }>(
+    `select id::text as id from research_runs where day = $1::date`,
+    [day]
+  );
+  if (!existing) throw new Error('research run vanished between insert and select');
+  return { id: existing.id, created: false };
+}
+
+// Take the run lease for ~5 minutes. Also flips a failed run back to running
+// (resume). False = another invocation holds it; the caller exits quietly.
+export async function claimResearchRun(runId: string): Promise<boolean> {
+  const row = await one<{ id: string }>(
+    `update research_runs
+        set lease_until = now() + interval '5 minutes',
+            status = 'running', error = null, updated_at = now()
+      where id = $1
+        and status in ('running', 'failed')
+        and (lease_until is null or lease_until < now())
+      returning id::text as id`,
+    [runId]
+  );
+  return Boolean(row);
+}
+
+// Lease renewal between work units (only the holder calls this) and release on
+// clean exit (so a same-day manual resume never waits out the lease).
+export async function renewResearchLease(runId: string): Promise<void> {
+  await exec(`update research_runs set lease_until = now() + interval '5 minutes' where id = $1`, [runId]);
+}
+
+export async function releaseResearchLease(runId: string): Promise<void> {
+  await exec(`update research_runs set lease_until = null, updated_at = now() where id = $1`, [runId]);
+}
+
+// Persist an invocation's issue notes (the scan 0040 / intel pattern):
+// appended in first-occurrence order, deduplicated against what the row
+// already holds, capped at 40.
+export async function appendResearchRunNotes(runId: string, notes: string[]): Promise<void> {
+  const clean = [...new Set(notes.map((n) => sanitizeText(n).trim().slice(0, 300)).filter(Boolean))].slice(0, 20);
+  if (!clean.length) return;
+  await exec(
+    `update research_runs
+        set notes = (
+          select coalesce(array_agg(n order by o), '{}') from (
+            select n, min(ord) as o
+              from unnest(notes || $2::text[]) with ordinality as t(n, ord)
+             group by n
+             order by min(ord)
+             limit 40
+          ) d
+        ), updated_at = now()
+      where id = $1`,
+    [runId, clean]
+  );
+}
+
+export async function failResearchRun(runId: string, error: string): Promise<void> {
+  await exec(
+    `update research_runs set status = 'failed', error = $2, lease_until = null, updated_at = now()
+      where id = $1`,
+    [runId, error.slice(0, 500)]
+  );
+}
+
+// The cron on/off switch. Gates the CRON route only; the console's manual
+// tick ignores it on purpose (an admin clicking IS the override).
+export async function setResearchEnabled(enabled: boolean): Promise<void> {
+  await exec(
+    `insert into research_prefs (id, enabled) values (true, $1)
+     on conflict (id) do update set enabled = excluded.enabled, updated_at = now()`,
+    [enabled]
+  );
+}
+
+// The console's model pickers (triage utility model + analysis A/B): each
+// field updates independently — an undefined field keeps the row's current
+// value (or the column default when no row exists yet) rather than clobbering
+// the other picker's selection.
+export async function setResearchModels(
+  opts: { triageModel?: string | null; analysisModels?: string[] }
+): Promise<void> {
+  const current = await one<{ triage_model: string | null; analysis_models: string[] }>(
+    `select triage_model, analysis_models from research_prefs where id = true`
+  );
+  const triageModel = opts.triageModel !== undefined ? opts.triageModel : (current?.triage_model ?? null);
+  const analysisModels = opts.analysisModels !== undefined ? opts.analysisModels : (current?.analysis_models ?? []);
+  await exec(
+    `insert into research_prefs (id, triage_model, analysis_models) values (true, $1, $2::text[])
+     on conflict (id) do update set
+       triage_model = excluded.triage_model, analysis_models = excluded.analysis_models, updated_at = now()`,
+    [triageModel, analysisModels]
+  );
+}
+
 // ---- Research section (migration 0023) ---------------------------------------
 
 export async function createResearchRun(sinceISO: string): Promise<string> {
@@ -232,19 +343,25 @@ export async function setPaperRawContent(paperId: string, text: string | null, v
 
 // Persist the structured finding + refresh the advisory arrays (the full-text pass is
 // more authoritative than triage's abstract-only guesses). Never touches rigor_prior.
+// analyzedBy stamps which model produced this extraction (migration 0046's
+// papers.analyzed_by; mirrors signals.drafted_by) — optional so a caller with
+// no model context (none exists today) still writes cleanly.
 export async function setPaperExtraction(
   paperId: string,
   extraction: PaperExtraction,
-  suggestions: { claim_touches: string[]; suggested_concepts: string[]; suggested_threads: string[] }
+  suggestions: { claim_touches: string[]; suggested_concepts: string[]; suggested_threads: string[] },
+  analyzedBy?: string | null
 ): Promise<void> {
   await exec(
     `update papers set
        extraction = $1::jsonb, claim_touches = $2, suggested_concepts = $3, suggested_threads = $4,
+       analyzed_by = coalesce($5, analyzed_by),
        updated_at = now()
-     where id = $5`,
+     where id = $6`,
     [
       JSON.stringify(extraction),
       suggestions.claim_touches, suggestions.suggested_concepts, suggestions.suggested_threads,
+      analyzedBy ?? null,
       paperId,
     ]
   );

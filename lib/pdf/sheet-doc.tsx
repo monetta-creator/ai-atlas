@@ -1,7 +1,7 @@
 import { renderToBuffer } from '@react-pdf/renderer';
 import type { ReactNode } from 'react';
 import type {
-  ClaimSheetPack, LensSheetPack, AtlasSheetPack, SavedSheet, SheetEvidence, SheetSignal,
+  ClaimSheetPack, LensSheetPack, AtlasSheetPack, RoundupPack, SavedSheet, SheetEvidence, SheetSignal,
 } from '@/lib/types';
 
 import { SIGNIFICANCE_LABEL, SHEET_KIND_LABEL, SHEET_SECTION_TITLES } from '@/lib/format';
@@ -315,12 +315,87 @@ function AtlasBody({ saved, pack, origin }: { saved: SavedSheet; pack: AtlasShee
   );
 }
 
+function RoundupBody({ saved, pack, origin }: { saved: SavedSheet; pack: RoundupPack; origin: string }): ReactNode {
+  const st = pack.stats;
+  const shownPapers = pack.papers.slice(0, DISPLAY_SIGNALS);
+  return (
+    <>
+      <StatBand cells={[
+        { n: st.papersTracked, label: 'Tracked' },
+        { n: st.papersNoted, label: 'Noted' },
+        { n: st.findings, label: 'Findings' },
+        { n: st.threadsUpdated, label: 'Threads updated' },
+        { n: st.risingRejects, label: 'Rising rejects', tone: st.risingRejects ? '#c62828' : undefined },
+      ]} />
+      <Text style={s.note}>
+        The week of {pack.scopeFrom} to {pack.scopeTo}: {st.papersTracked + st.papersNoted} papers
+        reviewed, {st.findings} with an extracted finding, {st.threadsUpdated} research thread
+        {st.threadsUpdated === 1 ? '' : 's'} refreshed, {st.risingRejects} rising reject
+        {st.risingRejects === 1 ? '' : 's'} on watch.
+      </Text>
+
+      <NarrativeSections saved={saved} origin={origin} />
+
+      {pack.papers.length > 0 && (
+        <View>
+          <SectionHead>Papers this week</SectionHead>
+          <View style={s.rowHead}>
+            <Text style={[s.cellHead, { flex: 1.4 }]}>Title</Text>
+            <Text style={[s.cellHead, { flex: 1 }]}>Effect size</Text>
+            <Text style={[s.cellHead, { width: 44 }]}>Status</Text>
+          </View>
+          {shownPapers.map((p) => (
+            <View key={p.id} style={s.row} wrap={false}>
+              <View style={{ flex: 1.4, paddingRight: 6 }}>
+                <Link src={`${origin}/research/${p.id}`} style={[s.small, { color: COBALT }]}>{clip(p.title, 90)}</Link>
+                {p.headline_claim && (
+                  <Text style={[s.mono, { fontSize: 6.5, color: DIM }]}>{clip(p.headline_claim, 90)}</Text>
+                )}
+              </View>
+              <Text style={[s.small, { flex: 1 }]}>{p.effect_size ? clip(p.effect_size, 90) : '–'}</Text>
+              <Text style={[s.mono, { width: 44 }]}>{p.review_status}</Text>
+            </View>
+          ))}
+          {pack.papers.length > shownPapers.length && (
+            <Text style={[s.note, { marginTop: 4 }]}>
+              And {pack.papers.length - shownPapers.length} more papers reviewed this week.
+            </Text>
+          )}
+        </View>
+      )}
+
+      {pack.threads.length > 0 && (
+        <View>
+          <SectionHead>Threads updated</SectionHead>
+          {pack.threads.map((t) => (
+            <BulletRow key={t.slug}>
+              <Link src={`${origin}/research/threads/${t.slug}`} style={s.link}>{t.title}</Link>: {clip(t.synthesis_excerpt, 160)}
+            </BulletRow>
+          ))}
+        </View>
+      )}
+
+      {pack.risingRejects.length > 0 && (
+        <View>
+          <SectionHead>Rising rejects</SectionHead>
+          {pack.risingRejects.map((r) => (
+            <BulletRow key={r.id}>
+              {clip(r.title, 130)} · {r.citation_count}× citations ({r.review_status})
+            </BulletRow>
+          ))}
+        </View>
+      )}
+    </>
+  );
+}
+
 function SheetPdf({ saved, origin }: { saved: SavedSheet; origin: string }): ReactNode {
   const pack = saved.pack;
   const kindLabel = SHEET_KIND_LABEL[pack.kind];
   const subjectLine =
     pack.kind === 'lens' ? `The Signal Board through the ${pack.label} lens.` :
     pack.kind === 'atlas' ? 'The state of the AI-economy debate across the Atlas.' :
+    pack.kind === 'roundup' ? `Week of ${pack.scopeFrom} to ${pack.scopeTo}.` :
     `${pack.node.code} · ${pack.node.statement}`;
   const metaLines = [
     scopeLine(saved),
@@ -336,6 +411,8 @@ function SheetPdf({ saved, origin }: { saved: SavedSheet; origin: string }): Rea
           <LensBody saved={saved} pack={pack} origin={origin} />
         ) : pack.kind === 'atlas' ? (
           <AtlasBody saved={saved} pack={pack} origin={origin} />
+        ) : pack.kind === 'roundup' ? (
+          <RoundupBody saved={saved} pack={pack} origin={origin} />
         ) : (
           <ClaimBody saved={saved} pack={pack} origin={origin} />
         )}

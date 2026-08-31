@@ -1,7 +1,7 @@
-import { runStructured } from '../dossier';
+import { researchStructured } from './model-route';
 import * as m from '../mutations';
 import {
-  getConceptDigest, getThreadDigest, getTargets, getSteeringNote, getReviewTasteDigest,
+  getConceptDigest, getThreadDigest, getTargets, getSteeringNote, getReviewTasteDigest, getResearchPrefs,
 } from '../data';
 import { q } from '../db';
 
@@ -123,19 +123,21 @@ export async function recommendQueueChunk(paperIds: string[]): Promise<AgentChun
     ].filter(Boolean).join('\n')),
   ].join('\n\n');
 
-  const out = await runStructured<{
+  // The agent rides the same utility pick as triage (research_prefs has one
+  // dial for both funnel-judgment calls, not a separate agent picker).
+  const prefs = await getResearchPrefs();
+  const out = await researchStructured<{
     decisions: { id: string; recommendation: 'tracked' | 'noted' | 'dismissed'; confidence: number; reason: string; cluster: string }[];
   }>({
+    model: prefs.triage_model,
     system: await buildSystem(),
     user,
     toolName: 'submit_queue_decisions',
     toolDescription: 'Submit one recommended decision per paper id.',
     schema: buildSchema(papers.map((p) => p.id)),
     maxTokens: 2800,
-    effort: 'low',
     feature: 'research_agent',
-    timeoutMs: 55_000,
-    maxRetries: 0,
+    timeoutMs: 90_000,
   });
 
   const valid = new Set(papers.map((p) => p.id));

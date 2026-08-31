@@ -193,6 +193,8 @@ const FEATURE_LABEL: Record<string, string> = {
   ask_verify: 'Ask · answer check',
   tearsheet_sections: 'Report Portal · sections',
   tearsheet_close: 'Report Portal · bottom line',
+  roundup_sections: 'Weekly roundup · sections',
+  roundup_close: 'Weekly roundup · close',
   thesis_map: 'Thesis · claim mapping',
   thesis_gaps: 'Thesis · gap diagnosis',
   thesis_sections: 'Thesis report · sections',
@@ -250,6 +252,7 @@ export const SHEET_KIND_LABEL: Record<SheetKind, string> = {
   bridge: 'Bridge-claim tear sheet',
   lens: 'Lens deep report',
   atlas: 'Executive briefing',
+  roundup: 'Weekly research roundup',
 };
 
 export const SHEET_SECTION_TITLES: Record<SheetKind, { reading: string; connections: string; watch: string }> = {
@@ -257,6 +260,7 @@ export const SHEET_SECTION_TITLES: Record<SheetKind, { reading: string; connecti
   bridge: { reading: 'Where the evidence stands', connections: 'How it wires into the argument', watch: 'What would move it' },
   lens: { reading: 'What happened through this lens', connections: 'The cross-claim read', watch: 'What to watch' },
   atlas: { reading: 'Where the debate stands', connections: 'What moved', watch: 'What to watch' },
+  roundup: { reading: 'The week in research', connections: 'Threads and the map', watch: 'Watch next week' },
 };
 
 export function featureLabel(slug: string): string {

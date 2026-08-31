@@ -2,14 +2,15 @@ import { one } from '../db';
 import { getScanPrefs } from './scan';
 import { getPipelinePrefs } from './pipeline';
 import { getIntelPrefs } from './intel';
+import { getResearchPrefs } from './research';
 
 // ---- Daily job readiness (the /page.tsx "cron-tracker" widget) -------------
-// A single read over the three cron subsystems (scan, pipeline, intel) that
-// answers "is today's data ready?" without sending an admin to three
-// consoles. A run ROW for today (any status) always wins over the prefs/
-// weekend guess: a manual weekend run still reports its real state.
+// A single read over the four cron subsystems (scan, pipeline, intel,
+// research) that answers "is today's data ready?" without sending an admin to
+// four consoles. A run ROW for today (any status) always wins over the
+// prefs/weekend guess: a manual weekend run still reports its real state.
 
-export type JobKey = 'scan' | 'pipeline' | 'intel';
+export type JobKey = 'scan' | 'pipeline' | 'intel' | 'research';
 export type JobState = 'off' | 'paused' | 'pending' | 'running' | 'done' | 'failed';
 
 export interface DailyJob {
@@ -55,6 +56,11 @@ interface IntelRunRow extends RunRowBase {
   metric_count: number;
 }
 
+interface ResearchRunRow extends RunRowBase {
+  pulled_count: number;
+  kept_count: number;
+}
+
 // Eastern-time finish stamp ('H:MM AM') plus the raw epoch (for picking the
 // latest finish across jobs) — one shared tail for all three run queries.
 const RUN_TIME_COLUMNS = `
@@ -90,6 +96,14 @@ function getIntelRunToday(): Promise<IntelRunRow | null> {
   );
 }
 
+function getResearchRunToday(): Promise<ResearchRunRow | null> {
+  return one<ResearchRunRow>(
+    `select status::text as status, step::text as step, pulled_count, kept_count, error,
+            ${RUN_TIME_COLUMNS}
+       from research_runs where day = (now() at time zone 'utc')::date`
+  );
+}
+
 // Row-vs-prefs-vs-weekend precedence: a run row (any status) always wins;
 // only its absence falls back to paused (prefs disabled) then off (weekend)
 // then pending (a weekday run just hasn't started or checkpointed yet).
@@ -121,14 +135,17 @@ function resolveJob(
 }
 
 export async function getDailyJobStatus(): Promise<DailyJobStatus> {
-  const [scanPrefs, pipelinePrefs, intelPrefs, scanRow, pipelineRow, intelRow] = await Promise.all([
-    getScanPrefs(),
-    getPipelinePrefs(),
-    getIntelPrefs(),
-    getScanRunToday(),
-    getPipelineRunToday(),
-    getIntelRunToday(),
-  ]);
+  const [scanPrefs, pipelinePrefs, intelPrefs, researchPrefs, scanRow, pipelineRow, intelRow, researchRow] =
+    await Promise.all([
+      getScanPrefs(),
+      getPipelinePrefs(),
+      getIntelPrefs(),
+      getResearchPrefs(),
+      getScanRunToday(),
+      getPipelineRunToday(),
+      getIntelRunToday(),
+      getResearchRunToday(),
+    ]);
 
   const day = new Date().toISOString().slice(0, 10);
   const weekendDow = new Date().getUTCDay();
@@ -142,11 +159,13 @@ export async function getDailyJobStatus(): Promise<DailyJobStatus> {
     ? `${intelRow.found} items · ${intelRow.fact_count} facts` +
       (intelRow.metric_count > 0 ? ` · ${intelRow.metric_count} metrics` : '')
     : null;
+  const researchDetail = researchRow ? `${researchRow.pulled_count} pulled · ${researchRow.kept_count} kept` : null;
 
   const jobs: DailyJob[] = [
     resolveJob('scan', 'External scan', '/scan', scanRow, scanDetail, scanPrefs.enabled, weekend),
     resolveJob('pipeline', 'Discovery pipeline', '/pipeline', pipelineRow, pipelineDetail, pipelinePrefs.enabled, weekend),
     resolveJob('intel', 'Intel desk', '/intel', intelRow, intelDetail, intelPrefs.enabled, weekend),
+    resolveJob('research', 'Research pull', '/research/console', researchRow, researchDetail, researchPrefs.enabled, weekend),
   ];
 
   const considered = jobs.filter((j) => j.state !== 'off' && j.state !== 'paused');
@@ -154,7 +173,7 @@ export async function getDailyJobStatus(): Promise<DailyJobStatus> {
 
   let readyAtET: string | null = null;
   if (ready) {
-    const rows: (RunRowBase | null)[] = [scanRow, pipelineRow, intelRow];
+    const rows: (RunRowBase | null)[] = [scanRow, pipelineRow, intelRow, researchRow];
     const doneRows = rows.filter((r): r is RunRowBase => !!r && r.status === 'completed');
     readyAtET = doneRows.length
       ? doneRows.reduce((max, r) => ((r.finished_epoch ?? 0) > (max.finished_epoch ?? 0) ? r : max)).finished_et

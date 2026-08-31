@@ -1,9 +1,10 @@
-import { runStructured } from '../dossier';
+import { researchStructured, resolvedModel } from './model-route';
+import { pickEnrichModel } from '../scan/models';
 import { fetchCandidateText, FetchFailure, MIN_READABLE_CHARS } from '../pipeline/web';
 import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL } from '../format';
 import * as m from '../mutations';
 import {
-  getPaper, getTargets, getConceptDigest, getThreadDigest, getSourceText,
+  getPaper, getTargets, getConceptDigest, getThreadDigest, getSourceText, getResearchPrefs,
 } from '../data';
 import type { Paper, PaperExtraction, SignalLens, ThreadRelation } from '../types';
 
@@ -172,9 +173,15 @@ export async function analyzePaper(paperId: string): Promise<AnalyzePaperResult>
     p.comments && `Comment: ${p.comments}`,
   ].filter(Boolean).join('\n');
 
-  const out = await runStructured<RawExtraction>({
+  // Deterministic per-paper A/B split over the picker's model list (the same
+  // hash-based assignment the /scan picker uses), null falling back to Haiku
+  // inside researchStructured.
+  const prefs = await getResearchPrefs();
+  const model = pickEnrichModel(prefs.analysis_models, paperId);
+  const out = await researchStructured<RawExtraction>({
+    model,
     // Digests are shared with triage and stable within a session — the SYSTEM block
-    // rides the prompt cache across consecutive Analyze clicks.
+    // rides the prompt cache across consecutive Analyze clicks (on the Anthropic path).
     system: [
       ANALYSIS_SYSTEM,
       `\nAUDIENCE LENSES (use only these codes):\n${lensGuide}`,
@@ -187,13 +194,11 @@ export async function analyzePaper(paperId: string): Promise<AnalyzePaperResult>
     toolDescription: 'Return the structured finding for this paper.',
     schema: buildSchema(codes, conceptSlugs, threadSlugs),
     maxTokens: 3000,
-    effort: 'medium',
     feature: 'research_analysis',
     metadata: { paper_id: paperId, arxiv_id: p.arxiv_id },
     // The model leg runs in its own invocation (hydrate is separate): bound it so one
     // call provably fits the 60s cap; the client retries on a fresh invocation.
-    timeoutMs: 45_000,
-    maxRetries: 0,
+    timeoutMs: 90_000,
   });
 
   // Coerce + allow-list everything (never trust the model for codes/slugs/enums).
@@ -234,11 +239,16 @@ export async function analyzePaper(paperId: string): Promise<AnalyzePaperResult>
     suggested_threads: (extraction.thread_placements ?? []).map((t) => t.slug),
   };
 
-  await m.setPaperExtraction(paperId, extraction, {
-    claim_touches: result.claim_touches,
-    suggested_concepts: result.suggested_concepts,
-    suggested_threads: result.suggested_threads,
-  });
+  await m.setPaperExtraction(
+    paperId,
+    extraction,
+    {
+      claim_touches: result.claim_touches,
+      suggested_concepts: result.suggested_concepts,
+      suggested_threads: result.suggested_threads,
+    },
+    resolvedModel(model)
+  );
   return result;
 }
 

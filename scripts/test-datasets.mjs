@@ -24,6 +24,7 @@ import pg from 'pg';
 import { DATASETS, getDataset } from '../lib/datasets/registry.ts';
 import { isSignalLens, SIGNAL_LENSES } from '../lib/datasets/core.ts';
 import { datasetFileName, datasetToCSV } from '../lib/datasets/serialize.ts';
+import { buildRowJsonSchema } from '../lib/datasets/handoff-shared.ts';
 
 const client = process.env.DATABASE_URL
   ? new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
@@ -65,16 +66,21 @@ const BANNED_EXACT = new Set([
 ]);
 const BANNED_SUBSTRINGS = ['rationale', 'snapshot', 'confidence', 'prior', 'dossier'];
 // The scoped exceptions (see lib/datasets/core.ts): per-touch direction +
-// editorial reason, and the Intel Desk's merged dossier fields, may ride
-// KEY-GATED datasets only; the portal key is the boundary, the same as bulk
-// article text. dossier_* here is the Intel Desk's own machine-merged
-// research record (lib/scout/core.ts mergeDossier), not the admin note/prior
-// personal layer the ban exists to protect; intel-companies is key-gated.
-// Never widen this to the personal layer proper (confidence, priors,
-// rationales stay banned everywhere).
+// editorial reason, the Intel Desk's merged dossier fields, and the Research
+// Portal's rigor_prior, may ride KEY-GATED datasets only; the portal key is
+// the boundary, the same as bulk article text. dossier_* here is the Intel
+// Desk's own machine-merged research record (lib/scout/core.ts mergeDossier),
+// not the admin note/prior personal layer the ban exists to protect;
+// intel-companies is key-gated. rigor_prior on research-export is the
+// research library's own per-paper editorial number (distinct from the
+// argument map's confidence/reliability_prior personal layer it never
+// touches or gates); research-export is key-gated. Never widen this to the
+// argument map's personal layer proper (confidence, source reliability
+// priors, rationales stay banned everywhere).
 const KEY_GATED_ALLOWED = new Set([
   'touch_details',
   'dossier_summary', 'dossier_initiatives', 'dossier_segments', 'dossier_updated_at',
+  'rigor_prior',
 ]);
 const EM_DASH = '—';
 
@@ -130,6 +136,18 @@ check('registry: house style, no em dash anywhere', () => {
     }
     for (const c of d.columns) {
       assert.ok(!c.label.includes(EM_DASH) && !c.def.includes(EM_DASH), `${d.slug}.${c.key}`);
+    }
+  }
+});
+check('registry: every dataset carrying full_text is heavy and key-gated', () => {
+  // full_text is not itself a banned key (articles-full-text, external-scan,
+  // signals-export, intel-items, research-export all legitimately carry bulk
+  // third-party or retained text), but it must never ship un-gated: this is
+  // the regression guard for that, independent of the personal-layer ban above.
+  for (const d of DATASETS) {
+    if (d.columns.some((c) => c.key === 'full_text')) {
+      assert.ok(d.keyGated, `${d.slug} carries full_text but is not keyGated`);
+      assert.ok(d.heavy, `${d.slug} carries full_text but is not heavy`);
     }
   }
 });
@@ -304,6 +322,45 @@ async function countUnpublished(signalIds) {
       for (const id of eventCompanyIds) assert.ok(have.has(id), String(id));
     });
   }
+
+  // research-export: key-gated by construction, every row is a tracked/noted
+  // paper (independent recount against papers.review_status), who_cares
+  // parses as the documented JSON array, and the schema generator has real
+  // facts for every column (the buildResearchHandoff coverage guard, the
+  // test-scan.mjs / test-intel-datasets.mjs pattern applied to this def).
+  const researchExportDef = getDataset('research-export');
+  check('research-export: is key-gated', () => assert.ok(researchExportDef.keyGated));
+  const researchExport = await researchExportDef.build(q);
+  {
+    const ids = idsOf(researchExport, 'id');
+    const bad = ids.length
+      ? Number((await q(
+          `select count(*)::int as n from papers where id = any($1::uuid[]) and review_status not in ('tracked', 'noted')`,
+          [ids]
+        ))[0].n)
+      : 0;
+    check(`research-export: every row is tracked or noted (${ids.length} distinct)`, () =>
+      assert.equal(bad, 0, `${bad} row(s) with a non-tracked/noted review_status leaked`));
+  }
+  check('research-export: review_status is allow-listed and who_cares parses as JSON', () => {
+    const allowed = new Set(['tracked', 'noted']);
+    for (const r of researchExport) {
+      assert.ok(allowed.has(r.review_status), String(r.review_status));
+      if (r.who_cares !== null) assert.ok(Array.isArray(JSON.parse(r.who_cares)), 'who_cares should be a JSON array');
+    }
+  });
+  check('research-export: buildRowJsonSchema covers every column with real facts', () => {
+    const schema = buildRowJsonSchema(researchExportDef);
+    for (const c of researchExportDef.columns) {
+      const p = schema.properties[c.key];
+      assert.ok(p, `no schema property for ${c.key}`);
+      assert.ok(
+        !(Array.isArray(p.type) && p.type.length === 3),
+        `${c.key} fell back to the permissive type; add it to FIELD_FACTS`
+      );
+    }
+    assert.deepEqual(schema.required, researchExportDef.columns.map((c) => c.key));
+  });
 
   const catalog = await getDataset('catalog').build(q);
   check('catalog: mirrors the registry exactly', () => {

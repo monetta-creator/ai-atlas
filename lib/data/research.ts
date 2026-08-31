@@ -1,7 +1,7 @@
 import { q, one } from '../db';
 import type {
-  Paper, ResearchRun, ResearchThread, ThreadPaperRow, ResearchThreadScan, WatchlistRow, RisingReject,
-  RecentThreadRevision, } from '../types';
+  Paper, ResearchRun, ResearchEngineRun, ResearchPrefs, ResearchThread, ThreadPaperRow, ResearchThreadScan,
+  WatchlistRow, RisingReject, RecentThreadRevision, RoundupPaper, ResearchHealth, ResearchModelStat, } from '../types';
 
 // ===== Research section (migration 0023) =====================================
 // Admin-first surface: no personal-layer stripping yet — every getter here is
@@ -36,6 +36,81 @@ export async function getLastResearchRunAt(): Promise<string | null> {
       where status = 'completed' order by triggered_at desc limit 1`
   );
   return row?.triggered_at ?? null;
+}
+
+// ---- Research engine (migration 0046) ---------------------------------------
+// Reads for the day-keyed checkpointed engine (lib/research/engine.ts) and the
+// home tracker. The engine row shares research_runs with the manual console
+// flow (day null there); ENGINE_RUN_COLUMNS pulls only the columns the engine
+// shape needs, cast the same way as getIntelRun/getScanRun.
+
+const ENGINE_RUN_COLUMNS = `
+  id::text as id, to_char(day, 'YYYY-MM-DD') as day, status, step,
+  to_char(since_date, 'YYYY-MM-DD') as since_date,
+  scanned_count, pulled_count, kept_count, rejected_count, notes, error, created_at, updated_at`;
+
+// By id, for the engine's own advance loop and the console tick action (the
+// getIntelRun precedent).
+export async function getResearchRun(runId: string): Promise<ResearchEngineRun | null> {
+  return one<ResearchEngineRun>(`select ${ENGINE_RUN_COLUMNS} from research_runs where id = $1`, [runId]);
+}
+
+// By day (defaults to today UTC), for the cron route's "already complete"
+// check and the home tracker's day-grid style read.
+export async function getResearchRunByDay(day?: string): Promise<ResearchEngineRun | null> {
+  return one<ResearchEngineRun>(
+    `select ${ENGINE_RUN_COLUMNS} from research_runs
+      where day = coalesce($1::date, (now() at time zone 'utc')::date)`,
+    [day ?? null]
+  );
+}
+
+// The runtime switches. Missing row = enabled with no models selected (the
+// getIntelPrefs idiom): the singleton is created lazily by the first toggle
+// or picker save.
+export async function getResearchPrefs(): Promise<ResearchPrefs> {
+  const row = await one<{ enabled: boolean; triage_model: string | null; analysis_models: string[] }>(
+    `select enabled, triage_model, analysis_models from research_prefs where id = true`
+  );
+  return {
+    enabled: row?.enabled ?? true,
+    triage_model: row?.triage_model ?? null,
+    analysis_models: row?.analysis_models ?? [],
+  };
+}
+
+// The engine's 'agent' step feed: kept, pending-review papers the queue agent
+// has not yet recommended on, oldest-untouched-first isn't needed here
+// (published_at desc matches the console's own queue order). Distinct from
+// getAllPendingPaperIds (the console's full-refresh "Run" button, which
+// re-processes already-recommended rows too): the engine advances past a
+// paper once it has been recommended, so a resumed invocation never repeats it.
+export async function getUnrecommendedPaperIds(limit = 12): Promise<string[]> {
+  const rows = await q<{ id: string }>(
+    `select id from papers
+      where triage_status = 'kept' and review_status = 'pending' and agent_recommendation is null
+      order by published_at desc nulls last
+      limit $1`,
+    [limit]
+  );
+  return rows.map((r) => r.id);
+}
+
+// The engine's 'analyze' step feed: the single next paper worth the model
+// spend, agent-recommended (tracked or noted) and not yet analyzed. excludeIds
+// keeps one invocation from retrying the same broken paper on every unit after
+// its hydrate/analyze call fails.
+export async function getNextAnalysisCandidate(excludeIds: string[] = []): Promise<{ id: string } | null> {
+  return one<{ id: string }>(
+    `select id::text as id from papers
+      where triage_status = 'kept' and review_status = 'pending'
+        and agent_recommendation in ('tracked', 'noted')
+        and extraction is null
+        and not (id = any($1::uuid[]))
+      order by agent_confidence desc nulls last
+      limit 1`,
+    [excludeIds]
+  );
 }
 
 export async function countPendingPapers(runId: string): Promise<number> {
@@ -398,4 +473,218 @@ export async function getReviewTasteDigest(): Promise<{
     ),
   ]);
   return { tracked, noted: noted.map((r) => r.title), dismissed: dismissed.map((r) => r.title) };
+}
+
+// ---- Weekly research roundup (lib/research/roundup.ts) ---------------------
+// Add-only readers for the Friday cron's pack builder. Public columns only:
+// review_note and raw_content never appear here (the roundup auto-publishes,
+// so its pack must be guest-safe from the start).
+
+// Tracked+noted papers reviewed within [sinceISO, toISO], with their extraction
+// fields flattened and confirmed thread placements resolved. reviewed_at (not
+// published_at) bounds the window, matching getTrackedSince's convention.
+export async function getReviewedSince(sinceISO: string, toISO: string): Promise<RoundupPaper[]> {
+  return q<RoundupPaper>(
+    `select p.id, p.title, p.arxiv_id, p.url,
+            to_char(p.published_at, 'YYYY-MM-DD') as published_on,
+            p.review_status, p.rigor_prior, p.citation_count,
+            p.extraction->>'headline_claim' as headline_claim,
+            p.extraction->>'effect_size' as effect_size,
+            p.extraction->>'econ_implication' as econ_implication,
+            p.claim_touches,
+            coalesce((
+              select array_agg(t.slug order by t.slug)
+                from thread_papers tp
+                join research_threads t on t.id = tp.thread_id
+               where tp.paper_id = p.id and tp.status = 'confirmed'
+            ), '{}') as thread_slugs
+       from papers p
+      where p.review_status in ('tracked', 'noted')
+        and p.reviewed_at >= $1::date and p.reviewed_at < ($2::date + 1)
+      order by p.reviewed_at desc, p.id`,
+    [sinceISO, toISO]
+  );
+}
+
+// Threads that gained a confirmed thread_papers row within the window, with the
+// count (the roundup's auto-refresh candidate list, and the per-thread
+// "papers added this week" figure in the pack).
+export async function getThreadsWithNewPapersSince(
+  sinceISO: string, toISO: string
+): Promise<{ slug: string; new_papers: number }[]> {
+  return q<{ slug: string; new_papers: number }>(
+    `select t.slug, count(*)::int as new_papers
+       from thread_papers tp
+       join research_threads t on t.id = tp.thread_id
+      where tp.status = 'confirmed'
+        and tp.created_at >= $1::date and tp.created_at < ($2::date + 1)
+      group by t.slug
+      order by count(*) desc, t.slug`,
+    [sinceISO, toISO]
+  );
+}
+
+// The week's discovery-engine activity: completed day-keyed runs (migration
+// 0046) in range, summed. Context for the roundup's narrative, not a gate.
+export async function getResearchRunStatsSince(
+  sinceISO: string, toISO: string
+): Promise<{ runsCompleted: number; papersPulled: number; papersKept: number }> {
+  const row = await one<{ runs: number; pulled: number; kept: number }>(
+    `select count(*)::int as runs,
+            coalesce(sum(pulled_count), 0)::int as pulled,
+            coalesce(sum(kept_count), 0)::int as kept
+       from research_runs
+      where day is not null and status = 'completed'
+        and day >= $1::date and day <= $2::date`,
+    [sinceISO, toISO]
+  );
+  return { runsCompleted: row?.runs ?? 0, papersPulled: row?.pulled ?? 0, papersKept: row?.kept ?? 0 };
+}
+
+// ---- /research/console operations (the getScanHealth shape applied here) ---
+// Every read below is day-keyed-only (research_runs.day is not null): the OLD
+// manual console flow's since_date-only rows never enter these aggregates.
+const RESEARCH_FEATURES = ['research_triage', 'research_analysis', 'research_agent', 'research_synthesis'];
+
+export async function getResearchHealth(days = 30): Promise<ResearchHealth> {
+  const interval = `${Math.max(1, Math.round(days))} days`;
+  const [runAgg, papersAgg, findingsAgg, spend, issueRows, firstRun] = await Promise.all([
+    one<{ completed: number; failed: number; running: number }>(
+      `select count(*) filter (where status = 'completed')::int as completed,
+              count(*) filter (where status = 'failed')::int as failed,
+              count(*) filter (where status = 'running')::int as running
+         from research_runs where day is not null and day > current_date - $1::interval`,
+      [interval]
+    ),
+    one<{ pulled: number; kept: number; rejected: number }>(
+      `select coalesce(sum(pulled_count), 0)::int as pulled,
+              coalesce(sum(kept_count), 0)::int as kept,
+              coalesce(sum(rejected_count), 0)::int as rejected
+         from research_runs where day is not null and day > current_date - $1::interval`,
+      [interval]
+    ),
+    // "Reviewed" here means the human decision (tracked/noted) landed within the
+    // window, not that the paper was published within it (reviewed_at is the
+    // only clean timestamp for when the shelf gained the row).
+    one<{ reviewed: number; with_finding: number }>(
+      `select count(*)::int as reviewed, count(extraction)::int as with_finding
+         from papers
+        where review_status in ('tracked', 'noted')
+          and reviewed_at > now() - $1::interval`,
+      [interval]
+    ),
+    one<{ usd: number }>(
+      `select coalesce(sum(cost_usd), 0)::numeric as usd from ai_cost_log
+        where feature = any($2) and created_at > now() - $1::interval`,
+      [interval, RESEARCH_FEATURES]
+    ),
+    // The last 14 day-keyed runs (not a days-interval window: research may not
+    // run every weekday, so a run-count window surfaces real issues even when
+    // recent activity is sparse), flattened newest first, capped at 30 notes.
+    q<{ day: string; note: string }>(
+      `select to_char(r.day, 'YYYY-MM-DD') as day, n as note
+         from (select day, notes from research_runs where day is not null
+                order by day desc limit 14) r,
+              unnest(r.notes) as n
+        order by day desc
+        limit 30`
+    ),
+    one<{ first: string | null }>(`select to_char(min(day), 'YYYY-MM-DD') as first from research_runs where day is not null`),
+  ]);
+
+  // Missed days: WEEKDAYS in [max(first day-keyed run, window start), today] minus
+  // weekdays that have a day-keyed run row (the getScanHealth idiom: the crons
+  // run weekdays only, so a quiet weekend is never a miss).
+  let missedDays = 0;
+  if (firstRun?.first) {
+    const dayRows = await q<{ n: number }>(
+      `select count(*)::int as n from research_runs
+        where day is not null and day > current_date - $1::interval and extract(isodow from day) < 6`,
+      [interval]
+    );
+    const start = new Date(`${firstRun.first}T00:00:00Z`);
+    const windowStart = new Date(Date.now() - days * 86_400_000);
+    const from = start > windowStart ? start : windowStart;
+    let elapsedWeekdays = 0;
+    for (let t = from.getTime(); t <= Date.now(); t += 86_400_000) {
+      const dow = new Date(t).getUTCDay();
+      if (dow !== 0 && dow !== 6) elapsedWeekdays += 1;
+    }
+    missedDays = Math.max(0, elapsedWeekdays - (dayRows[0]?.n ?? 0));
+  }
+
+  const kept = papersAgg?.kept ?? 0;
+  const rejected = papersAgg?.rejected ?? 0;
+  const reviewed = findingsAgg?.reviewed ?? 0;
+  const withFinding = findingsAgg?.with_finding ?? 0;
+
+  return {
+    days,
+    runs: {
+      completed: runAgg?.completed ?? 0,
+      failed: runAgg?.failed ?? 0,
+      running: runAgg?.running ?? 0,
+      missedDays,
+    },
+    papers: {
+      pulled: papersAgg?.pulled ?? 0,
+      kept,
+      rejected,
+      keptRate: kept + rejected > 0 ? kept / (kept + rejected) : null,
+    },
+    findings: {
+      reviewed,
+      withFinding,
+      coverage: reviewed > 0 ? withFinding / reviewed : null,
+    },
+    spendUsd: spend?.usd ?? 0,
+    issues: issueRows,
+  };
+}
+
+// The /research/console Model A/B table: per analyzing model over the window,
+// volume, what the human did with the paper afterward (review_status), and
+// cost/latency from the cost log (feature research_analysis). Mirrors
+// getAnalysisModelStats (pipeline) / getEnrichModelStats (scan). analyzed_by
+// has no clean "when analyzed" timestamp of its own (it rides updated_at,
+// which also moves on unrelated edits), so this reads cumulative state
+// rather than a days-window slice; only the cost-log half is windowed.
+export async function getResearchModelAB(days = 30): Promise<ResearchModelStat[]> {
+  const interval = `${Math.max(1, Math.round(days))} days`;
+  const rows = await q<{
+    model: string; analyzed: number; tracked: number; noted: number; dismissed: number;
+    avg_agent_confidence: number | null;
+    avg_wall_ms: number | null; cost_usd: number | null; calls: number | null;
+  }>(
+    `select p.analyzed_by as model,
+            count(*)::int as analyzed,
+            count(*) filter (where p.review_status = 'tracked')::int as tracked,
+            count(*) filter (where p.review_status = 'noted')::int as noted,
+            count(*) filter (where p.review_status = 'dismissed')::int as dismissed,
+            round(avg(p.agent_confidence)::numeric, 1) as avg_agent_confidence,
+            l.avg_wall_ms, l.cost_usd, l.calls
+       from papers p
+       left join (
+         select model, round(avg(wall_ms))::int as avg_wall_ms,
+                sum(cost_usd)::numeric as cost_usd, count(*)::int as calls
+           from ai_cost_log
+          where feature = 'research_analysis' and created_at > now() - $1::interval
+          group by model
+       ) l on l.model = p.analyzed_by
+      where p.analyzed_by is not null
+      group by p.analyzed_by, l.avg_wall_ms, l.cost_usd, l.calls
+      order by analyzed desc, p.analyzed_by`,
+    [interval]
+  );
+  return rows.map((r) => ({
+    model: r.model,
+    analyzed: r.analyzed,
+    tracked: r.tracked,
+    noted: r.noted,
+    dismissed: r.dismissed,
+    avgAgentConfidence: r.avg_agent_confidence === null ? null : Number(r.avg_agent_confidence),
+    avgWallMs: r.avg_wall_ms,
+    costUsd: r.cost_usd ?? 0,
+    costPerPaper: r.calls ? Number(((r.cost_usd ?? 0) / r.calls).toFixed(4)) : null,
+  }));
 }
