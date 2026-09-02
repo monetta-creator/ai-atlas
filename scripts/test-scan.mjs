@@ -386,6 +386,14 @@ check('source tiers: curated map + parent-domain walk', () => {
   assert.ok(curatedDomainCount() > 150);
   for (const [kind, tier] of Object.entries(KIND_TIER)) assert.ok(tier >= 1 && tier <= 4, kind);
 });
+check('source rating: a model-rated primary caps at tier 2', () => {
+  const rows = acceptDomainRatings(
+    { ratings: [{ domain: 'nascar.com', kind: 'primary', tier: 1, reason: 'official site' }] },
+    [{ domain: 'nascar.com', sample_headline: null }]
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].tier, 2);
+});
 check('source tiers: priority composes relevance, tier, content kind', () => {
   assert.equal(priorityOf(0.8, 1, 'news'), 0.8);
   assert.equal(priorityOf(0.8, 4, 'news'), 0.2);

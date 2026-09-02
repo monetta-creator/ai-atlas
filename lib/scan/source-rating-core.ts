@@ -54,7 +54,11 @@ export function acceptDomainRatings(
     if (!isSourceKind(kind)) continue;
     const tierRaw = Number(r?.tier);
     if (!Number.isFinite(tierRaw)) continue;
-    const floor = KIND_TIER[kind];
+    // A model-rated 'primary' caps at tier 2: the model calls any company's own
+    // site primary (career portals, claim portals, sports leagues), and a
+    // self-published page is reliable about itself but unverified as the
+    // actual company. Curated primaries (the labs, the card networks) stay 1.
+    const floor = kind === 'primary' ? 2 : KIND_TIER[kind];
     const ceiling = Math.min(4, floor + 1);
     const tier = Math.min(Math.max(Math.round(tierRaw), floor), ceiling);
     if (!isSourceTier(tier)) continue;
