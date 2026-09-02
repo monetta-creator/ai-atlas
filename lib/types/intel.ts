@@ -84,6 +84,9 @@ export interface IntelItem {
   entities: string[];
   significance: number | null;     // 0-1
   enriched_by: string | null;
+  source_tier: number | null;   // 0052: 1 (regulator/primary/research/wire) to 4 (promo/social); null = unrated
+  source_kind: string | null;   // 0052: the SourceKind the tier came from
+  content_kind: string | null;  // 0052: news/analysis/data/press_release/marketing/opinion/other from enrichment
   created_at: string;
 }
 

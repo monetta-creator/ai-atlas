@@ -2,6 +2,7 @@ import { runStructured } from '../dossier';
 import { clamp01 } from './core';
 import { chatJSONOpenRouter } from './llm';
 import { SCAN_ENRICH_MODELS } from './models';
+import { CONTENT_KINDS, isContentKind, type ContentKind } from './source-tiers';
 import type { ScanTopic } from '../types';
 
 // The scan's light enrichment: one small-model call per hydrated item
@@ -25,6 +26,7 @@ export interface ScanEnrichment {
   tags: string[];
   entities: string[];
   relevance: number | null;
+  contentKind: ContentKind;
 }
 
 interface RawEnrichment {
@@ -32,6 +34,7 @@ interface RawEnrichment {
   taxonomy_codes: string[];
   entities: string[];
   relevance: number;
+  content_kind: string;
 }
 
 // Ranges live in descriptions, not minimum/maximum: the Anthropic tool
@@ -43,6 +46,12 @@ interface RawEnrichment {
 // in prose, never schema min/max (the Anthropic tool validator rejects those).
 const RELEVANCE_RUBRIC =
   'How relevant to banking and financial services strategy, 0.0 to 1.0. Anchors: 0.9 or higher means a named financial institution, regulator, or payments/AI vendor takes a concrete action with stated numbers or dates (an enforcement action, an earnings beat, a major platform policy change). 0.7 means clearly sector-relevant development without a named actor taking new action (industry trend data, a credible analysis of fraud or credit conditions). 0.4 to 0.5 means sector-adjacent context a strategy reader might skim (macro data, adjacent tech news with plausible spillover). 0.2 means tangential mention only. 0.0 to 0.1 means unrelated locale news, listicles, marketing pages. Score the substance of the text, not the headline. Off-topic items get a low score, not an error.';
+
+// Migration 0052: content_kind discounts promotional text inside an
+// otherwise-good source (priorityOf in lib/scan/source-tiers.ts), separately
+// from source_tier which rates the domain itself.
+const CONTENT_KIND_RUBRIC =
+  'What the text IS: news reporting, analysis, data (a study, survey, dataset or statistics release), press_release (company-authored announcement, wire copy), marketing (a product page, vendor content, SEO listicle), opinion (editorial, column), other.';
 
 function enrichSchema(codes: string[]) {
   return {
@@ -67,8 +76,13 @@ function enrichSchema(codes: string[]) {
         type: 'number',
         description: RELEVANCE_RUBRIC,
       },
+      content_kind: {
+        type: 'string',
+        enum: [...CONTENT_KINDS],
+        description: CONTENT_KIND_RUBRIC,
+      },
     },
-    required: ['summary', 'taxonomy_codes', 'entities', 'relevance'],
+    required: ['summary', 'taxonomy_codes', 'entities', 'relevance', 'content_kind'],
   };
 }
 
@@ -110,7 +124,8 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
   "summary": string, two to three sentences (what happened, why it matters to banking and financial services strategy)
   "taxonomy_codes": array of code strings, from the taxonomy list only, usually one or two
   "entities": array of proper names (companies, agencies, regulators, people) named in the item
-  "relevance": number. ${RELEVANCE_RUBRIC}`,
+  "relevance": number. ${RELEVANCE_RUBRIC}
+  "content_kind": string, one of ${CONTENT_KINDS.join(', ')}. ${CONTENT_KIND_RUBRIC}`,
         user,
         maxTokens: 700,
         feature: 'scan_enrich',
@@ -143,5 +158,6 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
     tags: [...new Set(arr(raw.taxonomy_codes).map((c) => String(c).trim()).filter((c) => allowed.has(c)))],
     entities: [...new Set(arr(raw.entities).map((e) => String(e).trim()).filter(Boolean))].slice(0, 20),
     relevance: clamp01(raw.relevance),
+    contentKind: isContentKind(raw.content_kind) ? raw.content_kind : 'other',
   };
 }

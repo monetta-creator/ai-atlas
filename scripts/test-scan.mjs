@@ -17,6 +17,10 @@ import {
 } from '../lib/scan/handoff.ts';
 import { getDataset } from '../lib/datasets/registry.ts';
 import { isGdeltTransportError, gdeltAvailable, markGdeltDown } from '../lib/scan/search-gdelt.ts';
+import {
+  rateDomainByRule, priorityOf, normalizeDomain, KIND_TIER, curatedDomainCount, isContentKind,
+} from '../lib/scan/source-tiers.ts';
+import { acceptDomainRatings } from '../lib/scan/source-rating-core.ts';
 
 let pass = 0;
 let fail = 0;
@@ -279,9 +283,16 @@ const signalsDef = getDataset('signals-export');
 
 check('signals-export: leading columns mirror external-scan key for key', () => {
   assert.ok(signalsDef, 'signals-export def missing from the registry');
+  // The mirrored/shared prefix is the base scan-item shape, through
+  // enriched_by; external-scan appends its own source-reliability columns
+  // after that (source_tier..priority, migration 0052) which signals-export
+  // deliberately does not carry (a signal is human-edited, not source-scored),
+  // so the comparison is against that shared prefix, not the full (longer)
+  // external-scan column list.
   const scanKeys = scanDef.columns.map((c) => c.key);
-  const sigKeys = signalsDef.columns.slice(0, scanKeys.length).map((c) => c.key);
-  assert.deepEqual(sigKeys, scanKeys);
+  const sharedLen = scanKeys.indexOf('enriched_by') + 1;
+  const sigKeys = signalsDef.columns.slice(0, sharedLen).map((c) => c.key);
+  assert.deepEqual(sigKeys, scanKeys.slice(0, sharedLen));
 });
 
 check('signals-export: buildRowJsonSchema covers every column with real facts', () => {
@@ -355,6 +366,100 @@ check('every OpenRouter registry model has a rate card', () => {
 });
 
 await client.end();
+
+// ---- source tiers (0052): rules are deterministic and cover the known volume ----
+check('source tiers: suffix rules', () => {
+  assert.deepEqual(rateDomainByRule('www.consumerfinance.gov'), { tier: 1, kind: 'regulator', via: 'suffix' });
+  assert.equal(rateDomainByRule('fca.org.uk')?.kind, 'regulator');
+  assert.equal(rateDomainByRule('brookings.edu')?.tier, 1);
+  assert.equal(rateDomainByRule('someone.substack.com')?.kind, 'blog');
+  assert.equal(rateDomainByRule('gov'), null, 'a bare suffix is not a domain');
+});
+check('source tiers: curated map + parent-domain walk', () => {
+  assert.deepEqual(rateDomainByRule('ipsos.com'), { tier: 1, kind: 'research', via: 'curated' });
+  assert.equal(rateDomainByRule('news.bloomberg.com')?.kind, 'major');
+  assert.equal(rateDomainByRule('www.bankingdive.com')?.tier, 2);
+  assert.equal(rateDomainByRule('whalesbook.com')?.tier, 4);
+  assert.equal(rateDomainByRule('prnewswire.com')?.kind, 'pr_wire');
+  assert.equal(rateDomainByRule('forbes.com')?.tier, 3, 'a curated tier override wins over the kind default');
+  assert.equal(rateDomainByRule('completely-unknown-site.example'), null);
+  assert.ok(curatedDomainCount() > 150);
+  for (const [kind, tier] of Object.entries(KIND_TIER)) assert.ok(tier >= 1 && tier <= 4, kind);
+});
+check('source tiers: priority composes relevance, tier, content kind', () => {
+  assert.equal(priorityOf(0.8, 1, 'news'), 0.8);
+  assert.equal(priorityOf(0.8, 4, 'news'), 0.2);
+  assert.equal(priorityOf(0.8, 2, 'press_release'), 0.48);
+  assert.equal(priorityOf(0.8, null, null), 0.41, 'unrated = tier 3 and other');
+  assert.equal(priorityOf(null, 1, 'news'), null);
+  assert.equal(priorityOf(1.7, 1, 'news'), 1, 'clamped');
+  assert.equal(normalizeDomain('WWW.Ipsos.com.'), 'ipsos.com');
+  assert.ok(isContentKind('data') && !isContentKind('rumor'));
+});
+
+// ---- source rating (0052): the model-rating decision validator is pure ----
+const RATING_CANDIDATES = [
+  { domain: 'example-news.test', sample_headline: 'Bank announces new product' },
+  { domain: 'example-blog.test', sample_headline: 'Why I quit my job' },
+];
+
+check('acceptDomainRatings: accepts a valid rating and normalizes the domain', () => {
+  const rows = acceptDomainRatings(
+    { ratings: [{ domain: 'WWW.Example-News.test.', kind: 'major', tier: 2, reason: 'A national outlet.' }] },
+    RATING_CANDIDATES
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].domain, 'example-news.test');
+  assert.equal(rows[0].kind, 'major');
+  assert.equal(rows[0].tier, 2);
+  assert.equal(rows[0].rated_by, 'model');
+  assert.equal(rows[0].reason, 'A national outlet.');
+  assert.equal(rows[0].sample_headline, 'Bank announces new product');
+});
+
+check('acceptDomainRatings: drops an invalid kind, a domain outside the batch, and a repeat', () => {
+  const rows = acceptDomainRatings(
+    {
+      ratings: [
+        { domain: 'example-news.test', kind: 'not-a-kind', tier: 2, reason: 'x' },
+        { domain: 'not-in-batch.test', kind: 'major', tier: 2, reason: 'x' },
+        { domain: 'example-blog.test', kind: 'blog', tier: 3, reason: 'first' },
+        { domain: 'example-blog.test', kind: 'blog', tier: 4, reason: 'second, should be dropped' },
+      ],
+    },
+    RATING_CANDIDATES
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].domain, 'example-blog.test');
+  assert.equal(rows[0].reason, 'first');
+});
+
+check('acceptDomainRatings: clamps the tier to the kind default or one step weaker, never stronger', () => {
+  // major defaults to tier 2: a model claiming tier 1 (stronger) clamps to 2.
+  const tooStrong = acceptDomainRatings(
+    { ratings: [{ domain: 'example-news.test', kind: 'major', tier: 1, reason: 'x' }] },
+    RATING_CANDIDATES
+  );
+  assert.equal(tooStrong[0].tier, 2);
+  // one step weaker than the kind default (2 -> 3) is allowed.
+  const oneWeaker = acceptDomainRatings(
+    { ratings: [{ domain: 'example-news.test', kind: 'major', tier: 3, reason: 'x' }] },
+    RATING_CANDIDATES
+  );
+  assert.equal(oneWeaker[0].tier, 3);
+  // two steps weaker (2 -> 4) clamps back to one step weaker (3).
+  const tooWeak = acceptDomainRatings(
+    { ratings: [{ domain: 'example-news.test', kind: 'major', tier: 4, reason: 'x' }] },
+    RATING_CANDIDATES
+  );
+  assert.equal(tooWeak[0].tier, 3);
+});
+
+check('acceptDomainRatings: malformed input yields no rows', () => {
+  assert.deepEqual(acceptDomainRatings(null, RATING_CANDIDATES), []);
+  assert.deepEqual(acceptDomainRatings({}, RATING_CANDIDATES), []);
+  assert.deepEqual(acceptDomainRatings({ ratings: 'not an array' }, RATING_CANDIDATES), []);
+});
 
 console.log(`\n${pass} passed · ${fail} failed`);
 process.exit(fail ? 1 : 0);

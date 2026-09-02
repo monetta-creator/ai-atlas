@@ -4,6 +4,7 @@ import { requireAdminPage } from '@/lib/auth';
 import {
   getIntelPrefs, getIntelCompanies, getIntelRuns, getIntelHealth, getIntelModelStats,
   getIntelCompanyYield, getTavilyQuota, getIntelMetricsCoverage, getIntelDatasetStats,
+  getSourceTierStats, getRecentSourceTiers,
 } from '@/lib/data';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import { checkIntelBudget } from '@/lib/intel/budget';
@@ -18,6 +19,7 @@ import IntelCalendar from '@/components/intel/IntelCalendar';
 import type { IntelCalDay } from '@/components/intel/IntelCalendar';
 import CopyHandoff from '@/components/scan/CopyHandoff';
 import EnrichModelPicker from '@/components/scan/EnrichModelPicker';
+import SourceReliabilityPanel from '@/components/scan/SourceReliabilityPanel';
 import { setIntelEnrichModelsAction } from '@/lib/actions';
 import { getDataset } from '@/lib/datasets/registry';
 import { buildIntelHandoff } from '@/lib/intel/handoff';
@@ -56,10 +58,10 @@ const TIER_LABEL: Record<IntelTier, string> = {
 export default async function IntelPage() {
   const admin = await requireAdminPage();
   const { editing, txt } = await getEditContext();
-  const [companies, runs, prefs, budget, health, modelStats, companyYield, quota, metricsCoverage, dsStats, h] = await Promise.all([
+  const [companies, runs, prefs, budget, health, modelStats, companyYield, quota, metricsCoverage, dsStats, tierStats, recentTiers, h] = await Promise.all([
     getIntelCompanies(), getIntelRuns(130), getIntelPrefs(), checkIntelBudget(), getIntelHealth(30),
     getIntelModelStats(30), getIntelCompanyYield(30), getTavilyQuota(), getIntelMetricsCoverage(),
-    getIntelDatasetStats(), headers(),
+    getIntelDatasetStats(), getSourceTierStats('intel_items', 30), getRecentSourceTiers(40), headers(),
   ]);
   const tavily = Boolean(process.env.TAVILY_API_KEY);
   const openrouter = Boolean(process.env.OPENROUTER_API_KEY);
@@ -425,6 +427,8 @@ export default async function IntelPage() {
               </div>
             ))}
           </div>
+
+          <SourceReliabilityPanel stats={tierStats} recent={recentTiers} days={health.days} />
 
           {metricsCoverage.length > 0 && (
             <div className="rounded-[var(--radius)] border p-[var(--card-pad)]" style={{ ...panel, marginTop: 14 }}>

@@ -1,6 +1,10 @@
 import { exec, one, withTx } from '../db';
 import { normalizeUrl, sanitizeText } from '../pipeline/web';
 import type { ScanStep } from '../types';
+import { getSourceTierRows, getUnstampedDomains, assertSourceTierTable, type SourceTierTable } from '../data/scan';
+import {
+  rateDomainByRule, normalizeDomain, isSourceTier, isSourceKind, type SourceTier, type SourceKind,
+} from '../scan/source-tiers';
 
 // ---- External Scan (migration 0038) -----------------------------------------
 // Writers for the daily scan. scan_runs IS the checkpoint state: the cron
@@ -201,12 +205,13 @@ export async function setScanItemEnrichment(
     entities?: string[];
     relevance?: number | null;
     enrichedBy?: string | null; // model id stamp (0041), set on success AND error for the A/B stats
+    contentKind?: string | null; // migration 0052, from enrichment (not the model rating pass)
   }
 ): Promise<void> {
   await exec(
     `update scan_items
         set enrich_status = $2, summary = $3, tags = $4::text[], entities = $5::text[], relevance = $6,
-            enriched_by = coalesce($7, enriched_by)
+            enriched_by = coalesce($7, enriched_by), content_kind = coalesce($8, content_kind)
       where id = $1`,
     [
       id, e.status,
@@ -215,6 +220,7 @@ export async function setScanItemEnrichment(
       (e.entities ?? []).map((x) => sanitizeText(x)),
       e.relevance ?? null,
       e.enrichedBy ?? null,
+      e.contentKind ?? null,
     ]
   );
 }
@@ -261,4 +267,77 @@ export async function setScanEnabled(enabled: boolean): Promise<void> {
      on conflict (id) do update set enabled = excluded.enabled, updated_at = now()`,
     [enabled]
   );
+}
+
+// ---- Source tiers (migration 0052) ------------------------------------------
+// Writers shared by the scan and intel engines. The rules in
+// lib/scan/source-tiers.ts stay in code; only model (and any future human)
+// ratings live in source_tiers. Stamping applies rules first, then the table.
+
+export async function upsertSourceTiers(rows: {
+  domain: string;
+  tier: SourceTier;
+  kind: SourceKind;
+  rated_by: 'model' | 'human';
+  reason?: string | null;
+  sample_headline?: string | null;
+}[]): Promise<number> {
+  let n = 0;
+  for (const r of rows) {
+    const domain = normalizeDomain(r.domain);
+    if (!domain || !isSourceTier(r.tier) || !isSourceKind(r.kind)) continue;
+    // A human rating is never overwritten by a model re-rate.
+    n += await exec(
+      `insert into source_tiers (domain, tier, kind, rated_by, reason, sample_headline)
+       values ($1, $2, $3, $4, $5, $6)
+       on conflict (domain) do update
+         set tier = excluded.tier, kind = excluded.kind, rated_by = excluded.rated_by,
+             reason = excluded.reason, sample_headline = coalesce(excluded.sample_headline, source_tiers.sample_headline),
+             updated_at = now()
+       where source_tiers.rated_by <> 'human' or excluded.rated_by = 'human'`,
+      [domain, r.tier, r.kind, r.rated_by, r.reason?.slice(0, 300) ?? null, r.sample_headline?.slice(0, 300) ?? null]
+    );
+  }
+  return n;
+}
+
+// Stamp source_tier + source_kind on every not-yet-stamped item of a run (or of
+// the whole table when runId is null): rules first, then the model-rated table.
+// Domains neither knows stay null and surface through getUnstampedDomains for
+// the once-per-domain model rating. Returns the number of items stamped.
+export async function stampSourceTiers(table: SourceTierTable, runId: string | null): Promise<number> {
+  const t = assertSourceTierTable(table);
+  const domains = await getUnstampedDomains(t, runId, 2000);
+  if (!domains.length) return 0;
+  const unknown: string[] = [];
+  const groups = new Map<string, string[]>(); // `${tier}:${kind}` -> domains
+  for (const d of domains) {
+    const rule = rateDomainByRule(d.domain);
+    if (rule) {
+      const key = `${rule.tier}:${rule.kind}`;
+      groups.set(key, [...(groups.get(key) ?? []), d.domain]);
+    } else {
+      unknown.push(d.domain);
+    }
+  }
+  if (unknown.length) {
+    const rated = await getSourceTierRows(unknown.map(normalizeDomain));
+    const byDomain = new Map(rated.map((r) => [r.domain, r]));
+    for (const raw of unknown) {
+      const r = byDomain.get(normalizeDomain(raw));
+      if (!r) continue;
+      const key = `${r.tier}:${r.kind}`;
+      groups.set(key, [...(groups.get(key) ?? []), raw]);
+    }
+  }
+  let stamped = 0;
+  for (const [key, list] of groups) {
+    const [tier, kind] = key.split(':');
+    stamped += await exec(
+      `update ${t} set source_tier = $1, source_kind = $2
+        where source_tier is null and source_domain = any($3::text[])${runId ? ' and run_id = $4' : ''}`,
+      runId ? [Number(tier), kind, list, runId] : [Number(tier), kind, list]
+    );
+  }
+  return stamped;
 }

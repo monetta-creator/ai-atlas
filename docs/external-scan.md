@@ -146,11 +146,41 @@ headers, UTF-8 BOM, CRLF):
 | `text_chars` | number or null | Character count of the retained text. |
 | `full_text` | string or null | The complete retained page text, capped at 24,000 chars. |
 | `enriched_by` | string or null | Model that produced the enrichment; null before model tracking began. |
+| `source_tier` | number or null | Source reliability tier, 1 (most reliable) to 4 (least). Null when the domain has not been rated yet. |
+| `source_kind` | enum or null | The kind of source behind the domain (regulator, primary, wire, and so on). Null when not yet rated. |
+| `content_kind` | enum or null | The kind of content in the piece, from enrichment (news, opinion, press_release, and so on). Null when not yet classified. |
+| `priority` | number or null | Composed ranking score: relevance times the tier weight times the content weight. Null only when relevance is null. |
 
 Importer guidance: key on `item_id` (stable) or `normalized_url` (stable
 across rediscovery); treat `tags`/`relevance` as advisory input to your own
 triage, not verdicts; `enrich_status != 'done'` rows still carry discovery
 metadata and (when fetched) full text, so import them too.
+
+## Source reliability tiers (0052)
+
+`relevance` alone answers "is this on topic", not "should I trust it": an
+on-topic crypto-promo site used to outscore a primary source, and a
+research house like Ipsos read the same as any blog. Reliability is a
+separate, SOURCE-derived axis (migration `0052`): `source_tier` and
+`source_kind` are decided deterministically for a known domain (suffix
+rules plus a curated map in `lib/scan/source-tiers.ts`), and, for a domain
+neither covers, rated ONCE by the utility model and cached in
+`source_tiers` (so the long tail rates itself and Kevin never tunes a list
+by hand). `content_kind` comes from enrichment and separately discounts
+promotional or opinion text inside an otherwise reliable source. Every item
+carries all four columns; `priority` composes them with `relevance` into
+one ranking score the importer can sort on without recomputing the formula.
+
+| source tier | weight | content kind | weight |
+|---|---|---|---|
+| 1 (primary: regulators, primary company sources, wires, research houses) | 1.0 | news, analysis, data | 1.0 |
+| 2 (majors, trade press, tech press) | 0.85 | opinion, other | 0.85 |
+| 3 (general, aggregator, blog, pr_wire, unrated) | 0.6 | press_release | 0.7 |
+| 4 (junk: social, promo) | 0.25 | marketing | 0.4 |
+
+`priority = relevance × tier weight × content weight`, rounded to two
+decimals. An unrated source counts as tier 3; an unclassified piece counts
+as other.
 
 ## The signals export (the contract's sibling)
 

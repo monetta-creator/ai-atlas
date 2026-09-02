@@ -98,6 +98,31 @@ stamps `fetched_at` on every refreshed row, so a weekly `?since=` pull
 against a previously downloaded corpus is the intended intake once the
 importer holds the initial full download.
 
+## Source reliability tiers (0052)
+
+`intel-items` carries the same trailing four columns as `external-scan`
+(migration `0052`, shared code in `lib/scan/source-tiers.ts`):
+`source_tier` and `source_kind` score the SOURCE itself, deterministically
+for a known domain (suffix rules plus a curated map) or, for a domain
+neither covers, rated ONCE by the utility model and cached in
+`source_tiers` so nobody tends the long tail by hand. `content_kind`
+scores the piece from enrichment (news, opinion, press_release, and so
+on), separately discounting promotional text found inside an otherwise
+reliable source. `priority` composes both with the item's `relevance`
+(significance) score into one ranking number the importer can sort on.
+
+| source tier | weight | content kind | weight |
+|---|---|---|---|
+| 1 (primary: regulators, primary company sources, wires, research houses) | 1.0 | news, analysis, data | 1.0 |
+| 2 (majors, trade press, tech press) | 0.85 | opinion, other | 0.85 |
+| 3 (general, aggregator, blog, pr_wire, unrated) | 0.6 | press_release | 0.7 |
+| 4 (junk: social, promo) | 0.25 | marketing | 0.4 |
+
+`priority = relevance × tier weight × content weight`, rounded to two
+decimals. An unrated source counts as tier 3; an unclassified piece counts
+as other. All four columns are null exactly when the item has not been
+rated or classified yet.
+
 ## Operating it
 
 - `/intel` is the whole surface: downloads + handoff copy, cron toggle +

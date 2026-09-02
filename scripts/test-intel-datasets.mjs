@@ -39,10 +39,17 @@ check('registry: all four intel-* defs are present', () => {
 // ---- (a) intel-items leading columns mirror external-scan key for key -----
 
 check('intel-items: leading columns mirror external-scan key for key', () => {
+  // The mirrored/shared prefix is the base scan-item shape, through
+  // enriched_by; external-scan and intel-items then each append their own
+  // domain-specific columns after it (intel-items: doc_type, company_slugs,
+  // tier; both: source_tier..priority, migration 0052), so the comparison is
+  // against that shared prefix, not external-scan's full (longer) column
+  // list.
   const scanKeys = scanDef.columns.map((c) => c.key);
+  const sharedLen = scanKeys.indexOf('enriched_by') + 1;
   const intelKeys = itemsDef.columns.map((c) => c.key);
-  assert.ok(intelKeys.length > scanKeys.length, 'intel-items has no appended columns beyond the mirrored set');
-  assert.deepEqual(intelKeys.slice(0, scanKeys.length), scanKeys);
+  assert.ok(intelKeys.length > sharedLen, 'intel-items has no appended columns beyond the mirrored set');
+  assert.deepEqual(intelKeys.slice(0, sharedLen), scanKeys.slice(0, sharedLen));
 });
 
 // ---- (b) every column of all four intel defs has real FIELD_FACTS ---------

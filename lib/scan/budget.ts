@@ -10,7 +10,7 @@ import { one } from '../db';
 // extra call: recordApiCall is best-effort, and two concurrent invocations can
 // both pass the check (the run lease makes that rare).
 
-const SCAN_FEATURES = ['scan_search', 'scan_enrich'];
+const SCAN_FEATURES = ['scan_search', 'scan_enrich', 'scan_source_rating'];
 
 function envNumber(name: string, fallback: number): number {
   const v = Number(process.env[name]);

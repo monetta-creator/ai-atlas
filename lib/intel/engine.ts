@@ -20,6 +20,7 @@ import { fetchAtsSnapshot, ATS_BUCKET_CODES } from './ats';
 import { enrichIntelItem } from './enrich';
 import { synthesizeCompanyDossier } from './synthesis';
 import { checkIntelBudget } from './budget';
+import { rateAndStampSources } from '../scan/source-rating';
 import { searchDueSlugs, nextUnsweptSlug, sweepUnit, unwrapNewsUrl } from './core';
 import type { IntelCompany, IntelProgress, IntelRun } from '../types';
 
@@ -129,6 +130,7 @@ export async function advanceIntelRun(runId: string, deadlineAt: number): Promis
             continue;
           }
         }
+        await rateSourcesBeforeHydrate(run, notes);
         await setIntelStep(runId, 'hydrate');
         continue;
       }
@@ -319,6 +321,26 @@ async function runAtsUnit(run: IntelRun, company: IntelCompany, notes: string[])
   await markIntelUnitSwept(run.id, sweepUnit('ats', company.slug));
 }
 
+// ---- source tiers (0052): once per run, right at the filings-to-hydrate
+// boundary, stamp every item's source_tier/source_kind from the rules + the
+// model-rated table, then rate whatever the rules don't cover. The step
+// transition above guarantees this runs exactly once per run. Never blocks
+// hydrate: a thrown error is caught here too, as a last resort belt to
+// rateAndStampSources's own internal catch.
+async function rateSourcesBeforeHydrate(run: IntelRun, notes: string[]): Promise<void> {
+  try {
+    const prefs = await getIntelPrefs();
+    const result = await rateAndStampSources('intel_items', run.id, {
+      utilityModel: prefs.utility_model,
+      budgetOk: async () => (await checkIntelBudget()).ok,
+      metadata: { intel_run: run.id },
+    });
+    if (result.note) notes.push(result.note);
+  } catch (e) {
+    notes.push(`source rating failed: ${String((e as Error)?.message ?? 'error').slice(0, 160)}`);
+  }
+}
+
 // ---- synthesis: the weekly dossier refresh (Monday runs only), one company
 // per unit. A per-company failure is a note; the unit checkpoints either way
 // so a wedged company cannot loop the run.
@@ -379,6 +401,7 @@ async function runEnrichWave(run: IntelRun, notes: string[]): Promise<void> {
           dimensions: e.dimensions,
           entities: e.entities,
           significance: e.significance,
+          contentKind: e.contentKind,
           enrichedBy: m ?? 'claude-haiku-4-5',
         });
         if (e.facts.length) {

@@ -6,7 +6,7 @@ import { one } from '../db';
 // them; a trip ships items unenriched rather than failing the run. The gov
 // and feed legs are model-free and always run.
 
-const INTEL_FEATURES = ['intel_enrich', 'intel_synthesis'];
+const INTEL_FEATURES = ['intel_enrich', 'intel_synthesis', 'scan_source_rating'];
 
 export async function checkIntelBudget(): Promise<{ ok: boolean; spentUsd: number; capUsd: number }> {
   const capUsd = Number(process.env.INTEL_DAILY_BUDGET_USD || 1.0);

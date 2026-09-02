@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { requireAdminPage } from '@/lib/auth';
 import {
   getScanTopics, getScanRuns, getScanPrefs, getScanHealth, getPublishedSignalCount,
-  getEnrichModelStats,
+  getEnrichModelStats, getSourceTierStats, getRecentSourceTiers,
 } from '@/lib/data';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import { getDataset } from '@/lib/datasets/registry';
@@ -21,6 +21,7 @@ import EnrichModelPicker from '@/components/scan/EnrichModelPicker';
 import ScanCalendar from '@/components/scan/ScanCalendar';
 import type { ScanCalDay } from '@/components/scan/ScanCalendar';
 import DatasetPreview from '@/components/datasets/DatasetPreview';
+import SourceReliabilityPanel from '@/components/scan/SourceReliabilityPanel';
 
 export const dynamic = 'force-dynamic';
 // Hosts the scan tick action (at most one bounded work unit per call).
@@ -41,9 +42,10 @@ const panel = {
 export default async function ScanPage() {
   const admin = await requireAdminPage();
   const { editing, txt } = await getEditContext();
-  const [topics, runs, prefs, budget, health, signalCount, modelStats, h] = await Promise.all([
+  const [topics, runs, prefs, budget, health, signalCount, modelStats, tierStats, recentTiers, h] = await Promise.all([
     getScanTopics(), getScanRuns(130), getScanPrefs(), checkScanBudget(), getScanHealth(30),
-    getPublishedSignalCount(), getEnrichModelStats(30), headers(),
+    getPublishedSignalCount(), getEnrichModelStats(30), getSourceTierStats('scan_items', 30),
+    getRecentSourceTiers(40), headers(),
   ]);
   const tavily = Boolean(process.env.TAVILY_API_KEY);
   const openrouter = Boolean(process.env.OPENROUTER_API_KEY);
@@ -383,6 +385,8 @@ export default async function ScanPage() {
               </div>
             ))}
           </div>
+
+          <SourceReliabilityPanel stats={tierStats} recent={recentTiers} days={health.days} />
 
           {modelStats.length > 0 && (
             <div style={{ marginTop: 14 }}>

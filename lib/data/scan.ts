@@ -280,3 +280,96 @@ export async function getScanStepCounts(runId: string): Promise<{
   );
   return { pendingFetch: row?.pf ?? 0, pendingEnrich: row?.pe ?? 0 };
 }
+
+// ---- Source tiers (migration 0052) ------------------------------------------
+// Reads shared by the scan and intel engines (stamping + the once-per-domain
+// model rating) and the consoles' read-only "Source tiers" panels.
+
+export type SourceTierTable = 'scan_items' | 'intel_items';
+const SOURCE_TIER_TABLES: readonly SourceTierTable[] = ['scan_items', 'intel_items'];
+export function assertSourceTierTable(t: string): SourceTierTable {
+  if (!(SOURCE_TIER_TABLES as readonly string[]).includes(t)) throw new Error('Bad source-tier table.');
+  return t as SourceTierTable;
+}
+
+export interface SourceTierRow {
+  domain: string;
+  tier: number;
+  kind: string;
+  rated_by: string;
+  reason: string | null;
+  sample_headline: string | null;
+  created_at: string;
+}
+
+export async function getSourceTierRows(domains: string[]): Promise<SourceTierRow[]> {
+  if (!domains.length) return [];
+  return q<SourceTierRow>(
+    `select domain, tier, kind, rated_by, reason, sample_headline, to_char(created_at, 'YYYY-MM-DD') as created_at
+       from source_tiers where domain = any($1::text[])`,
+    [domains]
+  );
+}
+
+// Distinct domains of not-yet-stamped items (one run, or the whole table when
+// runId is null), with a sample headline for the model rater and the item
+// count so the biggest unknowns rate first. The caller filters out domains
+// the rules already cover (lib/scan/source-tiers.ts rateDomainByRule) and
+// domains already in source_tiers.
+export async function getUnstampedDomains(
+  table: SourceTierTable, runId: string | null, limit = 200
+): Promise<{ domain: string; sample_headline: string | null; items: number }[]> {
+  const t = assertSourceTierTable(table);
+  return q(
+    `select source_domain as domain, max(headline) as sample_headline, count(*)::int as items
+       from ${t}
+      where source_tier is null and source_domain is not null and btrim(source_domain) <> ''
+        ${runId ? 'and run_id = $2' : ''}
+      group by source_domain
+      order by items desc, source_domain
+      limit $1`,
+    runId ? [limit, runId] : [limit]
+  );
+}
+
+export interface SourceTierStats {
+  byTier: { tier: number | null; items: number }[]; // null = unstamped
+  byKind: { kind: string | null; items: number }[];
+  modelRated: number;
+  ruleRated: number;
+}
+
+// The console panel: tier and kind distribution over the trailing window plus
+// how many stamped items came from the model-rated table vs the rules.
+export async function getSourceTierStats(table: SourceTierTable, days = 30): Promise<SourceTierStats> {
+  const t = assertSourceTierTable(table);
+  const interval = `${Math.max(1, Math.round(days))} days`;
+  const [byTier, byKind, split] = await Promise.all([
+    q<{ tier: number | null; items: number }>(
+      `select source_tier as tier, count(*)::int as items from ${t}
+        where created_at > now() - $1::interval group by 1 order by 1 nulls last`,
+      [interval]
+    ),
+    q<{ kind: string | null; items: number }>(
+      `select source_kind as kind, count(*)::int as items from ${t}
+        where created_at > now() - $1::interval group by 1 order by 2 desc`,
+      [interval]
+    ),
+    one<{ model_rated: number; rule_rated: number }>(
+      `select count(*) filter (where st.domain is not null)::int as model_rated,
+              count(*) filter (where st.domain is null)::int as rule_rated
+         from ${t} i left join source_tiers st on st.domain = i.source_domain
+        where i.created_at > now() - $1::interval and i.source_tier is not null`,
+      [interval]
+    ),
+  ]);
+  return { byTier, byKind, modelRated: split?.model_rated ?? 0, ruleRated: split?.rule_rated ?? 0 };
+}
+
+export async function getRecentSourceTiers(limit = 40): Promise<SourceTierRow[]> {
+  return q<SourceTierRow>(
+    `select domain, tier, kind, rated_by, reason, sample_headline, to_char(created_at, 'YYYY-MM-DD') as created_at
+       from source_tiers order by created_at desc, domain limit $1`,
+    [limit]
+  );
+}

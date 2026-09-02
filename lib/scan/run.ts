@@ -15,6 +15,7 @@ import { searchTopicNewsGdelt, gdeltAvailable } from './search-gdelt';
 import { enrichScanItem } from './enrich';
 import { pickEnrichModel } from './models';
 import { checkScanBudget } from './budget';
+import { rateAndStampSources } from './source-rating';
 import { lookbackDays, nextSearchTopic, withinWindow } from './core';
 import { resolveDateTokens, rotatedQueries, LOW_QUALITY_DOMAINS } from '../pipeline/config';
 import { fetchCandidateText, FetchFailure, domainOf } from '../pipeline/web';
@@ -88,6 +89,7 @@ export async function advanceScanRun(runId: string, deadlineAt: number): Promise
         const topics = await getActiveScanTopics();
         const next = nextSearchTopic(topics, run.searched_topics);
         if (!next) {
+          await rateSourcesBeforeHydrate(run, notes);
           await setScanStep(runId, 'hydrate');
           continue;
         }
@@ -254,6 +256,26 @@ async function runSearchUnit(
     notes.push(`search failed (${topic.slug}): ${String((e as Error)?.message ?? 'error')}`);
   }
   await markScanTopicSearched(run.id, topic.slug);
+}
+
+// ---- source tiers (0052): once per run, right at the search-to-hydrate
+// boundary, stamp every item's source_tier/source_kind from the rules + the
+// model-rated table, then rate whatever the rules don't cover. The step
+// transition above guarantees this runs exactly once per run. NOTE: scan_prefs
+// has no utility_model column (unlike pipeline_prefs/intel_prefs), so this
+// leaves utilityModel unset and rateDomainsWithModel falls back to
+// DEFAULT_UTILITY_MODEL. Never blocks hydrate: a thrown error is caught here
+// too, as a last resort belt to rateAndStampSources's own internal catch.
+async function rateSourcesBeforeHydrate(run: ScanRun, notes: string[]): Promise<void> {
+  try {
+    const result = await rateAndStampSources('scan_items', run.id, {
+      budgetOk: async () => (await checkScanBudget()).ok,
+      metadata: { scan_run: run.id },
+    });
+    if (result.note) notes.push(result.note);
+  } catch (e) {
+    notes.push(`source rating failed: ${String((e as Error)?.message ?? 'error').slice(0, 160)}`);
+  }
 }
 
 // ---- hydrate: a small parallel wave over fetchCandidateText. Both terminal

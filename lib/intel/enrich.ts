@@ -2,6 +2,7 @@ import { runStructured } from '../dossier';
 import { clamp01 } from '../scan/core';
 import { chatJSONOpenRouter } from '../scan/llm';
 import { SCAN_ENRICH_MODELS } from '../scan/models';
+import { CONTENT_KINDS, isContentKind, type ContentKind } from '../scan/source-tiers';
 import { INTEL_DIMENSIONS, INTEL_DIMENSION_CODES, dimensionDigest } from './core';
 import type { IntelCompany } from '../types';
 
@@ -29,6 +30,7 @@ export interface IntelEnrichment {
   dimensions: string[];
   entities: string[];
   significance: number | null;
+  contentKind: ContentKind;
   facts: {
     company_slug: string;
     dimension: string;
@@ -52,6 +54,7 @@ interface RawEnrichment {
   dimensions: string[];
   entities: string[];
   significance: number;
+  content_kind: string;
   facts: RawFact[];
 }
 
@@ -85,6 +88,11 @@ function enrichSchema(slugs: string[]) {
         type: 'number',
         description: SIGNIFICANCE_RUBRIC,
       },
+      content_kind: {
+        type: 'string',
+        enum: [...CONTENT_KINDS],
+        description: CONTENT_KIND_RUBRIC,
+      },
       facts: {
         type: 'array',
         description: 'Up to 8 discrete, durable facts the TEXT supports about tracked companies: a launch, a number, a hire, a deal term, a stated plan. Skip opinions, speculation, and market noise (share-price moves, price targets, analyst ratings). Empty is a normal outcome.',
@@ -102,7 +110,7 @@ function enrichSchema(slugs: string[]) {
         },
       },
     },
-    required: ['summary', 'company_slugs', 'dimensions', 'entities', 'significance', 'facts'],
+    required: ['summary', 'company_slugs', 'dimensions', 'entities', 'significance', 'content_kind', 'facts'],
   };
 }
 
@@ -111,6 +119,12 @@ function enrichSchema(slugs: string[]) {
 // schema min/max (the Anthropic tool validator rejects those).
 const SIGNIFICANCE_RUBRIC =
   'How significant the item is for tracking the named companies, 0.0 to 1.0. Anchors: 0.9 or higher means a material company-specific event (M&A, earnings, an executive change, a major product or regulatory action). 0.7 means a notable company development without hard numbers. 0.4 to 0.5 means routine coverage or minor mentions. 0.1 to 0.2 means the company appears only in passing (a comparison table, a listicle). Score the substance of the text, not the headline. Off-topic items get a low score, not an error.';
+
+// Migration 0052: content_kind discounts promotional text inside an
+// otherwise-good source (priorityOf in lib/scan/source-tiers.ts), separately
+// from source_tier which rates the domain itself.
+const CONTENT_KIND_RUBRIC =
+  'What the text IS: news reporting, analysis, data (a study, survey, dataset or statistics release), press_release (company-authored announcement, wire copy), marketing (a product page, vendor content, SEO listicle), opinion (editorial, column), other.';
 
 function registryDigest(companies: Pick<IntelCompany, 'slug' | 'name' | 'aliases'>[]): string {
   return companies
@@ -162,6 +176,7 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
   "dimensions": array of dimension code strings, from the list only, usually one or two
   "entities": array of proper names (companies, agencies, regulators, people) named in the item
   "significance": number. ${SIGNIFICANCE_RUBRIC}
+  "content_kind": string, one of ${CONTENT_KINDS.join(', ')}. ${CONTENT_KIND_RUBRIC}
   "facts": array of up to 8 objects {"company_slug": registry slug, "dimension": code, "fact": one self-contained sentence under 300 chars, "value": key figure or empty string, "as_of": "YYYY-MM-DD" or empty string}; empty array is a normal outcome`,
         user,
         maxTokens: 1400,
@@ -212,6 +227,7 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
     dimensions: [...new Set(arr(raw.dimensions).map(deBracket).filter((d) => allowedDims.has(d)))],
     entities: [...new Set(arr(raw.entities).map((e) => String(e).trim()).filter(Boolean))].slice(0, 20),
     significance: clamp01(raw.significance),
+    contentKind: isContentKind(raw.content_kind) ? raw.content_kind : 'other',
     facts,
   };
 }

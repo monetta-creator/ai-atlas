@@ -76,11 +76,16 @@ const BANNED_SUBSTRINGS = ['rationale', 'snapshot', 'confidence', 'prior', 'doss
 // argument map's confidence/reliability_prior personal layer it never
 // touches or gates); research-export is key-gated. Never widen this to the
 // argument map's personal layer proper (confidence, source reliability
-// priors, rationales stay banned everywhere).
+// priors, rationales stay banned everywhere). priority (external-scan,
+// intel-items; migration 0052) is a lexical false positive of the 'prior'
+// substring rule, not a personal-layer field: it is the source-tier ranking
+// score (relevance times tier weight times content weight), and both
+// datasets that carry it are key-gated anyway.
 const KEY_GATED_ALLOWED = new Set([
   'touch_details',
   'dossier_summary', 'dossier_initiatives', 'dossier_segments', 'dossier_updated_at',
   'rigor_prior',
+  'priority',
 ]);
 const EM_DASH = '—';
 

@@ -62,6 +62,22 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   text_chars: { type: 'number', nullable: true },
   full_text: { type: 'string', nullable: true },
   enriched_by: { type: 'string', nullable: true },
+  // ---- source reliability (0052): trailing columns shared by external-scan
+  // and intel-items only, never signals-export (a signal is human-edited
+  // editorial work, not a source-scored collected item) ---------------------
+  source_tier: { type: 'number', nullable: true },
+  source_kind: {
+    type: 'string', nullable: true,
+    enum: [
+      'regulator', 'primary', 'research', 'wire', 'major', 'trade', 'tech_press',
+      'general', 'aggregator', 'pr_wire', 'blog', 'social', 'promo', 'unknown',
+    ],
+  },
+  content_kind: {
+    type: 'string', nullable: true,
+    enum: ['news', 'analysis', 'data', 'press_release', 'marketing', 'opinion', 'other'],
+  },
+  priority: { type: 'number', nullable: true },
   // ---- signals-export extras (appended after the shared scan-shaped columns) ----
   significance: { type: 'string', nullable: false, enum: ['high', 'medium', 'low'] },
   lenses: { type: 'string', nullable: false },

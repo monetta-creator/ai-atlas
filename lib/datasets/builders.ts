@@ -4,6 +4,7 @@ import { isPositiveInt } from './core.ts';
 // scripts/test-datasets.mjs (type stripping), which resolves no extensionless
 // specifiers. The bundler resolves it identically.
 import { domainOfUrl, normalizeUrl } from '../pack-shared.ts';
+import { priorityOf, isSourceTier, isContentKind } from '../scan/source-tiers.ts';
 
 // Dataset builders. See core.ts for the contract: injected Q, deterministic
 // ordering, guest-safe by construction (no personal-layer column ever appears in
@@ -482,13 +483,19 @@ export async function buildExternalScan(q: Q, opts: DatasetOpts = {}): Promise<D
   // One row per item in one day's External Scan run: the latest COMPLETED day
   // by default (a mid-flight run never shifts the default download), or the
   // ?day= the route validated. Run internals (lease, counters) never export.
+  // source_tier/source_kind/content_kind are stamped at collection time
+  // (migration 0052); priority is composed in JS via priorityOf so the
+  // dataset can never disagree with the app's own formula.
   const params: unknown[] = [opts.day ?? null];
   let limitClause = '';
   if (isPositiveInt(opts.limit)) {
     params.push(opts.limit);
     limitClause = ` limit $${params.length}`;
   }
-  return q<DatasetRow>(
+  const rows = await q<DatasetRow & {
+    relevance: number | null;
+    source_tier: number | null; source_kind: string | null; content_kind: string | null;
+  }>(
     `select i.id::text as item_id,
             to_char(r.day, 'YYYY-MM-DD') as run_day,
             i.url, i.normalized_url, i.headline, i.source_domain,
@@ -503,7 +510,8 @@ export async function buildExternalScan(q: Q, opts: DatasetOpts = {}): Promise<D
             i.fetched_via,
             length(i.raw_content) as text_chars,
             i.raw_content as full_text,
-            i.enriched_by
+            i.enriched_by,
+            i.source_tier, i.source_kind, i.content_kind
        from scan_items i
        join scan_runs r on r.id = i.run_id
        left join scan_topics t on t.slug = i.topic_slug
@@ -511,6 +519,14 @@ export async function buildExternalScan(q: Q, opts: DatasetOpts = {}): Promise<D
       order by i.published_date desc nulls last, i.normalized_url, i.id${limitClause}`,
     params
   );
+  return rows.map((r) => ({
+    ...r,
+    priority: priorityOf(
+      r.relevance,
+      isSourceTier(r.source_tier) ? r.source_tier : null,
+      isContentKind(r.content_kind) ? r.content_kind : null
+    ),
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -660,6 +676,7 @@ interface IntelItemQueryRow {
   enriched_by: string | null;
   raw_content: string | null; facts_text: string | null;
   doc_type: string; company_slugs: string; tier: string | null;
+  source_tier: number | null; source_kind: string | null; content_kind: string | null;
 }
 
 export async function buildIntelItems(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
@@ -672,7 +689,9 @@ export async function buildIntelItems(q: Q, opts: DatasetOpts = {}): Promise<Dat
   // reason. full_text is a COMPOSED document (headline, summary, extracted
   // facts, then the raw article text), not the raw retained text alone, so
   // its text_chars is the composed length; the day resolution mirrors
-  // buildExternalScan's latest-completed-day default.
+  // buildExternalScan's latest-completed-day default. source_tier/
+  // source_kind/content_kind and the composed priority (migration 0052)
+  // append after the mirrored columns, same as external-scan.
   const params: unknown[] = [opts.day ?? null];
   let limitClause = '';
   if (isPositiveInt(opts.limit)) {
@@ -698,7 +717,8 @@ export async function buildIntelItems(q: Q, opts: DatasetOpts = {}): Promise<Dat
             fx.facts_text,
             i.doc_type::text as doc_type,
             array_to_string(i.company_slugs, '; ') as company_slugs,
-            c.tier::text as tier
+            c.tier::text as tier,
+            i.source_tier, i.source_kind, i.content_kind
        from intel_items i
        join intel_runs r on r.id = i.run_id
        left join intel_companies c on c.slug = i.company_slug
@@ -748,6 +768,14 @@ export async function buildIntelItems(q: Q, opts: DatasetOpts = {}): Promise<Dat
       doc_type: r.doc_type,
       company_slugs: r.company_slugs,
       tier: r.tier,
+      source_tier: r.source_tier,
+      source_kind: r.source_kind,
+      content_kind: r.content_kind,
+      priority: priorityOf(
+        r.relevance,
+        isSourceTier(r.source_tier) ? r.source_tier : null,
+        isContentKind(r.content_kind) ? r.content_kind : null
+      ),
     };
   });
 }

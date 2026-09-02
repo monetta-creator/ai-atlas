@@ -222,6 +222,7 @@ export async function setIntelItemEnrichment(
     entities?: string[];
     significance?: number | null;
     enrichedBy?: string | null;
+    contentKind?: string | null; // migration 0052, from enrichment (not the model rating pass)
   }
 ): Promise<void> {
   const companySlugs = e.companySlugs ?? [];
@@ -230,7 +231,8 @@ export async function setIntelItemEnrichment(
         set enrich_status = $2, summary = $3, dimensions = $4::text[], entities = $5::text[],
             significance = $6, company_slugs = $7::text[],
             company_slug = coalesce(company_slug, $8),
-            enriched_by = coalesce($9, enriched_by)
+            enriched_by = coalesce($9, enriched_by),
+            content_kind = coalesce($10, content_kind)
       where id = $1`,
     [
       id, e.status,
@@ -241,6 +243,7 @@ export async function setIntelItemEnrichment(
       companySlugs,
       companySlugs[0] ?? null,
       e.enrichedBy ?? null,
+      e.contentKind ?? null,
     ]
   );
 }

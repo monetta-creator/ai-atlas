@@ -114,6 +114,26 @@ Additional guarantees:
   OPEN: topics get added and edited over time; an unknown code should be
   stored, not rejected.
 
+Source reliability (migration 0052): source_tier, source_kind, and
+content_kind score the SOURCE and the piece, separately from relevance's
+topic-fit score. source_tier runs 1 (most reliable: regulators, primary
+company sources, wire services, research houses) to 4 (least: social
+platforms, stock tip and promotional sites); source_kind names which of
+those the domain is. Both are deterministic for a known domain (a curated
+map plus suffix rules) and, for a domain neither covers, rated ONCE by the
+utility model and cached, so the same unknown domain never re-prompts the
+model on a later item. content_kind (news, analysis, data, press_release,
+marketing, opinion, other) comes from enrichment and discounts promotional
+or opinion text found inside an otherwise reliable source. priority
+composes all three with relevance: priority = relevance times the tier
+weight (tier 1 is 1.0, tier 2 is 0.85, tier 3 is 0.6, tier 4 is 0.25) times
+the content weight (news, analysis, and data are 1.0, opinion and other are
+0.85, press_release is 0.7, marketing is 0.4), rounded to two decimals; an
+unrated source counts as tier 3 and an unclassified piece counts as other.
+All four fields are null exactly when the item has not been rated or
+classified yet; treat them as advisory ranking input, the same posture as
+relevance and tags.
+
 ## 4. Status semantics
 
 - fetch_status: done (text retrieved), failed (fetch failed; the row still
