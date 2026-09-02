@@ -92,7 +92,10 @@ malformed value). JSON renders inline in a browser by default; add
 `&download=1` to force a saved file (CSV always downloads). The filename is
 date-stamped with the day the download served
 (`atlas-external-scan-YYYY-MM-DD.json`), including on the latest-completed
-default. This section is the interface a downstream importer builds
+default. Since 2026-09-02 EVERY dataset filename carries a date: day-filtered
+sets stamp the served day, incremental pulls stamp the `since` date, and
+whole-corpus sets such as `signals-export` and `intel-facts` stamp the UTC
+generation date, so a folder of firewall pulls sorts and dedupes by itself. This section is the interface a downstream importer builds
 against.
 
 JSON envelope:

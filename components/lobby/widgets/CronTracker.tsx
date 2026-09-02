@@ -91,10 +91,10 @@ export default async function CronTracker() {
       {status.ready && (
         <div className="lw-downloads">
           <span className="lw-downloads-label">Pass to the firewall:</span>
-          <a href={`/api/datasets/external-scan?format=json&day=${status.day}&download=1`}>external-scan.json</a>
-          <a href={`/api/datasets/signals-export?format=json&download=1`}>signals-export.json</a>
-          <a href={`/api/datasets/intel-items?format=json&day=${status.day}&download=1`}>intel-items.json</a>
-          <a href={`/api/datasets/intel-facts?format=json&download=1`}>intel-facts.json</a>
+          <a href={`/api/datasets/external-scan?format=json&day=${status.day}&download=1`}>external-scan-{status.day}.json</a>
+          <a href={`/api/datasets/signals-export?format=json&download=1`}>signals-export-{status.day}.json</a>
+          <a href={`/api/datasets/intel-items?format=json&day=${status.day}&download=1`}>intel-items-{status.day}.json</a>
+          <a href={`/api/datasets/intel-facts?format=json&download=1`}>intel-facts-{status.day}.json</a>
         </div>
       )}
     </>

@@ -47,9 +47,14 @@ export function datasetToJSON(
 }
 
 // Safe filename stem, mirroring lib/viewdata.ts fileStem.
+// Every download filename carries a date so a folder of firewall pulls sorts
+// and dedupes by itself: the served day for day-filtered datasets, the since
+// date for incremental pulls, and otherwise the UTC date the file was
+// generated (signals-export, intel-facts, and the other whole-corpus sets).
 export function datasetFileName(
   def: DatasetDef, format: 'csv' | 'json', lens?: string, day?: string, since?: string
 ): string {
-  const stem = ['atlas', def.slug, lens, day, since].filter(Boolean).join('-');
+  const date = day || since || new Date().toISOString().slice(0, 10);
+  const stem = ['atlas', def.slug, lens, date].filter(Boolean).join('-');
   return `${stem}.${format}`;
 }

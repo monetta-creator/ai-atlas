@@ -156,8 +156,13 @@ check('helpers: isSignalLens + datasetFileName', () => {
   assert.ok(!isSignalLens('vibes'));
   assert.equal(SIGNAL_LENSES.length, 6);
   const sig = DATASETS.find((d) => d.slug === 'signals');
-  assert.equal(datasetFileName(sig, 'csv'), 'atlas-signals.csv');
-  assert.equal(datasetFileName(sig, 'json', 'labor'), 'atlas-signals-labor.json');
+  // Every filename carries a date: the served day / since when given, else the
+  // UTC generation date (a firewall folder of pulls must sort by itself).
+  const today = new Date().toISOString().slice(0, 10);
+  assert.equal(datasetFileName(sig, 'csv'), `atlas-signals-${today}.csv`);
+  assert.equal(datasetFileName(sig, 'json', 'labor'), `atlas-signals-labor-${today}.json`);
+  assert.equal(datasetFileName(sig, 'json', undefined, '2026-09-01'), 'atlas-signals-2026-09-01.json');
+  assert.equal(datasetFileName(sig, 'json', undefined, undefined, '2026-08-25'), 'atlas-signals-2026-08-25.json');
 });
 
 // ---- per-dataset build checks ------------------------------------------------
