@@ -90,6 +90,14 @@ formal JSON Schemas from the shared `lib/datasets/handoff-shared.ts`.
 Licensed sources (AlphaSense, S&P Capital IQ) are never ingested here:
 public sources only, joined downstream by ticker/cik/rssd_id/fdic_cert/lei.
 
+`intel-metrics` also supports incremental pulls, on top of the full-corpus
+default: `?since=YYYY-MM-DD` returns rows with `fetched_at` on or after
+that date, and `?source=<code>` (`edgar_xbrl`, `fdic`, `cfpb`, `y9c`, or
+`ats`) returns one source's rows; the two combine. The Monday engine
+stamps `fetched_at` on every refreshed row, so a weekly `?since=` pull
+against a previously downloaded corpus is the intended intake once the
+importer holds the initial full download.
+
 ## Operating it
 
 - `/intel` is the whole surface: downloads + handoff copy, cron toggle +

@@ -19,9 +19,13 @@ const COMPANY_ADMIN_COLUMNS = `${COMPANY_PUBLIC_COLUMNS},
   agent_verdict, agent_reason, agent_confidence, agent_scores, agent_at::text as agent_at,
   fetched_via, run_id, found_url`;
 
+// search_queries (the discovery templates) are admin-only: the public /scout
+// page only needs names + tracked counts, and the templates reveal what the
+// funnel hunts for. Guests get an empty array so the row shape stays stable.
 export async function getScoutVerticals(personal = false): Promise<ScoutVertical[]> {
   return q<ScoutVertical>(
-    `select v.slug, v.name, v.description, v.search_queries, v.active,
+    `select v.slug, v.name, v.description,
+            ${personal ? 'v.search_queries' : `'{}'::text[] as search_queries`}, v.active,
             (select count(*)::int from companies c where c.vertical = v.slug and c.status = 'tracked') as tracked_count
             ${personal ? `, (select count(*)::int from companies c where c.vertical = v.slug and c.status = 'queued') as queued_count` : ''}
        from scout_verticals v

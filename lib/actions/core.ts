@@ -17,20 +17,30 @@ import { recommendLenses } from '../lens';
 import type {
   Direction, Weight, SourceMetadata, ClaimRecommendation, Lens,
   } from '../types';
-import { DIRECTIONS, UUID_RE, WEIGHTS, parsePrior, requireAdmin, safePath, str } from './shared';
+import {
+  DIRECTIONS, UUID_RE, WEIGHTS,
+  isUniqueViolation, parsePrior, parseTarget, requireAdmin, requireUuid, safePath, str,
+} from './shared';
 
 export async function createSourceAction(formData: FormData) {
   await requireAdmin();
-  const id = await m.createSource({
-    title: str(formData, 'title'),
-    author: str(formData, 'author'),
-    outlet: str(formData, 'outlet'),
-    url: str(formData, 'url'),
-    published_at: str(formData, 'published_at') || undefined,
-    raw_text: str(formData, 'raw_text'),
-    domain_tag: str(formData, 'domain_tag') || null,
-    reliability_prior: parsePrior(str(formData, 'reliability_prior')),
-  });
+  let id: string;
+  try {
+    id = await m.createSource({
+      title: str(formData, 'title'),
+      author: str(formData, 'author'),
+      outlet: str(formData, 'outlet'),
+      url: str(formData, 'url'),
+      published_at: str(formData, 'published_at') || undefined,
+      raw_text: str(formData, 'raw_text'),
+      domain_tag: str(formData, 'domain_tag') || null,
+      reliability_prior: parsePrior(str(formData, 'reliability_prior')),
+    });
+  } catch (e) {
+    // sources.url is unique (0050): a manual add pointed at an already-tracked URL.
+    if (isUniqueViolation(e)) throw new Error('A source with that URL already exists.');
+    throw e;
+  }
   redirect(`/source/${id}`);
 }
 
@@ -46,11 +56,12 @@ export async function moveConfidenceAction(formData: FormData) {
   if (target_type !== 'claim' && target_type !== 'bridge_claim' && target_type !== 'stance' && target_type !== 'position') {
     throw new Error('Invalid target type.');
   }
+  const target_id = requireUuid(formData, 'target_id', 'Target');
   const evidenceId = str(formData, 'evidence_id');
   if (evidenceId && !UUID_RE.test(evidenceId)) throw new Error('Bad evidence id.');
   await m.moveConfidence({
     target_type,
-    target_id: str(formData, 'target_id'),
+    target_id,
     new_confidence: newConfidence,
     reason,
     evidence_id: evidenceId || null,
@@ -61,7 +72,7 @@ export async function moveConfidenceAction(formData: FormData) {
 
 export async function setPriorAction(formData: FormData) {
   await requireAdmin();
-  const sourceId = str(formData, 'source_id');
+  const sourceId = requireUuid(formData, 'source_id', 'Source');
   await m.setReliabilityPrior(sourceId, parsePrior(str(formData, 'reliability_prior')));
   revalidatePath('/', 'layout');
   redirect(`/source/${sourceId}`);
@@ -140,8 +151,7 @@ export async function updateDomainFieldAction(
 
 export async function generateDossierAction(formData: FormData) {
   await requireAdmin();
-  const sourceId = str(formData, 'source_id');
-  if (!sourceId) throw new Error('No source specified.');
+  const sourceId = requireUuid(formData, 'source_id', 'Source');
   const data = await getSource(sourceId);
   if (!data) throw new Error('Source not found.');
   const { source } = data;
@@ -255,7 +265,7 @@ export async function unlinkSignalFromNodeAction(slug: string, signalId: string)
 // Change 2 — recommend (don't attach) which claims this source fits.
 export async function recommendClaimsAction(sourceId: string): Promise<ClaimRecommendation[]> {
   await requireAdmin();
-  if (!sourceId) return [];
+  if (!UUID_RE.test(sourceId)) return [];
   const data = await getSource(sourceId);
   if (!data) return [];
   const { source } = data;
@@ -274,8 +284,7 @@ export async function recommendClaimsAction(sourceId: string): Promise<ClaimReco
 // The client serializes the selected items into a JSON `payload` field.
 export async function addEvidenceBulkAction(formData: FormData) {
   await requireAdmin();
-  const sourceId = str(formData, 'source_id');
-  if (!sourceId) throw new Error('No source specified.');
+  const sourceId = requireUuid(formData, 'source_id', 'Source');
   let parsed: { target: string; direction: string; weight: string }[] = [];
   try {
     parsed = JSON.parse(str(formData, 'payload') || '[]');
@@ -284,11 +293,7 @@ export async function addEvidenceBulkAction(formData: FormData) {
   }
   const excerpt = str(formData, 'excerpt') || undefined;
   const rows = parsed.map((it) => {
-    const sep = it.target.indexOf(':');
-    const target_type = it.target.slice(0, sep);
-    const target_id = it.target.slice(sep + 1);
-    if (target_type !== 'claim' && target_type !== 'bridge_claim') throw new Error('Invalid target.');
-    if (!target_id) throw new Error('Missing target id.');
+    const { target_type, target_id } = parseTarget(it.target, ['claim', 'bridge_claim']);
     if (!DIRECTIONS.includes(it.direction as Direction)) throw new Error('Invalid direction.');
     if (!WEIGHTS.includes(it.weight as Weight)) throw new Error('Invalid weight.');
     return {
@@ -310,8 +315,7 @@ export async function addEvidenceBulkAction(formData: FormData) {
 // Change 4 — delete a source entirely (its evidence cascades).
 export async function deleteSourceAction(formData: FormData) {
   await requireAdmin();
-  const sourceId = str(formData, 'source_id');
-  if (!sourceId) throw new Error('No source specified.');
+  const sourceId = requireUuid(formData, 'source_id', 'Source');
   await m.deleteSource(sourceId);
   revalidatePath('/', 'layout');
   redirect('/ingest');
@@ -320,15 +324,10 @@ export async function deleteSourceAction(formData: FormData) {
 // Change 4 — repoint one evidence link to a different claim/bridge.
 export async function reassignEvidenceAction(formData: FormData) {
   await requireAdmin();
-  const evidenceId = str(formData, 'evidence_id');
+  const evidenceId = requireUuid(formData, 'evidence_id', 'Evidence');
   const sourceId = str(formData, 'source_id');
-  const target = str(formData, 'target');
-  const sep = target.indexOf(':');
-  const target_type = target.slice(0, sep);
-  const target_id = target.slice(sep + 1);
-  if (target_type !== 'claim' && target_type !== 'bridge_claim') throw new Error('Invalid target.');
-  if (!target_id || !evidenceId) throw new Error('Missing data.');
-  await m.reassignEvidence(evidenceId, target_type, target_id);
+  const { target_type, target_id } = parseTarget(str(formData, 'target'), ['claim', 'bridge_claim']);
+  await m.reassignEvidence(evidenceId, target_type as 'claim' | 'bridge_claim', target_id);
   revalidatePath('/', 'layout');
   redirect(`/source/${sourceId}`);
 }
@@ -336,9 +335,8 @@ export async function reassignEvidenceAction(formData: FormData) {
 // Change 4 — detach (delete) one evidence link.
 export async function deleteEvidenceAction(formData: FormData) {
   await requireAdmin();
-  const evidenceId = str(formData, 'evidence_id');
+  const evidenceId = requireUuid(formData, 'evidence_id', 'Evidence');
   const sourceId = str(formData, 'source_id');
-  if (!evidenceId) throw new Error('Missing evidence.');
   await m.deleteEvidence(evidenceId);
   revalidatePath('/', 'layout');
   redirect(`/source/${sourceId}`);
@@ -348,9 +346,9 @@ export async function deleteEvidenceAction(formData: FormData) {
 // and show the timeline. Metrics are computed in code (input.metrics).
 export async function generateQuestionSummaryAction(formData: FormData) {
   await requireAdmin();
-  const questionId = str(formData, 'question_id');
+  const questionId = requireUuid(formData, 'question_id', 'Question');
   const slug = str(formData, 'slug');
-  if (!questionId || !slug) throw new Error('Missing question.');
+  if (!slug) throw new Error('Missing question.');
   const input = await getQuestionSummaryInput(questionId);
   if (!input) throw new Error('Question not found.');
   const summary = await generateQuestionSummary(input);

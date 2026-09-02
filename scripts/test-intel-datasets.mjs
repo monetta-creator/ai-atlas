@@ -103,5 +103,51 @@ check('every intel-* dataset is key-gated and heavy: nothing intel-shaped ships 
   }
 });
 
+// ---- (e) intel-metrics: since/source incremental-pull filters -------------
+
+check('intel-metrics: registry declares the since/source filters', () => {
+  assert.deepEqual(metricsDef.filters, { since: true, source: true });
+});
+
+// A mock Q that never touches a DB: it just records the SQL text passed to it
+// and returns no rows, so buildIntelMetrics can be driven directly.
+let capturedSql = '';
+const captureQ = async (sql) => {
+  capturedSql = sql;
+  return [];
+};
+
+await metricsDef.build(captureQ, {});
+const unfilteredSql = capturedSql;
+
+check('buildIntelMetrics: no since/source filter carries neither predicate', () => {
+  assert.ok(!unfilteredSql.includes('fetched_at >='), 'unfiltered SQL should not carry the since predicate');
+  assert.ok(!unfilteredSql.includes('m.source ='), 'unfiltered SQL should not carry the source predicate');
+});
+
+await metricsDef.build(captureQ, { since: '2026-08-01' });
+const sinceSql = capturedSql;
+
+check('buildIntelMetrics: since= adds the fetched_at predicate only', () => {
+  assert.ok(sinceSql.includes('m.fetched_at >= $1::date'), 'since filter should add the fetched_at predicate');
+  assert.ok(!sinceSql.includes('m.source ='), 'since alone should not add the source predicate');
+});
+
+await metricsDef.build(captureQ, { source: 'edgar_xbrl' });
+const sourceSql = capturedSql;
+
+check('buildIntelMetrics: source= adds the source predicate only', () => {
+  assert.ok(sourceSql.includes('m.source = $1'), 'source filter should add the source predicate');
+  assert.ok(!sourceSql.includes('fetched_at >='), 'source alone should not add the since predicate');
+});
+
+await metricsDef.build(captureQ, { since: '2026-08-01', source: 'edgar_xbrl' });
+const bothSql = capturedSql;
+
+check('buildIntelMetrics: since+source combine in one where clause', () => {
+  assert.ok(bothSql.includes('m.fetched_at >= $1::date'), 'combined filters should include the since predicate');
+  assert.ok(bothSql.includes('m.source = $2'), 'combined filters should include the source predicate, second param');
+});
+
 console.log(`\n${pass} passed · ${fail} failed`);
 process.exit(fail ? 1 : 0);

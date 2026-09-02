@@ -228,16 +228,18 @@ export async function setPipelineAnalysisModels(models: string[]): Promise<void>
 
 // Reuse an existing source row for a URL, or create a bare one. Returns the source id
 // so a pipeline-created signal can link to it (admin sets the reliability prior later).
+// One atomic statement (0050): analysis runs 4-way concurrent (ANALYSIS_POOL in
+// lib/pipeline/engine.ts), so a SELECT-then-INSERT here could race two candidates
+// on the same URL into twin rows. sources_url_key (partial: WHERE url IS NOT NULL)
+// backs the ON CONFLICT target; the DO UPDATE is a no-op (sets url to itself) only
+// so RETURNING still fires on a conflict, since a bare DO NOTHING returns no row.
 export async function ensureSource(
   input: { url: string; title?: string | null; outlet?: string | null }
 ): Promise<string> {
-  const existing = await one<{ id: string }>(
-    `select id from sources where url = $1 order by created_at limit 1`,
-    [input.url]
-  );
-  if (existing) return existing.id;
   const row = await one<{ id: string }>(
-    `insert into sources (title, outlet, url) values ($1, $2, $3) returning id`,
+    `insert into sources (title, outlet, url) values ($1, $2, $3)
+     on conflict (url) where url is not null do update set url = excluded.url
+     returning id`,
     [input.title || null, input.outlet || null, input.url]
   );
   return row!.id;

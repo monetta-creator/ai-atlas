@@ -538,11 +538,12 @@ const BASE: DatasetDef[] = [
     description:
       'LLM-free structured series for tracked companies, about a decade deep: the full FDIC call-report field set per bank, FR Y-9C holding-company consolidated items, curated SEC EDGAR XBRL concepts, and CFPB complaint counts: one metric-period value per row.',
     methodology:
-      'One row per (company, metric, period, source). Metric codes name their origin: fdic_<mnemonic> (FDIC RIS dictionary), y9c_<mdrm> (Federal Reserve MDRM), curated concept names for edgar_xbrl, cfpb_complaints_month/_30d. No model ever touches this table; every value traces to a public structured source. Quarterly sources refresh on the Monday cron (Y-9C by a quarterly file ingest); re-fetches upsert idempotently, so a re-download reflects the latest pull for a period without duplicating it. This is a working corpus, not a redistribution channel. Downloading requires the team portal key.',
+      'One row per (company, metric, period, source). Metric codes name their origin: fdic_<mnemonic> (FDIC RIS dictionary), y9c_<mdrm> (Federal Reserve MDRM), curated concept names for edgar_xbrl, cfpb_complaints_month/_30d. No model ever touches this table; every value traces to a public structured source. Quarterly sources refresh on the Monday cron (Y-9C by a quarterly file ingest); re-fetches upsert idempotently, so a re-download reflects the latest pull for a period without duplicating it. This is a working corpus, not a redistribution channel. Downloading requires the team portal key. Incremental pulls: add ?since=YYYY-MM-DD (rows fetched on or after that date) and/or ?source=<code>; the Monday engine stamps fetched_at on every refreshed row, so a weekly ?since= pull is the intended intake.',
     category: 'intel',
     formats: ['csv', 'json'],
     heavy: true,
     keyGated: true,
+    filters: { since: true, source: true },
     columns: [
       col('company_slug', 'Company slug', 'text', 'The company the metric is about; joins intel-companies.'),
       col('company_name', 'Company', 'text', 'Company name, denormalized for convenience.'),
@@ -550,7 +551,7 @@ const BASE: DatasetDef[] = [
       col('period', 'Period', 'date', 'The period the value covers (YYYY-MM-DD, typically a quarter end).'),
       col('value', 'Value', 'number', 'The metric value, when reported.'),
       col('unit', 'Unit', 'text', 'Unit of the value, when known.'),
-      col('source', 'Source', 'enum', 'edgar_xbrl, fdic, or cfpb.'),
+      col('source', 'Source', 'enum', 'edgar_xbrl, fdic, cfpb, y9c, or ats.'),
       col('fetched_at', 'Fetched', 'date', 'When this value was pulled (YYYY-MM-DD).'),
     ],
     build: buildIntelMetrics,

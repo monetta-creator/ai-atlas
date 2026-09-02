@@ -175,6 +175,7 @@ export default async function IntelPage() {
                   <p className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 6 }}>
                     {datasetStatsLine[slug]}
                     {slug === 'intel-items' ? ' · add ?day=YYYY-MM-DD for a specific day' : ''}
+                    {slug === 'intel-metrics' ? ' · add ?since=YYYY-MM-DD or ?source=<code> for an incremental pull' : ''}
                   </p>
                   {def && (
                     <div style={{ marginTop: 10 }}>

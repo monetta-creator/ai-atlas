@@ -36,6 +36,7 @@ export interface IntelCompany {
   dossier: Record<string, unknown> | null;
   notes: string | null;
   ats: IntelAtsConfig | null;      // Greenhouse/Lever board, if the company has one
+  cfpb_name: string | null;        // exact CFPB-registered name override; '' skips CFPB, null = auto
   created_at: string;
   updated_at: string;
 }

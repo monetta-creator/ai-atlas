@@ -158,7 +158,7 @@ if (sizeBeforeBytes > SIX_GB) {
 
 // ---------------------------------------------------------------- registry
 const { rows: registry } = await client.query(
-  `select slug, name, tier, ticker, cik, fdic_cert, rssd_id
+  `select slug, name, tier, ticker, cik, fdic_cert, rssd_id, cfpb_name
      from intel_companies where active order by slug`
 );
 let companies = registry;

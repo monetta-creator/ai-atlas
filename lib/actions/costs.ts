@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import * as m from '../mutations';
-import { requireAdmin, str } from './shared';
+import { isUniqueViolation, requireAdmin, str } from './shared';
 import { ISO_DAY_RE } from './shared';
 
 // ===== AI cost monitoring (migration 0014) ==================================
@@ -54,11 +54,10 @@ export async function addRateCardAction(
     revalidatePath('/costs');
     return { ok: true };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Could not add the rate card.';
     // unique (model, effective_date) → a friendly message instead of a 500.
-    if (/duplicate key|unique/i.test(msg)) {
+    if (isUniqueViolation(e)) {
       return { ok: false, error: 'A rate card for that model and effective date already exists.' };
     }
-    return { ok: false, error: msg };
+    return { ok: false, error: e instanceof Error ? e.message : 'Could not add the rate card.' };
   }
 }

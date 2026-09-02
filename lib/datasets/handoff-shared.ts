@@ -115,7 +115,7 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   period: { type: 'string', nullable: false, format: 'date' },
   value: { type: 'number', nullable: true },
   unit: { type: 'string', nullable: true },
-  source: { type: 'string', nullable: false, enum: ['edgar_xbrl', 'fdic', 'cfpb', 'y9c'] },
+  source: { type: 'string', nullable: false, enum: ['edgar_xbrl', 'fdic', 'cfpb', 'y9c', 'ats'] },
   fetched_at: { type: 'string', nullable: false, format: 'date' },
   // ---- research-export (url, published_on, counterpoint, full_text shared above) --
   id: { type: 'string', nullable: false, format: 'uuid' },

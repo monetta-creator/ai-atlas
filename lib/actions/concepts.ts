@@ -10,7 +10,7 @@ import type {
   ConceptStatus, ConceptPrereqRecommendation, ConceptClaimRecommendation,
   ConceptGapScan, ConceptGapRecommendation,
   } from '../types';
-import { UUID_RE, requireAdmin, str } from './shared';
+import { UUID_RE, isUniqueViolation, requireAdmin, str } from './shared';
 import { parseStringArray } from './shared';
 
 // ===== Concepts (the semantic scaffold) =====================================
@@ -70,8 +70,7 @@ export async function createConceptAction(formData: FormData) {
   try {
     await m.createConcept(fields);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Could not create the concept.';
-    if (/duplicate key|unique/i.test(msg)) throw new Error('A concept with that slug already exists.');
+    if (isUniqueViolation(e)) throw new Error('A concept with that slug already exists.');
     throw e;
   }
   revalidatePath('/', 'layout');
@@ -86,8 +85,7 @@ export async function updateConceptAction(formData: FormData) {
   try {
     await m.updateConcept(id, fields);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Could not save the concept.';
-    if (/duplicate key|unique/i.test(msg)) throw new Error('A concept with that slug already exists.');
+    if (isUniqueViolation(e)) throw new Error('A concept with that slug already exists.');
     throw e;
   }
   revalidatePath('/', 'layout');

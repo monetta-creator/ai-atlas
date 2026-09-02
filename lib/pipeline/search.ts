@@ -198,6 +198,7 @@ export async function coverageDevelopmentsGdelt(opts: {
   utilityModel?: string | null;
 }): Promise<{ headline: string; url: string; covered: boolean; matched: string }[]> {
   const days = daysSince(opts.sinceISO);
+  const t0 = Date.now();
   const byUrl = new Map<string, RawCandidate>();
   for (let i = 0; i < opts.queries.length; i++) {
     if (i > 0) await sleep(GDELT_BETWEEN_QUERIES_MS);
@@ -213,6 +214,17 @@ export async function coverageDevelopmentsGdelt(opts: {
       if (!byUrl.has(item.url)) byUrl.set(item.url, item);
     }
   }
+  // The fetch leg's own $0 row (the judgment call below logs separately):
+  // the Tavily quota tile sums metadata.queries over model 'tavily-search',
+  // so an unlogged coverage fetch undercounted the month by its query count.
+  await recordApiCall({
+    feature: 'pipeline_coverage',
+    model: 'gdelt-doc',
+    usage: null,
+    wallMs: Date.now() - t0,
+    pipelineRunId: opts.pipelineRunId ?? null,
+    metadata: { queries: opts.queries.length, provider: 'gdelt', fetch: true },
+  });
   const found = [...byUrl.values()];
   if (!found.length) return [];
 
@@ -330,6 +342,7 @@ export async function coverageDevelopmentsTavily(opts: {
   utilityModel?: string | null;
 }): Promise<{ headline: string; url: string; covered: boolean; matched: string }[]> {
   const days = daysSince(opts.sinceISO);
+  const t0 = Date.now();
   const byUrl = new Map<string, RawCandidate>();
   for (const query of opts.queries) {
     let results;
@@ -342,6 +355,17 @@ export async function coverageDevelopmentsTavily(opts: {
       if (!byUrl.has(item.url)) byUrl.set(item.url, item);
     }
   }
+  // The fetch leg's own $0 row (the judgment call below logs separately):
+  // the Tavily quota tile sums metadata.queries over model 'tavily-search',
+  // so an unlogged coverage fetch undercounted the month by its query count.
+  await recordApiCall({
+    feature: 'pipeline_coverage',
+    model: 'tavily-search',
+    usage: null,
+    wallMs: Date.now() - t0,
+    pipelineRunId: opts.pipelineRunId ?? null,
+    metadata: { queries: opts.queries.length, provider: 'tavily', fetch: true },
+  });
   const found = [...byUrl.values()];
   if (!found.length) return [];
 

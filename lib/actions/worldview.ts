@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import * as m from '../mutations';
-import { UUID_RE, requireAdmin, str } from './shared';
+import { UUID_RE, parseTarget, requireAdmin, requireUuid, str } from './shared';
 
 // ---- Cross-cutting positions (the worldview layer) ----
 const NODE_TYPES = ['stance', 'claim', 'bridge_claim'] as const;
@@ -39,14 +39,9 @@ export async function deletePositionAction(formData: FormData) {
 
 export async function addPositionComponentAction(formData: FormData) {
   await requireAdmin();
-  const positionId = str(formData, 'position_id');
-  const target = str(formData, 'target'); // "claim:<id>" | "bridge_claim:<id>" | "stance:<id>"
-  const sep = target.indexOf(':');
-  const target_type = target.slice(0, sep);
-  const target_id = target.slice(sep + 1);
-  if (!UUID_RE.test(positionId)) throw new Error('Bad position id.');
-  if (!(NODE_TYPES as readonly string[]).includes(target_type)) throw new Error('Invalid target.');
-  if (!UUID_RE.test(target_id)) throw new Error('Pick a node to add.');
+  const positionId = requireUuid(formData, 'position_id', 'Position');
+  // target is "claim:<id>" | "bridge_claim:<id>" | "stance:<id>"
+  const { target_type, target_id } = parseTarget(str(formData, 'target'), NODE_TYPES);
   await m.addPositionComponent(positionId, target_type as 'stance' | 'claim' | 'bridge_claim', target_id);
   revalidatePath('/', 'layout');
   redirect('/worldview');

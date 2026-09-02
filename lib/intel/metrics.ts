@@ -16,8 +16,9 @@ import type { IntelCompany, IntelMetricSource } from '../types';
 //   * FDIC BankFind financials: call-report-derived fields per FDIC cert.
 //   * CFPB consumer complaints: trailing-30-day complaint count. The API
 //     matches its own registered legal names (all-caps corporate form), so
-//     the fetcher first resolves the registry name through the
-//     _suggest_company endpoint and queries the first suggestion.
+//     the fetcher resolves a legal name first: the registry's cfpb_name
+//     when set (empty string skips CFPB on purpose), else the
+//     _suggest_company endpoint's first suggestion.
 
 const FETCH_TIMEOUT_MS = 15_000;
 const MAX_QUARTERS = 8;
@@ -276,13 +277,23 @@ interface CfpbPayload {
 const CFPB_API = 'https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/';
 
 // The CFPB matches its own registered legal names (all-caps corporate form),
-// not the registry display name, so every complaints fetch resolves the name
-// through _suggest_company first. Shared by the 30-day snapshot and the
-// monthly series below; no suggestion = the company is not in the CFPB
-// database (most fintechs and non-banks), which is a skip, not an error.
-async function resolveCfpbLegalName(name: string): Promise<string | undefined> {
+// not the registry display name, so every complaints fetch resolves a legal
+// name first. The registry's cfpb_name overrides the automatic pick when it
+// is wrong or empty for a given company (a name mismatch on the automatic
+// path silently returns zero, or worse, a plausible-looking but unrelated
+// company): null (the default) runs the automatic _suggest_company lookup
+// and takes the first suggestion; an explicit empty string skips CFPB for
+// that company on purpose (registered under no name at all); any other
+// string is queried as-is. Shared by the 30-day snapshot and the monthly
+// series below; no suggestion = the company is not in the CFPB database
+// (most fintechs and non-banks), which is a skip, not an error.
+async function resolveCfpbLegalName(
+  company: Pick<IntelCompany, 'name' | 'cfpb_name'>
+): Promise<string | undefined> {
+  if (company.cfpb_name === '') return undefined;
+  if (company.cfpb_name) return company.cfpb_name;
   const suggestions = await fetchJson<string[]>(
-    `${CFPB_API}_suggest_company/?text=${encodeURIComponent(name)}`
+    `${CFPB_API}_suggest_company/?text=${encodeURIComponent(company.name)}`
   );
   return Array.isArray(suggestions) ? suggestions[0] : undefined;
 }
@@ -290,12 +301,12 @@ async function resolveCfpbLegalName(name: string): Promise<string | undefined> {
 // CFPB complaints: one trailing-30-day count, period-stamped to the first of
 // the run month so re-runs within a month upsert the same row.
 export async function fetchCfpbComplaints(
-  company: Pick<IntelCompany, 'slug' | 'name'>,
+  company: Pick<IntelCompany, 'slug' | 'name' | 'cfpb_name'>,
   dayISO: string,
   intelRunId?: string
 ): Promise<MetricRow[]> {
   const t0 = Date.now();
-  const legalName = await resolveCfpbLegalName(company.name);
+  const legalName = await resolveCfpbLegalName(company);
   if (!legalName) return [];
   const min = new Date(`${dayISO}T00:00:00Z`);
   min.setUTCDate(min.getUTCDate() - 30);
@@ -327,12 +338,12 @@ export async function fetchCfpbComplaints(
 // month (the current, still-partial month is excluded), period-stamped to
 // the first of that month. The name resolves once and every month reuses it.
 export async function fetchCfpbMonthlySeries(
-  company: Pick<IntelCompany, 'slug' | 'name'>,
+  company: Pick<IntelCompany, 'slug' | 'name' | 'cfpb_name'>,
   months = 24,
   intelRunId?: string
 ): Promise<MetricRow[]> {
   const t0 = Date.now();
-  const legalName = await resolveCfpbLegalName(company.name);
+  const legalName = await resolveCfpbLegalName(company);
   if (!legalName) return [];
   const rows: MetricRow[] = [];
   const now = new Date();

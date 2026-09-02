@@ -26,7 +26,11 @@ import pg from 'pg';
 //   "aliases": ["Example Bancorp"],         // optional; defaults to [name]
 //   "feed_urls": ["https://..."],           // optional; defaults to one Google News RSS URL
 //   "search_queries": ["Example Bancorp strategy announcement {month} {year}"],  // optional; defaults to []
-//   "ats": { "provider": "greenhouse", "board": "example" }  // optional; "greenhouse" | "lever"
+//   "ats": { "provider": "greenhouse", "board": "example" },  // optional; "greenhouse" | "lever"
+//   "cfpb_name": "EXAMPLE BANCORP, N.A."   // optional; the exact CFPB-registered name to
+//                                          // query when the automatic _suggest_company pick
+//                                          // is wrong or empty. Omit or null keeps the
+//                                          // automatic pick; "" skips CFPB on purpose.
 // }]
 
 const path = process.argv[2] ?? 'private/intel-companies.json';
@@ -74,6 +78,9 @@ for (const [i, c] of companies.entries()) {
   if (c?.cik !== undefined && c?.cik !== null && !CIK_RE.test(String(c.cik))) {
     errors.push(`${where}: cik must be digits only, got "${c.cik}"`);
   }
+  if (c?.cfpb_name !== undefined && c?.cfpb_name !== null && typeof c.cfpb_name !== 'string') {
+    errors.push(`${where}: cfpb_name must be a string`);
+  }
   if (c?.ats !== undefined && c?.ats !== null) {
     if (typeof c.ats !== 'object' || Array.isArray(c.ats)) {
       errors.push(`${where}: ats must be an object`);
@@ -119,6 +126,9 @@ for (const c of companies) {
   c.name = c.name.trim();
   if (!c.aliases || c.aliases.length === 0) c.aliases = [c.name];
   if (!c.feed_urls || c.feed_urls.length === 0) c.feed_urls = [bingNewsFeedUrl(c.name)];
+  // Trim a real name, but leave "" as-is (the explicit skip-CFPB marker) and
+  // undefined/null as null (keep the automatic _suggest_company pick).
+  c.cfpb_name = typeof c.cfpb_name === 'string' ? c.cfpb_name.trim() : null;
 }
 
 // CIK auto-resolve: entries with a ticker but no cik get looked up against
@@ -165,8 +175,8 @@ await client.connect();
 let upserted = 0;
 for (const c of companies) {
   await client.query(
-    `insert into intel_companies (slug, name, tier, niche, ticker, cik, rssd_id, fdic_cert, lei, domain, aliases, feed_urls, search_queries, ats)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text[], $12::text[], $13::text[], $14::jsonb)
+    `insert into intel_companies (slug, name, tier, niche, ticker, cik, rssd_id, fdic_cert, lei, domain, aliases, feed_urls, search_queries, ats, cfpb_name)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text[], $12::text[], $13::text[], $14::jsonb, $15)
      on conflict (slug) do update set
        name = excluded.name,
        tier = excluded.tier,
@@ -180,12 +190,14 @@ for (const c of companies) {
        aliases = excluded.aliases,
        feed_urls = excluded.feed_urls,
        search_queries = excluded.search_queries,
-       ats = excluded.ats`,
+       ats = excluded.ats,
+       cfpb_name = excluded.cfpb_name`,
     [
       c.slug, c.name, c.tier, c.niche?.trim() || null, c.ticker?.trim() || null, c.cik ?? null,
       c.rssd_id?.trim() || null, c.fdic_cert?.trim() || null, c.lei?.trim() || null, c.domain?.trim() || null,
       c.aliases, c.feed_urls, c.search_queries ?? [],
       c.ats ? JSON.stringify({ provider: c.ats.provider, board: c.ats.board.trim() }) : null,
+      c.cfpb_name,
     ]
   );
   upserted += 1;

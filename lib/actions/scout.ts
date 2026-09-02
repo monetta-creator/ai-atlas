@@ -154,7 +154,7 @@ export async function setVerticalActiveAction(slug: string, active: boolean): Pr
 // ---- Scout discovery (phase 2): console-driven, DB-checkpointed batches -----
 export async function startScoutRunAction(): Promise<{ runId: string; plan: ScoutBatchRef[] }> {
   await requireAdmin();
-  const verticals = await getScoutVerticals();
+  const verticals = await getScoutVerticals(true); // admin read: carries the discovery queries
   const plan = scoutPlan(verticals);
   if (!plan.length) throw new Error('No active vertical carries discovery queries.');
   const runId = await m.createScoutRun();

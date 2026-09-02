@@ -12,7 +12,7 @@ import type {
   Domain, Resolvability, Relation,
   ArgumentGapScan,
   } from '../types';
-import { UUID_RE, requireAdmin, str } from './shared';
+import { UUID_RE, isUniqueViolation, requireAdmin, str } from './shared';
 
 // ===== Argument-map node authoring (claims + bridges; migration 0021) =========
 // Create a new claim or bridge-claim AND its edges, AI-proposed + human-committed.
@@ -106,8 +106,7 @@ export async function createClaimAction(formData: FormData) {
   try {
     created = await m.createClaimWithEdges(fields);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Could not create the claim.';
-    if (/duplicate key|unique/i.test(msg)) throw new Error('A claim or bridge with that code already exists.');
+    if (isUniqueViolation(e)) throw new Error('A claim or bridge with that code already exists.');
     throw e;
   }
   await appendCodeToThesis(formData, created.code);
@@ -161,8 +160,7 @@ export async function createBridgeAction(formData: FormData) {
   try {
     created = await m.createBridgeWithEdges(fields);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Could not create the bridge-claim.';
-    if (/duplicate key|unique/i.test(msg)) throw new Error('A claim or bridge with that code already exists.');
+    if (isUniqueViolation(e)) throw new Error('A claim or bridge with that code already exists.');
     throw e;
   }
   await appendCodeToThesis(formData, created.code);

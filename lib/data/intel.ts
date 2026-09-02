@@ -22,7 +22,7 @@ export async function getIntelPrefs(): Promise<IntelPrefs> {
 
 const COMPANY_COLUMNS = `
   slug, name, tier, niche, ticker, cik, rssd_id, fdic_cert, lei, domain,
-  aliases, feed_urls, search_queries, active, dossier, notes, ats, created_at, updated_at`;
+  aliases, feed_urls, search_queries, active, dossier, notes, ats, cfpb_name, created_at, updated_at`;
 
 export async function getIntelCompanies(): Promise<IntelCompany[]> {
   return q<IntelCompany>(`select ${COMPANY_COLUMNS} from intel_companies order by tier, slug`);

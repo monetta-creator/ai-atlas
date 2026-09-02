@@ -84,8 +84,34 @@ export async function GET(
       day = v;
     }
   }
+  let since: string | undefined;
+  if (def.filters?.since) {
+    const v = sp.get('since');
+    if (v) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) {
+        return Response.json(
+          { error: 'Bad since. Use YYYY-MM-DD; rows with fetched_at on or after that date are returned.' },
+          { status: 400 }
+        );
+      }
+      since = v;
+    }
+  }
+  let source: string | undefined;
+  if (def.filters?.source) {
+    const v = sp.get('source');
+    if (v) {
+      if (!/^[a-z0-9_]{1,32}$/.test(v)) {
+        return Response.json(
+          { error: 'Bad source. Use one of the source codes listed on the dataset page.' },
+          { status: 400 }
+        );
+      }
+      source = v;
+    }
+  }
 
-  const rows = await def.build(q, { lens, day, host: req.nextUrl.origin, limit: previewLimit });
+  const rows = await def.build(q, { lens, day, since, source, host: req.nextUrl.origin, limit: previewLimit });
   // A preview never writes the no-store full-download header, even key-gated:
   // it's a small, cheap peek, so it's safe to cache briefly per-viewer.
   const cache = isPreview
@@ -97,7 +123,7 @@ export async function GET(
   // envelope's `day` stays the REQUESTED filter per the import contract.
   const servedDay =
     day ?? (def.filters?.day && typeof rows[0]?.run_day === 'string' ? rows[0].run_day : undefined);
-  const filename = datasetFileName(def, format, lens, servedDay);
+  const filename = datasetFileName(def, format, lens, servedDay, since);
 
   if (format === 'json') {
     // JSON is inline by default (quick in-browser inspection; the explorer
@@ -105,7 +131,7 @@ export async function GET(
     // want one, like the /scan daily grab from a work browser. A preview is
     // always inline: it's a peek, never a file to save.
     const disposition = !isPreview && sp.get('download') === '1' ? 'attachment' : 'inline';
-    return new Response(datasetToJSON(def, rows, { lens, day, preview: isPreview }), {
+    return new Response(datasetToJSON(def, rows, { lens, day, since, source, preview: isPreview }), {
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
         'Content-Disposition': `${disposition}; filename="${filename}"`,

@@ -828,7 +828,21 @@ export async function buildIntelFacts(q: Q, opts: DatasetOpts = {}): Promise<Dat
 export async function buildIntelMetrics(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // LLM-free structured series (EDGAR XBRL, FDIC, CFPB); no model ever
   // touches this table, so there is no enrichment status to carry.
+  // since/source are the incremental-pull filters: an importer that already
+  // holds prior rows can ask for only what changed (fetched_at on or after a
+  // date) and/or one source, instead of the full ~2M-row corpus every time.
+  // Neither set: byte-identical SQL to the unfiltered build.
   const params: unknown[] = [];
+  const whereParts: string[] = [];
+  if (opts.since) {
+    params.push(opts.since);
+    whereParts.push(`m.fetched_at >= $${params.length}::date`);
+  }
+  if (opts.source) {
+    params.push(opts.source);
+    whereParts.push(`m.source = $${params.length}`);
+  }
+  const whereClause = whereParts.length ? ` where ${whereParts.join(' and ')}` : '';
   let limitClause = '';
   if (isPositiveInt(opts.limit)) {
     params.push(opts.limit);
@@ -844,7 +858,7 @@ export async function buildIntelMetrics(q: Q, opts: DatasetOpts = {}): Promise<D
             m.source,
             to_char(m.fetched_at, 'YYYY-MM-DD') as fetched_at
        from intel_metrics m
-       join intel_companies c on c.slug = m.company_slug
+       join intel_companies c on c.slug = m.company_slug${whereClause}
       order by m.company_slug, m.metric_code, m.period desc, m.source, m.id${limitClause}`,
     params
   );

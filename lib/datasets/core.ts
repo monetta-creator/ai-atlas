@@ -52,6 +52,8 @@ export interface DatasetColumn {
 export interface DatasetOpts {
   lens?: string;          // validated against SIGNAL_LENSES before it reaches a builder
   day?: string;           // validated as YYYY-MM-DD in the route before it reaches a builder
+  since?: string;         // validated as YYYY-MM-DD in the route before it reaches a builder; an incremental lower bound on fetched_at
+  source?: string;        // validated against /^[a-z0-9_]{1,32}$/ in the route before it reaches a builder; a single source code
   host?: string;          // request origin (https://host), for builders that mint absolute Atlas links
   limit?: number;         // preview row cap; clamped to 1..100 in the route before it reaches a builder
 }
@@ -66,7 +68,7 @@ export interface DatasetDef {
   formats: ('csv' | 'json')[];
   heavy?: boolean;        // no explorer, truncated preview, download-only posture
   keyGated?: boolean;     // requires the portal key (bulk third-party article text)
-  filters?: { lens?: boolean; day?: boolean };  // declares supported download query params
+  filters?: { lens?: boolean; day?: boolean; since?: boolean; source?: boolean };  // declares supported download query params
   build: (q: Q, opts?: DatasetOpts) => Promise<DatasetRow[]>;
 }
 

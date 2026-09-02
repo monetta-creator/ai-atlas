@@ -25,7 +25,7 @@ export function datasetToCSV(def: DatasetDef, rows: DatasetRow[]): string {
 // needs a second request to interpret a download.
 export function datasetToJSON(
   def: DatasetDef, rows: DatasetRow[],
-  opts: { lens?: string; day?: string; preview?: boolean } = {}
+  opts: { lens?: string; day?: string; since?: string; source?: string; preview?: boolean } = {}
 ): string {
   return JSON.stringify({
     dataset: {
@@ -36,6 +36,8 @@ export function datasetToJSON(
       category: def.category,
       lens: opts.lens ?? null,
       day: opts.day ?? null,
+      since: opts.since ?? null,
+      source: opts.source ?? null,
       row_count: rows.length,
       columns: def.columns,
       ...(opts.preview ? { preview: true } : {}),
@@ -46,8 +48,8 @@ export function datasetToJSON(
 
 // Safe filename stem, mirroring lib/viewdata.ts fileStem.
 export function datasetFileName(
-  def: DatasetDef, format: 'csv' | 'json', lens?: string, day?: string
+  def: DatasetDef, format: 'csv' | 'json', lens?: string, day?: string, since?: string
 ): string {
-  const stem = ['atlas', def.slug, lens, day].filter(Boolean).join('-');
+  const stem = ['atlas', def.slug, lens, day, since].filter(Boolean).join('-');
   return `${stem}.${format}`;
 }

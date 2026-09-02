@@ -266,6 +266,11 @@ intel-facts, and intel-metrics can change on any weekday download.
    ${host}/api/datasets/intel-companies?format=json&download=1
    ${host}/api/datasets/intel-facts?format=json&download=1
    ${host}/api/datasets/intel-metrics?format=json&download=1
+   intel-metrics supports incremental pulls: append &since=YYYY-MM-DD
+   (rows with fetched_at on or after that date) and/or &source=<code>
+   (edgar_xbrl, fdic, cfpb, y9c, or ats), together or alone. A weekly
+   &since=<the date of your last pull> download is the intended intake
+   once the initial full corpus is in hand.
 4. Fresh data lands via scheduled weekday runs; the intel-items default URL
    always serves the latest COMPLETED day, never a partial one.
 `;
