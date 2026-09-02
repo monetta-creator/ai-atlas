@@ -1,5 +1,6 @@
 import { searchCandidates, searchBreakingSweep } from './web';
-import { searchCandidatesTavily, searchBreakingSweepGdelt } from './search';
+import { searchCandidatesTavily, searchBreakingSweepGdelt, searchBreakingSweepTavily } from './search';
+import { gdeltAvailable } from '../scan/search-gdelt';
 import {
   lensBatches, dailyLensQueries, resolveDateTokens, ALL_LENSES, MAX_SEARCH_USES,
   LOW_QUALITY_DOMAINS, SWEEP_QUERIES, BREAKING_SWEEP_DOMAINS,
@@ -68,17 +69,30 @@ export async function discoverBatch(
 // "what did the serious press report since the window opened" over a curated
 // quality-outlet allowlist, significance-first. 2.0: GDELT (keyless, free) fetches the
 // outlets' headlines and a cheap utility model does the significance + lens judgment
-// (lib/pipeline/search.ts); the Sonnet web_search call remains the fallback. GDELT needs
-// no API key, so this branch only requires OPENROUTER_API_KEY (for the judgment call).
+// (lib/pipeline/search.ts). GDELT has proven unreliable in production (2026-09-02), so
+// the call is guarded by its circuit breaker (gdeltAvailable, lib/scan/search-gdelt) and
+// falls back to the Tavily version of the same recipe when TAVILY_API_KEY is set; with
+// neither a working GDELT nor a Tavily key, the error rethrows (this function has no
+// notes array of its own; the caller in engine.ts logs "discovery failed (sweep)"). The
+// Sonnet web_search call remains the fallback for the no-OPENROUTER_API_KEY case (the
+// judgment call's requirement; GDELT and Tavily themselves need no key for this leg).
 // Candidates enter the same triage funnel as every other discovery.
 export async function discoverBreakingSweep(runId: string, sinceISO: string): Promise<number> {
   const queries = resolveDateTokens(SWEEP_QUERIES, sinceISO);
   let found;
   if (process.env.OPENROUTER_API_KEY) {
     const prefs = await getPipelinePrefs();
-    found = await searchBreakingSweepGdelt({
-      queries, sinceISO, pipelineRunId: runId, utilityModel: prefs.utility_model,
-    });
+    try {
+      if (!gdeltAvailable()) throw new Error('gdelt circuit open');
+      found = await searchBreakingSweepGdelt({
+        queries, sinceISO, pipelineRunId: runId, utilityModel: prefs.utility_model,
+      });
+    } catch (e) {
+      if (!process.env.TAVILY_API_KEY) throw e;
+      found = await searchBreakingSweepTavily({
+        queries, sinceISO, pipelineRunId: runId, utilityModel: prefs.utility_model,
+      });
+    }
   } else {
     found = await searchBreakingSweep({
       queries, sinceISO, allowedDomains: BREAKING_SWEEP_DOMAINS,

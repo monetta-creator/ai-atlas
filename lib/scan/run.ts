@@ -11,7 +11,7 @@ import {
 import { fetchFeed } from './feeds';
 import { searchTopicNews, type RawScanItem } from './web';
 import { searchTopicNewsTavily } from './search-tavily';
-import { searchTopicNewsGdelt } from './search-gdelt';
+import { searchTopicNewsGdelt, gdeltAvailable } from './search-gdelt';
 import { enrichScanItem } from './enrich';
 import { pickEnrichModel } from './models';
 import { checkScanBudget } from './budget';
@@ -181,8 +181,31 @@ async function runFeedsStep(run: ScanRun, notes: string[]): Promise<void> {
 // (topicIndex + dayIndex) parity when TAVILY_API_KEY is set, so every topic
 // sees both Tavily and GDELT across consecutive days and each free tier only
 // carries half the daily load; with no Tavily key every topic goes to GDELT.
-// The original Sonnet + web_search call is the last-resort fallback, reached
-// only when GDELT itself throws.
+// GDELT's circuit breaker (gdeltAvailable/markGdeltDown, see search-gdelt.ts)
+// is checked before every GDELT call, and a GDELT call that throws anyway
+// falls through to the SAME-invocation fallback: Tavily (free) when
+// TAVILY_API_KEY is set, and only when neither free provider is available
+// does the original Sonnet + web_search call run as the last resort.
+async function searchFallback(
+  topic: ScanTopic,
+  queries: string[],
+  since: string,
+  runId: string
+): Promise<RawScanItem[]> {
+  if (process.env.TAVILY_API_KEY) {
+    return searchTopicNewsTavily({ topicName: topic.name, queries, sinceISO: since, scanRunId: runId });
+  }
+  return searchTopicNews({
+    topicName: topic.name,
+    topicDescription: topic.description,
+    queries,
+    sinceISO: since,
+    maxUses: 1,
+    scanRunId: runId,
+    blockedDomains: LOW_QUALITY_DOMAINS,
+  });
+}
+
 async function runSearchUnit(
   run: ScanRun,
   topic: ScanTopic,
@@ -203,6 +226,9 @@ async function runSearchUnit(
         sinceISO: since,
         scanRunId: run.id,
       });
+    } else if (!gdeltAvailable()) {
+      notes.push(`gdelt skipped (${topic.slug}): circuit open`);
+      found = await searchFallback(topic, queries, since, run.id);
     } else {
       try {
         found = await searchTopicNewsGdelt({
@@ -211,16 +237,9 @@ async function runSearchUnit(
           sinceISO: since,
           scanRunId: run.id,
         });
-      } catch {
-        found = await searchTopicNews({
-          topicName: topic.name,
-          topicDescription: topic.description,
-          queries,
-          sinceISO: since,
-          maxUses: 1,
-          scanRunId: run.id,
-          blockedDomains: LOW_QUALITY_DOMAINS,
-        });
+      } catch (e) {
+        notes.push(`gdelt failed (${topic.slug}): ${String((e as Error)?.message ?? 'error').slice(0, 160)}`);
+        found = await searchFallback(topic, queries, since, run.id);
       }
     }
     const fresh = found.filter(
@@ -229,10 +248,9 @@ async function runSearchUnit(
     const { inserted } = await insertScanItems(run.id, topic.slug, 'web_search', fresh);
     if (inserted) await bumpScanRunCount(run.id, 'search_item_count', inserted);
   } catch (e) {
-    // A slow or overloaded call (Tavily, or GDELT falling all the way through
-    // to a failing Sonnet fallback): checkpoint the topic as attempted and
-    // move on rather than wedging the run on one topic forever (tomorrow
-    // retries it).
+    // A slow or overloaded call (Tavily, or the Sonnet fallback): checkpoint
+    // the topic as attempted and move on rather than wedging the run on one
+    // topic forever (tomorrow retries it).
     notes.push(`search failed (${topic.slug}): ${String((e as Error)?.message ?? 'error')}`);
   }
   await markScanTopicSearched(run.id, topic.slug);

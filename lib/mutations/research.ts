@@ -321,25 +321,29 @@ export async function pruneRejectedPapers(days = 90): Promise<number> {
 // chunks (the console runs a small pool) never send the same paper to the model
 // twice: the claim is a single statement with `for update skip locked`, and marks
 // the rows via triage_reason. A claim expires after 5 minutes (updated_at), so a
-// chunk that died mid-model-call self-heals on the next pass — its papers are
-// still triage_status='pending' and get reclaimed.
+// chunk that died mid-model-call self-heals on the next pass, its papers are
+// still triage_status='pending' and get reclaimed. GLOBAL (no run_id filter): the
+// triage queue is shared across runs, so leftovers from a superseded or last
+// time window's run are claimed and triaged by the next run instead of being
+// orphaned forever (the 2026-09-02 incident: a thrown model call held 25 papers
+// under a run-scoped claim that no later run could ever reach).
 export async function claimPendingPapers(
-  runId: string, limit: number
+  limit: number
 ): Promise<{ id: string; arxiv_id: string | null; title: string; abstract: string | null; categories: string[]; comments: string | null; published_at: string | null }[]> {
   const { rows } = await withTx(async (c) =>
     c.query(
       `update papers set triage_reason = 'in triage', triage_attempts = triage_attempts + 1, updated_at = now()
         where id in (
           select id from papers
-           where run_id = $1 and triage_status = 'pending'
+           where triage_status = 'pending'
              and triage_attempts < 3
              and (triage_reason is distinct from 'in triage' or updated_at < now() - interval '5 minutes')
            order by published_at desc nulls last, created_at
-           limit $2
+           limit $1
            for update skip locked)
         returning id, arxiv_id, title, abstract, categories, comments,
                   to_char(published_at, 'YYYY-MM-DD') as published_at`,
-      [runId, limit]
+      [limit]
     )
   );
   return rows as { id: string; arxiv_id: string | null; title: string; abstract: string | null; categories: string[]; comments: string | null; published_at: string | null }[];
@@ -360,13 +364,15 @@ export async function releaseTriageClaims(ids: string[]): Promise<void> {
 
 // Reject papers that burned all their triage attempts without ever getting a
 // decision, with a reason distinct from a real model reject. Skips papers a
-// live concurrent chunk still holds (fresh 'in triage' marker).
-export async function rejectExhaustedTriagePapers(runId: string): Promise<number> {
+// live concurrent chunk still holds (fresh 'in triage' marker). GLOBAL like
+// claimPendingPapers: attempts accrue on the paper, not the run, so a paper
+// exhausted under a superseded run is still rejected here instead of sitting
+// pending forever.
+export async function rejectExhaustedTriagePapers(): Promise<number> {
   return exec(
     `update papers set triage_status = 'rejected', triage_reason = 'Triage unavailable (3 attempts)', updated_at = now()
-      where run_id = $1 and triage_status = 'pending' and triage_attempts >= 3
-        and (triage_reason is distinct from 'in triage' or updated_at < now() - interval '5 minutes')`,
-    [runId]
+      where triage_status = 'pending' and triage_attempts >= 3
+        and (triage_reason is distinct from 'in triage' or updated_at < now() - interval '5 minutes')`
   );
 }
 

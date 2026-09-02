@@ -4,6 +4,7 @@ import type {
   RunCadence, RunStatus, RunStep, TriageStatus, AnalysisStatus, } from '../types';
 import { sanitizeText } from '../pipeline/web';
 import type { RawCandidate } from '../pipeline/web';
+import { PIPELINE_DAY_START_SQL } from '../pipeline/config';
 
 // ---- Discovery pipeline ----------------------------------------------------
 
@@ -59,7 +60,7 @@ export async function failStaleDailyRuns(): Promise<number> {
     `update pipeline_runs
         set status = 'failed', error = 'incomplete: superseded by a newer daily run', updated_at = now()
       where cadence = 'daily' and status = 'running'
-        and created_at < date_trunc('day', now() at time zone 'utc')`
+        and created_at < ${PIPELINE_DAY_START_SQL}`
   );
 }
 

@@ -58,7 +58,10 @@ export default async function ResearchConsolePage() {
     headers(),
   ]);
   const latest = runs[0] ?? null;
-  const pendingTriage = latest ? await countPendingPapers(latest.id) : 0;
+  // GLOBAL count (mig 0047 fix, 2026-09-02): the triage queue is shared across
+  // runs, so this is every paper awaiting triage regardless of which run
+  // pulled it in, not just the latest run's leftovers.
+  const pendingTriage = await countPendingPapers();
   const scan = reconcileThreadScan(rawScan, new Set(threads.map((t) => t.slug)));
 
   const def = getDataset('research-export');

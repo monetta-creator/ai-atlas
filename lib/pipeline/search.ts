@@ -15,13 +15,19 @@ import type { SignalLens } from '../types';
 // own prompt forbade judgment and returned only url/headline/date lists, so
 // the lens leg is LLM-free Tavily (the scan's proven recipe, unchanged here).
 // The breaking sweep and coverage check DO carry judgment (significance, lens
-// assignment, covered-vs-missed): their web half is GDELT DOC 2.0 (free,
-// keyless, halving Tavily's free-tier burn) restricted post-fetch to the same
-// quality-outlet allowlist Tavily's include_domains used to enforce
+// assignment, covered-vs-missed): their web half tries GDELT DOC 2.0 first
+// (free, keyless, halving Tavily's free-tier burn), restricted post-fetch to
+// the same quality-outlet allowlist Tavily's include_domains used to enforce
 // server-side, and their judgment half stays one small utility-model call.
-// Callers branch on OPENROUTER_API_KEY (the judgment call's requirement;
-// GDELT itself needs no key); without it the original Sonnet paths (web.ts /
-// coverage.ts) run unchanged.
+// GDELT has proven unreliable from this deploy (2026-09-02: api.gdeltproject.org
+// is unreachable from Vercel and from the dev machine), so the callers in
+// discovery.ts and coverage.ts guard every GDELT call with the circuit breaker
+// in lib/scan/search-gdelt.ts (gdeltAvailable/markGdeltDown) and fall back to
+// the Tavily versions below (searchBreakingSweepTavily / coverageDevelopmentsTavily,
+// restored from before GDELT existed) on a tripped breaker or a thrown GDELT
+// call. Callers branch on OPENROUTER_API_KEY (the judgment call's requirement;
+// neither GDELT nor Tavily itself needs it); without it the original Sonnet
+// paths (web.ts / coverage.ts) run unchanged.
 
 const num = (v: string | null | undefined): string => String(v ?? '');
 
@@ -224,6 +230,135 @@ export async function coverageDevelopmentsGdelt(opts: {
     feature: 'pipeline_coverage',
     pipelineRunId: opts.pipelineRunId ?? null,
     metadata: { tracked: opts.tracked.length, provider: 'gdelt' },
+  });
+
+  const seen = new Set<number>();
+  const developments: { headline: string; url: string; covered: boolean; matched: string }[] = [];
+  for (const d of out.developments ?? []) {
+    const i = Number(d?.index);
+    if (!Number.isInteger(i) || i < 0 || i >= found.length || seen.has(i)) continue;
+    seen.add(i);
+    developments.push({
+      headline: (found[i].headline || found[i].url).slice(0, 300),
+      url: found[i].url,
+      covered: !!d?.covered,
+      matched: String(d?.matched ?? '').trim().slice(0, 300),
+    });
+  }
+  return developments;
+}
+
+// The Tavily fallback for the breaking sweep, restored from before GDELT
+// existed (git 2e7a130): Tavily fetches what the quality outlets reported
+// (include_domains = the curated allowlist), then the same utility-model
+// call picks the genuinely significant developments and assigns each a lens.
+// Used when searchBreakingSweepGdelt throws or its circuit breaker is open.
+export async function searchBreakingSweepTavily(opts: {
+  queries: string[];
+  sinceISO: string;
+  pipelineRunId?: string;
+  utilityModel?: string | null;
+}): Promise<SweepDevelopment[]> {
+  if (!opts.queries.length) return [];
+  const days = daysSince(opts.sinceISO);
+  const t0 = Date.now();
+  const byUrl = new Map<string, RawCandidate>();
+  for (const query of opts.queries) {
+    let results;
+    try {
+      results = await tavilyQuery({ query, days, includeDomains: BREAKING_SWEEP_DOMAINS, maxResults: 15 });
+    } catch {
+      results = await tavilyQuery({ query, days, includeDomains: BREAKING_SWEEP_DOMAINS, maxResults: 15 });
+    }
+    for (const item of mapTavilyResults(results)) {
+      if (!byUrl.has(item.url)) byUrl.set(item.url, item);
+    }
+  }
+  await recordApiCall({
+    feature: 'pipeline_discovery',
+    model: 'tavily-search',
+    usage: null,
+    wallMs: Date.now() - t0,
+    pipelineRunId: opts.pipelineRunId,
+    metadata: { sweep: true, provider: 'tavily' },
+  });
+  const found = [...byUrl.values()];
+  if (!found.length) return [];
+
+  const list = found
+    .map((c, i) => `[${i}] ${num(c.source_domain)}${c.published_date ? ` · ${c.published_date}` : ''} — ${c.headline || c.url}`)
+    .join('\n');
+  const out = await chatJSONOpenRouter<{ picks?: { index?: number; lens?: string }[] }>({
+    model: opts.utilityModel || DEFAULT_UTILITY_MODEL,
+    system: `You screen headlines for an AI-economy intelligence board. From the numbered list, pick every item reporting a SIGNIFICANT AI development: a frontier or open-weight model release or major capability jump, a major AI lab or government announcement, a major regulatory or export-control action, or a major AI market or infrastructure event. Skip routine coverage, opinion, and minor product news. When unsure, include it: a later step filters. Reply with ONLY a JSON object: {"picks": [{"index": <number>, "lens": "<one of: ${SIGNAL_LENS_SLUGS.join(', ')}>"}]}. lens is the single best fit: market (money and valuations), labor (jobs and productivity), geopolitics (national competition and supply chains), regulatory (rules and enforcement), capability (what models can do), society (public attitudes and culture). Never use an em dash.`,
+    user: `HEADLINES since ${opts.sinceISO}:\n${list}`,
+    maxTokens: 900,
+    timeoutMs: 45_000,
+    feature: 'pipeline_discovery',
+    pipelineRunId: opts.pipelineRunId ?? null,
+    metadata: { sweep_judge: true, items: found.length },
+  });
+
+  const validLens = new Set<string>(SIGNAL_LENS_SLUGS);
+  const seen = new Set<number>();
+  const picks: SweepDevelopment[] = [];
+  for (const p of out.picks ?? []) {
+    const i = Number(p?.index);
+    if (!Number.isInteger(i) || i < 0 || i >= found.length || seen.has(i)) continue;
+    seen.add(i);
+    // Some open-weight models copy display brackets around enum values.
+    const lens = String(p?.lens ?? '').trim().replace(/^\[/, '').replace(/\]$/, '');
+    picks.push({
+      ...found[i],
+      published_date: inferDate(found[i].url, found[i].published_date),
+      lens: validLens.has(lens) ? (lens as SignalLens) : 'capability',
+    });
+  }
+  return picks;
+}
+
+// The Tavily fallback for the coverage check, restored from before GDELT
+// existed (git 2e7a130): Tavily re-derives "what did the serious press
+// report" with the independent COVERAGE_QUERIES phrasing; the utility model
+// does the covered-vs-missed comparison against the tracked list. Used when
+// coverageDevelopmentsGdelt throws or its circuit breaker is open.
+export async function coverageDevelopmentsTavily(opts: {
+  queries: string[];
+  sinceISO: string;
+  tracked: string[];
+  pipelineRunId?: string;
+  utilityModel?: string | null;
+}): Promise<{ headline: string; url: string; covered: boolean; matched: string }[]> {
+  const days = daysSince(opts.sinceISO);
+  const byUrl = new Map<string, RawCandidate>();
+  for (const query of opts.queries) {
+    let results;
+    try {
+      results = await tavilyQuery({ query, days, includeDomains: BREAKING_SWEEP_DOMAINS, maxResults: 15 });
+    } catch {
+      results = await tavilyQuery({ query, days, includeDomains: BREAKING_SWEEP_DOMAINS, maxResults: 15 });
+    }
+    for (const item of mapTavilyResults(results)) {
+      if (!byUrl.has(item.url)) byUrl.set(item.url, item);
+    }
+  }
+  const found = [...byUrl.values()];
+  if (!found.length) return [];
+
+  const list = found
+    .map((c, i) => `[${i}] ${num(c.source_domain)} — ${c.headline || c.url}\n    ${c.url}`)
+    .join('\n');
+  const out = await chatJSONOpenRouter<{
+    developments?: { index?: number; covered?: boolean; matched?: string }[];
+  }>({
+    model: opts.utilityModel || DEFAULT_UTILITY_MODEL,
+    system: `You audit an AI-economy intelligence pipeline run for coverage gaps. From the numbered FOUND headlines, pick the 5 to 8 most significant AI developments (model releases, major lab or government announcements, major regulatory actions, major market or infrastructure events). For each, decide whether any TRACKED item clearly reports the same story. Reply with ONLY a JSON object: {"developments": [{"index": <number>, "covered": <boolean>, "matched": "<the tracked item's text, or empty string>"}]}. covered is true only on a clear same-story match. Never use an em dash.`,
+    user: `FOUND (published since ${opts.sinceISO}):\n${list}\n\nTRACKED ITEMS:\n${opts.tracked.map((t) => `- ${t}`).join('\n')}`,
+    maxTokens: 1200,
+    timeoutMs: 45_000,
+    feature: 'pipeline_coverage',
+    pipelineRunId: opts.pipelineRunId ?? null,
+    metadata: { tracked: opts.tracked.length, provider: 'tavily' },
   });
 
   const seen = new Set<number>();

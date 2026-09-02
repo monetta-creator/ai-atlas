@@ -1,5 +1,5 @@
 import { q, one } from '../db';
-import { isNeverAutoBlocked } from '../pipeline/config';
+import { isNeverAutoBlocked, PIPELINE_DAY_START_SQL } from '../pipeline/config';
 import type {
   PipelineRun, SignalCandidate, } from '../types';
 
@@ -47,7 +47,7 @@ export async function getPipelinePrefs(): Promise<{
 export async function getTodayDailyRunId(): Promise<string | null> {
   const row = await one<{ id: string }>(
     `select id from pipeline_runs
-      where cadence = 'daily' and created_at >= date_trunc('day', now() at time zone 'utc')
+      where cadence = 'daily' and created_at >= ${PIPELINE_DAY_START_SQL}
       order by created_at desc limit 1`
   );
   return row?.id ?? null;

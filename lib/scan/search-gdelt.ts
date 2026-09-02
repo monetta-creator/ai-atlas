@@ -1,5 +1,8 @@
-import { recordApiCall } from '../cost';
-import { gdeltSafeQuery } from './core';
+// Explicit .ts extensions on these two so plain Node (scripts/test-scan.mjs,
+// type stripping) can load this module chain directly to test the circuit
+// breaker; the bundler resolves it the same (same trick as lib/pipeline/config.ts).
+import { recordApiCall } from '../cost.ts';
+import { gdeltSafeQuery } from './core.ts';
 import type { RawScanItem } from './web';
 
 // The scan's second free search leg: GDELT DOC 2.0, a keyless news-article search
@@ -15,11 +18,29 @@ import type { RawScanItem } from './web';
 // query 200s with a message body ("Your search contained a keyword that was too
 // short." / "The specified phrase is too short."), and the free tier's ~1-req/5s
 // limit 429s with a rate-limit notice. Either way JSON.parse throws, which is the
-// signal this module treats as a hard failure.
+// signal this module treats as a per-query (non-transport) failure.
 //
 // Each batch logs one $0 recordApiCall (model 'gdelt-doc', usage null, no rate
 // card), matching search-tavily.ts's discipline so per-run call counts and /costs
 // keep counting this leg even though it's free.
+//
+// Live finding 2026-09-02: api.gdeltproject.org is UNREACHABLE from Vercel and
+// from the dev machine (connect timeout / ECONNRESET) — a TRANSPORT failure
+// distinct from a bad query. gdeltQuery below classifies transport failures
+// (fetch itself rejecting, or a 429/5xx response) with a marker on the thrown
+// Error (isGdeltTransportError); a 200 with a non-JSON body and other 4xx stay
+// ordinary per-query failures. Fallback order (see lib/scan/run.ts and
+// lib/pipeline/search.ts): a caller tries GDELT first; a transport failure trips
+// the circuit breaker below and the caller falls through to Tavily when
+// TAVILY_API_KEY is set, else the Sonnet web_search call.
+//
+// Circuit breaker: gdeltDownUntil is MODULE-SCOPED state, so it persists for the
+// life of a serverless instance and across any invocation that reuses a warm
+// instance. One transport failure trips it, sparing every remaining topic in
+// THIS invocation (and the next one, on instance reuse) from paying ~45s of
+// timeouts per topic (20s abort + 5.1s politeness sleep + 20s retry) while the
+// host is down. gdeltAvailable()/markGdeltDown() are the breaker's read/trip
+// API; callers check gdeltAvailable() before calling GDELT at all.
 
 const GDELT_URL = 'https://api.gdeltproject.org/api/v2/doc/doc';
 
@@ -41,6 +62,35 @@ export interface GdeltArticle {
   sourcecountry?: string;
 }
 
+// A transport-level GDELT failure: the host didn't answer (network error,
+// abort/timeout) or answered with 429/5xx. Distinct from a per-query failure
+// (a bad query, a malformed body), which should not trip the circuit breaker.
+export interface GdeltError extends Error {
+  transport?: boolean;
+}
+
+export function isGdeltTransportError(e: unknown): boolean {
+  return !!(e && typeof e === 'object' && (e as GdeltError).transport);
+}
+
+function markTransport(message: string): GdeltError {
+  const err = new Error(message) as GdeltError;
+  err.transport = true;
+  return err;
+}
+
+// Circuit breaker state. See the module header comment above for why this is
+// deliberately module-scoped rather than persisted.
+let gdeltDownUntil = 0;
+
+export function gdeltAvailable(): boolean {
+  return Date.now() >= gdeltDownUntil;
+}
+
+export function markGdeltDown(ms = 10 * 60_000): void {
+  gdeltDownUntil = Date.now() + ms;
+}
+
 // GDELT's seendate -> 'YYYY-MM-DD' ('' when the prefix doesn't parse, so callers
 // treat it like an unknown date same as an empty Tavily published_date).
 function seendateToISO(seendate: string | undefined): string {
@@ -53,6 +103,9 @@ function seendateToISO(seendate: string | undefined): string {
 
 // One raw GDELT DOC 2.0 call: 20s abort, throws on a non-2xx status OR a body
 // that fails to parse as JSON (GDELT's own error format, see module note above).
+// A network-level fetch failure or a 429/5xx status is marked transport=true
+// (isGdeltTransportError); a non-JSON 200 body or another 4xx is a per-query
+// failure and is NOT marked, so it stays eligible for the one in-call retry.
 // `sourcelang:english` rides on every query (GDELT's documented language filter);
 // mapGdeltResults below ALSO checks the language field defensively in case a
 // result slips through un-filtered.
@@ -71,15 +124,25 @@ export async function gdeltQuery(opts: {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   try {
-    const res = await fetch(`${GDELT_URL}?${params.toString()}`, { signal: controller.signal });
+    let res: Response;
+    try {
+      res = await fetch(`${GDELT_URL}?${params.toString()}`, { signal: controller.signal });
+    } catch (e) {
+      throw markTransport(`GDELT fetch failed: ${String((e as Error)?.message ?? e)}`);
+    }
     const body = await res.text();
-    if (!res.ok) throw new Error(`GDELT ${res.status}: ${body.slice(0, 160)}`);
+    if (!res.ok) {
+      const msg = `GDELT ${res.status}: ${body.slice(0, 160)}`;
+      if (res.status === 429 || res.status >= 500) throw markTransport(msg);
+      throw new Error(msg);
+    }
     let data: { articles?: GdeltArticle[] };
     try {
       data = JSON.parse(body) as { articles?: GdeltArticle[] };
     } catch {
       // GDELT's error responses are plain text on a 200 (short-keyword /
-      // short-phrase / rate-limit notices); surface the body as the error.
+      // short-phrase / rate-limit notices); a per-query problem, not a
+      // transport failure, so it does NOT trip the breaker.
       throw new Error(`GDELT: ${body.slice(0, 160)}`);
     }
     return data.articles ?? [];
@@ -122,7 +185,10 @@ export function mapGdeltResults(
 
 // The scan's per-topic search, mirroring searchTopicNewsTavily: one GDELT call
 // per (already date-token-resolved) query, deduped by url, one in-call retry on
-// failure, one $0 cost row per topic-batch.
+// a per-query failure, one $0 cost row per topic-batch. A TRANSPORT failure
+// skips the retry (a dead host must not burn another ~25s), trips the circuit
+// breaker so every other caller in this invocation (and any warm-instance
+// reuse) falls through to the fallback immediately, and rethrows right away.
 export async function searchTopicNewsGdelt(opts: {
   topicName: string;
   queries: string[];
@@ -140,14 +206,23 @@ export async function searchTopicNewsGdelt(opts: {
   for (let i = 0; i < opts.queries.length; i++) {
     if (i > 0) await sleep(BETWEEN_QUERIES_MS);
     const query = opts.queries[i];
-    // One in-call retry per query, same discipline as searchTopicNewsTavily: a
-    // lost query is a whole topic-day of coverage.
     let articles: GdeltArticle[];
     try {
       articles = await gdeltQuery({ query, days });
-    } catch {
+    } catch (e) {
+      if (isGdeltTransportError(e)) {
+        markGdeltDown();
+        throw e;
+      }
+      // One in-call retry per per-query failure, same discipline as
+      // searchTopicNewsTavily: a lost query is a whole topic-day of coverage.
       await sleep(BETWEEN_QUERIES_MS);
-      articles = await gdeltQuery({ query, days });
+      try {
+        articles = await gdeltQuery({ query, days });
+      } catch (e2) {
+        if (isGdeltTransportError(e2)) markGdeltDown();
+        throw e2;
+      }
     }
     for (const item of mapGdeltResults(articles)) {
       if (!byUrl.has(item.url)) byUrl.set(item.url, item);

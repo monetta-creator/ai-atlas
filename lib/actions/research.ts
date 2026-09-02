@@ -70,7 +70,7 @@ export async function triageResearchChunkAction(runId: string): Promise<{
 export async function completeResearchRunAction(runId: string): Promise<void> {
   await requireAdmin();
   if (!UUID_RE.test(runId)) throw new Error('Bad run id.');
-  const pending = await countPendingPapers(runId);
+  const pending = await countPendingPapers();
   if (pending > 0) {
     throw new Error(`Cannot complete: ${pending} paper${pending === 1 ? '' : 's'} still pending triage.`);
   }
@@ -89,7 +89,7 @@ export async function failResearchRunAction(runId: string, message: string): Pro
 export async function pendingResearchTriageCountAction(runId: string): Promise<number> {
   await requireAdmin();
   if (!UUID_RE.test(runId)) throw new Error('Bad run id.');
-  return countPendingPapers(runId);
+  return countPendingPapers();
 }
 
 // The review decision — the human gate on the research funnel. Tracking a paper

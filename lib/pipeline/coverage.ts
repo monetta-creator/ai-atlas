@@ -1,7 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { recordApiCall } from '../cost';
 import { COVERAGE_QUERIES, BREAKING_SWEEP_DOMAINS, MAX_SEARCH_USES, resolveDateTokens } from './config';
-import { coverageDevelopmentsGdelt } from './search';
+import { coverageDevelopmentsGdelt, coverageDevelopmentsTavily } from './search';
+import { gdeltAvailable } from '../scan/search-gdelt';
 import { getRun, getCandidates, getSignalsDigestForTriage, getPipelinePrefs } from '../data';
 import * as m from '../mutations';
 import type { CoverageDevelopment, RunCoverage } from '../types';
@@ -45,13 +46,27 @@ export async function runCoverageCheck(runId: string): Promise<RunCoverage> {
   const queries = resolveDateTokens(COVERAGE_QUERIES, sinceISO);
 
   // 2.0: GDELT (keyless, free) fetches the quality outlets' headlines and the cheap
-  // utility model does the covered-vs-missed comparison; the Sonnet web_search call
-  // below is the fallback when OPENROUTER_API_KEY is absent. Same RunCoverage shape.
+  // utility model does the covered-vs-missed comparison. GDELT has proven unreliable
+  // in production (2026-09-02), so the call is guarded by its circuit breaker
+  // (gdeltAvailable, lib/scan/search-gdelt) and falls back to the Tavily version of the
+  // same recipe when TAVILY_API_KEY is set; with neither a working GDELT nor a Tavily
+  // key, the error rethrows (the caller's existing "coverage check failed" note handles
+  // it). The Sonnet web_search call below is the fallback when OPENROUTER_API_KEY is
+  // absent. Same RunCoverage shape either way.
   if (process.env.OPENROUTER_API_KEY) {
     const prefs = await getPipelinePrefs();
-    const developments = await coverageDevelopmentsGdelt({
-      queries, sinceISO, tracked, pipelineRunId: runId, utilityModel: prefs.utility_model,
-    });
+    let developments;
+    try {
+      if (!gdeltAvailable()) throw new Error('gdelt circuit open');
+      developments = await coverageDevelopmentsGdelt({
+        queries, sinceISO, tracked, pipelineRunId: runId, utilityModel: prefs.utility_model,
+      });
+    } catch (e) {
+      if (!process.env.TAVILY_API_KEY) throw e;
+      developments = await coverageDevelopmentsTavily({
+        queries, sinceISO, tracked, pipelineRunId: runId, utilityModel: prefs.utility_model,
+      });
+    }
     const coverage: RunCoverage = {
       since: sinceISO,
       checked_at: new Date().toISOString(),

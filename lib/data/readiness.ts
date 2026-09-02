@@ -3,6 +3,7 @@ import { getScanPrefs } from './scan';
 import { getPipelinePrefs } from './pipeline';
 import { getIntelPrefs } from './intel';
 import { getResearchPrefs } from './research';
+import { PIPELINE_DAY_START_SQL } from '../pipeline/config';
 
 // ---- Daily job readiness (the /page.tsx "cron-tracker" widget) -------------
 // A single read over the four cron subsystems (scan, pipeline, intel,
@@ -82,7 +83,7 @@ function getPipelineRunToday(): Promise<PipelineRunRow | null> {
     `select status::text as status, step::text as step, candidate_count, signal_count, error,
             ${RUN_TIME_COLUMNS}
        from pipeline_runs
-      where cadence = 'daily' and created_at >= date_trunc('day', now() at time zone 'utc')
+      where cadence = 'daily' and created_at >= ${PIPELINE_DAY_START_SQL}
       order by created_at desc limit 1`
   );
 }
@@ -129,7 +130,8 @@ function getScanStatusOn(day: string): Promise<StatusOnly | null> {
 function getPipelineStatusOn(day: string): Promise<StatusOnly | null> {
   return one<StatusOnly>(
     `select status::text as status from pipeline_runs
-      where cadence = 'daily' and created_at >= $1::date and created_at < $1::date + interval '1 day'
+      where cadence = 'daily' and created_at >= ($1::date + interval '6 hours')
+        and created_at < ($1::date + interval '1 day' + interval '6 hours')
       order by created_at desc limit 1`,
     [day]
   );

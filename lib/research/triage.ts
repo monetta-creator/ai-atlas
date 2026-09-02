@@ -74,14 +74,14 @@ interface ResearchTriageResult {
 export async function triagePapersChunk(runId: string, chunkSize = TRIAGE_CHUNK): Promise<ResearchTriageResult> {
   await m.updateResearchRun(runId, { step: 'triage', status: 'running', error: null });
 
-  const pending = await m.claimPendingPapers(runId, chunkSize);
+  const pending = await m.claimPendingPapers(chunkSize);
   if (!pending.length) {
     // Nothing claimable. Papers that burned all their attempts without ever
     // getting a decision are rejected here with a distinct reason (never by the
     // decision loop below), so the queue can't spin on them forever.
-    const exhausted = await m.rejectExhaustedTriagePapers(runId);
+    const exhausted = await m.rejectExhaustedTriagePapers();
     await m.recomputeResearchRunCounts(runId);
-    return { processed: 0, kept: 0, rejected: exhausted, remaining: await countPendingPapers(runId) };
+    return { processed: 0, kept: 0, rejected: exhausted, remaining: await countPendingPapers() };
   }
 
   const { claims, bridges } = await getTargets();
@@ -114,32 +114,42 @@ export async function triagePapersChunk(runId: string, chunkSize = TRIAGE_CHUNK)
   // triage utility pick from research_prefs, null falling back to Haiku inside
   // researchStructured.
   const prefs = await getResearchPrefs();
-  const out = await researchStructured<{
+  type TriageOutput = {
     decisions: {
       index: number; keep: boolean; summary: string; reason: string;
       claim_codes: string[]; concept_slugs: string[]; thread_slugs: string[];
     }[];
-  }>({
-    model: prefs.triage_model,
-    // The claim/concept/thread digests are identical for every chunk of a run — they
-    // ride in the SYSTEM block (cache_control'd by runStructured on the Anthropic
-    // path) so chunks 2..N read them from the prompt cache. Only the paper list
-    // rides in the user message.
-    system: [
-      TRIAGE_SYSTEM,
-      `\nARGUMENT-MAP CLAIMS & BRIDGE-CLAIMS (use ONLY these codes):\n${targetList || '(none)'}`,
-      `\nCONCEPTS (use ONLY these slugs):\n${conceptList || '(none)'}`,
-      `\nRESEARCH THREADS (use ONLY these slugs):\n${threadList || '(none)'}`,
-    ].join('\n'),
-    user: `PAPERS:\n\n${list}`,
-    toolName: 'submit_triage',
-    toolDescription: 'Return a keep/reject decision for every paper index.',
-    schema: buildSchema(codes, conceptSlugs, threadSlugs),
-    maxTokens: 8000,
-    timeoutMs: 90_000,
-    feature: 'research_triage',
-    metadata: { research_run_id: runId, papers: pending.length },
-  });
+  };
+  let out: TriageOutput;
+  try {
+    out = await researchStructured<TriageOutput>({
+      model: prefs.triage_model,
+      // The claim/concept/thread digests are identical for every chunk of a run — they
+      // ride in the SYSTEM block (cache_control'd by runStructured on the Anthropic
+      // path) so chunks 2..N read them from the prompt cache. Only the paper list
+      // rides in the user message.
+      system: [
+        TRIAGE_SYSTEM,
+        `\nARGUMENT-MAP CLAIMS & BRIDGE-CLAIMS (use ONLY these codes):\n${targetList || '(none)'}`,
+        `\nCONCEPTS (use ONLY these slugs):\n${conceptList || '(none)'}`,
+        `\nRESEARCH THREADS (use ONLY these slugs):\n${threadList || '(none)'}`,
+      ].join('\n'),
+      user: `PAPERS:\n\n${list}`,
+      toolName: 'submit_triage',
+      toolDescription: 'Return a keep/reject decision for every paper index.',
+      schema: buildSchema(codes, conceptSlugs, threadSlugs),
+      maxTokens: 8000,
+      timeoutMs: 90_000,
+      feature: 'research_triage',
+      metadata: { research_run_id: runId, papers: pending.length },
+    });
+  } catch (e) {
+    // A thrown model call (timeout, abort, transport) must not leave the chunk
+    // held: release every claimed paper so the next pass reclaims it (attempt
+    // 2 of 3 under the claim's cap). Missing DECISIONS are handled below.
+    await m.releaseTriageClaims(pending.map((p) => p.id)).catch(() => {});
+    throw e;
+  }
 
   // Coerce + allow-list everything (never trust the model for codes/slugs). A missing
   // decision (truncated output, shifted indices) releases the claim so the paper is
@@ -200,6 +210,6 @@ export async function triagePapersChunk(runId: string, chunkSize = TRIAGE_CHUNK)
   }
 
   await m.recomputeResearchRunCounts(runId);
-  const remaining = await countPendingPapers(runId);
+  const remaining = await countPendingPapers();
   return { processed: pending.length, kept, rejected, remaining };
 }

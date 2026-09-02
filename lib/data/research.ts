@@ -113,10 +113,13 @@ export async function getNextAnalysisCandidate(excludeIds: string[] = []): Promi
   );
 }
 
-export async function countPendingPapers(runId: string): Promise<number> {
+// GLOBAL count (no run_id filter): the triage queue is shared across runs, so
+// this reflects everything still awaiting triage regardless of which run
+// pulled it in (mirrors claimPendingPapers/rejectExhaustedTriagePapers in
+// lib/mutations/research.ts).
+export async function countPendingPapers(): Promise<number> {
   const row = await one<{ n: string }>(
-    `select count(*)::text as n from papers where run_id = $1 and triage_status = 'pending'`,
-    [runId]
+    `select count(*)::text as n from papers where triage_status = 'pending'`
   );
   return Number(row?.n ?? 0);
 }

@@ -107,7 +107,8 @@ export async function getIntelStepCounts(runId: string): Promise<{
 // getScanHealth shape carried over: fetch success and enrichment coverage stay
 // raw counts (the panel computes rates), avgSignificance stands in for scan's
 // avgRelevance, and factsWritten/metricsWritten are the two collection-yield
-// counts scan has no equivalent of.
+// counts scan has no equivalent of (metricsWritten = rows the engine's runs
+// wrote in the window; the quarterly backfill ritual is not a run).
 export interface IntelHealth {
   days: number;
   runs: { completed: number; failed: number; running: number; missedDays: number };
@@ -164,8 +165,13 @@ export async function getIntelHealth(days = 30): Promise<IntelHealth> {
       `select count(*)::int as n from intel_facts where created_at > now() - $1::interval`,
       [interval]
     ),
+    // Metrics written BY RUNS in the window (intel_runs.metric_count, 1 ms),
+    // not a count over intel_metrics.fetched_at: that seq-scanned the ~2M-row
+    // warehouse on every /intel load (0.4 s idle, 10 s under load) and, since
+    // the 08-30 backfill stamped every row, counted the whole table anyway.
     one<{ n: number }>(
-      `select count(*)::int as n from intel_metrics where fetched_at > now() - $1::interval`,
+      `select coalesce(sum(metric_count), 0)::int as n from intel_runs
+        where day > current_date - $1::interval`,
       [interval]
     ),
     one<{ usd: number }>(

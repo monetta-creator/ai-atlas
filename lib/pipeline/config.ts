@@ -191,3 +191,15 @@ export function rotatedQueries(queries: string[], dayISO: string, count = 2): st
 export function dailyLensQueries(lens: SignalLens, dayISO: string): string[] {
   return resolveDateTokens(rotatedQueries(LENS_QUERIES[lens] ?? [], dayISO), dayISO);
 }
+
+// ---- Daily-run day boundary -------------------------------------------------
+// The pipeline keys "today's" daily run off pipeline_runs.created_at (it has no
+// explicit `day` column like scan/intel/research). A plain UTC midnight boundary let a
+// late-evening ET smoke test of the cron endpoint (21:53 ET = 01:53 UTC) open a run that
+// the next morning's crons then found "already exists for today" and skipped, so the
+// day's news was never discovered. Every real pipeline cron fires at or after 09:20 UTC,
+// so the day instead starts at 06:00 UTC: a run created between 00:00 and 06:00 UTC
+// belongs to the PREVIOUS day's window, not the new one. Shared by lib/data/pipeline.ts
+// and lib/mutations/pipeline.ts, which must not import from each other.
+export const PIPELINE_DAY_START_SQL =
+  "(date_trunc('day', (now() at time zone 'utc') - interval '6 hours') + interval '6 hours')";

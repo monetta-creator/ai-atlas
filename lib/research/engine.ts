@@ -148,7 +148,7 @@ export async function advanceResearchRun(runId: string, deadlineAt: number): Pro
       if (run.step === 'triage') {
         const budget = await checkResearchBudget();
         if (!budget.ok) {
-          const pending = await countPendingPapers(runId);
+          const pending = await countPendingPapers();
           notes.push(`triage: budget reached, ${pending} paper${pending === 1 ? '' : 's'} left pending`);
           await updateResearchRun(runId, { step: 'agent' });
           continue;
@@ -162,7 +162,13 @@ export async function advanceResearchRun(runId: string, deadlineAt: number): Pro
           } else if (r.processed === 0 && r.rejected === 0) {
             // Nothing claimable and nothing exhausted to reject: the remaining
             // pending papers are held by live claims (a crashed invocation under
-            // 5 minutes old). Advance rather than spin on empty claims.
+            // 5 minutes old). Advance rather than spin on empty claims. The claim
+            // is GLOBAL, so anything still held here is picked up and triaged by
+            // a later invocation of this run, or by the next day's run once the
+            // 5-minute hold expires, instead of being orphaned. Note a run's
+            // kept/rejected counters (recomputeResearchRunCounts, scoped by
+            // run_id) exclude leftovers absorbed from earlier runs, so an old
+            // run's papers triaged here count against whichever run claimed them.
             notes.push(`triage: no claimable papers, ${r.remaining} left pending, advancing to agent`);
             await updateResearchRun(runId, { step: 'agent' });
           }
@@ -170,7 +176,7 @@ export async function advanceResearchRun(runId: string, deadlineAt: number): Pro
           triageFailures++;
           notes.push(`triage chunk failed: ${String((e as Error)?.message ?? 'error').slice(0, 160)}`);
           if (triageFailures >= TRIAGE_FAILURE_CAP) {
-            const pending = await countPendingPapers(runId);
+            const pending = await countPendingPapers();
             notes.push(`triage: ${TRIAGE_FAILURE_CAP} consecutive failures, ${pending} left pending, advancing to agent`);
             await updateResearchRun(runId, { step: 'agent' });
           }

@@ -16,12 +16,23 @@ import {
   buildScanHandoff, buildSignalsExportHandoff, buildRowJsonSchema, cronLabel,
 } from '../lib/scan/handoff.ts';
 import { getDataset } from '../lib/datasets/registry.ts';
+import { isGdeltTransportError, gdeltAvailable, markGdeltDown } from '../lib/scan/search-gdelt.ts';
 
 let pass = 0;
 let fail = 0;
 function check(name, fn) {
   try {
     fn();
+    pass += 1;
+    console.log(`  ok  ${name}`);
+  } catch (e) {
+    fail += 1;
+    console.error(`FAIL  ${name}\n      ${e.message}`);
+  }
+}
+async function checkAsync(name, fn) {
+  try {
+    await fn();
     pass += 1;
     console.log(`  ok  ${name}`);
   } catch (e) {
@@ -171,6 +182,23 @@ check('gdeltSafeQuery: expands short tokens, keeps phrases, drops strays', () =>
   assert.equal(gdeltSafeQuery('"AI agents" at 5G scale'), '"AI agents" scale');
   // Pure numbers survive (years in date-token queries).
   assert.equal(gdeltSafeQuery('outlook 2026'), 'outlook 2026');
+});
+
+check('isGdeltTransportError: flags only errors marked transport', () => {
+  assert.equal(isGdeltTransportError(new Error('plain failure')), false);
+  const marked = new Error('GDELT 503: down');
+  marked.transport = true;
+  assert.equal(isGdeltTransportError(marked), true);
+  assert.equal(isGdeltTransportError(null), false);
+  assert.equal(isGdeltTransportError('not an error object'), false);
+});
+
+await checkAsync('gdelt circuit breaker: available by default, unavailable after markGdeltDown, available again after its window', async () => {
+  assert.equal(gdeltAvailable(), true);
+  markGdeltDown(60);
+  assert.equal(gdeltAvailable(), false);
+  await new Promise((resolve) => setTimeout(resolve, 90));
+  assert.equal(gdeltAvailable(), true);
 });
 
 check('extractJsonObject: clean, fenced, prose-wrapped, nested, braces in strings', () => {
