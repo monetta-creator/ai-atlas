@@ -9,7 +9,7 @@ import {
 } from '../data/research';
 import {
   createDayResearchRun, claimResearchRun, renewResearchLease, releaseResearchLease,
-  appendResearchRunNotes, updateResearchRun, pruneRejectedPapers,
+  appendResearchRunNotes, updateResearchRun, pruneRejectedPapers, failStaleResearchRuns,
 } from '../mutations/research';
 import type { ResearchEngineRun, ResearchProgress } from '../types';
 
@@ -56,6 +56,10 @@ export function todayUTC(): string {
 // created run also opportunistically prunes expired triage rejects, the same
 // housekeeping startResearchRunAction does for a manual run.
 export async function getOrCreateTodayResearchRun(): Promise<{ runId: string; day: string }> {
+  // Stale-run janitor: fail any prior day's run still marked running before
+  // touching today's row (it can never be resumed once its day has passed);
+  // legacy manual runs (day null) are untouched.
+  await failStaleResearchRuns().catch(() => {});
   const day = todayUTC();
   const since = shiftDay(day, -lookbackDays(day));
   const { id, created } = await createDayResearchRun(day, since);
@@ -155,6 +159,12 @@ export async function advanceResearchRun(runId: string, deadlineAt: number): Pro
           if (r.remaining === 0) {
             notes.push(`triage: ${run.kept_count + r.kept} kept of ${run.kept_count + r.kept + run.rejected_count + r.rejected}`);
             await updateResearchRun(runId, { step: 'agent' });
+          } else if (r.processed === 0 && r.rejected === 0) {
+            // Nothing claimable and nothing exhausted to reject: the remaining
+            // pending papers are held by live claims (a crashed invocation under
+            // 5 minutes old). Advance rather than spin on empty claims.
+            notes.push(`triage: no claimable papers, ${r.remaining} left pending, advancing to agent`);
+            await updateResearchRun(runId, { step: 'agent' });
           }
         } catch (e) {
           triageFailures++;
@@ -232,10 +242,9 @@ export async function advanceResearchRun(runId: string, deadlineAt: number): Pro
     if (run.status !== 'completed') notes.push('time budget reached: resume to continue');
     return progressOf(run, notes, { agentProcessed, analyzed });
   } finally {
-    await appendResearchRunNotes(
-      runId,
-      notes.filter((n) => !n.startsWith('time budget reached'))
-    ).catch(() => {});
+    // Persist issue notes for the health panel, including the time-budget
+    // line: it is the only DB evidence a window was exhausted.
+    await appendResearchRunNotes(runId, notes).catch(() => {});
     await releaseResearchLease(runId).catch(() => {});
   }
 }

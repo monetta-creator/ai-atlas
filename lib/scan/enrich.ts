@@ -37,6 +37,13 @@ interface RawEnrichment {
 // Ranges live in descriptions, not minimum/maximum: the Anthropic tool
 // validator rejects those keywords on number properties (the 0033 landmine);
 // clamp01 clamps at the writer instead.
+// Shared anchored rubric for relevance, interpolated into BOTH provider paths so
+// the three A/B models score on one ruler (measured skew before anchoring: GLM
+// avg 0.40 vs deepseek 0.57 / qwen 0.55 on randomly split items). Anchors live
+// in prose, never schema min/max (the Anthropic tool validator rejects those).
+const RELEVANCE_RUBRIC =
+  'How relevant to banking and financial services strategy, 0.0 to 1.0. Anchors: 0.9 or higher means a named financial institution, regulator, or payments/AI vendor takes a concrete action with stated numbers or dates (an enforcement action, an earnings beat, a major platform policy change). 0.7 means clearly sector-relevant development without a named actor taking new action (industry trend data, a credible analysis of fraud or credit conditions). 0.4 to 0.5 means sector-adjacent context a strategy reader might skim (macro data, adjacent tech news with plausible spillover). 0.2 means tangential mention only. 0.0 to 0.1 means unrelated locale news, listicles, marketing pages. Score the substance of the text, not the headline. Off-topic items get a low score, not an error.';
+
 function enrichSchema(codes: string[]) {
   return {
     type: 'object',
@@ -58,7 +65,7 @@ function enrichSchema(codes: string[]) {
       },
       relevance: {
         type: 'number',
-        description: 'How relevant the item is to banking and financial services, from 0.0 (unrelated) to 1.0 (directly material). Off-topic items get a low score, not an error.',
+        description: RELEVANCE_RUBRIC,
       },
     },
     required: ['summary', 'taxonomy_codes', 'entities', 'relevance'],
@@ -83,7 +90,7 @@ export async function enrichScanItem(
 The taxonomy (use ONLY these codes; when an item is ambiguous or early-stage, the triage bucket code is the right tag if one exists in the list):
 ${taxonomyDigest(topics)}
 
-Rules: summarize only what the text supports, never invent facts or figures. Do not editorialize. Never use an em dash in any text you write.`;
+Rules: summarize only what the text supports, never invent facts or figures. Do not editorialize. Score relevance using the stated anchors consistently, the same way for every item. Never use an em dash in any text you write.`;
 
   const user = `ITEM
 URL: ${item.url}
@@ -103,7 +110,7 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
   "summary": string, two to three sentences (what happened, why it matters to banking and financial services strategy)
   "taxonomy_codes": array of code strings, from the taxonomy list only, usually one or two
   "entities": array of proper names (companies, agencies, regulators, people) named in the item
-  "relevance": number from 0.0 (unrelated) to 1.0 (directly material)`,
+  "relevance": number. ${RELEVANCE_RUBRIC}`,
         user,
         maxTokens: 700,
         feature: 'scan_enrich',

@@ -82,6 +82,7 @@ export default async function CronTracker() {
             <span className="lw-job-label">
               <span className="lw-dot" data-state={job.state} aria-hidden="true" />
               {job.label}
+              {job.yesterdayIncomplete && <span className="lw-stale">yesterday incomplete</span>}
             </span>
             <span className="lw-job-sub">{jobSubline(job)}</span>
           </Link>

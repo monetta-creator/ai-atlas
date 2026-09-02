@@ -22,6 +22,7 @@ export interface DailyJob {
   detail: string | null;
   finishedAtET: string | null;
   error: string | null;
+  yesterdayIncomplete: boolean;
 }
 
 export interface DailyJobStatus {
@@ -104,6 +105,51 @@ function getResearchRunToday(): Promise<ResearchRunRow | null> {
   );
 }
 
+// "Yesterday" for the incomplete-run flag, weekend-aware: on a Monday, the
+// calendar-yesterday (Sunday) never has a scheduled run, so we look at the
+// last WEEKDAY instead (Mon looks back to Fri). Computed in JS (UTC) and
+// passed as a plain date parameter so the SQL side stays a flat equality/range
+// check, same shape as the "today" queries above.
+function previousWeekdayUTC(now: Date): string {
+  const dow = now.getUTCDay(); // 0 = Sun ... 6 = Sat
+  const daysBack = dow === 1 ? 3 : 1; // Monday looks back to Friday
+  const target = new Date(now);
+  target.setUTCDate(target.getUTCDate() - daysBack);
+  return target.toISOString().slice(0, 10);
+}
+
+interface StatusOnly {
+  status: string;
+}
+
+function getScanStatusOn(day: string): Promise<StatusOnly | null> {
+  return one<StatusOnly>(`select status::text as status from scan_runs where day = $1::date`, [day]);
+}
+
+function getPipelineStatusOn(day: string): Promise<StatusOnly | null> {
+  return one<StatusOnly>(
+    `select status::text as status from pipeline_runs
+      where cadence = 'daily' and created_at >= $1::date and created_at < $1::date + interval '1 day'
+      order by created_at desc limit 1`,
+    [day]
+  );
+}
+
+function getIntelStatusOn(day: string): Promise<StatusOnly | null> {
+  return one<StatusOnly>(`select status::text as status from intel_runs where day = $1::date`, [day]);
+}
+
+function getResearchStatusOn(day: string): Promise<StatusOnly | null> {
+  return one<StatusOnly>(`select status::text as status from research_runs where day = $1::date`, [day]);
+}
+
+// A janitor now marks stale "running" rows "failed" after this deploy, so
+// "failed" is the usual signal going forward; "running" is kept as a
+// belt-and-suspenders check for anything the janitor missed.
+function isIncomplete(row: StatusOnly | null): boolean {
+  return !!row && (row.status === 'running' || row.status === 'failed');
+}
+
 // Row-vs-prefs-vs-weekend precedence: a run row (any status) always wins;
 // only its absence falls back to paused (prefs disabled) then off (weekend)
 // then pending (a weekday run just hasn't started or checkpointed yet).
@@ -114,41 +160,52 @@ function resolveJob(
   row: RunRowBase | null,
   detail: string | null,
   enabled: boolean,
-  weekend: boolean
+  weekend: boolean,
+  yesterdayIncomplete: boolean
 ): DailyJob {
   if (row) {
     if (row.status === 'running') {
-      return { key, label, console: consoleHref, state: 'running', step: row.step, detail, finishedAtET: null, error: null };
+      return { key, label, console: consoleHref, state: 'running', step: row.step, detail, finishedAtET: null, error: null, yesterdayIncomplete };
     }
     if (row.status === 'completed') {
-      return { key, label, console: consoleHref, state: 'done', step: null, detail, finishedAtET: row.finished_et, error: null };
+      return { key, label, console: consoleHref, state: 'done', step: null, detail, finishedAtET: row.finished_et, error: null, yesterdayIncomplete };
     }
     if (row.status === 'failed') {
       return {
         key, label, console: consoleHref, state: 'failed', step: null, detail,
-        finishedAtET: null, error: row.error ? row.error.slice(0, 120) : null,
+        finishedAtET: null, error: row.error ? row.error.slice(0, 120) : null, yesterdayIncomplete,
       };
     }
   }
   const state: JobState = !enabled ? 'paused' : weekend ? 'off' : 'pending';
-  return { key, label, console: consoleHref, state, step: null, detail: null, finishedAtET: null, error: null };
+  return { key, label, console: consoleHref, state, step: null, detail: null, finishedAtET: null, error: null, yesterdayIncomplete };
 }
 
 export async function getDailyJobStatus(): Promise<DailyJobStatus> {
-  const [scanPrefs, pipelinePrefs, intelPrefs, researchPrefs, scanRow, pipelineRow, intelRow, researchRow] =
-    await Promise.all([
-      getScanPrefs(),
-      getPipelinePrefs(),
-      getIntelPrefs(),
-      getResearchPrefs(),
-      getScanRunToday(),
-      getPipelineRunToday(),
-      getIntelRunToday(),
-      getResearchRunToday(),
-    ]);
+  const now = new Date();
+  const yesterday = previousWeekdayUTC(now);
 
-  const day = new Date().toISOString().slice(0, 10);
-  const weekendDow = new Date().getUTCDay();
+  const [
+    scanPrefs, pipelinePrefs, intelPrefs, researchPrefs,
+    scanRow, pipelineRow, intelRow, researchRow,
+    scanYRow, pipelineYRow, intelYRow, researchYRow,
+  ] = await Promise.all([
+    getScanPrefs(),
+    getPipelinePrefs(),
+    getIntelPrefs(),
+    getResearchPrefs(),
+    getScanRunToday(),
+    getPipelineRunToday(),
+    getIntelRunToday(),
+    getResearchRunToday(),
+    getScanStatusOn(yesterday),
+    getPipelineStatusOn(yesterday),
+    getIntelStatusOn(yesterday),
+    getResearchStatusOn(yesterday),
+  ]);
+
+  const day = now.toISOString().slice(0, 10);
+  const weekendDow = now.getUTCDay();
   const weekend = weekendDow === 0 || weekendDow === 6;
 
   const scanDetail = scanRow ? `${scanRow.found} items · ${scanRow.enriched_count} enriched` : null;
@@ -162,10 +219,10 @@ export async function getDailyJobStatus(): Promise<DailyJobStatus> {
   const researchDetail = researchRow ? `${researchRow.pulled_count} pulled · ${researchRow.kept_count} kept` : null;
 
   const jobs: DailyJob[] = [
-    resolveJob('scan', 'External scan', '/scan', scanRow, scanDetail, scanPrefs.enabled, weekend),
-    resolveJob('pipeline', 'Discovery pipeline', '/pipeline', pipelineRow, pipelineDetail, pipelinePrefs.enabled, weekend),
-    resolveJob('intel', 'Intel desk', '/intel', intelRow, intelDetail, intelPrefs.enabled, weekend),
-    resolveJob('research', 'Research pull', '/research/console', researchRow, researchDetail, researchPrefs.enabled, weekend),
+    resolveJob('scan', 'External scan', '/scan', scanRow, scanDetail, scanPrefs.enabled, weekend, isIncomplete(scanYRow)),
+    resolveJob('pipeline', 'Discovery pipeline', '/pipeline', pipelineRow, pipelineDetail, pipelinePrefs.enabled, weekend, isIncomplete(pipelineYRow)),
+    resolveJob('intel', 'Intel desk', '/intel', intelRow, intelDetail, intelPrefs.enabled, weekend, isIncomplete(intelYRow)),
+    resolveJob('research', 'Research pull', '/research/console', researchRow, researchDetail, researchPrefs.enabled, weekend, isIncomplete(researchYRow)),
   ];
 
   const considered = jobs.filter((j) => j.state !== 'off' && j.state !== 'paused');

@@ -1,7 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { recordApiCall } from '../cost';
 import { SIGNAL_LENS_SLUGS } from '../format';
+import { looksLikeBotWall } from './botwall';
 import type { SignalLens } from '../types';
+
+// Re-exported so callers of this module keep one import surface; the predicate itself
+// lives in ./botwall (pure, no imports) so a plain-Node script can load it without
+// pulling in ../cost -> ./db.ts.
+export { looksLikeBotWall };
 
 // The ONE web-enabled code path in the app. runStructured (lib/dossier.ts) is and
 // stays non-web (single forced tool) to fit the 60s cap; this is deliberately separate.
@@ -476,7 +482,11 @@ export async function fetchCandidateText(
   const tryDirect = async (): Promise<FetchedText | FetchFailure> => {
     try {
       const text = await fetchReadableText(url, { maxChars, timeoutMs: opts.timeoutMs });
-      if (text.length >= MIN_READABLE_CHARS) return { text, via: 'direct' };
+      if (text.length >= MIN_READABLE_CHARS) {
+        // A bot-verification stub can be long enough to clear the length gate above.
+        if (looksLikeBotWall(text)) return new FetchFailure('bot-wall page', true);
+        return { text, via: 'direct' };
+      }
       // A 200 with no body text is a paywall/cookie/JS stub — exactly what the reader beats.
       return new FetchFailure('page returned too little readable text to analyze', true);
     } catch (e) {
@@ -488,7 +498,13 @@ export async function fetchCandidateText(
   const tryJina = async (): Promise<FetchedText | FetchFailure> => {
     try {
       const text = await fetchViaJina(url, maxChars);
-      if (text.length >= MIN_READABLE_CHARS) return { text, via: 'jina' };
+      if (text.length >= MIN_READABLE_CHARS) {
+        // The reader renders a Cloudflare/anti-bot stub as plain text long enough to
+        // clear the length gate above (observed 441-784 chars) instead of the explicit
+        // "Target URL returned error" wrapper caught in fetchViaJina.
+        if (looksLikeBotWall(text)) return new FetchFailure('reader: bot-wall page', true, false);
+        return { text, via: 'jina' };
+      }
       return new FetchFailure('reader returned too little readable text', true, false);
     } catch (e) {
       return e instanceof FetchFailure

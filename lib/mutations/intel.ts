@@ -121,6 +121,18 @@ export async function failIntelRun(runId: string, error: string): Promise<void> 
   );
 }
 
+// The stale-run janitor (mirrors failStaleDailyRuns in mutations/pipeline.ts):
+// a daily run left 'running' from a prior day can never be resumed (the cron
+// only ever advances today's row), so mark it failed with an honest error
+// instead of letting the row lie forever in the console/health panel.
+export async function failStaleIntelRuns(): Promise<number> {
+  return exec(
+    `update intel_runs
+        set status = 'failed', error = 'incomplete: superseded by a newer daily run', updated_at = now()
+      where status = 'running' and day < (now() at time zone 'utc')::date`
+  );
+}
+
 // Discovery inserts (feeds/search/filings all funnel here): dedupe within the
 // batch, within the run (the unique constraint), and against the trailing 14
 // days GLOBALLY (check-before-insert: a partial unique index over "recent" is

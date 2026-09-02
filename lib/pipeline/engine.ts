@@ -47,8 +47,11 @@ export function runSinceISO(run: Pick<PipelineRun, 'created_at' | 'cadence'>): s
   return shiftDay(day, -back);
 }
 
-// Reuse today's daily run or open one (the two cron invocations share it).
+// Reuse today's daily run or open one (the three cron invocations share it).
+// A prior day's run still marked running can never be resumed (the cron only
+// ever advances today's run), so it is failed here rather than lying forever.
 export async function getOrCreateDailyRun(): Promise<{ runId: string; created: boolean }> {
+  await m.failStaleDailyRuns().catch(() => {});
   const existing = await getTodayDailyRunId();
   if (existing) return { runId: existing, created: false };
   return { runId: await m.createRun('daily'), created: true };
@@ -56,9 +59,10 @@ export async function getOrCreateDailyRun(): Promise<{ runId: string; created: b
 
 export async function advancePipelineRun(runId: string, deadlineAt: number): Promise<PipelineProgress> {
   const notes: string[] = [];
-  // Transient analysis failures already attempted THIS invocation; skipping
-  // them prevents an in-invocation spin while leaving the run resumable.
-  const attempted = new Set<string>();
+  // Per-candidate attempt count THIS invocation: a flaky candidate gets one
+  // in-invocation retry (on the next configured model) before its error rests,
+  // preventing an in-invocation spin while leaving the run resumable.
+  const attempted = new Map<string, number>();
   try {
     while (Date.now() < deadlineAt) {
       const run = await getRun(runId);
@@ -111,15 +115,20 @@ export async function advancePipelineRun(runId: string, deadlineAt: number): Pro
         }
 
         const approved = await getApprovedCandidates(runId);
-        const pending = approved.filter((c) => !c.signal_id && !attempted.has(c.id));
+        const pending = approved.filter((c) => !c.signal_id && (attempted.get(c.id) ?? 0) < 2);
         if (!pending.length) {
-          // Nothing analyzable left this invocation. If untouched pending
-          // remain (all attempted + transient), stop here resumable.
-          const leftover = approved.filter((c) => !c.signal_id).length;
+          // Nothing analyzable left this invocation. Candidates whose analysis
+          // sits at 'error' after their retries no longer hold the run open:
+          // only hydrate-transients (analysis_status still pending) do — a run
+          // used to stay 'running' forever when one flaky candidate errored in
+          // the day's last window, silently skipping the coverage check.
+          const leftover = approved.filter((c) => !c.signal_id && c.analysis_status !== 'error').length;
           if (leftover > 0) {
             notes.push(`analysis: ${leftover} candidate(s) left for the next invocation`);
             return { runId, step: 'analysis', done: false, notes };
           }
+          const restingErrors = approved.filter((c) => !c.signal_id).length;
+          if (restingErrors > 0) notes.push(`analysis: completing with ${restingErrors} errored candidate(s) resting`);
           // Coverage (advisory, never fatal), then complete.
           try {
             await runCoverageCheck(runId);
@@ -143,7 +152,8 @@ export async function advancePipelineRun(runId: string, deadlineAt: number): Pro
         const wave = pending.slice(0, ANALYSIS_POOL);
         await Promise.all(
           wave.map(async (cand) => {
-            attempted.add(cand.id);
+            const attemptNo = attempted.get(cand.id) ?? 0;
+            attempted.set(cand.id, attemptNo + 1);
             const giveUp = async (reason: string) => {
               const note = `unanalyzable: ${reason.slice(0, 280)}`;
               await m.setTriage(cand.id, 'rejected', note);
@@ -156,7 +166,14 @@ export async function advancePipelineRun(runId: string, deadlineAt: number): Pro
               return;
             }
             try {
-              const model = pickEnrichModel(prefs.analysis_models, cand.id);
+              // The retry moves to the next configured model (or the Sonnet
+              // default when only one is configured): a 429/abort on model A
+              // rarely repeats on model B in the same minute.
+              const models = prefs.analysis_models;
+              let model = pickEnrichModel(models, cand.id);
+              if (attemptNo > 0 && model) {
+                model = models.length > 1 ? models[(models.indexOf(model) + 1) % models.length] : null;
+              }
               await analyzeCandidate(cand.id, model ?? undefined);
             } catch (e) {
               const status = (e as { status?: number } | null)?.status;
@@ -179,6 +196,9 @@ export async function advancePipelineRun(runId: string, deadlineAt: number): Pro
     if (run && run.status !== 'completed') notes.push('time budget reached: next invocation resumes');
     return { runId, step: run?.step ?? 'unknown', done: run?.status === 'completed', notes };
   } finally {
+    // Persist this invocation's issue notes (0047) — they used to ride only the
+    // cron HTTP response and vanish.
+    await m.appendPipelineRunNotes(runId, notes).catch(() => {});
     await m.releasePipelineLease(runId).catch(() => {});
   }
 }

@@ -83,11 +83,11 @@ function enrichSchema(slugs: string[]) {
       },
       significance: {
         type: 'number',
-        description: 'How significant the item is for tracking the named companies, from 0.0 (routine or unrelated) to 1.0 (a major strategic development). Off-topic items get a low score, not an error.',
+        description: SIGNIFICANCE_RUBRIC,
       },
       facts: {
         type: 'array',
-        description: 'Up to 8 discrete, durable facts the TEXT supports about tracked companies: a launch, a number, a hire, a deal term, a stated plan. Skip opinions and speculation. Empty is a normal outcome.',
+        description: 'Up to 8 discrete, durable facts the TEXT supports about tracked companies: a launch, a number, a hire, a deal term, a stated plan. Skip opinions, speculation, and market noise (share-price moves, price targets, analyst ratings). Empty is a normal outcome.',
         items: {
           type: 'object',
           additionalProperties: false,
@@ -105,6 +105,12 @@ function enrichSchema(slugs: string[]) {
     required: ['summary', 'company_slugs', 'dimensions', 'entities', 'significance', 'facts'],
   };
 }
+
+// Shared anchored rubric for significance, interpolated into BOTH provider
+// paths so the A/B models score on one ruler. Anchors stay in prose, never
+// schema min/max (the Anthropic tool validator rejects those).
+const SIGNIFICANCE_RUBRIC =
+  'How significant the item is for tracking the named companies, 0.0 to 1.0. Anchors: 0.9 or higher means a material company-specific event (M&A, earnings, an executive change, a major product or regulatory action). 0.7 means a notable company development without hard numbers. 0.4 to 0.5 means routine coverage or minor mentions. 0.1 to 0.2 means the company appears only in passing (a comparison table, a listicle). Score the substance of the text, not the headline. Off-topic items get a low score, not an error.';
 
 function registryDigest(companies: Pick<IntelCompany, 'slug' | 'name' | 'aliases'>[]): string {
   return companies
@@ -134,7 +140,7 @@ ${registryDigest(companies)}
 The dimensions (use ONLY these codes):
 ${dimensionDigest()}
 
-Rules: use only what the text supports, never invent facts or figures. A fact must be attributable to a specific tracked company; industry-wide observations are not facts, they belong in the summary. Do not editorialize. Never use an em dash in any text you write.`;
+Rules: use only what the text supports, never invent facts or figures. A fact must be attributable to a specific tracked company; industry-wide observations are not facts, they belong in the summary. Never extract share-price moves, price targets, analyst ratings, or valuation-model outputs as facts: they are market noise, not company intelligence. Never extract company-history boilerplate (founding stories, decade-old events) unless directly tied to a current development. One fact per underlying event: if the article restates the same earnings result several ways, extract the single most complete version with the primary numbers. Label fiscal periods exactly as the company reports them (for example "fiscal Q4 2026, quarter ending June 30, 2026") and never guess the fiscal quarter from the calendar date. Score significance using the stated anchors consistently, the same way for every item. Do not editorialize. Never use an em dash in any text you write.`;
 
   const user = `ITEM
 URL: ${item.url}
@@ -155,7 +161,7 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
   "company_slugs": array of registry slug strings the item materially concerns (empty if none)
   "dimensions": array of dimension code strings, from the list only, usually one or two
   "entities": array of proper names (companies, agencies, regulators, people) named in the item
-  "significance": number from 0.0 (routine or unrelated) to 1.0 (a major strategic development)
+  "significance": number. ${SIGNIFICANCE_RUBRIC}
   "facts": array of up to 8 objects {"company_slug": registry slug, "dimension": code, "fact": one self-contained sentence under 300 chars, "value": key figure or empty string, "as_of": "YYYY-MM-DD" or empty string}; empty array is a normal outcome`,
         user,
         maxTokens: 1400,

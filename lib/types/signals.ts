@@ -109,6 +109,7 @@ export interface PipelineRun {
   error: string | null;
   coverage: RunCoverage | null;
   discovered_units: string[]; // 0042: the cron engine's per-unit discovery checkpoints
+  notes: string[]; // 0047: per-run issue notes, same shape as the other engines
 
   created_at: string;
   updated_at: string;

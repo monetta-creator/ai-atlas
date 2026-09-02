@@ -6,7 +6,7 @@ import {
   createScanRun, claimScanRun, renewScanLease, releaseScanLease, setScanStep,
   markScanTopicSearched, bumpScanRunCount, completeScanRun, insertScanItems,
   setScanItemFetchResult, setScanItemEnrichment, sweepUnenrichableItems, skipAllPendingEnrichment,
-  appendScanRunNotes,
+  appendScanRunNotes, failStaleScanRuns,
 } from '../mutations/scan';
 import { fetchFeed } from './feeds';
 import { searchTopicNews } from './web';
@@ -39,6 +39,9 @@ export function todayUTC(): string {
 }
 
 export async function getOrCreateTodayRun(): Promise<{ runId: string; day: string; created: boolean }> {
+  // Stale-run janitor: fail any prior day's run still marked running before
+  // touching today's row (it can never be resumed once its day has passed).
+  await failStaleScanRuns().catch(() => {});
   const day = todayUTC();
   const { id, created } = await createScanRun(day);
   return { runId: id, day, created };
@@ -130,12 +133,9 @@ export async function advanceScanRun(runId: string, deadlineAt: number): Promise
     if (run.status !== 'completed') notes.push('time budget reached: resume to continue');
     return progressOf(run, notes);
   } finally {
-    // Persist issue notes for the health panel (0040); the transient
-    // time-budget line stays out (it is normal operation, not an issue).
-    await appendScanRunNotes(
-      runId,
-      notes.filter((n) => !n.startsWith('time budget reached'))
-    ).catch(() => {});
+    // Persist issue notes for the health panel (0040), including the
+    // time-budget line: it is the only DB evidence a window was exhausted.
+    await appendScanRunNotes(runId, notes).catch(() => {});
     await releaseScanLease(runId).catch(() => {});
   }
 }
@@ -236,8 +236,10 @@ async function runHydrateWave(run: ScanRun, notes: string[]): Promise<void> {
 // ---- enrich: a small parallel wave of model calls. The /scan picker's
 // selection assigns each item a model deterministically (2+ selected =
 // the round-robin A/B split; empty = the Haiku fallback), and enriched_by
-// stamps the item either way. A per-item model failure marks 'error' (raw
-// text still ships); the wave never throws.
+// stamps the item either way. A per-item model failure gets a one-shot retry
+// on the next configured model (a single model's timeout or overload should
+// not sink the item for the day); only a second failure marks 'error' (raw
+// text still ships). The wave never throws.
 async function runEnrichWave(run: ScanRun, notes: string[]): Promise<void> {
   const [topics, prefs] = await Promise.all([getActiveScanTopics(), getScanPrefs()]);
   const items = await getPendingEnrichItems(run.id, ENRICH_POOL);
@@ -246,15 +248,23 @@ async function runEnrichWave(run: ScanRun, notes: string[]): Promise<void> {
   await Promise.all(
     items.map(async (item) => {
       const model = pickEnrichModel(prefs.enrich_models, item.id);
+      const attempt = async (m: string | null) => {
+        const e = await enrichScanItem(item, topics, run.id, m ?? undefined);
+        await setScanItemEnrichment(item.id, { status: 'done', ...e, enrichedBy: m ?? 'claude-haiku-4-5' });
+      };
       try {
-        const e = await enrichScanItem(item, topics, run.id, model ?? undefined);
-        await setScanItemEnrichment(item.id, {
-          status: 'done', ...e, enrichedBy: model ?? 'claude-haiku-4-5',
-        });
+        await attempt(model);
         enriched += 1;
-      } catch (err) {
-        await setScanItemEnrichment(item.id, { status: 'error', enrichedBy: model ?? 'claude-haiku-4-5' });
-        notes.push(`enrich failed (${model ?? 'haiku'} · ${item.source_domain ?? 'item'}): ${String((err as Error)?.message ?? 'error').slice(0, 120)}`);
+      } catch {
+        const models = prefs.enrich_models;
+        const alt = models.length > 1 ? models[(models.indexOf(model ?? '') + 1) % models.length] : null;
+        try {
+          await attempt(alt);
+          enriched += 1;
+        } catch (err2) {
+          await setScanItemEnrichment(item.id, { status: 'error', enrichedBy: alt ?? 'claude-haiku-4-5' });
+          notes.push(`enrich failed (${model ?? 'haiku'} then ${alt ?? 'haiku fallback'} · ${item.source_domain ?? 'item'}): ${String((err2 as Error)?.message ?? 'error').slice(0, 120)}`);
+        }
       }
     })
   );

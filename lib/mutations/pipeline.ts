@@ -29,6 +29,40 @@ export async function updateRun(
   await exec(`update pipeline_runs set ${sets.join(', ')}, updated_at = now() where id = $${params.length}`, params);
 }
 
+// Persist an invocation's issue notes (0047): appended in first-occurrence
+// order, deduplicated against what the row already holds, capped at 40.
+// Mirrors appendScanRunNotes / appendIntelRunNotes / appendResearchRunNotes.
+export async function appendPipelineRunNotes(runId: string, notes: string[]): Promise<void> {
+  const clean = [...new Set(notes.map((n) => sanitizeText(n).trim().slice(0, 300)).filter(Boolean))].slice(0, 20);
+  if (!clean.length) return;
+  await exec(
+    `update pipeline_runs
+        set notes = (
+          select coalesce(array_agg(n order by o), '{}') from (
+            select n, min(ord) as o
+              from unnest(notes || $2::text[]) with ordinality as t(n, ord)
+             group by n
+             order by min(ord)
+             limit 40
+          ) d
+        ), updated_at = now()
+      where id = $1`,
+    [runId, clean]
+  );
+}
+
+// The stale-run janitor: a daily run left 'running' from a prior day can never
+// be resumed (the cron only advances today's run), so mark it failed with an
+// honest error instead of letting the row lie forever in the console/tracker.
+export async function failStaleDailyRuns(): Promise<number> {
+  return exec(
+    `update pipeline_runs
+        set status = 'failed', error = 'incomplete: superseded by a newer daily run', updated_at = now()
+      where cadence = 'daily' and status = 'running'
+        and created_at < date_trunc('day', now() at time zone 'utc')`
+  );
+}
+
 // Persist the post-run coverage-check result (migration 0026). Overwrites: re-running
 // the check on a resumed run replaces the stale audit with the current one.
 export async function setRunCoverage(id: string, coverage: unknown): Promise<void> {

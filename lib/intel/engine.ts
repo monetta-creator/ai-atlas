@@ -7,6 +7,7 @@ import {
   markIntelUnitSwept, bumpIntelRunCount, completeIntelRun, insertIntelItems,
   setIntelItemFetchResult, setIntelItemEnrichment, insertIntelFacts, upsertIntelMetrics,
   sweepUnenrichableIntelItems, skipAllPendingIntelEnrichment, appendIntelRunNotes,
+  failStaleIntelRuns,
 } from '../mutations/intel';
 import { fetchFeed } from '../scan/feeds';
 import { lookbackDays, withinWindow } from '../scan/core';
@@ -44,6 +45,9 @@ export function todayUTC(): string {
 }
 
 export async function getOrCreateTodayIntelRun(): Promise<{ runId: string; day: string; created: boolean }> {
+  // Stale-run janitor: fail any prior day's run still marked running before
+  // touching today's row (it can never be resumed once its day has passed).
+  await failStaleIntelRuns().catch(() => {});
   const day = todayUTC();
   const { id, created } = await createIntelRun(day);
   return { runId: id, day, created };
@@ -163,10 +167,9 @@ export async function advanceIntelRun(runId: string, deadlineAt: number): Promis
     if (run.status !== 'completed') notes.push('time budget reached: resume to continue');
     return progressOf(run, notes);
   } finally {
-    await appendIntelRunNotes(
-      runId,
-      notes.filter((n) => !n.startsWith('time budget reached'))
-    ).catch(() => {});
+    // Persist issue notes for the health panel, including the time-budget
+    // line: it is the only DB evidence a window was exhausted.
+    await appendIntelRunNotes(runId, notes).catch(() => {});
     await releaseIntelLease(runId).catch(() => {});
   }
 }
@@ -306,8 +309,11 @@ async function runHydrateWave(run: IntelRun, notes: string[]): Promise<void> {
 
 // ---- enrich: cheap-model waves + fact extraction. The picker's selection
 // assigns each item a model deterministically; enriched_by stamps success
-// AND error so A/B error rates stay measurable. Facts insert after the item
-// write so a fact always points at an enriched item.
+// AND error so A/B error rates stay measurable. A per-item model failure gets
+// a one-shot retry on the next configured model (a single model's timeout or
+// overload should not sink the item for the day); only a second failure marks
+// 'error'. Facts insert after the item write so a fact always points at an
+// enriched item.
 async function runEnrichWave(run: IntelRun, notes: string[]): Promise<void> {
   const [companies, prefs] = await Promise.all([getActiveIntelCompanies(), getIntelPrefs()]);
   const items = await getPendingIntelEnrichItems(run.id, ENRICH_POOL);
@@ -317,8 +323,8 @@ async function runEnrichWave(run: IntelRun, notes: string[]): Promise<void> {
   await Promise.all(
     items.map(async (item) => {
       const model = pickEnrichModel(prefs.enrich_models, item.id);
-      try {
-        const e = await enrichIntelItem(item, companies, run.id, model ?? undefined);
+      const attempt = async (m: string | null) => {
+        const e = await enrichIntelItem(item, companies, run.id, m ?? undefined);
         await setIntelItemEnrichment(item.id, {
           status: 'done',
           summary: e.summary,
@@ -326,15 +332,25 @@ async function runEnrichWave(run: IntelRun, notes: string[]): Promise<void> {
           dimensions: e.dimensions,
           entities: e.entities,
           significance: e.significance,
-          enrichedBy: model ?? 'claude-haiku-4-5',
+          enrichedBy: m ?? 'claude-haiku-4-5',
         });
         if (e.facts.length) {
           factsWritten += await insertIntelFacts(e.facts.map((f) => ({ ...f, item_id: item.id })));
         }
+      };
+      try {
+        await attempt(model);
         enriched += 1;
-      } catch (err) {
-        await setIntelItemEnrichment(item.id, { status: 'error', enrichedBy: model ?? 'claude-haiku-4-5' });
-        notes.push(`enrich failed (${model ?? 'haiku'} · ${item.source_domain ?? 'item'}): ${String((err as Error)?.message ?? 'error').slice(0, 120)}`);
+      } catch {
+        const models = prefs.enrich_models;
+        const alt = models.length > 1 ? models[(models.indexOf(model ?? '') + 1) % models.length] : null;
+        try {
+          await attempt(alt);
+          enriched += 1;
+        } catch (err2) {
+          await setIntelItemEnrichment(item.id, { status: 'error', enrichedBy: alt ?? 'claude-haiku-4-5' });
+          notes.push(`enrich failed (${model ?? 'haiku'} then ${alt ?? 'haiku fallback'} · ${item.source_domain ?? 'item'}): ${String((err2 as Error)?.message ?? 'error').slice(0, 120)}`);
+        }
       }
     })
   );

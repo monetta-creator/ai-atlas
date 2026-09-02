@@ -76,8 +76,12 @@ export async function triagePapersChunk(runId: string, chunkSize = TRIAGE_CHUNK)
 
   const pending = await m.claimPendingPapers(runId, chunkSize);
   if (!pending.length) {
+    // Nothing claimable. Papers that burned all their attempts without ever
+    // getting a decision are rejected here with a distinct reason (never by the
+    // decision loop below), so the queue can't spin on them forever.
+    const exhausted = await m.rejectExhaustedTriagePapers(runId);
     await m.recomputeResearchRunCounts(runId);
-    return { processed: 0, kept: 0, rejected: 0, remaining: await countPendingPapers(runId) };
+    return { processed: 0, kept: 0, rejected: exhausted, remaining: await countPendingPapers(runId) };
   }
 
   const { claims, bridges } = await getTargets();
@@ -138,7 +142,9 @@ export async function triagePapersChunk(runId: string, chunkSize = TRIAGE_CHUNK)
   });
 
   // Coerce + allow-list everything (never trust the model for codes/slugs). A missing
-  // decision fails closed to reject, mirroring pipeline triage.
+  // decision (truncated output, shifted indices) releases the claim so the paper is
+  // retried by a later chunk, bounded by the triage_attempts cap in the claim; the
+  // old behavior silently rejected 16 never-judged papers on 2026-09-01.
   const validCode = new Set(codes);
   const validConcept = new Set(conceptSlugs);
   const validThread = new Set(threadSlugs);
@@ -148,19 +154,24 @@ export async function triagePapersChunk(runId: string, chunkSize = TRIAGE_CHUNK)
   let kept = 0;
   let rejected = 0;
   const keptArxiv: { id: string; arxiv_id: string }[] = [];
+  const undecided: string[] = [];
   for (let i = 0; i < pending.length; i++) {
     const d = byIndex.get(i);
-    const keep = !!d?.keep;
-    const reason = d ? sentence(String(d.reason ?? '').slice(0, 300)) : 'No decision returned';
-    const summary = keep && d ? sentence(String(d.summary ?? '').slice(0, 600)) : null;
+    if (!d) {
+      undecided.push(pending[i].id);
+      continue;
+    }
+    const keep = !!d.keep;
+    const reason = sentence(String(d.reason ?? '').slice(0, 300));
+    const summary = keep ? sentence(String(d.summary ?? '').slice(0, 600)) : null;
     const pick = (arr: unknown, valid: Set<string>, cap: number) =>
       Array.isArray(arr)
         ? Array.from(new Set(arr.filter((v): v is string => typeof v === 'string' && valid.has(v)))).slice(0, cap)
         : [];
     await m.setPaperTriage(pending[i].id, keep ? 'kept' : 'rejected', reason, {
-      claim_touches: keep ? pick(d?.claim_codes, validCode, 6) : [],
-      suggested_concepts: keep ? pick(d?.concept_slugs, validConcept, 4) : [],
-      suggested_threads: keep ? pick(d?.thread_slugs, validThread, 3) : [],
+      claim_touches: keep ? pick(d.claim_codes, validCode, 6) : [],
+      suggested_concepts: keep ? pick(d.concept_slugs, validConcept, 4) : [],
+      suggested_threads: keep ? pick(d.thread_slugs, validThread, 3) : [],
     }, summary);
     if (keep) {
       kept++;
@@ -169,6 +180,7 @@ export async function triagePapersChunk(runId: string, chunkSize = TRIAGE_CHUNK)
       rejected++;
     }
   }
+  await m.releaseTriageClaims(undecided);
 
   // Author pedigree for the kept papers (Semantic Scholar, one batch POST, no AI
   // cost) so the queue shows its day-zero quality prior. Best-effort: an S2 hiccup

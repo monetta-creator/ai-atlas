@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import pg from 'pg';
 import { rotatedQueries, DEFAULT_UTILITY_MODEL } from '../lib/pipeline/config.ts';
 import { SCAN_ENRICH_MODELS, isScanEnrichModel } from '../lib/scan/models.ts';
+import { looksLikeBotWall } from '../lib/pipeline/botwall.ts';
 
 let pass = 0;
 let fail = 0;
@@ -52,6 +53,38 @@ check('rotatedQueries: every query is reached across consecutive days', () => {
 check('utility model default is a registry model', () => {
   assert.ok(isScanEnrichModel(DEFAULT_UTILITY_MODEL));
   assert.ok(!SCAN_ENRICH_MODELS.find((m) => m.id === DEFAULT_UTILITY_MODEL)?.anthropic);
+});
+
+check('looksLikeBotWall: flags a short Cloudflare verification stub', () => {
+  const stub =
+    'Verifying you are human. This may take a few seconds. ' +
+    'ai-atlas.example needs to review the security of your connection before proceeding. ' +
+    'Please enable JavaScript and cookies to continue. Cloudflare Ray ID: 8f2a9c1d4e2b0f11. ' +
+    'Performance & security by Cloudflare.';
+  assert.equal(stub.length < 1200, true, `fixture is ${stub.length} chars, expected < 1200`);
+  assert.equal(looksLikeBotWall(stub), true);
+});
+
+check('looksLikeBotWall: does not flag a legitimate news paragraph', () => {
+  const article =
+    'Regulators in three countries opened a joint review of the merger on Tuesday, ' +
+    'citing concerns over data portability and market concentration in cloud services. ' +
+    'The companies said they would cooperate fully with the inquiry and expected the ' +
+    'process to conclude within six months. Analysts said the review was unlikely to ' +
+    'block the deal outright but could force divestitures in overlapping product lines. ' +
+    'Shares in both companies were little changed in after-hours trading following the news.';
+  assert.equal(looksLikeBotWall(article), false);
+});
+
+check('looksLikeBotWall: length gate spares a long article that mentions Cloudflare', () => {
+  const paragraph =
+    'A widespread Cloudflare outage disrupted access to thousands of websites on Tuesday, ' +
+    'the company said, after a configuration change in its network triggered cascading ' +
+    'failures across its edge points of presence. Engineers rolled back the change within ' +
+    'the hour and said full service was restored by early afternoon. ';
+  const article = paragraph.repeat(Math.ceil(5000 / paragraph.length)).slice(0, 5000);
+  assert.equal(article.length, 5000);
+  assert.equal(looksLikeBotWall(article), false);
 });
 
 // DB sanity (read-only): 0042 applied, and every OpenRouter registry model

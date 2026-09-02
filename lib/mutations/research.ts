@@ -87,6 +87,19 @@ export async function failResearchRun(runId: string, error: string): Promise<voi
   );
 }
 
+// The stale-run janitor (mirrors failStaleDailyRuns in mutations/pipeline.ts):
+// a daily run left 'running' from a prior day can never be resumed (the cron
+// only ever advances today's row), so mark it failed with an honest error
+// instead of letting the row lie forever in the console/health panel. Legacy
+// manual runs (day is null) are untouched.
+export async function failStaleResearchRuns(): Promise<number> {
+  return exec(
+    `update research_runs
+        set status = 'failed', error = 'incomplete: superseded by a newer daily run', updated_at = now()
+      where status = 'running' and day is not null and day < (now() at time zone 'utc')::date`
+  );
+}
+
 // The cron on/off switch. Gates the CRON route only; the console's manual
 // tick ignores it on purpose (an admin clicking IS the override).
 export async function setResearchEnabled(enabled: boolean): Promise<void> {
@@ -315,10 +328,11 @@ export async function claimPendingPapers(
 ): Promise<{ id: string; arxiv_id: string | null; title: string; abstract: string | null; categories: string[]; comments: string | null; published_at: string | null }[]> {
   const { rows } = await withTx(async (c) =>
     c.query(
-      `update papers set triage_reason = 'in triage', updated_at = now()
+      `update papers set triage_reason = 'in triage', triage_attempts = triage_attempts + 1, updated_at = now()
         where id in (
           select id from papers
            where run_id = $1 and triage_status = 'pending'
+             and triage_attempts < 3
              and (triage_reason is distinct from 'in triage' or updated_at < now() - interval '5 minutes')
            order by published_at desc nulls last, created_at
            limit $2
@@ -329,6 +343,31 @@ export async function claimPendingPapers(
     )
   );
   return rows as { id: string; arxiv_id: string | null; title: string; abstract: string | null; categories: string[]; comments: string | null; published_at: string | null }[];
+}
+
+// Release the claim on papers whose decision never came back from the model
+// (truncated output, shifted indices): they stay pending and are immediately
+// reclaimable, up to the triage_attempts cap the claim enforces. This replaces
+// the old fail-closed 'No decision returned' reject.
+export async function releaseTriageClaims(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  await exec(
+    `update papers set triage_reason = null, updated_at = now()
+      where id = any($1::uuid[]) and triage_status = 'pending'`,
+    [ids]
+  );
+}
+
+// Reject papers that burned all their triage attempts without ever getting a
+// decision, with a reason distinct from a real model reject. Skips papers a
+// live concurrent chunk still holds (fresh 'in triage' marker).
+export async function rejectExhaustedTriagePapers(runId: string): Promise<number> {
+  return exec(
+    `update papers set triage_status = 'rejected', triage_reason = 'Triage unavailable (3 attempts)', updated_at = now()
+      where run_id = $1 and triage_status = 'pending' and triage_attempts >= 3
+        and (triage_reason is distinct from 'in triage' or updated_at < now() - interval '5 minutes')`,
+    [runId]
+  );
 }
 
 // ---- Research phase 2: analysis cache, extraction, links, promotion ----------

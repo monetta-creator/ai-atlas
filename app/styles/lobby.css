@@ -201,6 +201,10 @@
 .lw-job:hover { border-color: var(--accent); text-decoration: none; }
 .lw-job-label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
 .lw-job-sub { font-size: 12px; color: var(--dim); }
+.lw-stale {
+  font-family: var(--font-mono); font-size: 10px; font-weight: 600; color: var(--heat-2);
+  border: 1px solid var(--heat-2); border-radius: 999px; padding: 1px 8px;
+}
 
 .lw-downloads { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 2px; }
 .lw-downloads-label { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }

@@ -13,6 +13,13 @@ export const maxDuration = 800;
 
 const WORK_BUDGET_MS = 700_000;
 
+// Optional healthchecks.io-style dead-man ping, fired on every invocation
+// that ends with the run COMPLETED (fresh or alreadyComplete), never on
+// busy/error/paused. Fire-and-forget: never await-blocks the response.
+function pingDeadman(url: string | undefined): void {
+  if (url) fetch(url, { signal: AbortSignal.timeout(3000) }).catch(() => {});
+}
+
 export async function GET(req: NextRequest): Promise<Response> {
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get('authorization');
@@ -26,10 +33,14 @@ export async function GET(req: NextRequest): Promise<Response> {
   const deadlineAt = Date.now() + WORK_BUDGET_MS;
   const { runId, day } = await getOrCreateTodayIntelRun();
   const existing = await getIntelRun(runId);
-  if (existing?.status === 'completed') return Response.json({ day, done: true, alreadyComplete: true });
+  if (existing?.status === 'completed') {
+    pingDeadman(process.env.HC_PING_URL_INTEL);
+    return Response.json({ day, done: true, alreadyComplete: true });
+  }
   if (!(await claimIntelRun(runId))) return Response.json({ day, done: false, busy: true });
   try {
     const progress = await advanceIntelRun(runId, deadlineAt);
+    if (progress.done) pingDeadman(process.env.HC_PING_URL_INTEL);
     return Response.json(progress);
   } catch (e) {
     const msg = String((e as Error)?.message ?? 'intel error');
