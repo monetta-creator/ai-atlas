@@ -19,7 +19,10 @@ import type { ScanTopic } from '../types';
 // metadata.scan_run, NEVER pipelineRunId (the ai_cost_log FK trap).
 
 const ENRICH_MODEL = 'claude-haiku-4-5';
-const MAX_INPUT_CHARS = 12_000;
+// Exported so the relevance ensemble's vote leg (lib/scan/relevance-vote.ts)
+// reads the SAME input clip as the enrichment pass, keeping a vote comparable
+// to the assigned model's read.
+export const MAX_INPUT_CHARS = 12_000;
 
 export interface ScanEnrichment {
   summary: string;
@@ -44,7 +47,9 @@ interface RawEnrichment {
 // the three A/B models score on one ruler (measured skew before anchoring: GLM
 // avg 0.40 vs deepseek 0.57 / qwen 0.55 on randomly split items). Anchors live
 // in prose, never schema min/max (the Anthropic tool validator rejects those).
-const RELEVANCE_RUBRIC =
+// Exported so the relevance ensemble's vote leg (lib/scan/relevance-vote.ts)
+// scores the EXACT same rubric, keeping every panel model's vote on one ruler.
+export const RELEVANCE_RUBRIC =
   'How relevant to banking and financial services strategy, 0.0 to 1.0. Anchors: 0.9 or higher means a named financial institution, regulator, or payments/AI vendor takes a concrete action with stated numbers or dates (an enforcement action, an earnings beat, a major platform policy change). 0.7 means clearly sector-relevant development without a named actor taking new action (industry trend data, a credible analysis of fraud or credit conditions). 0.4 to 0.5 means sector-adjacent context a strategy reader might skim (macro data, adjacent tech news with plausible spillover). 0.2 means tangential mention only. 0.0 to 0.1 means unrelated locale news, listicles, marketing pages. Score the substance of the text, not the headline. Off-topic items get a low score, not an error.';
 
 // Migration 0052: content_kind discounts promotional text inside an

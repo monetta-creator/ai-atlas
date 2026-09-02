@@ -134,6 +134,13 @@ All four fields are null exactly when the item has not been rated or
 classified yet; treat them as advisory ranking input, the same posture as
 relevance and tags.
 
+Relevance ensemble (migration 0053): since 2026-09-02, relevance is the
+median of score-only votes from a panel of enrichment models reading the
+same text, not one model's single read, and priority is composed from that
+median the same as before. relevance_votes carries the raw per-model votes
+as a compact JSON object (model id to 0 to 1 score); relevance_spread is the
+highest vote minus the lowest, null when only one model has voted so far.
+
 ## 4. Status semantics
 
 - fetch_status: done (text retrieved), failed (fetch failed; the row still

@@ -78,6 +78,9 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
     enum: ['news', 'analysis', 'data', 'press_release', 'marketing', 'opinion', 'other'],
   },
   priority: { type: 'number', nullable: true },
+  // ---- relevance ensemble (0053): external-scan only, trailing after priority ----
+  relevance_spread: { type: 'number', nullable: true },
+  relevance_votes: { type: 'string', nullable: true },
   // ---- signals-export extras (appended after the shared scan-shaped columns) ----
   significance: { type: 'string', nullable: false, enum: ['high', 'medium', 'low'] },
   lenses: { type: 'string', nullable: false },

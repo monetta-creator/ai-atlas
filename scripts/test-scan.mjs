@@ -21,6 +21,7 @@ import {
   rateDomainByRule, priorityOf, normalizeDomain, KIND_TIER, curatedDomainCount, isContentKind,
 } from '../lib/scan/source-tiers.ts';
 import { acceptDomainRatings } from '../lib/scan/source-rating-core.ts';
+import { ensemblePanel, medianOf, spreadOf, summarizeVotes, mergeVotes, missingVoters, ENSEMBLE_MODELS } from '../lib/scan/ensemble.ts';
 
 let pass = 0;
 let fail = 0;
@@ -393,6 +394,20 @@ check('source rating: a model-rated primary caps at tier 2', () => {
   );
   assert.equal(rows.length, 1);
   assert.equal(rows[0].tier, 2);
+});
+check('relevance ensemble: median, spread, panel, merge', () => {
+  assert.equal(medianOf([0.4, 0.7, 0.55]), 0.55);
+  assert.equal(medianOf([0.4, 0.7]), 0.55, 'even count averages the middle pair');
+  assert.equal(medianOf([]), null);
+  assert.equal(spreadOf([0.4, 0.7, 0.55]), 0.3);
+  assert.deepEqual(summarizeVotes({ a: 0.4, b: 0.7, c: 'junk' }), { median: 0.55, spread: 0.3, n: 2 });
+  assert.deepEqual(summarizeVotes({ a: 0.9 }), { median: 0.9, spread: 0, n: 1 });
+  assert.deepEqual(summarizeVotes(null), { median: null, spread: null, n: 0 });
+  assert.deepEqual(ensemblePanel(['x', 'y']), ['x', 'y']);
+  assert.deepEqual(ensemblePanel(['x']), [...ENSEMBLE_MODELS], 'one picked model falls back to the trio');
+  assert.deepEqual(ensemblePanel([]), [...ENSEMBLE_MODELS]);
+  assert.deepEqual(mergeVotes({ a: 0.2 }, { b: 1.4, c: 'no' }), { a: 0.2, b: 1 });
+  assert.deepEqual(missingVoters(['a', 'b', 'c'], { a: 0.5 }), ['b', 'c']);
 });
 check('source tiers: priority composes relevance, tier, content kind', () => {
   assert.equal(priorityOf(0.8, 1, 'news'), 0.8);

@@ -1,6 +1,6 @@
 import {
   getActiveScanTopics, getScanRun, getScanPrefs, getPendingFetchItems, getPendingEnrichItems,
-  getScanStepCounts,
+  getScanStepCounts, getItemsMissingVotes,
 } from '../data/scan';
 import {
   createScanRun, claimScanRun, renewScanLease, releaseScanLease, setScanStep,
@@ -13,6 +13,8 @@ import { searchTopicNews, type RawScanItem } from './web';
 import { searchTopicNewsTavily } from './search-tavily';
 import { searchTopicNewsGdelt, gdeltAvailable } from './search-gdelt';
 import { enrichScanItem } from './enrich';
+import { ensemblePanel } from './ensemble';
+import { castMissingVotes } from './relevance-vote';
 import { pickEnrichModel } from './models';
 import { checkScanBudget } from './budget';
 import { rateAndStampSources } from './source-rating';
@@ -119,6 +121,7 @@ export async function advanceScanRun(runId: string, deadlineAt: number): Promise
       if (swept) await bumpScanRunCount(runId, 'skipped_count', swept);
       const counts = await getScanStepCounts(runId);
       if (counts.pendingEnrich === 0) {
+        await topUpRelevanceVotes(run, notes);
         await completeScanRun(runId);
         continue;
       }
@@ -308,17 +311,37 @@ async function runHydrateWave(run: ScanRun, notes: string[]): Promise<void> {
 // on the next configured model (a single model's timeout or overload should
 // not sink the item for the day); only a second failure marks 'error' (raw
 // text still ships). The wave never throws.
+//
+// Relevance ensemble (0053): right after a SUCCESSFUL enrichment write (either
+// attempt), the other panel models cast a score-only vote on the same item so
+// relevance becomes the median of the panel, not just the assigned model's
+// read. Gated once per wave on checkScanBudget (the vote calls are cheap, but
+// still billable) and always wrapped so a vote failure never touches the
+// enrichment result; a skipped wave leaves items for the per-run top-up.
 async function runEnrichWave(run: ScanRun, notes: string[]): Promise<void> {
   const [topics, prefs] = await Promise.all([getActiveScanTopics(), getScanPrefs()]);
   const items = await getPendingEnrichItems(run.id, ENRICH_POOL);
   if (!items.length) return;
+  const panel = ensemblePanel(prefs.enrich_models);
+  const voteBudget = await checkScanBudget();
   let enriched = 0;
+  let votesSkipped = false;
   await Promise.all(
     items.map(async (item) => {
       const model = pickEnrichModel(prefs.enrich_models, item.id);
       const attempt = async (m: string | null) => {
         const e = await enrichScanItem(item, topics, run.id, m ?? undefined);
-        await setScanItemEnrichment(item.id, { status: 'done', ...e, enrichedBy: m ?? 'claude-haiku-4-5' });
+        const enrichedBy = m ?? 'claude-haiku-4-5';
+        await setScanItemEnrichment(item.id, { status: 'done', ...e, enrichedBy });
+        if (!voteBudget.ok) {
+          votesSkipped = true;
+        } else {
+          try {
+            await castMissingVotes(item, panel, enrichedBy, e.relevance, null, { scanRunId: run.id });
+          } catch {
+            // a vote failure must never affect the enrichment result
+          }
+        }
       };
       try {
         await attempt(model);
@@ -337,4 +360,34 @@ async function runEnrichWave(run: ScanRun, notes: string[]): Promise<void> {
     })
   );
   if (enriched) await bumpScanRunCount(run.id, 'enriched_count', enriched);
+  if (votesSkipped) notes.push('relevance votes skipped: budget');
+}
+
+// ---- relevance vote top-up: once per run, right as the enrich step finds no
+// more pending items, cast whatever votes earlier waves missed (a busy wave, a
+// budget skip). Bounded to one batch of 8 so it never grows the run's tail;
+// whatever it still misses waits for tomorrow's run or the backfill script.
+const VOTE_TOPUP_BATCH = 8;
+
+async function topUpRelevanceVotes(run: ScanRun, notes: string[]): Promise<void> {
+  try {
+    const budget = await checkScanBudget();
+    if (!budget.ok) return;
+    const prefs = await getScanPrefs();
+    const panel = ensemblePanel(prefs.enrich_models);
+    const items = await getItemsMissingVotes(run.id, panel.length, VOTE_TOPUP_BATCH);
+    if (!items.length) return;
+    let topped = 0;
+    await Promise.all(
+      items.map(async (item) => {
+        const summary = await castMissingVotes(
+          item, panel, item.enriched_by, item.relevance, item.relevance_votes, { scanRunId: run.id }
+        ).catch(() => null);
+        if (summary) topped += 1;
+      })
+    );
+    if (topped) notes.push(`relevance votes: ${topped} items topped up`);
+  } catch (e) {
+    notes.push(`relevance vote top-up failed: ${String((e as Error)?.message ?? 'error').slice(0, 120)}`);
+  }
 }

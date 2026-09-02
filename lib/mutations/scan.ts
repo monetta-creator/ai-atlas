@@ -5,6 +5,7 @@ import { getSourceTierRows, getUnstampedDomains, assertSourceTierTable, type Sou
 import {
   rateDomainByRule, normalizeDomain, isSourceTier, isSourceKind, type SourceTier, type SourceKind,
 } from '../scan/source-tiers';
+import { summarizeVotes, type RelevanceVotes, type VoteSummary } from '../scan/ensemble';
 
 // ---- External Scan (migration 0038) -----------------------------------------
 // Writers for the daily scan. scan_runs IS the checkpoint state: the cron
@@ -340,4 +341,21 @@ export async function stampSourceTiers(table: SourceTierTable, runId: string | n
     );
   }
   return stamped;
+}
+
+// ---- Relevance ensemble (migration 0053) ------------------------------------
+// Write the full votes map for an item (the caller merges the assigned
+// model's enrichment score with the other panel models' score-only reads):
+// relevance becomes the median, relevance_spread the disagreement. A map
+// with no numeric votes leaves relevance untouched.
+export async function setScanItemRelevanceVotes(id: string, votes: RelevanceVotes): Promise<VoteSummary> {
+  const s = summarizeVotes(votes);
+  if (s.median === null) return s;
+  await exec(
+    `update scan_items
+        set relevance_votes = $2::jsonb, relevance = $3, relevance_spread = $4
+      where id = $1`,
+    [id, JSON.stringify(votes), s.median, s.spread]
+  );
+  return s;
 }

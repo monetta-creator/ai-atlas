@@ -495,6 +495,7 @@ export async function buildExternalScan(q: Q, opts: DatasetOpts = {}): Promise<D
   const rows = await q<DatasetRow & {
     relevance: number | null;
     source_tier: number | null; source_kind: string | null; content_kind: string | null;
+    relevance_spread: number | null; relevance_votes: Record<string, number> | null;
   }>(
     `select i.id::text as item_id,
             to_char(r.day, 'YYYY-MM-DD') as run_day,
@@ -511,7 +512,8 @@ export async function buildExternalScan(q: Q, opts: DatasetOpts = {}): Promise<D
             length(i.raw_content) as text_chars,
             i.raw_content as full_text,
             i.enriched_by,
-            i.source_tier, i.source_kind, i.content_kind
+            i.source_tier, i.source_kind, i.content_kind,
+            i.relevance_spread, i.relevance_votes
        from scan_items i
        join scan_runs r on r.id = i.run_id
        left join scan_topics t on t.slug = i.topic_slug
@@ -526,6 +528,7 @@ export async function buildExternalScan(q: Q, opts: DatasetOpts = {}): Promise<D
       isSourceTier(r.source_tier) ? r.source_tier : null,
       isContentKind(r.content_kind) ? r.content_kind : null
     ),
+    relevance_votes: r.relevance_votes ? JSON.stringify(r.relevance_votes) : null,
   }));
 }
 

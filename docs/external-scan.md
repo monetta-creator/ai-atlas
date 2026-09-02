@@ -139,7 +139,7 @@ headers, UTF-8 BOM, CRLF):
 | `summary` | string or null | Two to three model-written sentences. Null when enrichment was skipped or errored. |
 | `tags` | string | Taxonomy codes enrichment assigned, joined with `; `. Empty string when none. |
 | `entities` | string | Companies, agencies, people named, joined with `; `. |
-| `relevance` | number or null | Advisory 0 to 1 relevance from enrichment. |
+| `relevance` | number or null | Advisory 0 to 1 relevance. Since 2026-09-02 the median of score-only votes from the enrichment panel (see `relevance_votes`); before that, the enriching model's single read. |
 | `enrich_status` | enum | `done`, `skipped` (budget or no text), `error`, `pending`. |
 | `fetch_status` | enum | `done`, `failed`, `skipped`, `pending`. |
 | `fetched_via` | string or null | `direct` or `jina`. |
@@ -150,6 +150,8 @@ headers, UTF-8 BOM, CRLF):
 | `source_kind` | enum or null | The kind of source behind the domain (regulator, primary, wire, and so on). Null when not yet rated. |
 | `content_kind` | enum or null | The kind of content in the piece, from enrichment (news, opinion, press_release, and so on). Null when not yet classified. |
 | `priority` | number or null | Composed ranking score: relevance times the tier weight times the content weight. Null only when relevance is null. |
+| `relevance_spread` | number or null | Disagreement across the enrichment panel's relevance votes: highest vote minus lowest, 0 to 1. Null when only one model has voted so far. |
+| `relevance_votes` | string or null | The raw per-model votes behind `relevance`, as a compact JSON object of model id to 0 to 1 score. Null when no panel votes are recorded yet. |
 
 Importer guidance: key on `item_id` (stable) or `normalized_url` (stable
 across rediscovery); treat `tags`/`relevance` as advisory input to your own
@@ -181,6 +183,34 @@ one ranking score the importer can sort on without recomputing the formula.
 `priority = relevance × tier weight × content weight`, rounded to two
 decimals. An unrated source counts as tier 3; an unclassified piece counts
 as other.
+
+## Relevance ensemble (0053)
+
+The scan's relevance score used to be whichever model the A/B split assigned
+to an item's single read, and the three flash models score the same
+anchored rubric on different rulers (30-day means on randomly split items:
+deepseek 0.58, qwen 0.56, GLM 0.44). The random split is still worth
+keeping, it is what made the skew visible and it keeps the A/B fair, so
+instead of picking a model the score is ENSEMBLED: after enrichment, every
+other panel model (`lib/scan/ensemble.ts` `ENSEMBLE_MODELS`, or the console's
+picked enrichment models when two or more are picked) gives a score-only
+read of the same text, and `relevance` becomes the MEDIAN of the votes.
+
+- `relevance` is the median of the panel's votes, not one model's opinion.
+- `relevance_votes` carries the raw votes as a JSON object (model id to 0 to
+  1 score), so an importer can see the disagreement, not just the summary.
+- `relevance_spread` is the highest vote minus the lowest; null until at
+  least one vote is recorded, and typically small once the panel is
+  complete. A wide spread flags an item where the panel genuinely disagreed
+  on topic fit, worth a second look before trusting the median.
+- `priority` is unchanged in shape: it composes the median `relevance` with
+  the source-tier and content-kind weights above, the same formula as before.
+
+The /scan console's Model A/B table gains `avg vote` and `bias vs median`
+per model (that model's votes across every item it voted on, not just the
+ones it enriched, minus the item's median), and a "Relevance ensemble" card
+under History & health shows votes coverage, average spread, and the most
+disagreed items.
 
 ## The signals export (the contract's sibling)
 

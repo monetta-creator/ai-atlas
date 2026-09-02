@@ -27,6 +27,13 @@ export async function chatJSONOpenRouter<T>(opts: {
   // ONLY for calls belonging to a pipeline_runs row (the column is FK'd there;
   // recordApiCall swallows violations silently). Scan callers never set it.
   pipelineRunId?: string | null;
+  // Opt-in reasoning budget (tokens). A bare-judgment call (the relevance
+  // vote: one number, no prose) is where "reasoning off" bites: live-probed
+  // 2026-09-02, deepseek-v4-flash returned 0.95 and 0.0 on the IDENTICAL
+  // prompt with reasoning disabled and landed 0.95 consistently with a
+  // 200-token budget. When set, the first attempt runs bounded at this
+  // budget instead of disabled.
+  reasoningTokens?: number;
 }): Promise<T> {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY is not set.');
@@ -53,9 +60,11 @@ export async function chatJSONOpenRouter<T>(opts: {
         },
         body: JSON.stringify({
           model: opts.model,
-          max_tokens: mode === 'off' ? opts.maxTokens : opts.maxTokens + 500,
+          // 2x the reasoning budget as headroom: deepseek overshoots reasoning.max_tokens
+          // by ~20% (live-probed 236 on a 200 bound) and a truncated answer is a lost vote.
+          max_tokens: mode === 'off' ? opts.maxTokens : opts.maxTokens + (opts.reasoningTokens ? opts.reasoningTokens * 2 : 500),
           response_format: { type: 'json_object' },
-          reasoning: mode === 'off' ? { enabled: false } : { max_tokens: 400 },
+          reasoning: mode === 'off' ? { enabled: false } : { max_tokens: opts.reasoningTokens ?? 400 },
           messages: [
             { role: 'system', content: opts.system },
             { role: 'user', content: opts.user },
@@ -92,7 +101,7 @@ export async function chatJSONOpenRouter<T>(opts: {
   };
 
   try {
-    return await attempt('off');
+    return await attempt(opts.reasoningTokens ? 'bounded' : 'off');
   } catch (e) {
     if (/reasoning is mandatory/i.test(String((e as Error)?.message))) return attempt('bounded');
     throw e;

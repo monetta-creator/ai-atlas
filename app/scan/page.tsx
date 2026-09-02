@@ -3,8 +3,9 @@ import { headers } from 'next/headers';
 import { requireAdminPage } from '@/lib/auth';
 import {
   getScanTopics, getScanRuns, getScanPrefs, getScanHealth, getPublishedSignalCount,
-  getEnrichModelStats, getSourceTierStats, getRecentSourceTiers,
+  getEnrichModelStats, getSourceTierStats, getRecentSourceTiers, getRelevanceEnsembleStats,
 } from '@/lib/data';
+import { ensemblePanel } from '@/lib/scan/ensemble';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import { getDataset } from '@/lib/datasets/registry';
 import { checkScanBudget } from '@/lib/scan/budget';
@@ -42,11 +43,12 @@ const panel = {
 export default async function ScanPage() {
   const admin = await requireAdminPage();
   const { editing, txt } = await getEditContext();
-  const [topics, runs, prefs, budget, health, signalCount, modelStats, tierStats, recentTiers, h] = await Promise.all([
+  const [topics, runs, prefs, budget, health, signalCount, modelStats, tierStats, recentTiers, ensemble, h] = await Promise.all([
     getScanTopics(), getScanRuns(130), getScanPrefs(), checkScanBudget(), getScanHealth(30),
     getPublishedSignalCount(), getEnrichModelStats(30), getSourceTierStats('scan_items', 30),
-    getRecentSourceTiers(40), headers(),
+    getRecentSourceTiers(40), getRelevanceEnsembleStats(30, 3), headers(),
   ]);
+  const panelSize = ensemblePanel(prefs.enrich_models).length;
   const tavily = Boolean(process.env.TAVILY_API_KEY);
   const openrouter = Boolean(process.env.OPENROUTER_API_KEY);
   const modelLabel = new Map(SCAN_ENRICH_MODELS.map((m) => [m.id, m.label]));
@@ -406,6 +408,8 @@ export default async function ScanPage() {
                       <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>avg ms</th>
                       <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>$/item</th>
                       <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>total $</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>avg vote</th>
+                      <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>bias vs median</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -422,6 +426,15 @@ export default async function ScanPage() {
                         <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{m.avgWallMs ?? '–'}</td>
                         <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{m.costPerItem === null ? '–' : `$${m.costPerItem.toFixed(4)}`}</td>
                         <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>${m.costUsd.toFixed(2)}</td>
+                        <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{m.avgVote === null ? '–' : m.avgVote.toFixed(2)}</td>
+                        <td
+                          style={{
+                            padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)',
+                            color: m.avgBias !== null && Math.abs(m.avgBias) >= 0.1 ? 'var(--heat-4)' : undefined,
+                          }}
+                        >
+                          {m.avgBias === null ? '–' : `${m.avgBias > 0 ? '+' : ''}${m.avgBias.toFixed(2)}`}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -429,6 +442,101 @@ export default async function ScanPage() {
               </div>
             </div>
           )}
+
+          <div style={{ marginTop: 20 }}>
+            <div className="section-label">Relevance ensemble · last 30 days</div>
+            <p className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 8 }}>
+              Relevance is the median of three score-only reads of the same text; the random model
+              split above stays so the A/B remains fair, and the spread is the disagreement signal.
+            </p>
+            <div
+              style={{
+                marginTop: 14, display: 'grid', gap: 'var(--gap, 10px)',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+              }}
+            >
+              <div className="rounded-[var(--radius)] border p-3" style={panel}>
+                <div className="text-xs" style={{ color: 'var(--faint-ink)' }}>Votes coverage</div>
+                <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                  {pct(ensemble.fullyVoted, ensemble.enriched)}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 2 }}>
+                  {ensemble.fullyVoted} of {ensemble.enriched} fully voted
+                </div>
+              </div>
+              <div className="rounded-[var(--radius)] border p-3" style={panel}>
+                <div className="text-xs" style={{ color: 'var(--faint-ink)' }}>Avg spread</div>
+                <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                  {ensemble.avgSpread === null ? '–' : ensemble.avgSpread.toFixed(2)}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 2 }}>
+                  max vote minus min vote
+                </div>
+              </div>
+              <div className="rounded-[var(--radius)] border p-3" style={panel}>
+                <div className="text-xs" style={{ color: 'var(--faint-ink)' }}>Panel size</div>
+                <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--ink)', marginTop: 2 }}>
+                  {panelSize}
+                </div>
+                <div className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 2 }}>
+                  models voting per item
+                </div>
+              </div>
+            </div>
+
+            {ensemble.perModel.length > 0 && (
+              <div className="text-xs" style={{ color: 'var(--dim)', marginTop: 12, display: 'grid', gap: 4 }}>
+                {ensemble.perModel.map((m) => (
+                  <div key={m.model} className="flex items-center gap-3 flex-wrap">
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--faint-ink)', minWidth: 160 }}>
+                      {modelLabel.get(m.model) ?? m.model}
+                    </span>
+                    <span>{m.votes} vote{m.votes === 1 ? '' : 's'}</span>
+                    <span>avg vote {m.avgVote === null ? '–' : m.avgVote.toFixed(2)}</span>
+                    <span style={{ color: m.avgBias !== null && Math.abs(m.avgBias) >= 0.1 ? 'var(--heat-4)' : undefined }}>
+                      bias {m.avgBias === null ? '–' : `${m.avgBias > 0 ? '+' : ''}${m.avgBias.toFixed(2)}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {ensemble.topDisagreements.length > 0 && (
+              <details style={{ marginTop: 12 }}>
+                <summary className="text-xs" style={{ color: 'var(--faint-ink)', cursor: 'pointer' }}>
+                  Most disagreed items · {ensemble.topDisagreements.length}
+                </summary>
+                <div style={{ marginTop: 10, overflowX: 'auto' }}>
+                  <table className="text-xs" style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', color: 'var(--faint-ink)' }}>
+                        <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)' }}>headline</th>
+                        <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)' }}>domain</th>
+                        <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)' }}>votes</th>
+                        <th style={{ padding: '5px 10px', borderBottom: '1px solid var(--line)', textAlign: 'right' }}>spread</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ensemble.topDisagreements.map((d) => (
+                        <tr key={d.id} style={{ color: 'var(--dim)' }}>
+                          <td style={{ padding: '4px 10px', borderBottom: '1px solid var(--line)' }}><a href={d.url} target="_blank" rel="noreferrer">{d.headline ?? d.url}</a></td>
+                          <td style={{ padding: '4px 10px', borderBottom: '1px solid var(--line)', color: 'var(--faint-ink)' }}>{d.source_domain ?? '–'}</td>
+                          <td style={{ padding: '4px 10px', borderBottom: '1px solid var(--line)', fontFamily: 'var(--font-mono)' }}>
+                            {Object.entries(d.votes)
+                              .map(([model, vote]) => `${modelLabel.get(model) ?? model}: ${vote.toFixed(2)}`)
+                              .join(' · ')}
+                          </td>
+                          <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)', color: 'var(--heat-4)' }}>
+                            {d.spread.toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            )}
+          </div>
 
           <details style={{ marginTop: 14 }}>
             <summary className="text-xs" style={{ color: 'var(--faint-ink)', cursor: 'pointer' }}>

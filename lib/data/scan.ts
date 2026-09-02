@@ -1,5 +1,6 @@
 import { q, one } from '../db';
 import type { ScanHealth, ScanRun, ScanTopic } from '../types';
+import type { RelevanceVotes } from '../scan/ensemble';
 
 // ---- External Scan (migration 0038) -----------------------------------------
 // Reads for the scan engine and the admin console. The whole surface is
@@ -31,6 +32,8 @@ export interface EnrichModelStat {
   avgWallMs: number | null;
   costUsd: number;
   costPerItem: number | null;
+  avgVote: number | null;   // this model's average relevance-ensemble vote, over every item it voted on
+  avgBias: number | null;   // that vote average minus the item's median (relevance), same window
 }
 
 export async function getEnrichModelStats(days = 30): Promise<EnrichModelStat[]> {
@@ -39,6 +42,7 @@ export async function getEnrichModelStats(days = 30): Promise<EnrichModelStat[]>
     model: string; items: number; errors: number;
     avg_relevance: number | null; avg_tags: number | null; avg_summary_chars: number | null;
     avg_wall_ms: number | null; cost_usd: number | null; calls: number | null;
+    avg_vote: number | null; avg_bias: number | null;
   }>(
     `select i.enriched_by as model,
             count(*) filter (where i.enrich_status = 'done')::int as items,
@@ -46,7 +50,8 @@ export async function getEnrichModelStats(days = 30): Promise<EnrichModelStat[]>
             round(avg(i.relevance) filter (where i.enrich_status = 'done')::numeric, 2) as avg_relevance,
             round(avg(cardinality(i.tags)) filter (where i.enrich_status = 'done')::numeric, 1) as avg_tags,
             round(avg(length(i.summary)) filter (where i.enrich_status = 'done')::numeric, 0) as avg_summary_chars,
-            l.avg_wall_ms, l.cost_usd, l.calls
+            l.avg_wall_ms, l.cost_usd, l.calls,
+            mv.avg_vote, mv.avg_bias
        from scan_items i
        join scan_runs r on r.id = i.run_id and r.day > current_date - $1::interval
        left join (
@@ -56,8 +61,21 @@ export async function getEnrichModelStats(days = 30): Promise<EnrichModelStat[]>
           where feature = 'scan_enrich' and created_at > now() - $1::interval
           group by model
        ) l on l.model = i.enriched_by
+       -- Every panel model's vote across ALL items it voted on in the window,
+       -- not just the ones it happened to enrich, so a model that voted a lot
+       -- but enriched little still shows its bias against the median.
+       left join (
+         select vp.key as model,
+                round(avg(vp.value::numeric), 2) as avg_vote,
+                round(avg(vp.value::numeric - si.relevance), 2) as avg_bias
+           from scan_items si
+           join scan_runs sr on sr.id = si.run_id and sr.day > current_date - $1::interval,
+                jsonb_each_text(si.relevance_votes) as vp
+          where si.relevance_votes is not null and si.relevance is not null
+          group by vp.key
+       ) mv on mv.model = i.enriched_by
       where i.enriched_by is not null
-      group by i.enriched_by, l.avg_wall_ms, l.cost_usd, l.calls
+      group by i.enriched_by, l.avg_wall_ms, l.cost_usd, l.calls, mv.avg_vote, mv.avg_bias
       order by items desc, i.enriched_by`,
     [interval]
   );
@@ -71,6 +89,8 @@ export async function getEnrichModelStats(days = 30): Promise<EnrichModelStat[]>
     avgWallMs: r.avg_wall_ms,
     costUsd: r.cost_usd ?? 0,
     costPerItem: r.calls ? Number(((r.cost_usd ?? 0) / r.calls).toFixed(4)) : null,
+    avgVote: r.avg_vote,
+    avgBias: r.avg_bias,
   }));
 }
 
@@ -372,4 +392,79 @@ export async function getRecentSourceTiers(limit = 40): Promise<SourceTierRow[]>
        from source_tiers order by created_at desc, domain limit $1`,
     [limit]
   );
+}
+
+// ---- Relevance ensemble (migration 0053) ------------------------------------
+
+// Enriched items that still owe votes from some panel model: the engine's
+// per-run top-up and the backfill both read this. The caller decides which
+// panel models are missing (lib/scan/ensemble.ts missingVoters).
+export async function getItemsMissingVotes(
+  runId: string | null, panelSize: number, limit = 8
+): Promise<{
+  id: string; url: string; headline: string | null; source_domain: string | null;
+  raw_content: string; enriched_by: string | null; relevance: number | null; relevance_votes: RelevanceVotes | null;
+}[]> {
+  return q(
+    `select id::text as id, url, headline, source_domain, coalesce(raw_content, '') as raw_content,
+            enriched_by, relevance, relevance_votes
+       from scan_items
+      where enrich_status = 'done' and raw_content is not null
+        and (relevance_votes is null or (select count(*) from jsonb_object_keys(relevance_votes)) < $1)
+        ${runId ? 'and run_id = $3' : ''}
+      order by created_at desc, id limit $2`,
+    runId ? [panelSize, limit, runId] : [panelSize, limit]
+  );
+}
+
+export interface RelevanceEnsembleStats {
+  days: number;
+  enriched: number;          // enriched items in the window
+  fullyVoted: number;        // items with every panel model's vote
+  anyVotes: number;          // items with at least two votes
+  avgSpread: number | null;
+  perModel: { model: string; votes: number; avgVote: number | null; avgBias: number | null }[]; // bias = vote - median
+  topDisagreements: { id: string; url: string; headline: string | null; source_domain: string | null; votes: RelevanceVotes; spread: number }[];
+}
+
+export async function getRelevanceEnsembleStats(days = 30, panelSize = 3): Promise<RelevanceEnsembleStats> {
+  const interval = `${Math.max(1, Math.round(days))} days`;
+  const [totals, perModel, top] = await Promise.all([
+    one<{ enriched: number; fully: number; any: number; avg_spread: number | null }>(
+      `select count(*)::int as enriched,
+              count(*) filter (where relevance_votes is not null and (select count(*) from jsonb_object_keys(relevance_votes)) >= $2)::int as fully,
+              count(*) filter (where relevance_votes is not null and (select count(*) from jsonb_object_keys(relevance_votes)) >= 2)::int as any,
+              round(avg(relevance_spread)::numeric, 2) as avg_spread
+         from scan_items i join scan_runs r on r.id = i.run_id
+        where i.enrich_status = 'done' and r.day > current_date - $1::interval`,
+      [interval, panelSize]
+    ),
+    q<{ model: string; votes: number; avg_vote: number | null; avg_bias: number | null }>(
+      `select v.key as model, count(*)::int as votes,
+              round(avg(v.value::numeric), 2) as avg_vote,
+              round(avg(v.value::numeric - i.relevance), 2) as avg_bias
+         from scan_items i join scan_runs r on r.id = i.run_id,
+              jsonb_each_text(i.relevance_votes) as v
+        where i.relevance_votes is not null and i.relevance is not null
+          and r.day > current_date - $1::interval
+        group by v.key order by votes desc, v.key`,
+      [interval]
+    ),
+    q<{ id: string; url: string; headline: string | null; source_domain: string | null; votes: RelevanceVotes; spread: number }>(
+      `select i.id::text as id, i.url, i.headline, i.source_domain, i.relevance_votes as votes, i.relevance_spread as spread
+         from scan_items i join scan_runs r on r.id = i.run_id
+        where i.relevance_spread is not null and r.day > current_date - $1::interval
+        order by i.relevance_spread desc, i.created_at desc limit 10`,
+      [interval]
+    ),
+  ]);
+  return {
+    days,
+    enriched: totals?.enriched ?? 0,
+    fullyVoted: totals?.fully ?? 0,
+    anyVotes: totals?.any ?? 0,
+    avgSpread: totals?.avg_spread ?? null,
+    perModel: perModel.map((r) => ({ model: r.model, votes: r.votes, avgVote: r.avg_vote, avgBias: r.avg_bias })),
+    topDisagreements: top,
+  };
 }
