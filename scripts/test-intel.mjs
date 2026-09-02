@@ -13,6 +13,7 @@ import {
   INTEL_DIMENSIONS, INTEL_DIMENSION_CODES, dimensionDigest, intelFactKey,
   searchDueSlugs, resolveIntelTokens, bingNewsFeedUrl, unwrapNewsUrl, sweepUnit, nextUnsweptSlug,
 } from '../lib/intel/core.ts';
+import { countJobBuckets, ATS_BUCKET_CODES } from '../lib/intel/ats.ts';
 
 let pass = 0;
 let fail = 0;
@@ -97,6 +98,37 @@ check('unwrapNewsUrl extracts the publisher URL from Bing apiclick links', () =>
   assert.equal(unwrapNewsUrl('https://example.com/a'), 'https://example.com/a');
 });
 
+check('countJobBuckets counts by keyword group, a title can land in several buckets', () => {
+  const titles = [
+    'AI Engineer, Fraud Platform',           // ai_ml + engineering + fraud_risk
+    'Machine Learning Scientist',            // ai_ml
+    'Senior Software Engineer',              // engineering
+    'Data Scientist, Risk',                  // ai_ml + fraud_risk
+    'AML Compliance Analyst',                // fraud_risk (both aml + compliance)
+    'Agentic Automation Lead',               // agents (both agent + automation)
+    'Email Marketing Specialist',            // nothing: "ai" must not fire on "Email"
+    'Retail Store Associate',                // nothing: "ai" must not fire on "Retail"
+  ];
+  const counts = countJobBuckets(titles);
+  assert.deepEqual(new Set(Object.keys(counts)), new Set(ATS_BUCKET_CODES));
+  assert.equal(counts.ai_ml, 3, 'AI Engineer, Machine Learning Scientist, Data Scientist Risk');
+  assert.equal(counts.fraud_risk, 3, 'AI Engineer(fraud), Data Scientist Risk, AML Compliance Analyst');
+  assert.equal(counts.engineering, 2, 'AI Engineer, Senior Software Engineer');
+  assert.equal(counts.agents, 1, 'Agentic Automation Lead (both keywords, still one title)');
+});
+
+check('countJobBuckets zeroes every bucket on an empty title list', () => {
+  const counts = countJobBuckets([]);
+  for (const code of ATS_BUCKET_CODES) assert.equal(counts[code], 0);
+});
+
+check('countJobBuckets is case-insensitive and word-bounded for short acronyms', () => {
+  assert.equal(countJobBuckets(['ai researcher']).ai_ml, 1);
+  assert.equal(countJobBuckets(['SWE II']).engineering, 1);
+  assert.equal(countJobBuckets(['Domain Registrar']).ai_ml, 0, '"ai" inside "Domain" must not match');
+  assert.equal(countJobBuckets(['Formless Copy Editor']).ai_ml, 0, '"ml" inside "Formless" must not match');
+});
+
 // ---- DB sanity: the 0043 schema is present with its invariants.
 const client = new pg.Client({
   host: process.env.SUPABASE_DB_HOST,
@@ -138,9 +170,9 @@ await checkAsync('intel_prefs singleton exists', async () => {
   assert.equal(rows.length, 1);
 });
 
-await checkAsync('intel_metrics.source values stay within the 4-value enum', async () => {
+await checkAsync('intel_metrics.source values stay within the 5-value enum', async () => {
   const { rows } = await client.query(`select distinct source from intel_metrics`);
-  const allowed = new Set(['edgar_xbrl', 'fdic', 'cfpb', 'y9c']);
+  const allowed = new Set(['edgar_xbrl', 'fdic', 'cfpb', 'y9c', 'ats']);
   for (const r of rows) assert.ok(allowed.has(r.source), `unexpected source ${r.source}`);
 });
 

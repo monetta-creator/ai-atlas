@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import pg from 'pg';
 import {
   parseFeedXml, decodeEntities, withinWindow, clamp01, nextSearchTopic, lookbackDays,
-  mapTavilyResults, extractJsonObject,
+  mapTavilyResults, extractJsonObject, gdeltSafeQuery,
 } from '../lib/scan/core.ts';
 import { SCAN_ENRICH_MODELS, pickEnrichModel, isScanEnrichModel } from '../lib/scan/models.ts';
 import {
@@ -155,6 +155,22 @@ check('mapTavilyResults: maps, blocks by suffix, normalizes dates, drops junk', 
   assert.equal(items[0].source_domain, 'example.gov');
   assert.equal(items[0].published_date, '2026-08-28');
   assert.equal(items[1].published_date, '');
+});
+
+check('gdeltSafeQuery: expands short tokens, keeps phrases, drops strays', () => {
+  // GDELT rejects any unquoted keyword under 3 chars ("keyword too short").
+  assert.equal(
+    gdeltSafeQuery('most significant AI developments news September 2026'),
+    'most significant "artificial intelligence" developments news September 2026'
+  );
+  assert.equal(
+    gdeltSafeQuery('US tariff announcement impact banks'),
+    '"United States" tariff announcement impact banks'
+  );
+  // Quoted phrases pass through untouched; other short strays drop.
+  assert.equal(gdeltSafeQuery('"AI agents" at 5G scale'), '"AI agents" scale');
+  // Pure numbers survive (years in date-token queries).
+  assert.equal(gdeltSafeQuery('outlook 2026'), 'outlook 2026');
 });
 
 check('extractJsonObject: clean, fenced, prose-wrapped, nested, braces in strings', () => {

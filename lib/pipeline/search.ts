@@ -1,5 +1,6 @@
 import { recordApiCall } from '../cost';
 import { tavilyQuery } from '../scan/search-tavily';
+import { gdeltQuery, mapGdeltResults } from '../scan/search-gdelt';
 import { mapTavilyResults } from '../scan/core';
 import { chatJSONOpenRouter } from '../scan/llm';
 import { getZeroYieldDomains } from '../data';
@@ -12,14 +13,38 @@ import type { SignalLens } from '../types';
 
 // Pipeline 2.0's cheap search legs. The Sonnet + web_search discovery call's
 // own prompt forbade judgment and returned only url/headline/date lists, so
-// the lens leg is LLM-free Tavily (the scan's proven recipe). The breaking
-// sweep and coverage check DO carry judgment (significance, lens assignment,
-// covered-vs-missed): their web half becomes Tavily over the same
-// quality-outlet allowlist and their judgment half one small utility-model
-// call. Callers branch on TAVILY_API_KEY; without it the original Sonnet
-// paths (web.ts / coverage.ts) run unchanged.
+// the lens leg is LLM-free Tavily (the scan's proven recipe, unchanged here).
+// The breaking sweep and coverage check DO carry judgment (significance, lens
+// assignment, covered-vs-missed): their web half is GDELT DOC 2.0 (free,
+// keyless, halving Tavily's free-tier burn) restricted post-fetch to the same
+// quality-outlet allowlist Tavily's include_domains used to enforce
+// server-side, and their judgment half stays one small utility-model call.
+// Callers branch on OPENROUTER_API_KEY (the judgment call's requirement;
+// GDELT itself needs no key); without it the original Sonnet paths (web.ts /
+// coverage.ts) run unchanged.
 
 const num = (v: string | null | undefined): string => String(v ?? '');
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Politeness between consecutive GDELT calls in a loop (search-gdelt.ts's
+// scan leg uses the same figure).
+const GDELT_BETWEEN_QUERIES_MS = 5100; // GDELT's documented anonymous limit: 1 request per 5 seconds
+
+// GDELT DOC 2.0 has no server-side "restrict to these domains" param the way
+// Tavily's include_domains does, so the quality-outlet allowlist is enforced
+// client-side after the fetch (suffix-matched, same shape as the deny-list
+// filters elsewhere in this file).
+function onlyAllowedDomains<T extends { source_domain: string }>(
+  items: T[],
+  allowedDomains: string[]
+): T[] {
+  return items.filter((it) =>
+    allowedDomains.some((d) => it.source_domain === d || it.source_domain.endsWith(`.${d}`))
+  );
+}
 
 function daysSince(sinceISO: string): number {
   return Math.max(1, Math.ceil((Date.now() - Date.parse(`${sinceISO}T00:00:00Z`)) / 86_400_000));
@@ -83,11 +108,12 @@ interface SweepDevelopment extends RawCandidate {
   lens: SignalLens;
 }
 
-// The breaking sweep, restructured: Tavily fetches what the quality outlets
-// reported (include_domains = the curated allowlist), then ONE utility-model
-// call picks the genuinely significant developments and assigns each a lens.
-// Mistakes are cheap: everything it returns enters the same triage funnel.
-export async function searchBreakingSweepTavily(opts: {
+// The breaking sweep, restructured: GDELT fetches what the quality outlets
+// reported (post-fetch filtered to the curated allowlist, replacing Tavily's
+// server-side include_domains), then ONE utility-model call picks the
+// genuinely significant developments and assigns each a lens. Mistakes are
+// cheap: everything it returns enters the same triage funnel.
+export async function searchBreakingSweepGdelt(opts: {
   queries: string[];
   sinceISO: string;
   pipelineRunId?: string;
@@ -97,24 +123,27 @@ export async function searchBreakingSweepTavily(opts: {
   const days = daysSince(opts.sinceISO);
   const t0 = Date.now();
   const byUrl = new Map<string, RawCandidate>();
-  for (const query of opts.queries) {
-    let results;
+  for (let i = 0; i < opts.queries.length; i++) {
+    if (i > 0) await sleep(GDELT_BETWEEN_QUERIES_MS);
+    const query = opts.queries[i];
+    let articles;
     try {
-      results = await tavilyQuery({ query, days, includeDomains: BREAKING_SWEEP_DOMAINS, maxResults: 15 });
+      articles = await gdeltQuery({ query, days, maxRecords: 100 });
     } catch {
-      results = await tavilyQuery({ query, days, includeDomains: BREAKING_SWEEP_DOMAINS, maxResults: 15 });
+      await sleep(GDELT_BETWEEN_QUERIES_MS);
+      articles = await gdeltQuery({ query, days, maxRecords: 100 });
     }
-    for (const item of mapTavilyResults(results)) {
+    for (const item of onlyAllowedDomains(mapGdeltResults(articles), BREAKING_SWEEP_DOMAINS)) {
       if (!byUrl.has(item.url)) byUrl.set(item.url, item);
     }
   }
   await recordApiCall({
     feature: 'pipeline_discovery',
-    model: 'tavily-search',
+    model: 'gdelt-doc',
     usage: null,
     wallMs: Date.now() - t0,
     pipelineRunId: opts.pipelineRunId,
-    metadata: { sweep: true, provider: 'tavily' },
+    metadata: { sweep: true, provider: 'gdelt', queries: opts.queries.length },
   });
   const found = [...byUrl.values()];
   if (!found.length) return [];
@@ -151,11 +180,11 @@ export async function searchBreakingSweepTavily(opts: {
   return picks;
 }
 
-// The coverage half of the same recipe: Tavily re-derives "what did the
+// The coverage half of the same recipe: GDELT re-derives "what did the
 // serious press report" with the independent COVERAGE_QUERIES phrasing; the
 // utility model does the covered-vs-missed comparison against the tracked
 // list. Returns the same development shape coverage.ts validates and persists.
-export async function coverageDevelopmentsTavily(opts: {
+export async function coverageDevelopmentsGdelt(opts: {
   queries: string[];
   sinceISO: string;
   tracked: string[];
@@ -164,14 +193,17 @@ export async function coverageDevelopmentsTavily(opts: {
 }): Promise<{ headline: string; url: string; covered: boolean; matched: string }[]> {
   const days = daysSince(opts.sinceISO);
   const byUrl = new Map<string, RawCandidate>();
-  for (const query of opts.queries) {
-    let results;
+  for (let i = 0; i < opts.queries.length; i++) {
+    if (i > 0) await sleep(GDELT_BETWEEN_QUERIES_MS);
+    const query = opts.queries[i];
+    let articles;
     try {
-      results = await tavilyQuery({ query, days, includeDomains: BREAKING_SWEEP_DOMAINS, maxResults: 15 });
+      articles = await gdeltQuery({ query, days, maxRecords: 100 });
     } catch {
-      results = await tavilyQuery({ query, days, includeDomains: BREAKING_SWEEP_DOMAINS, maxResults: 15 });
+      await sleep(GDELT_BETWEEN_QUERIES_MS);
+      articles = await gdeltQuery({ query, days, maxRecords: 100 });
     }
-    for (const item of mapTavilyResults(results)) {
+    for (const item of onlyAllowedDomains(mapGdeltResults(articles), BREAKING_SWEEP_DOMAINS)) {
       if (!byUrl.has(item.url)) byUrl.set(item.url, item);
     }
   }
@@ -191,7 +223,7 @@ export async function coverageDevelopmentsTavily(opts: {
     timeoutMs: 45_000,
     feature: 'pipeline_coverage',
     pipelineRunId: opts.pipelineRunId ?? null,
-    metadata: { tracked: opts.tracked.length, provider: 'tavily' },
+    metadata: { tracked: opts.tracked.length, provider: 'gdelt' },
   });
 
   const seen = new Set<number>();

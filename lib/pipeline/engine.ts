@@ -3,6 +3,7 @@ import {
   getRun, getPipelinePrefs, getTodayDailyRunId, getApprovedCandidates, countPendingCandidates,
 } from '../data';
 import { discoveryPlan, discoverBatch, discoverBreakingSweep } from './discovery';
+import { searchCourtListener } from './courtlistener';
 import { triageChunk } from './triage';
 import { analyzeCandidate } from './analysis';
 import { hydrateCandidate } from './hydrate';
@@ -75,6 +76,7 @@ export async function advancePipelineRun(runId: string, deadlineAt: number): Pro
         const units = [
           ...discoveryPlan(run.cadence).map((b) => `${b.lens}:${b.batchIndex}`),
           'sweep',
+          'courtlistener',
         ];
         const done = new Set(run.discovered_units ?? []);
         const next = units.find((u) => !done.has(u));
@@ -85,6 +87,8 @@ export async function advancePipelineRun(runId: string, deadlineAt: number): Pro
         try {
           if (next === 'sweep') {
             await discoverBreakingSweep(runId, sinceISO);
+          } else if (next === 'courtlistener') {
+            await searchCourtListener(runId, sinceISO);
           } else {
             const [lens, idx] = next.split(':');
             await discoverBatch(runId, lens as SignalLens, Number(idx), sinceISO);

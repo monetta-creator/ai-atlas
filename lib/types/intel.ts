@@ -10,7 +10,13 @@ export type IntelTier =
   | 'self' | 'card_issuer' | 'consumer_bank' | 'fintech' | 'tech_platform' | 'wildcard';
 export type IntelStep = 'feeds' | 'search' | 'filings' | 'hydrate' | 'enrich' | 'complete';
 export type IntelDocType = 'news' | 'press' | 'filing' | 'transcript' | 'report';
-export type IntelMetricSource = 'edgar_xbrl' | 'fdic' | 'cfpb' | 'y9c';
+export type IntelMetricSource = 'edgar_xbrl' | 'fdic' | 'cfpb' | 'y9c' | 'ats';
+export type IntelAtsProvider = 'greenhouse' | 'lever';
+
+export interface IntelAtsConfig {
+  provider: IntelAtsProvider;
+  board: string;
+}
 
 export interface IntelCompany {
   slug: string;
@@ -29,6 +35,7 @@ export interface IntelCompany {
   active: boolean;
   dossier: Record<string, unknown> | null;
   notes: string | null;
+  ats: IntelAtsConfig | null;      // Greenhouse/Lever board, if the company has one
   created_at: string;
   updated_at: string;
 }

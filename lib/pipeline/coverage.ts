@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { recordApiCall } from '../cost';
 import { COVERAGE_QUERIES, BREAKING_SWEEP_DOMAINS, MAX_SEARCH_USES, resolveDateTokens } from './config';
-import { coverageDevelopmentsTavily } from './search';
+import { coverageDevelopmentsGdelt } from './search';
 import { getRun, getCandidates, getSignalsDigestForTriage, getPipelinePrefs } from '../data';
 import * as m from '../mutations';
 import type { CoverageDevelopment, RunCoverage } from '../types';
@@ -44,12 +44,12 @@ export async function runCoverageCheck(runId: string): Promise<RunCoverage> {
 
   const queries = resolveDateTokens(COVERAGE_QUERIES, sinceISO);
 
-  // 2.0: Tavily fetches the quality outlets' headlines and the cheap utility
-  // model does the covered-vs-missed comparison; the Sonnet web_search call
-  // below is the fallback when either key is absent. Same RunCoverage shape.
-  if (process.env.TAVILY_API_KEY && process.env.OPENROUTER_API_KEY) {
+  // 2.0: GDELT (keyless, free) fetches the quality outlets' headlines and the cheap
+  // utility model does the covered-vs-missed comparison; the Sonnet web_search call
+  // below is the fallback when OPENROUTER_API_KEY is absent. Same RunCoverage shape.
+  if (process.env.OPENROUTER_API_KEY) {
     const prefs = await getPipelinePrefs();
-    const developments = await coverageDevelopmentsTavily({
+    const developments = await coverageDevelopmentsGdelt({
       queries, sinceISO, tracked, pipelineRunId: runId, utilityModel: prefs.utility_model,
     });
     const coverage: RunCoverage = {

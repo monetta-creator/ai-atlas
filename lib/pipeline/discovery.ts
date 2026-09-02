@@ -1,5 +1,5 @@
 import { searchCandidates, searchBreakingSweep } from './web';
-import { searchCandidatesTavily, searchBreakingSweepTavily } from './search';
+import { searchCandidatesTavily, searchBreakingSweepGdelt } from './search';
 import {
   lensBatches, dailyLensQueries, resolveDateTokens, ALL_LENSES, MAX_SEARCH_USES,
   LOW_QUALITY_DOMAINS, SWEEP_QUERIES, BREAKING_SWEEP_DOMAINS,
@@ -66,16 +66,17 @@ export async function discoverBatch(
 
 // The breaking-events sweep: one extra, lens-agnostic discovery unit per run that asks
 // "what did the serious press report since the window opened" over a curated
-// quality-outlet allowlist, significance-first. 2.0: Tavily fetches the outlets'
-// headlines and a cheap utility model does the significance + lens judgment
-// (lib/pipeline/search.ts); the Sonnet web_search call remains the fallback.
+// quality-outlet allowlist, significance-first. 2.0: GDELT (keyless, free) fetches the
+// outlets' headlines and a cheap utility model does the significance + lens judgment
+// (lib/pipeline/search.ts); the Sonnet web_search call remains the fallback. GDELT needs
+// no API key, so this branch only requires OPENROUTER_API_KEY (for the judgment call).
 // Candidates enter the same triage funnel as every other discovery.
 export async function discoverBreakingSweep(runId: string, sinceISO: string): Promise<number> {
   const queries = resolveDateTokens(SWEEP_QUERIES, sinceISO);
   let found;
-  if (process.env.TAVILY_API_KEY && process.env.OPENROUTER_API_KEY) {
+  if (process.env.OPENROUTER_API_KEY) {
     const prefs = await getPipelinePrefs();
-    found = await searchBreakingSweepTavily({
+    found = await searchBreakingSweepGdelt({
       queries, sinceISO, pipelineRunId: runId, utilityModel: prefs.utility_model,
     });
   } else {

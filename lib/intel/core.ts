@@ -93,7 +93,7 @@ export function unwrapNewsUrl(url: string): string {
 export const EDGAR_FORMS = ['8-K', '10-Q', '10-K', 'S-1', 'DEF 14A', '20-F', '6-K'] as const;
 
 // A checkpoint entry for intel_runs.swept_units.
-export type SweepLeg = 'feeds' | 'search' | 'filings' | 'synthesis';
+export type SweepLeg = 'feeds' | 'search' | 'filings' | 'synthesis' | 'ats';
 
 export function sweepUnit(leg: SweepLeg, slug?: string): string {
   return slug ? `${leg}:${slug}` : leg;

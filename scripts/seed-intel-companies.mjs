@@ -25,7 +25,8 @@ import pg from 'pg';
 //   "domain": "examplebancorp.com",         // optional
 //   "aliases": ["Example Bancorp"],         // optional; defaults to [name]
 //   "feed_urls": ["https://..."],           // optional; defaults to one Google News RSS URL
-//   "search_queries": ["Example Bancorp strategy announcement {month} {year}"]  // optional; defaults to []
+//   "search_queries": ["Example Bancorp strategy announcement {month} {year}"],  // optional; defaults to []
+//   "ats": { "provider": "greenhouse", "board": "example" }  // optional; "greenhouse" | "lever"
 // }]
 
 const path = process.argv[2] ?? 'private/intel-companies.json';
@@ -54,6 +55,7 @@ if (!Array.isArray(companies) || !companies.length) {
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,60}$/;
 const CIK_RE = /^[0-9]+$/;
 const TIERS = ['self', 'card_issuer', 'consumer_bank', 'fintech', 'tech_platform', 'wildcard'];
+const ATS_PROVIDERS = ['greenhouse', 'lever'];
 const isStrArray = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string' && x.trim());
 
 const errors = [];
@@ -71,6 +73,18 @@ for (const [i, c] of companies.entries()) {
   }
   if (c?.cik !== undefined && c?.cik !== null && !CIK_RE.test(String(c.cik))) {
     errors.push(`${where}: cik must be digits only, got "${c.cik}"`);
+  }
+  if (c?.ats !== undefined && c?.ats !== null) {
+    if (typeof c.ats !== 'object' || Array.isArray(c.ats)) {
+      errors.push(`${where}: ats must be an object`);
+    } else {
+      if (!ATS_PROVIDERS.includes(c.ats.provider)) {
+        errors.push(`${where}: ats.provider must be one of ${ATS_PROVIDERS.join(', ')}`);
+      }
+      if (typeof c.ats.board !== 'string' || !c.ats.board.trim()) {
+        errors.push(`${where}: ats.board is required`);
+      }
+    }
   }
 }
 
@@ -151,8 +165,8 @@ await client.connect();
 let upserted = 0;
 for (const c of companies) {
   await client.query(
-    `insert into intel_companies (slug, name, tier, niche, ticker, cik, rssd_id, fdic_cert, lei, domain, aliases, feed_urls, search_queries)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text[], $12::text[], $13::text[])
+    `insert into intel_companies (slug, name, tier, niche, ticker, cik, rssd_id, fdic_cert, lei, domain, aliases, feed_urls, search_queries, ats)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text[], $12::text[], $13::text[], $14::jsonb)
      on conflict (slug) do update set
        name = excluded.name,
        tier = excluded.tier,
@@ -165,11 +179,13 @@ for (const c of companies) {
        domain = excluded.domain,
        aliases = excluded.aliases,
        feed_urls = excluded.feed_urls,
-       search_queries = excluded.search_queries`,
+       search_queries = excluded.search_queries,
+       ats = excluded.ats`,
     [
       c.slug, c.name, c.tier, c.niche?.trim() || null, c.ticker?.trim() || null, c.cik ?? null,
       c.rssd_id?.trim() || null, c.fdic_cert?.trim() || null, c.lei?.trim() || null, c.domain?.trim() || null,
       c.aliases, c.feed_urls, c.search_queries ?? [],
+      c.ats ? JSON.stringify({ provider: c.ats.provider, board: c.ats.board.trim() }) : null,
     ]
   );
   upserted += 1;

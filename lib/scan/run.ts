@@ -9,13 +9,14 @@ import {
   appendScanRunNotes, failStaleScanRuns,
 } from '../mutations/scan';
 import { fetchFeed } from './feeds';
-import { searchTopicNews } from './web';
+import { searchTopicNews, type RawScanItem } from './web';
 import { searchTopicNewsTavily } from './search-tavily';
+import { searchTopicNewsGdelt } from './search-gdelt';
 import { enrichScanItem } from './enrich';
 import { pickEnrichModel } from './models';
 import { checkScanBudget } from './budget';
 import { lookbackDays, nextSearchTopic, withinWindow } from './core';
-import { resolveDateTokens, LOW_QUALITY_DOMAINS } from '../pipeline/config';
+import { resolveDateTokens, rotatedQueries, LOW_QUALITY_DOMAINS } from '../pipeline/config';
 import { fetchCandidateText, FetchFailure, domainOf } from '../pipeline/web';
 import type { ScanProgress, ScanRun, ScanTopic } from '../types';
 
@@ -96,7 +97,8 @@ export async function advanceScanRun(runId: string, deadlineAt: number): Promise
           await setScanStep(runId, 'hydrate');
           continue;
         }
-        await runSearchUnit(run, next, notes);
+        const topicIndex = topics.indexOf(next);
+        await runSearchUnit(run, next, topicIndex, notes);
         continue;
       }
 
@@ -173,22 +175,44 @@ async function runFeedsStep(run: ScanRun, notes: string[]): Promise<void> {
 }
 
 // ---- search: one topic per unit, checkpointed in searched_topics so a
-// resumed invocation never repeats a topic. Provider: Tavily's LLM-free news
-// search when TAVILY_API_KEY is set (a few seconds per topic, free tier),
-// else the original Sonnet + web_search call (~35-50s).
-async function runSearchUnit(run: ScanRun, topic: ScanTopic, notes: string[]): Promise<void> {
+// resumed invocation never repeats a topic. Queries rotate over the topic's
+// FULL query list day by day (rotatedQueries, the pipeline's daily-rotation
+// recipe) instead of always taking the first two. Provider alternates by
+// (topicIndex + dayIndex) parity when TAVILY_API_KEY is set, so every topic
+// sees both Tavily and GDELT across consecutive days and each free tier only
+// carries half the daily load; with no Tavily key every topic goes to GDELT.
+// The original Sonnet + web_search call is the last-resort fallback, reached
+// only when GDELT itself throws.
+async function runSearchUnit(
+  run: ScanRun,
+  topic: ScanTopic,
+  topicIndex: number,
+  notes: string[]
+): Promise<void> {
   const since = shiftDay(run.day, -lookbackDays(run.day));
   const oldest = shiftDay(run.day, -7); // wire-pickup lag tolerance for the search leg
-  const queries = resolveDateTokens(topic.search_queries, run.day).slice(0, 2);
+  const queries = resolveDateTokens(rotatedQueries(topic.search_queries, run.day), run.day);
+  const dayIndex = Math.floor(Date.parse(`${run.day}T00:00:00Z`) / 86_400_000);
+  const useTavily = !!process.env.TAVILY_API_KEY && (topicIndex + dayIndex) % 2 === 0;
   try {
-    const found = process.env.TAVILY_API_KEY
-      ? await searchTopicNewsTavily({
+    let found: RawScanItem[];
+    if (useTavily) {
+      found = await searchTopicNewsTavily({
+        topicName: topic.name,
+        queries,
+        sinceISO: since,
+        scanRunId: run.id,
+      });
+    } else {
+      try {
+        found = await searchTopicNewsGdelt({
           topicName: topic.name,
           queries,
           sinceISO: since,
           scanRunId: run.id,
-        })
-      : await searchTopicNews({
+        });
+      } catch {
+        found = await searchTopicNews({
           topicName: topic.name,
           topicDescription: topic.description,
           queries,
@@ -197,14 +221,18 @@ async function runSearchUnit(run: ScanRun, topic: ScanTopic, notes: string[]): P
           scanRunId: run.id,
           blockedDomains: LOW_QUALITY_DOMAINS,
         });
+      }
+    }
     const fresh = found.filter(
       (it) => !/^\d{4}-\d{2}-\d{2}$/.test(it.published_date) || it.published_date >= oldest
     );
     const { inserted } = await insertScanItems(run.id, topic.slug, 'web_search', fresh);
     if (inserted) await bumpScanRunCount(run.id, 'search_item_count', inserted);
   } catch (e) {
-    // A slow or overloaded call: checkpoint the topic as attempted and move on
-    // rather than wedging the run on one topic forever (tomorrow retries it).
+    // A slow or overloaded call (Tavily, or GDELT falling all the way through
+    // to a failing Sonnet fallback): checkpoint the topic as attempted and
+    // move on rather than wedging the run on one topic forever (tomorrow
+    // retries it).
     notes.push(`search failed (${topic.slug}): ${String((e as Error)?.message ?? 'error')}`);
   }
   await markScanTopicSearched(run.id, topic.slug);

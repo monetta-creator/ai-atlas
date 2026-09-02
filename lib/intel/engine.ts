@@ -16,6 +16,7 @@ import { pickEnrichModel } from '../scan/models';
 import { searchCompanyNewsTavily } from './search';
 import { fetchRecentFilings } from './edgar';
 import { fetchEdgarMetrics, fetchFdicMetricsFull, fetchCfpbComplaints } from './metrics';
+import { fetchAtsSnapshot, ATS_BUCKET_CODES } from './ats';
 import { enrichIntelItem } from './enrich';
 import { synthesizeCompanyDossier } from './synthesis';
 import { checkIntelBudget } from './budget';
@@ -112,11 +113,23 @@ export async function advanceIntelRun(runId: string, deadlineAt: number): Promis
       if (run.step === 'filings') {
         const companies = await getActiveIntelCompanies();
         const next = nextUnsweptSlug(companies.map((c) => c.slug), 'filings', run.swept_units);
-        if (!next) {
-          await setIntelStep(runId, 'hydrate');
+        if (next) {
+          await runFilingsUnit(run, companies.find((c) => c.slug === next) as IntelCompany, notes);
           continue;
         }
-        await runFilingsUnit(run, companies.find((c) => c.slug === next) as IntelCompany, notes);
+        // ATS hiring-signal leg: same Monday-only cadence as the EDGAR/FDIC/
+        // CFPB metrics (quarterly-ish data; the re-fetch upsert absorbs any
+        // drift), checkpointed per company independently of 'filings:<slug>'
+        // so a slow EDGAR fetch never blocks a fast ATS one, or vice versa.
+        if (lookbackDays(run.day) > 1) {
+          const atsCompanies = companies.filter((c) => c.ats);
+          const nextAts = nextUnsweptSlug(atsCompanies.map((c) => c.slug), 'ats', run.swept_units);
+          if (nextAts) {
+            await runAtsUnit(run, atsCompanies.find((c) => c.slug === nextAts) as IntelCompany, notes);
+            continue;
+          }
+        }
+        await setIntelStep(runId, 'hydrate');
         continue;
       }
 
@@ -270,6 +283,40 @@ async function runFilingsUnit(run: IntelRun, company: IntelCompany, notes: strin
     notes.push(`filings failed (${company.slug}): ${String((e as Error)?.message ?? 'error').slice(0, 120)}`);
   }
   await markIntelUnitSwept(run.id, sweepUnit('filings', company.slug));
+}
+
+// ---- ats: the LLM-free hiring-signal leg (Monday runs only, mirroring the
+// filings metrics cadence). One company per unit; a fetch/parse failure is a
+// note, never fatal, and the unit checkpoints either way.
+async function runAtsUnit(run: IntelRun, company: IntelCompany, notes: string[]): Promise<void> {
+  try {
+    if (company.ats) {
+      const snapshot = await fetchAtsSnapshot(company.ats.provider, company.ats.board);
+      const rows = [
+        {
+          company_slug: company.slug,
+          metric_code: 'ats_open_roles_total',
+          period: run.day,
+          value: snapshot.total,
+          unit: 'count',
+          source: 'ats' as const,
+        },
+        ...ATS_BUCKET_CODES.map((code) => ({
+          company_slug: company.slug,
+          metric_code: `ats_open_roles_${code}`,
+          period: run.day,
+          value: snapshot.buckets[code] ?? 0,
+          unit: 'count',
+          source: 'ats' as const,
+        })),
+      ];
+      const written = await upsertIntelMetrics(rows);
+      if (written) await bumpIntelRunCount(run.id, 'metric_count', written);
+    }
+  } catch (e) {
+    notes.push(`ats failed (${company.slug}): ${String((e as Error)?.message ?? 'error').slice(0, 120)}`);
+  }
+  await markIntelUnitSwept(run.id, sweepUnit('ats', company.slug));
 }
 
 // ---- synthesis: the weekly dossier refresh (Monday runs only), one company

@@ -203,3 +203,37 @@ export function nextSearchTopic<T extends { slug: string; active: boolean; searc
   }
   return null;
 }
+
+// GDELT hard-rejects any unquoted keyword under 3 characters ("Your search
+// contained a keyword that was too short.", a plain-text 200) — and this
+// repo's queries are full of bare "AI"/"US" tokens (every pipeline SWEEP_QUERY
+// carries "AI"). Rewrite the common short tokens to their quoted long forms
+// and drop any other short stray, leaving quoted phrases untouched. Pure, so
+// test-scan.mjs can assert on it directly.
+const GDELT_SHORT_TOKEN_MAP: Record<string, string> = {
+  ai: '"artificial intelligence"',
+  us: '"United States"',
+  uk: '"United Kingdom"',
+  eu: '"European Union"',
+};
+
+export function gdeltSafeQuery(query: string): string {
+  return query
+    .split(/("[^"]*")/)
+    .map((part) => {
+      if (part.startsWith('"')) return part;
+      return part
+        .split(/\s+/)
+        .map((tok) => {
+          const bare = tok.replace(/[^a-zA-Z0-9]/g, '');
+          if (bare.length >= 3 || /^\d+$/.test(bare)) return tok;
+          return GDELT_SHORT_TOKEN_MAP[bare.toLowerCase()] ?? '';
+        })
+        .filter(Boolean)
+        .join(' ');
+    })
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
