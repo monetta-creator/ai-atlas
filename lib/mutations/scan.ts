@@ -6,6 +6,7 @@ import {
   rateDomainByRule, normalizeDomain, isSourceTier, isSourceKind, type SourceTier, type SourceKind,
 } from '../scan/source-tiers';
 import { summarizeVotes, type RelevanceVotes, type VoteSummary } from '../scan/ensemble';
+import { foldRunNotes } from '../run-notes';
 
 // ---- External Scan (migration 0038) -----------------------------------------
 // Writers for the daily scan. scan_runs IS the checkpoint state: the cron
@@ -81,24 +82,19 @@ export async function bumpScanRunCount(runId: string, column: string, delta: num
 }
 
 // Persist an invocation's issue notes (0040): appended in first-occurrence
-// order, deduplicated against what the row already holds, capped at 40.
+// order, repeats counted instead of dropped ("note (xN)", lib/run-notes.ts),
+// capped at 40.
 export async function appendScanRunNotes(runId: string, notes: string[]): Promise<void> {
-  const clean = [...new Set(notes.map((n) => sanitizeText(n).trim().slice(0, 300)).filter(Boolean))].slice(0, 20);
+  const clean = notes.map((n) => sanitizeText(n).trim().slice(0, 300)).filter(Boolean);
   if (!clean.length) return;
-  await exec(
-    `update scan_runs
-        set notes = (
-          select coalesce(array_agg(n order by o), '{}') from (
-            select n, min(ord) as o
-              from unnest(notes || $2::text[]) with ordinality as t(n, ord)
-             group by n
-             order by min(ord)
-             limit 40
-          ) d
-        ), updated_at = now()
-      where id = $1`,
-    [runId, clean]
-  );
+  await withTx(async (c) => {
+    const row = await c.query<{ notes: string[] | null }>(
+      `select coalesce(notes, '{}') as notes from scan_runs where id = $1 for update`,
+      [runId]
+    );
+    const folded = foldRunNotes(row.rows[0]?.notes ?? [], clean);
+    await c.query(`update scan_runs set notes = $2::text[], updated_at = now() where id = $1`, [runId, folded]);
+  });
 }
 
 export async function completeScanRun(runId: string): Promise<void> {

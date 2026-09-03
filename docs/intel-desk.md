@@ -131,9 +131,10 @@ rated or classified yet.
   straight-line projection, warn past 85%, hard flag on quota errors),
   run console, the registry grouped by tier (toggles, dossier refresh),
   day grid, health tiles, model A/B table, per-company yield, run history.
-- Crons (`vercel.json`, Vercel Pro): weekdays 9:40 + 11:40 UTC, path-split
-  because Vercel keys crons by path. Monday runs carry the 3-day weekend
-  window and the metrics + synthesis refresh.
+- Crons (`vercel.json`, Vercel Pro): weekdays 9:40, 11:40, 13:20 and 15:20
+  UTC (`/sweep`, `/sweep2`, `/sweep3` stubs, path-split because Vercel keys
+  crons by path; the later two were Monday-only until 2026-09-03). Monday
+  runs carry the 3-day weekend window and the metrics + synthesis refresh.
 - The Scout bridge: wildcard niches run as Scout discovery verticals;
   `promoteScoutCompanyToIntelAction` graduates a tracked discovery into the
   registry as a `wildcard` row.

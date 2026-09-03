@@ -5,7 +5,7 @@ import { hydratePaper, analyzePaper } from './analysis';
 import { checkResearchBudget } from './budget';
 import { lookbackDays } from '../scan/core';
 import {
-  getResearchRun, getUnrecommendedPaperIds, getNextAnalysisCandidate, countPendingPapers,
+  getResearchRun, getUnrecommendedPaperIds, getNextAnalysisCandidates, countPendingPapers,
 } from '../data/research';
 import {
   createDayResearchRun, claimResearchRun, renewResearchLease, releaseResearchLease,
@@ -18,10 +18,10 @@ import type { ResearchEngineRun, ResearchProgress } from '../types';
 // unit persists to research_runs/papers before the next begins, so an
 // invocation that runs out of time resumes exactly where it stopped. Steps in
 // order: pull (arXiv, one page per unit, offset = the run's scanned_count),
-// triage (metadata relevance filtering, the existing chunked shape), agent
-// (the queue-agent recommendation pass over the pending review queue),
-// analyze (per-paper hydrate + finding extraction, budget-guarded, over
-// agent-recommended papers).
+// triage (metadata relevance filtering, TRIAGE_POOL chunks concurrent per
+// unit), agent (the queue-agent recommendation pass over the pending review
+// queue), analyze (hydrate + finding extraction, ANALYZE_POOL papers
+// concurrent per unit, budget-guarded, over agent-recommended papers).
 //
 // The OLD manual console flow (startResearchRunAction and friends) creates
 // its own since_date-only runs (day null) and is untouched by any of this:
@@ -33,10 +33,12 @@ import type { ResearchEngineRun, ResearchProgress } from '../types';
 // on the next one):
 const PULL_DAY_CAP_PER_LOOKBACK_DAY = 1500; // scanned_count ceiling = this * lookbackDays(day)
 const AGENT_CHUNK_SIZE = 12;
-const AGENT_CHUNK_CAP = 6;
+const AGENT_CHUNK_CAP = 8;
 const ANALYZE_CAP = 40;
+const ANALYZE_POOL = 3; // papers hydrated + analyzed concurrently per unit
 const ANALYZE_FAILURE_CAP = 5;
 const PULL_FAILURE_CAP = 3;
+const TRIAGE_POOL = 2; // triage chunks claimed + processed concurrently per unit
 const TRIAGE_FAILURE_CAP = 3;
 const ARXIV_POLITENESS_MS = 3200; // arXiv's ~1 request/3s ask, between pages within one invocation
 
@@ -144,7 +146,7 @@ export async function advanceResearchRun(runId: string, deadlineAt: number): Pro
         continue;
       }
 
-      // ---- triage: existing chunked relevance filter, claims its own rows ----
+      // ---- triage: TRIAGE_POOL chunks concurrent per unit, each claims its own rows ----
       if (run.step === 'triage') {
         const budget = await checkResearchBudget();
         if (!budget.ok) {
@@ -153,33 +155,50 @@ export async function advanceResearchRun(runId: string, deadlineAt: number): Pro
           await updateResearchRun(runId, { step: 'agent' });
           continue;
         }
-        try {
-          const r = await triagePapersChunk(runId);
-          triageFailures = 0;
-          if (r.remaining === 0) {
-            notes.push(`triage: ${run.kept_count + r.kept} kept of ${run.kept_count + r.kept + run.rejected_count + r.rejected}`);
-            await updateResearchRun(runId, { step: 'agent' });
-          } else if (r.processed === 0 && r.rejected === 0) {
-            // Nothing claimable and nothing exhausted to reject: the remaining
-            // pending papers are held by live claims (a crashed invocation under
-            // 5 minutes old). Advance rather than spin on empty claims. The claim
-            // is GLOBAL, so anything still held here is picked up and triaged by
-            // a later invocation of this run, or by the next day's run once the
-            // 5-minute hold expires, instead of being orphaned. Note a run's
-            // kept/rejected counters (recomputeResearchRunCounts, scoped by
-            // run_id) exclude leftovers absorbed from earlier runs, so an old
-            // run's papers triaged here count against whichever run claimed them.
-            notes.push(`triage: no claimable papers, ${r.remaining} left pending, advancing to agent`);
-            await updateResearchRun(runId, { step: 'agent' });
+        // claimPendingPapers ('for update skip locked', a 5-minute 'in triage'
+        // hold) makes concurrent chunks safe: no two chunks claim the same rows.
+        const settled = await Promise.allSettled(
+          Array.from({ length: TRIAGE_POOL }, () => triagePapersChunk(runId))
+        );
+        const ok = settled.flatMap((s) => (s.status === 'fulfilled' ? [s.value] : []));
+        for (const s of settled) {
+          if (s.status === 'rejected') {
+            notes.push(`triage chunk failed: ${String((s.reason as Error)?.message ?? 'error').slice(0, 160)}`);
           }
-        } catch (e) {
+        }
+        if (!ok.length) {
           triageFailures++;
-          notes.push(`triage chunk failed: ${String((e as Error)?.message ?? 'error').slice(0, 160)}`);
           if (triageFailures >= TRIAGE_FAILURE_CAP) {
             const pending = await countPendingPapers();
             notes.push(`triage: ${TRIAGE_FAILURE_CAP} consecutive failures, ${pending} left pending, advancing to agent`);
             await updateResearchRun(runId, { step: 'agent' });
           }
+          continue;
+        }
+        triageFailures = 0;
+        const processed = ok.reduce((sum, r) => sum + r.processed, 0);
+        const rejected = ok.reduce((sum, r) => sum + r.rejected, 0);
+        // Re-read remaining rather than trusting either chunk's own count: two
+        // concurrent chunks race on the same GLOBAL pending queue.
+        const remaining = await countPendingPapers();
+        if (remaining === 0) {
+          const current = await getResearchRun(runId);
+          const kept = current?.kept_count ?? run.kept_count;
+          const totalRejected = current?.rejected_count ?? run.rejected_count;
+          notes.push(`triage: ${kept} kept of ${kept + totalRejected}`);
+          await updateResearchRun(runId, { step: 'agent' });
+        } else if (processed === 0 && rejected === 0) {
+          // Nothing claimable and nothing exhausted to reject: the remaining
+          // pending papers are held by live claims (a crashed invocation under
+          // 5 minutes old). Advance rather than spin on empty claims. The claim
+          // is GLOBAL, so anything still held here is picked up and triaged by
+          // a later invocation of this run, or by the next day's run once the
+          // 5-minute hold expires, instead of being orphaned. Note a run's
+          // kept/rejected counters (recomputeResearchRunCounts, scoped by
+          // run_id) exclude leftovers absorbed from earlier runs, so an old
+          // run's papers triaged here count against whichever run claimed them.
+          notes.push(`triage: no claimable papers, ${remaining} left pending, advancing to agent`);
+          await updateResearchRun(runId, { step: 'agent' });
         }
         continue;
       }
@@ -213,7 +232,7 @@ export async function advanceResearchRun(runId: string, deadlineAt: number): Pro
         continue;
       }
 
-      // ---- analyze: per-paper hydrate + finding extraction, budget-guarded ----
+      // ---- analyze: ANALYZE_POOL papers hydrated + analyzed concurrently per unit, budget-guarded ----
       // (also the fallback for a legacy 'review' row, or 'complete' with status
       // still running: draining an empty candidate list completes the run.)
       if (analyzed >= ANALYZE_CAP || analyzeFailures >= ANALYZE_FAILURE_CAP) {
@@ -227,20 +246,25 @@ export async function advanceResearchRun(runId: string, deadlineAt: number): Pro
         await completeRun(runId);
         continue;
       }
-      const next = await getNextAnalysisCandidate(analyzeFailedIds);
-      if (!next) {
+      const want = Math.min(ANALYZE_POOL, ANALYZE_CAP - analyzed);
+      const candidates = await getNextAnalysisCandidates(analyzeFailedIds, want);
+      if (!candidates.length) {
         notes.push(`analyze: ${analyzed} finding${analyzed === 1 ? '' : 's'}, ${analyzeFailures} failure${analyzeFailures === 1 ? '' : 's'}, queue drained`);
         await completeRun(runId);
         continue;
       }
-      try {
-        await hydratePaper(next.id);
-        await analyzePaper(next.id);
-        analyzed++;
-      } catch (e) {
-        analyzeFailures++;
-        analyzeFailedIds.push(next.id);
-        notes.push(`analyze failed (paper ${next.id}): ${String((e as Error)?.message ?? 'error').slice(0, 160)}`);
+      const results = await Promise.allSettled(
+        candidates.map((c) => hydratePaper(c.id).then(() => analyzePaper(c.id)))
+      );
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        if (r.status === 'fulfilled') {
+          analyzed++;
+        } else {
+          analyzeFailures++;
+          analyzeFailedIds.push(candidates[i].id);
+          notes.push(`analyze failed (paper ${candidates[i].id}): ${String((r.reason as Error)?.message ?? 'error').slice(0, 160)}`);
+        }
       }
     }
     const run = await getResearchRun(runId);

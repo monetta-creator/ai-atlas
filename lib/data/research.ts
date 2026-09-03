@@ -96,20 +96,21 @@ export async function getUnrecommendedPaperIds(limit = 12): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-// The engine's 'analyze' step feed: the single next paper worth the model
-// spend, agent-recommended (tracked or noted) and not yet analyzed. excludeIds
-// keeps one invocation from retrying the same broken paper on every unit after
-// its hydrate/analyze call fails.
-export async function getNextAnalysisCandidate(excludeIds: string[] = []): Promise<{ id: string } | null> {
-  return one<{ id: string }>(
+// The engine's 'analyze' step feed: the next batch of papers worth the model
+// spend (ANALYZE_POOL-wide, lib/research/engine.ts), agent-recommended
+// (tracked or noted) and not yet analyzed. excludeIds keeps one invocation
+// from retrying the same broken paper on a later unit after its
+// hydrate/analyze call fails.
+export async function getNextAnalysisCandidates(excludeIds: string[], limit: number): Promise<{ id: string }[]> {
+  return q<{ id: string }>(
     `select id::text as id from papers
       where triage_status = 'kept' and review_status = 'pending'
         and agent_recommendation in ('tracked', 'noted')
         and extraction is null
         and not (id = any($1::uuid[]))
       order by agent_confidence desc nulls last
-      limit 1`,
-    [excludeIds]
+      limit $2`,
+    [excludeIds, limit]
   );
 }
 

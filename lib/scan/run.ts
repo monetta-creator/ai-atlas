@@ -21,6 +21,7 @@ import { rateAndStampSources } from './source-rating';
 import { lookbackDays, nextSearchTopic, withinWindow } from './core';
 import { resolveDateTokens, rotatedQueries, LOW_QUALITY_DOMAINS } from '../pipeline/config';
 import { fetchCandidateText, FetchFailure, domainOf } from '../pipeline/web';
+import { runPool } from '../pool';
 import type { ScanProgress, ScanRun, ScanTopic } from '../types';
 
 // The scan's checkpointed step engine, shared by the cron route (270s budget)
@@ -30,7 +31,9 @@ import type { ScanProgress, ScanRun, ScanTopic } from '../types';
 // (search 50s, enrich 30s) well under either caller's budget.
 
 const HYDRATE_POOL = 4;
+const ENRICH_PAGE = 12;
 const ENRICH_POOL = 3;
+const VOTE_POOL = 3;
 
 function shiftDay(dayISO: string, delta: number): string {
   const d = new Date(`${dayISO}T00:00:00Z`);
@@ -121,7 +124,7 @@ export async function advanceScanRun(runId: string, deadlineAt: number): Promise
       if (swept) await bumpScanRunCount(runId, 'skipped_count', swept);
       const counts = await getScanStepCounts(runId);
       if (counts.pendingEnrich === 0) {
-        await topUpRelevanceVotes(run, notes);
+        await topUpRelevanceVotes(run, notes, deadlineAt);
         await completeScanRun(runId);
         continue;
       }
@@ -133,7 +136,7 @@ export async function advanceScanRun(runId: string, deadlineAt: number): Promise
         await completeScanRun(runId);
         continue;
       }
-      await runEnrichWave(run, notes);
+      await runEnrichUnit(run, notes, deadlineAt);
     }
     const run = await getScanRun(runId);
     if (!run) throw new Error('scan run not found');
@@ -304,88 +307,133 @@ async function runHydrateWave(run: ScanRun, notes: string[]): Promise<void> {
   if (hydrated < items.length) notes.push(`hydrate: ${items.length - hydrated} of ${items.length} failed this wave`);
 }
 
-// ---- enrich: a small parallel wave of model calls. The /scan picker's
-// selection assigns each item a model deterministically (2+ selected =
-// the round-robin A/B split; empty = the Haiku fallback), and enriched_by
-// stamps the item either way. A per-item model failure gets a one-shot retry
-// on the next configured model (a single model's timeout or overload should
-// not sink the item for the day); only a second failure marks 'error' (raw
-// text still ships). The wave never throws.
+// ---- enrich: a bounded ROLLING pool of model calls (2026-09-03), not a
+// synchronized Promise.all wave. Measured problem: a wave of ENRICH_POOL
+// items waits for the slowest call in the batch (GLM p90 20s, max 44s)
+// while the other slots sit idle, and each slot used to also await its
+// relevance votes before freeing, roughly doubling hold time; throughput
+// measured ~7 items/min, and a full day's budget window ran out with 73
+// items still pending. runPool keeps ENRICH_POOL calls in flight and starts
+// the next item the instant a slot frees, checked against the unit's
+// deadline. The /scan picker's selection assigns each item a model
+// deterministically (2+ selected = the round-robin A/B split; empty = the
+// Haiku fallback), and enriched_by stamps the item either way. A per-item
+// model failure gets a one-shot retry on the next configured model (a
+// single model's timeout or overload should not sink the item for the day);
+// only a second failure marks 'error' (raw text still ships). The unit
+// never throws.
 //
-// Relevance ensemble (0053): right after a SUCCESSFUL enrichment write (either
-// attempt), the other panel models cast a score-only vote on the same item so
-// relevance becomes the median of the panel, not just the assigned model's
-// read. Gated once per wave on checkScanBudget (the vote calls are cheap, but
+// Relevance ensemble (0053), now DECOUPLED from the enrich slot: a
+// successful enrichment write pushes a vote job onto an in-unit queue
+// instead of awaiting castMissingVotes inline, and a second, concurrent pool
+// of VOTE_POOL workers drains that queue while enrichment keeps running.
+// Gated once per unit on checkScanBudget (the vote calls are cheap, but
 // still billable) and always wrapped so a vote failure never touches the
-// enrichment result; a skipped wave leaves items for the per-run top-up.
-async function runEnrichWave(run: ScanRun, notes: string[]): Promise<void> {
+// enrichment result; anything left unvoted (budget skip, or the deadline
+// hit before its turn) waits for the per-run top-up.
+async function runEnrichUnit(run: ScanRun, notes: string[], deadlineAt: number): Promise<void> {
   const [topics, prefs] = await Promise.all([getActiveScanTopics(), getScanPrefs()]);
-  const items = await getPendingEnrichItems(run.id, ENRICH_POOL);
+  const items = await getPendingEnrichItems(run.id, ENRICH_PAGE);
   if (!items.length) return;
   const panel = ensemblePanel(prefs.enrich_models);
   const voteBudget = await checkScanBudget();
-  let enriched = 0;
   let votesSkipped = false;
-  await Promise.all(
-    items.map(async (item) => {
-      const model = pickEnrichModel(prefs.enrich_models, item.id);
-      const attempt = async (m: string | null) => {
-        const e = await enrichScanItem(item, topics, run.id, m ?? undefined);
-        const enrichedBy = m ?? 'claude-haiku-4-5';
-        await setScanItemEnrichment(item.id, { status: 'done', ...e, enrichedBy });
-        if (!voteBudget.ok) {
-          votesSkipped = true;
-        } else {
-          try {
-            await castMissingVotes(item, panel, enrichedBy, e.relevance, null, { scanRunId: run.id });
-          } catch {
-            // a vote failure must never affect the enrichment result
-          }
-        }
-      };
-      try {
-        await attempt(model);
-        enriched += 1;
-      } catch {
-        const models = prefs.enrich_models;
-        const alt = models.length > 1 ? models[(models.indexOf(model ?? '') + 1) % models.length] : null;
-        try {
-          await attempt(alt);
-          enriched += 1;
-        } catch (err2) {
-          await setScanItemEnrichment(item.id, { status: 'error', enrichedBy: alt ?? 'claude-haiku-4-5' });
-          notes.push(`enrich failed (${model ?? 'haiku'} then ${alt ?? 'haiku fallback'} · ${item.source_domain ?? 'item'}): ${String((err2 as Error)?.message ?? 'error').slice(0, 120)}`);
-        }
+
+  type EnrichItem = (typeof items)[number];
+  type VoteJob = { item: EnrichItem; enrichedBy: string; relevance: number | null };
+  const voteQueue: VoteJob[] = [];
+  let enrichDone = false;
+
+  const enrichJob = async (item: EnrichItem): Promise<boolean> => {
+    const model = pickEnrichModel(prefs.enrich_models, item.id);
+    const attempt = async (m: string | null) => {
+      const e = await enrichScanItem(item, topics, run.id, m ?? undefined);
+      const enrichedBy = m ?? 'claude-haiku-4-5';
+      await setScanItemEnrichment(item.id, { status: 'done', ...e, enrichedBy });
+      if (!voteBudget.ok) {
+        votesSkipped = true;
+      } else {
+        voteQueue.push({ item, enrichedBy, relevance: e.relevance });
       }
-    })
-  );
+    };
+    try {
+      await attempt(model);
+      return true;
+    } catch {
+      const models = prefs.enrich_models;
+      const alt = models.length > 1 ? models[(models.indexOf(model ?? '') + 1) % models.length] : null;
+      try {
+        await attempt(alt);
+        return true;
+      } catch (err2) {
+        await setScanItemEnrichment(item.id, { status: 'error', enrichedBy: alt ?? 'claude-haiku-4-5' });
+        notes.push(`enrich failed (${model ?? 'haiku'} then ${alt ?? 'haiku fallback'} · ${item.source_domain ?? 'item'}): ${String((err2 as Error)?.message ?? 'error').slice(0, 120)}`);
+        return false;
+      }
+    }
+  };
+
+  const voteWorker = async (): Promise<void> => {
+    while (!enrichDone || voteQueue.length) {
+      if (Date.now() >= deadlineAt) return;
+      const job = voteQueue.shift();
+      if (!job) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        continue;
+      }
+      try {
+        await castMissingVotes(job.item, panel, job.enrichedBy, job.relevance, null, { scanRunId: run.id });
+      } catch {
+        // a vote failure must never affect the enrichment result
+      }
+    }
+  };
+
+  const [enrichResult] = await Promise.all([
+    runPool(items, ENRICH_POOL, enrichJob, () => Date.now() < deadlineAt).finally(() => {
+      enrichDone = true;
+    }),
+    Promise.all(Array.from({ length: VOTE_POOL }, voteWorker)),
+  ]);
+
+  const enriched = enrichResult.results.filter((r) => r.status === 'fulfilled' && r.value === true).length;
   if (enriched) await bumpScanRunCount(run.id, 'enriched_count', enriched);
   if (votesSkipped) notes.push('relevance votes skipped: budget');
 }
 
-// ---- relevance vote top-up: once per run, right as the enrich step finds no
-// more pending items, cast whatever votes earlier waves missed (a busy wave, a
-// budget skip). Bounded to one batch of 8 so it never grows the run's tail;
-// whatever it still misses waits for tomorrow's run or the backfill script.
+// ---- relevance vote top-up: right as the enrich step finds no more pending
+// items, cast whatever votes earlier units missed (a busy pool, a budget
+// skip). Loops batches of VOTE_TOPUP_BATCH through the same VOTE_POOL rolling
+// pool, up to VOTE_TOPUP_MAX_BATCHES, so a run with a lot of catching up to
+// do can clear more than one batch's worth against the deadline instead of
+// leaving it all for tomorrow; whatever it still misses waits for the next
+// run or the backfill script.
 const VOTE_TOPUP_BATCH = 8;
+const VOTE_TOPUP_MAX_BATCHES = 10;
 
-async function topUpRelevanceVotes(run: ScanRun, notes: string[]): Promise<void> {
+async function topUpRelevanceVotes(run: ScanRun, notes: string[], deadlineAt: number): Promise<void> {
   try {
     const budget = await checkScanBudget();
     if (!budget.ok) return;
     const prefs = await getScanPrefs();
     const panel = ensemblePanel(prefs.enrich_models);
-    const items = await getItemsMissingVotes(run.id, panel.length, VOTE_TOPUP_BATCH);
-    if (!items.length) return;
     let topped = 0;
-    await Promise.all(
-      items.map(async (item) => {
-        const summary = await castMissingVotes(
-          item, panel, item.enriched_by, item.relevance, item.relevance_votes, { scanRunId: run.id }
-        ).catch(() => null);
-        if (summary) topped += 1;
-      })
-    );
+    for (let batch = 0; batch < VOTE_TOPUP_MAX_BATCHES && Date.now() < deadlineAt; batch++) {
+      const items = await getItemsMissingVotes(run.id, panel.length, VOTE_TOPUP_BATCH);
+      if (!items.length) break;
+      const { results } = await runPool(
+        items,
+        VOTE_POOL,
+        async (item) => {
+          const summary = await castMissingVotes(
+            item, panel, item.enriched_by, item.relevance, item.relevance_votes, { scanRunId: run.id }
+          ).catch(() => null);
+          return summary;
+        },
+        () => Date.now() < deadlineAt
+      );
+      topped += results.filter((r) => r.status === 'fulfilled' && r.value).length;
+    }
     if (topped) notes.push(`relevance votes: ${topped} items topped up`);
   } catch (e) {
     notes.push(`relevance vote top-up failed: ${String((e as Error)?.message ?? 'error').slice(0, 120)}`);

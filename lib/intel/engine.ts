@@ -22,6 +22,7 @@ import { synthesizeCompanyDossier } from './synthesis';
 import { checkIntelBudget } from './budget';
 import { rateAndStampSources } from '../scan/source-rating';
 import { searchDueSlugs, nextUnsweptSlug, sweepUnit, unwrapNewsUrl } from './core';
+import { runPool } from '../pool';
 import type { IntelCompany, IntelProgress, IntelRun } from '../types';
 
 // The intel desk's checkpointed step engine (the scan engine pattern), shared
@@ -34,6 +35,7 @@ import type { IntelCompany, IntelProgress, IntelRun } from '../types';
 // extraction, budget-guarded).
 
 const HYDRATE_POOL = 4;
+const ENRICH_PAGE = 12;
 const ENRICH_POOL = 3;
 
 function shiftDay(dayISO: string, delta: number): string {
@@ -175,7 +177,7 @@ export async function advanceIntelRun(runId: string, deadlineAt: number): Promis
         await completeIntelRun(runId);
         continue;
       }
-      await runEnrichWave(run, notes);
+      await runEnrichUnit(run, notes, deadlineAt);
     }
     const run = await getIntelRun(runId);
     if (!run) throw new Error('intel run not found');
@@ -376,21 +378,27 @@ async function runHydrateWave(run: IntelRun, notes: string[]): Promise<void> {
   if (hydrated < items.length) notes.push(`hydrate: ${items.length - hydrated} of ${items.length} failed this wave`);
 }
 
-// ---- enrich: cheap-model waves + fact extraction. The picker's selection
-// assigns each item a model deterministically; enriched_by stamps success
-// AND error so A/B error rates stay measurable. A per-item model failure gets
-// a one-shot retry on the next configured model (a single model's timeout or
-// overload should not sink the item for the day); only a second failure marks
-// 'error'. Facts insert after the item write so a fact always points at an
-// enriched item.
-async function runEnrichWave(run: IntelRun, notes: string[]): Promise<void> {
+// ---- enrich: a bounded ROLLING pool of model calls (2026-09-03), not a
+// synchronized Promise.all wave. A wave of ENRICH_POOL items used to wait for
+// the slowest call in the batch (GLM p90 20s, max 44s) while the other slots
+// sat idle; runPool keeps ENRICH_POOL calls in flight and starts the next
+// item the instant a slot frees, checked against the unit's deadline. The
+// picker's selection assigns each item a model deterministically;
+// enriched_by stamps success AND error so A/B error rates stay measurable. A
+// per-item model failure gets a one-shot retry on the next configured model
+// (a single model's timeout or overload should not sink the item for the
+// day); only a second failure marks 'error'. Facts insert after the item
+// write so a fact always points at an enriched item.
+async function runEnrichUnit(run: IntelRun, notes: string[], deadlineAt: number): Promise<void> {
   const [companies, prefs] = await Promise.all([getActiveIntelCompanies(), getIntelPrefs()]);
-  const items = await getPendingIntelEnrichItems(run.id, ENRICH_POOL);
+  const items = await getPendingIntelEnrichItems(run.id, ENRICH_PAGE);
   if (!items.length) return;
-  let enriched = 0;
   let factsWritten = 0;
-  await Promise.all(
-    items.map(async (item) => {
+
+  const { results } = await runPool(
+    items,
+    ENRICH_POOL,
+    async (item) => {
       const model = pickEnrichModel(prefs.enrich_models, item.id);
       const attempt = async (m: string | null) => {
         const e = await enrichIntelItem(item, companies, run.id, m ?? undefined);
@@ -410,20 +418,24 @@ async function runEnrichWave(run: IntelRun, notes: string[]): Promise<void> {
       };
       try {
         await attempt(model);
-        enriched += 1;
+        return true;
       } catch {
         const models = prefs.enrich_models;
         const alt = models.length > 1 ? models[(models.indexOf(model ?? '') + 1) % models.length] : null;
         try {
           await attempt(alt);
-          enriched += 1;
+          return true;
         } catch (err2) {
           await setIntelItemEnrichment(item.id, { status: 'error', enrichedBy: alt ?? 'claude-haiku-4-5' });
           notes.push(`enrich failed (${model ?? 'haiku'} then ${alt ?? 'haiku fallback'} · ${item.source_domain ?? 'item'}): ${String((err2 as Error)?.message ?? 'error').slice(0, 120)}`);
+          return false;
         }
       }
-    })
+    },
+    () => Date.now() < deadlineAt
   );
+
+  const enriched = results.filter((r) => r.status === 'fulfilled' && r.value === true).length;
   if (enriched) await bumpIntelRunCount(run.id, 'enriched_count', enriched);
   if (factsWritten) await bumpIntelRunCount(run.id, 'fact_count', factsWritten);
 }

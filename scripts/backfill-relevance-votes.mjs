@@ -169,10 +169,10 @@ ${(item.raw_content ?? '').slice(0, MAX_INPUT_CHARS)}`;
 }
 
 // Minimal local fetch to OpenRouter, the same request shape as
-// lib/scan/llm.ts's chatJSONOpenRouter: JSON mode, reasoning disabled first,
-// one bounded retry with reasoning capped if the endpoint refuses to disable
-// it, 30s abort, max_tokens 60. A 429 waits 5s and retries once before giving
-// up on that vote.
+// lib/scan/llm.ts's chatJSONOpenRouter: JSON mode, a 200-token reasoning
+// budget (deepseek flips to 0.0 on a bare score without one), 30s abort. A
+// 429 waits 5s and retries once, and one plain retry covers a transient
+// refusal, before giving up on that vote.
 async function scoreVoteOpenRouter(item, model, retried429 = false) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) throw new Error('OPENROUTER_API_KEY is not set.');
@@ -182,7 +182,7 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
   "relevance": number. ${RELEVANCE_RUBRIC}`;
   const user = userText(item);
 
-  const attempt = async (mode) => {
+  const attempt = async () => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);
     const t0 = Date.now();
@@ -220,9 +220,9 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
   };
 
   try {
-    return await attempt('off');
+    return await attempt();
   } catch (e) {
-    if (/reasoning is mandatory/i.test(String(e?.message))) return attempt('bounded');
+    if (/reasoning is mandatory/i.test(String(e?.message))) return attempt();
     throw e;
   }
 }

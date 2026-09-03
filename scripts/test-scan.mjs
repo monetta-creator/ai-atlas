@@ -22,6 +22,7 @@ import {
 } from '../lib/scan/source-tiers.ts';
 import { acceptDomainRatings } from '../lib/scan/source-rating-core.ts';
 import { ensemblePanel, medianOf, spreadOf, summarizeVotes, mergeVotes, missingVoters, ENSEMBLE_MODELS } from '../lib/scan/ensemble.ts';
+import { runPool } from '../lib/pool.ts';
 
 let pass = 0;
 let fail = 0;
@@ -482,6 +483,63 @@ check('acceptDomainRatings: malformed input yields no rows', () => {
   assert.deepEqual(acceptDomainRatings(null, RATING_CANDIDATES), []);
   assert.deepEqual(acceptDomainRatings({}, RATING_CANDIDATES), []);
   assert.deepEqual(acceptDomainRatings({ ratings: 'not an array' }, RATING_CANDIDATES), []);
+});
+
+console.log('\npool:');
+
+function delay(ms, value) {
+  return new Promise((resolve) => setTimeout(resolve, ms, value));
+}
+
+await checkAsync('runPool: concurrency 2 runs at most 2 jobs at once, all 5 complete in index order', async () => {
+  const delays = [30, 10, 20, 5, 15];
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const { results, started } = await runPool(delays, 2, async (ms, i) => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await delay(ms);
+    inFlight -= 1;
+    return i;
+  });
+  assert.ok(maxInFlight <= 2, `max in flight was ${maxInFlight}`);
+  assert.equal(started, 5);
+  assert.equal(results.length, 5);
+  results.forEach((r, i) => {
+    assert.equal(r.status, 'fulfilled');
+    assert.equal(r.value, i);
+  });
+});
+
+await checkAsync('runPool: a rejecting job settles as rejected without stopping the others', async () => {
+  const items = [1, 2, 3];
+  const { results, started } = await runPool(items, 2, async (n) => {
+    if (n === 2) throw new Error('boom');
+    return n * 10;
+  });
+  assert.equal(started, 3);
+  assert.equal(results[0].status, 'fulfilled');
+  assert.equal(results[0].value, 10);
+  assert.equal(results[1].status, 'rejected');
+  assert.equal(results[1].reason.message, 'boom');
+  assert.equal(results[2].status, 'fulfilled');
+  assert.equal(results[2].value, 30);
+});
+
+await checkAsync('runPool: shouldStart returning false after the first job means started === 1', async () => {
+  let allow = true;
+  const { started, results } = await runPool(
+    [1, 2, 3, 4],
+    2,
+    async (n) => {
+      allow = false;
+      return n;
+    },
+    () => allow
+  );
+  assert.equal(started, 1);
+  assert.equal(results.length, 1);
+  assert.equal(results[0].status, 'fulfilled');
 });
 
 console.log(`\n${pass} passed · ${fail} failed`);

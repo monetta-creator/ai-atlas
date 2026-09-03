@@ -67,9 +67,10 @@ persisting after each, under a caller-supplied deadline:
    `enrich_status = 'skipped'`. The curated model list + rate cards:
    `lib/scan/models.ts` + migration `0041` (test-guarded against drift).
 
-Drivers: two weekday Vercel crons (`vercel.json`, `0 9 * * 1-5` and
-`0 11 * * 1-5`) hit `GET /api/cron/scan` (Bearer `CRON_SECRET`,
-`maxDuration 300`, ~240s work budget per invocation; the second cron finishes
+Drivers: four weekday Vercel cron windows (`vercel.json`: `0 9`, `0 11`,
+`0 13`, `0 15 * * 1-5`, the `/sweep`, `/sweep2`, `/sweep3` path stubs since
+Vercel keys crons by path) hit `GET /api/cron/scan` (Bearer `CRON_SECRET`,
+`maxDuration 800`, a 700s work budget per invocation; each later window finishes
 what the first could not), and the admin `/scan` console's Run/Resume button
 ticks the same engine one unit at a time (a manual weekend run works and gets
 the normal one-day window; Monday's overlap dedupes away).

@@ -5,6 +5,7 @@ import type {
   } from '../types';
 import { sanitizeText } from '../pipeline/web';
 import type { ArxivEntry } from '../research/arxiv';
+import { foldRunNotes } from '../run-notes';
 
 // ---- Research engine (migration 0046) ----------------------------------------
 // Writers for the day-keyed checkpointed engine (the intel_runs pattern
@@ -58,25 +59,19 @@ export async function releaseResearchLease(runId: string): Promise<void> {
 }
 
 // Persist an invocation's issue notes (the scan 0040 / intel pattern):
-// appended in first-occurrence order, deduplicated against what the row
-// already holds, capped at 40.
+// appended in first-occurrence order, repeats counted instead of dropped
+// ("note (xN)", lib/run-notes.ts), capped at 40.
 export async function appendResearchRunNotes(runId: string, notes: string[]): Promise<void> {
-  const clean = [...new Set(notes.map((n) => sanitizeText(n).trim().slice(0, 300)).filter(Boolean))].slice(0, 20);
+  const clean = notes.map((n) => sanitizeText(n).trim().slice(0, 300)).filter(Boolean);
   if (!clean.length) return;
-  await exec(
-    `update research_runs
-        set notes = (
-          select coalesce(array_agg(n order by o), '{}') from (
-            select n, min(ord) as o
-              from unnest(notes || $2::text[]) with ordinality as t(n, ord)
-             group by n
-             order by min(ord)
-             limit 40
-          ) d
-        ), updated_at = now()
-      where id = $1`,
-    [runId, clean]
-  );
+  await withTx(async (c) => {
+    const row = await c.query<{ notes: string[] | null }>(
+      `select coalesce(notes, '{}') as notes from research_runs where id = $1 for update`,
+      [runId]
+    );
+    const folded = foldRunNotes(row.rows[0]?.notes ?? [], clean);
+    await c.query(`update research_runs set notes = $2::text[], updated_at = now() where id = $1`, [runId, folded]);
+  });
 }
 
 export async function failResearchRun(runId: string, error: string): Promise<void> {

@@ -5,6 +5,7 @@ import type {
 import { sanitizeText } from '../pipeline/web';
 import type { RawCandidate } from '../pipeline/web';
 import { PIPELINE_DAY_START_SQL } from '../pipeline/config';
+import { foldRunNotes } from '../run-notes';
 
 // ---- Discovery pipeline ----------------------------------------------------
 
@@ -31,25 +32,19 @@ export async function updateRun(
 }
 
 // Persist an invocation's issue notes (0047): appended in first-occurrence
-// order, deduplicated against what the row already holds, capped at 40.
-// Mirrors appendScanRunNotes / appendIntelRunNotes / appendResearchRunNotes.
+// order, repeats counted instead of dropped ("note (xN)", lib/run-notes.ts),
+// capped at 40. Mirrors appendScanRunNotes / appendIntelRunNotes / appendResearchRunNotes.
 export async function appendPipelineRunNotes(runId: string, notes: string[]): Promise<void> {
-  const clean = [...new Set(notes.map((n) => sanitizeText(n).trim().slice(0, 300)).filter(Boolean))].slice(0, 20);
+  const clean = notes.map((n) => sanitizeText(n).trim().slice(0, 300)).filter(Boolean);
   if (!clean.length) return;
-  await exec(
-    `update pipeline_runs
-        set notes = (
-          select coalesce(array_agg(n order by o), '{}') from (
-            select n, min(ord) as o
-              from unnest(notes || $2::text[]) with ordinality as t(n, ord)
-             group by n
-             order by min(ord)
-             limit 40
-          ) d
-        ), updated_at = now()
-      where id = $1`,
-    [runId, clean]
-  );
+  await withTx(async (c) => {
+    const row = await c.query<{ notes: string[] | null }>(
+      `select coalesce(notes, '{}') as notes from pipeline_runs where id = $1 for update`,
+      [runId]
+    );
+    const folded = foldRunNotes(row.rows[0]?.notes ?? [], clean);
+    await c.query(`update pipeline_runs set notes = $2::text[], updated_at = now() where id = $1`, [runId, folded]);
+  });
 }
 
 // The stale-run janitor: a daily run left 'running' from a prior day can never

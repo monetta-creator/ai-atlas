@@ -4,6 +4,7 @@ import { intelFactKey, bingNewsFeedUrl } from '../intel/core';
 import { mergeDossier } from '../scout/core';
 import type { ScoutDossier } from '../scout/core';
 import type { IntelStep, IntelDocType, IntelMetricSource } from '../types';
+import { foldRunNotes } from '../run-notes';
 
 // ---- Intel Desk (migration 0043) --------------------------------------------
 // Writers for the daily company-intelligence sweep. intel_runs IS the
@@ -83,25 +84,19 @@ export async function bumpIntelRunCount(runId: string, column: string, delta: nu
 }
 
 // Persist an invocation's issue notes (the scan 0040 pattern): appended in
-// first-occurrence order, deduplicated against what the row already holds,
-// capped at 40.
+// first-occurrence order, repeats counted instead of dropped ("note (xN)",
+// lib/run-notes.ts), capped at 40.
 export async function appendIntelRunNotes(runId: string, notes: string[]): Promise<void> {
-  const clean = [...new Set(notes.map((n) => sanitizeText(n).trim().slice(0, 300)).filter(Boolean))].slice(0, 20);
+  const clean = notes.map((n) => sanitizeText(n).trim().slice(0, 300)).filter(Boolean);
   if (!clean.length) return;
-  await exec(
-    `update intel_runs
-        set notes = (
-          select coalesce(array_agg(n order by o), '{}') from (
-            select n, min(ord) as o
-              from unnest(notes || $2::text[]) with ordinality as t(n, ord)
-             group by n
-             order by min(ord)
-             limit 40
-          ) d
-        ), updated_at = now()
-      where id = $1`,
-    [runId, clean]
-  );
+  await withTx(async (c) => {
+    const row = await c.query<{ notes: string[] | null }>(
+      `select coalesce(notes, '{}') as notes from intel_runs where id = $1 for update`,
+      [runId]
+    );
+    const folded = foldRunNotes(row.rows[0]?.notes ?? [], clean);
+    await c.query(`update intel_runs set notes = $2::text[], updated_at = now() where id = $1`, [runId, folded]);
+  });
 }
 
 export async function completeIntelRun(runId: string): Promise<void> {

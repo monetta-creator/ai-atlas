@@ -7,8 +7,9 @@ import { chatJSONOpenRouter } from './llm';
 // The relevance ensemble's vote leg (migration 0053). After enrichment, every
 // other panel model gives a SCORE-ONLY read of the same item, on the exact
 // same rubric and the same input clip as the enrichment pass, so its vote is
-// comparable to the assigned model's read. lib/scan/run.ts's runEnrichWave
-// casts these right after a successful enrichment; a per-run top-up and
+// comparable to the assigned model's read. lib/scan/run.ts's runEnrichUnit
+// queues these right after a successful enrichment (a vote pool drains the
+// queue beside the enrich pool); a per-run top-up and
 // scripts/backfill-relevance-votes.mjs catch whatever an earlier call missed.
 //
 // Cost-log discipline matches every other scan call: feature
