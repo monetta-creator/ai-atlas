@@ -15,7 +15,7 @@ import {
   mapHnHits, mapGithubRepos, mapProductHuntPosts, mapTavilyHits,
   mergeToolingDossier, eventExists, parseMaturityHint, parseEventKindHint,
   matchExisting, toolingPlan, sweepUnit, nextUnswept, clampFit, isNewsHost,
-  resolveToolingTokens,
+  resolveToolingTokens, isProductUrl,
 } from '../lib/tooling/core.ts';
 
 let pass = 0;
@@ -257,6 +257,22 @@ check('resolveToolingTokens: resolves {year}/{month} from the given day, falls b
   assert.equal(resolveToolingTokens('new tool launch {month} {year}', '2026-03-15'), 'new tool launch March 2026');
   assert.equal(resolveToolingTokens('no tokens here', '2026-03-15'), 'no tokens here');
   assert.equal(typeof resolveToolingTokens('{year}', 'not-a-date'), 'string');
+});
+
+// isProductUrl: repo paths on aggregator roots are homepages, news roots are not.
+check('isProductUrl accepts a plain vendor site', () => assert.equal(isProductUrl('https://www.langfuse.com/'), true));
+check('isProductUrl accepts a GitHub repo path', () => assert.equal(isProductUrl('https://github.com/deepset-ai/haystack'), true));
+check('isProductUrl rejects the GitHub root and a user page', () => {
+  assert.equal(isProductUrl('https://github.com/'), false);
+  assert.equal(isProductUrl('https://github.com/deepset-ai'), false);
+});
+check('isProductUrl rejects news and aggregator hosts', () => {
+  assert.equal(isProductUrl('https://techcrunch.com/2026/09/17/some-launch/'), false);
+  assert.equal(isProductUrl('https://news.ycombinator.com/item?id=1'), false);
+});
+check('isProductUrl rejects non-http and garbage', () => {
+  assert.equal(isProductUrl('ftp://example.com/x'), false);
+  assert.equal(isProductUrl('not a url'), false);
 });
 
 // ---- DB round-trip (read-only), guarded: migration 0054 may not be applied ----

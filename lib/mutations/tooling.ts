@@ -423,10 +423,10 @@ export async function setProductScores(
   for (const r of rows) {
     await exec(
       `update tooling_products set
-         agent_fit = $2, agent_scores = $3::jsonb, agent_reason = $4, agent_model = $5, agent_at = now(),
+         agent_fit = $2::int, agent_scores = $3::jsonb, agent_reason = $4, agent_model = $5, agent_at = now(),
          status = case
-           when $2 is not null and $2 >= $6 and raw_content is not null then 'cataloged'
-           else 'parked'
+           when $2::int >= $6::int and raw_content is not null then 'cataloged'::tooling_status_t
+           else 'parked'::tooling_status_t
          end,
          updated_at = now()
        where id = $1 and status = 'candidate' and not pinned`,

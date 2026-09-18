@@ -129,6 +129,7 @@ export async function scoreChunk(ids: string[], runId: string | null): Promise<T
         p.notable_customers.length ? `notable customers: ${p.notable_customers.join(', ')}` : null,
         p.dossier_summary ? `dossier: ${p.dossier_summary.slice(0, 400)}` : null,
         p.fetch_error ? 'homepage unreachable: score conservatively from the name, category, and one-liner alone' : null,
+        !p.url ? 'no homepage identified yet: score conservatively from the name, category, and one-liner alone' : null,
       ].filter(Boolean).join('\n')
     ),
   ].join('\n\n');

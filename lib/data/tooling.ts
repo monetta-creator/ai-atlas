@@ -131,7 +131,7 @@ export async function getUnscoredIds(limit = 10): Promise<string[]> {
   const rows = await q<{ id: string }>(
     `select id::text as id from tooling_products
       where status = 'candidate' and agent_at is null and not pinned
-        and (enriched_at is not null or fetch_error is not null)
+        and (enriched_at is not null or fetch_error is not null or url is null)
       order by first_seen, id
       limit $1`,
     [limit]
@@ -192,6 +192,7 @@ export interface ProductForScoring {
   compliance_claims: string[];
   notable_customers: string[];
   fetch_error: string | null;
+  url: string | null;
   dossier_summary: string | null;
 }
 
@@ -204,7 +205,7 @@ export async function getProductsForScoring(ids: string[]): Promise<ProductForSc
   if (!clean.length) return [];
   return q<ProductForScoring>(
     `select id::text as id, name, vendor, category, one_liner, description, features, deployment,
-            pricing_model, maturity::text as maturity, compliance_claims, notable_customers, fetch_error,
+            pricing_model, maturity::text as maturity, compliance_claims, notable_customers, fetch_error, url,
             dossier->>'summary' as dossier_summary
        from tooling_products
       where id = any($1::uuid[])`,

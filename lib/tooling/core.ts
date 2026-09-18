@@ -148,7 +148,11 @@ export function mapGithubRepos(items: unknown[]): RawHit[] {
     const url = typeof it.html_url === 'string' ? it.html_url.trim() : '';
     const title = String(it.full_name ?? it.name ?? '').trim();
     if (!url || !title) continue;
-    const snippet = String(it.description ?? '').trim().slice(0, 500);
+    const homepage = typeof it.homepage === 'string' && /^https?:\/\//i.test(it.homepage.trim()) ? it.homepage.trim() : '';
+    const description = String(it.description ?? '').trim().slice(0, 400);
+    // The repo's declared homepage rides in the snippet so the triage model
+    // can name it as the product_url (else the repo URL itself qualifies).
+    const snippet = (homepage ? `Homepage: ${homepage}. ` : '') + description;
     const pushedAt = typeof it.pushed_at === 'string' ? it.pushed_at : null;
     out.push({
       title,
@@ -386,6 +390,30 @@ export function isNewsHost(host: string): boolean {
   const h = String(host ?? '').toLowerCase().replace(/^www\./, '');
   if (!h) return false;
   return NEWS_HOSTS.some((news) => h === news || h.endsWith(`.${news}`));
+}
+
+// Hosts where a DEEP path is a product page even though the root is an
+// aggregator: an open-source project's repository IS its homepage.
+const REPO_HOSTS = ['github.com', 'gitlab.com', 'huggingface.co'];
+
+// Whether a triaged product_url may become a product's homepage: any
+// non-news host, or a repository/space path (owner + name) on a repo host.
+// News, blog and social roots are never a homepage.
+export function isProductUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+  if (!host) return false;
+  if (REPO_HOSTS.some((r) => host === r || host.endsWith(`.${r}`))) {
+    const depth = parsed.pathname.split('/').filter(Boolean).length;
+    return depth >= 2;
+  }
+  return !isNewsHost(host);
 }
 
 // ---- {year}/{month} token resolution (reimplemented, not imported, to stay

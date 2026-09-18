@@ -1,5 +1,5 @@
 import { routedStructured } from '../model-route';
-import { isNewsHost } from './core';
+import { isProductUrl } from './core';
 import type { RawHit, TriagedProduct } from '../types';
 
 // Discovery triage: from a batch of raw search/HN/GitHub/Product Hunt hits,
@@ -16,7 +16,7 @@ const MAX_HITS = 60;
 const TRIAGE_SYSTEM = [
   'You triage discovery hits for the AI Tooling Monitor, a market-scan engine that catalogs AI products for the AI-transformation team of a large, regulated financial-services enterprise.',
   'You are given a batch of search hits (an id, a source, a title, a URL, and a snippet); most are news, blog posts, or noise, not products. Extract only DISTINCT AI products actually named in the hits: skip roundup articles, generic commentary, and anything that is not a specific, nameable AI product or platform.',
-  'For every product found, give: name; vendor (the company behind it, empty string if unclear); product_url (the product\'s OWN homepage if identifiable from the hit, empty string otherwise, never a news article or aggregator URL); one_liner (one sentence, what it does); category (the single best-fit category from the provided list); is_ai_tool (false for anything that is not actually an AI product, e.g. a hiring announcement or a funding roundup with no named product); confidence (0 to 100, how sure you are this is a real, distinct product); and hit_id (the id of the ONE hit this product was found in).',
+  'For every product found, give: name; vendor (the company behind it, empty string if unclear); product_url (the product\'s OWN homepage: the one shown in the hit when there is one; for a well-known product whose official site you are certain of, that site even if the hit does not show it; a GitHub repository URL for an open-source project; empty string when unsure; never a news article, blog, or aggregator URL, and never a guess); one_liner (one sentence, what it does); category (the single best-fit category from the provided list); is_ai_tool (false for anything that is not actually an AI product, e.g. a hiring announcement or a funding roundup with no named product); confidence (0 to 100, how sure you are this is a real, distinct product); and hit_id (the id of the ONE hit this product was found in).',
   'Never invent a product that is not actually named in the hits. Never use an em dash anywhere; use a comma or a colon instead.',
 ].join(' ');
 
@@ -59,13 +59,6 @@ interface RawTriaged {
   hit_id: string;
 }
 
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return '';
-  }
-}
 
 export async function triageHits(opts: {
   hits: RawHit[];
@@ -115,12 +108,7 @@ export async function triageHits(opts: {
     if (!hit) continue;
 
     let productUrl: string | null = String(p.product_url ?? '').trim();
-    if (productUrl && /^https?:\/\//i.test(productUrl)) {
-      const host = hostOf(productUrl);
-      if (!host || isNewsHost(host)) productUrl = null;
-    } else {
-      productUrl = null;
-    }
+    if (!productUrl || !isProductUrl(productUrl)) productUrl = null;
 
     out2.push({
       name: name.slice(0, 200),
