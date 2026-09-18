@@ -443,7 +443,11 @@ async function runDeepdiveStep(run: ToolingRun, notes: string[], deadlineAt: num
     pending,
     DEEPDIVE_POOL,
     async (c) => {
-      const result = await runDeepDive(c.id, null, 'tooling_deepdive', { runId: run.id });
+      // Sonnet + three web searches routinely needs more than the 50s the
+      // console tick path can afford; give the cron path (700s budget) up to
+      // 150s per dive, and let a short remaining budget clamp it back down.
+      const timeoutMs = Math.max(50_000, Math.min(150_000, deadlineAt - Date.now() - 10_000));
+      const result = await runDeepDive(c.id, null, 'tooling_deepdive', { runId: run.id, timeoutMs });
       await markToolingUnitSwept(run.id, sweepUnit('dd', c.id));
       if (!result.ok) {
         notes.push(`deep dive failed (${c.name}): ${result.error}`);
@@ -488,7 +492,12 @@ async function runReportStep(run: ToolingRun, notes: string[]): Promise<void> {
     // The seven days ending on the run day: this Monday's discoveries carry
     // first_seen = run.day, and anything added by hand during the week
     // before is in the window too. Idempotent per Monday (scope_to = run.day).
-    const result = await runWeeklyEntrantsReport(run.id, shiftDay(run.day, -6), run.day, prefs.auto_publish_entrants);
+    // A run executed later in its week (a manual resume, a delayed cron)
+    // stamps first_seen with the actual day, so the window ends on today
+    // when today is past the Monday key.
+    const today = new Date().toISOString().slice(0, 10);
+    const weekTo = today > run.day ? today : run.day;
+    const result = await runWeeklyEntrantsReport(run.id, shiftDay(run.day, -6), weekTo, prefs.auto_publish_entrants);
     if ('reportId' in result) {
       await setToolingRunReport(run.id, result.reportId);
     } else {
