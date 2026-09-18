@@ -15,18 +15,27 @@ import type { RawScanItem } from './web';
 
 const TAVILY_URL = 'https://api.tavily.com/search';
 
-// One raw Tavily news query (shared with the pipeline's search legs,
-// lib/pipeline/search.ts): 20s abort, throws on non-2xx, returns the
-// unmapped results array. include_domains restricts to an allowlist (the
-// pipeline's breaking sweep / coverage legs).
+// One raw Tavily query (shared with the pipeline's search legs,
+// lib/pipeline/search.ts, and lib/tooling/sources.ts): 20s abort, throws on
+// non-2xx, returns the unmapped results array. include_domains restricts to
+// an allowlist (the pipeline's breaking sweep / coverage legs). `topic`
+// defaults to 'news' (every existing caller's behavior); `days` only makes
+// sense for the news topic, so it's sent only then (a 'general' search, e.g.
+// the tooling monitor's evergreen pull queries, has no day window). `days`
+// is otherwise optional so a 'general' call need not fabricate one.
+// `timeRange` (Tavily's `time_range`) is an alternative recency knob for a
+// 'general' search. `maxResults` is clamped to Tavily's 20-result ceiling.
 export async function tavilyQuery(opts: {
   query: string;
-  days: number;
+  days?: number;
+  topic?: 'news' | 'general';
+  timeRange?: 'day' | 'week' | 'month' | 'year';
   maxResults?: number;
   includeDomains?: string[];
 }): Promise<TavilyResult[]> {
   const apiKey = process.env.TAVILY_API_KEY;
   if (!apiKey) throw new Error('TAVILY_API_KEY is not set.');
+  const topic = opts.topic ?? 'news';
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   try {
@@ -36,9 +45,10 @@ export async function tavilyQuery(opts: {
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         query: opts.query,
-        topic: 'news',
-        days: opts.days,
-        max_results: opts.maxResults ?? 12,
+        topic,
+        ...(topic === 'news' && opts.days != null ? { days: opts.days } : {}),
+        ...(opts.timeRange ? { time_range: opts.timeRange } : {}),
+        max_results: Math.min(20, opts.maxResults ?? 12),
         ...(opts.includeDomains?.length ? { include_domains: opts.includeDomains } : {}),
       }),
     });

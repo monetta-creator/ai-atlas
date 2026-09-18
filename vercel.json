@@ -15,6 +15,9 @@
     { "path": "/api/cron/scan/sweep3", "schedule": "0 15 * * 1-5" },
     { "path": "/api/cron/intel/sweep3", "schedule": "20 15 * * 1-5" },
     { "path": "/api/cron/research/sweep3", "schedule": "40 15 * * 1-5" },
+    { "path": "/api/cron/tooling", "schedule": "0 7 * * 1" },
+    { "path": "/api/cron/tooling/sweep", "schedule": "20 8 * * 1" },
+    { "path": "/api/cron/tooling/sweep2", "schedule": "0 17 * * 1" },
     { "path": "/api/cron/roundup", "schedule": "0 21 * * 5" }
   ]
 }

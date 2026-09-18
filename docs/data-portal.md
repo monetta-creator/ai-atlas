@@ -101,3 +101,36 @@ evidence -> counterpoint, with citations. Per team:
 
 Deferred by design (see `docs/data-portal-upgrade-paths.md`): in-browser SQL via DuckDB-WASM
 (v2), server-side SQL role, drag-and-drop BI, embeddings, multi-user auth.
+
+## Tooling Monitor datasets
+
+Added 2026-09-17 alongside the AI Tooling Monitor (`/tooling`, `docs/tooling-monitor.md`).
+Four datasets, category `tooling`:
+
+| slug | gating | what it is |
+|---|---|---|
+| `tooling-products` | key-gated, heavy | Every product with a status other than dismissed: descriptive facts, the scoring agent's advisory fit read and rubric scores, the merged dossier, and the latest deep dive. |
+| `tooling-events` | key-gated | The per-product timelines: launches, funding, feature and pricing changes, partnerships, and changelog entries, on non-dismissed products. |
+| `tooling-features` | key-gated | The feature matrix in long form, one row per (cataloged or parked product, normalized feature tag): the who-does-what comparison across a category. |
+| `tooling-catalog` | public | The same corpus as `tooling-products`, filtered to cataloged products only, with every agent, dossier, deep-dive, status, and provenance column dropped. The one tooling file that needs no team key. |
+
+`tooling-products` and `tooling-catalog` are full-corpus, non-incremental downloads, the same
+posture as the argument-graph and Scout datasets; neither declares a `?day=`, `?since=`, or
+`?lens=` filter.
+
+`lib/tooling/handoff.ts`'s `buildToolingHandoff` renders the importer orientation doc shown on
+the `/tooling/console` downloads panel: the market-monitor overview, a JSON Schema per file,
+the identity rule (`id` stable, `slug` stable, `url` can change), the live category roster,
+the curation-status semantics (candidate, cataloged, parked, dismissed, and how a transition
+should read on re-download), intake design guidance (upsert on `id`, treat `features` as an
+open tag list, never re-judge the agent's advisory fit score), and the transport steps last.
+It mirrors `lib/intel/handoff.ts`'s `buildIntelHandoff` shape and shares its JSON Schema
+machinery (`lib/datasets/handoff-shared.ts`'s `buildRowJsonSchema`/`envelopeJsonSchema`/
+`cronLabel`).
+
+Tests: `scripts/test-tooling-datasets.mjs` (the `scripts/test-intel-datasets.mjs` sibling):
+`FIELD_FACTS` coverage for all four defs, the handoff doc's schema blocks and no-em-dash
+check, gating (`tooling-products` key-gated and heavy, `tooling-catalog` not key-gated), a
+determinism double-build, and a DB-backed recount proving every `tooling-catalog` row's id
+resolves to `status = 'cataloged'` in `tooling_products`. Every assertion holds on an empty,
+unseeded schema.

@@ -4,11 +4,12 @@ import { getNavCounts } from '@/lib/data';
 // The working queues, mirroring SiteNav's admin badge hrefs (Papers/Scout
 // route into their consoles, not the public portal pages, since this widget
 // is about what needs review).
-const LINKS: { href: string; label: string; key: 'pipeline' | 'drafts' | 'papers' | 'scout' | 'tickets' | null }[] = [
+const LINKS: { href: string; label: string; key: 'pipeline' | 'drafts' | 'papers' | 'scout' | 'tickets' | 'tooling' | null }[] = [
   { href: '/pipeline', label: 'Pipeline', key: 'pipeline' },
   { href: '/signals/drafts', label: 'Drafts', key: 'drafts' },
   { href: '/research/console', label: 'Papers', key: 'papers' },
   { href: '/scout/console', label: 'Scout', key: 'scout' },
+  { href: '/tooling/console', label: 'Tooling', key: 'tooling' },
   { href: '/tickets', label: 'Tickets', key: 'tickets' },
   { href: '/sources', label: 'Sources', key: null },
 ];

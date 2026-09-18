@@ -18,11 +18,14 @@ export interface CronEntry {
 }
 
 // '0 9 * * *' -> '09:00 UTC daily'; '0 9 * * 1-5' -> '09:00 UTC weekdays';
-// anything fancier renders raw.
+// '0 7 * * 1' -> '07:00 UTC Mondays' (a single day-of-week digit, 0 = Sunday
+// through 6 = Saturday, the tooling monitor's once-a-week cron); anything
+// fancier renders raw.
+const CRON_DOW_NAMES = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
 export function cronLabel(schedule: string): string {
-  const m = /^(\d{1,2}) (\d{1,2}) \* \* (\*|1-5)$/.exec(schedule.trim());
+  const m = /^(\d{1,2}) (\d{1,2}) \* \* (\*|1-5|[0-6])$/.exec(schedule.trim());
   if (!m) return schedule;
-  const cadence = m[3] === '1-5' ? 'weekdays' : 'daily';
+  const cadence = m[3] === '1-5' ? 'weekdays' : m[3] === '*' ? 'daily' : CRON_DOW_NAMES[Number(m[3])];
   return `${m[2].padStart(2, '0')}:${m[1].padStart(2, '0')} UTC ${cadence}`;
 }
 
@@ -44,7 +47,11 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   // ---- shared by external-scan, signals-export, and intel-items -----------
   item_id: { type: 'string', nullable: false, format: 'uuid' },
   run_day: { type: 'string', nullable: false, format: 'date' },
-  url: { type: 'string', nullable: false, format: 'uri' },
+  // Widened nullable (2026-09-17, the Tooling Monitor) for tooling-products/
+  // tooling-catalog/tooling-events, where a discovered product can lack a
+  // confirmed homepage; every other domain sharing this key always sets a
+  // URL, so the widening is additive and changes nothing for them.
+  url: { type: 'string', nullable: true, format: 'uri' },
   normalized_url: { type: 'string', nullable: false },
   headline: { type: 'string', nullable: true },
   source_domain: { type: 'string', nullable: true },
@@ -84,7 +91,15 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   // ---- signals-export extras (appended after the shared scan-shaped columns) ----
   significance: { type: 'string', nullable: false, enum: ['high', 'medium', 'low'] },
   lenses: { type: 'string', nullable: false },
-  origin: { type: 'string', nullable: false, enum: ['manual', 'pipeline'] },
+  // Union of every domain's origin values (signals-export: manual/pipeline;
+  // scout-companies: discovery/manual, unmapped before now; tooling-products:
+  // tavily/hn/producthunt/github/enumeration/manual/feed). Widening the enum
+  // to the union is additive: no domain's actual values fall outside it, and
+  // each domain's data never produces another domain's values anyway.
+  origin: {
+    type: 'string', nullable: false,
+    enum: ['manual', 'pipeline', 'discovery', 'tavily', 'hn', 'producthunt', 'github', 'enumeration', 'feed'],
+  },
   claim_touches: { type: 'string', nullable: false },
   touch_details: { type: 'string', nullable: false },
   brief_what_happened: { type: 'string', nullable: true },
@@ -156,6 +171,68 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   promoted_signal_id: { type: 'string', nullable: true, format: 'uuid' },
   analyzed_by: { type: 'string', nullable: true },
   abstract: { type: 'string', nullable: true },
+  // ---- Tooling Monitor (0054): tooling-products, tooling-events, --------
+  // tooling-features, tooling-catalog. category/id/slug/name/url/title/
+  // created_at/updated_at/enriched_by/dossier_summary above are shared keys,
+  // reused as-is (compatible types/nullability); origin and url were widened
+  // above. kind and source on tooling_events would collide with an unrelated
+  // enum already claimed by another domain's use of those exact key names
+  // (scout-events' kind, intel-metrics' source), so the exported columns are
+  // named event_kind/event_source instead of overloading them.
+  vendor: { type: 'string', nullable: true },
+  vendor_domain: { type: 'string', nullable: true },
+  category: { type: 'string', nullable: false },
+  category_name: { type: 'string', nullable: false },
+  secondary_categories: { type: 'string', nullable: false },
+  one_liner: { type: 'string', nullable: true },
+  description: { type: 'string', nullable: true },
+  target_buyer: { type: 'string', nullable: false },
+  deployment: { type: 'string', nullable: false },
+  pricing_model: { type: 'string', nullable: true, enum: ['free', 'freemium', 'per_seat', 'usage', 'enterprise', 'unknown'] },
+  pricing_note: { type: 'string', nullable: true },
+  maturity: {
+    type: 'string', nullable: false,
+    enum: ['startup_early', 'startup_growth', 'scaleup', 'incumbent', 'big_tech', 'open_source_project', 'unknown'],
+  },
+  founded_year: { type: 'number', nullable: true },
+  hq: { type: 'string', nullable: true },
+  funding_note: { type: 'string', nullable: true },
+  notable_customers: { type: 'string', nullable: false },
+  integrations: { type: 'string', nullable: false },
+  compliance_claims: { type: 'string', nullable: false },
+  models_used: { type: 'string', nullable: false },
+  features: { type: 'string', nullable: false },
+  feed_url: { type: 'string', nullable: true },
+  changelog_url: { type: 'string', nullable: true },
+  github_repo: { type: 'string', nullable: true },
+  status: { type: 'string', nullable: false, enum: ['candidate', 'cataloged', 'parked', 'dismissed'] },
+  pinned: { type: 'number', nullable: false },
+  agent_fit: { type: 'number', nullable: true },
+  agent_relevance: { type: 'number', nullable: true },
+  agent_enterprise_readiness: { type: 'number', nullable: true },
+  agent_differentiation: { type: 'number', nullable: true },
+  agent_momentum: { type: 'number', nullable: true },
+  agent_build_difficulty: { type: 'number', nullable: true },
+  agent_steal: { type: 'string', nullable: true },
+  agent_reason: { type: 'string', nullable: true },
+  agent_model: { type: 'string', nullable: true },
+  customers: { type: 'string', nullable: true },
+  sources: { type: 'string', nullable: true },
+  deep_dive_summary: { type: 'string', nullable: true },
+  deep_dived_at: { type: 'string', nullable: true, format: 'date' },
+  found_url: { type: 'string', nullable: true, format: 'uri' },
+  first_seen: { type: 'string', nullable: false, format: 'date' },
+  last_seen: { type: 'string', nullable: false, format: 'date' },
+  product_id: { type: 'string', nullable: false, format: 'uuid' },
+  product_slug: { type: 'string', nullable: false },
+  product_name: { type: 'string', nullable: false },
+  event_date: { type: 'string', nullable: false, format: 'date' },
+  event_kind: {
+    type: 'string', nullable: false,
+    enum: ['launch', 'funding', 'feature', 'pricing', 'partnership', 'news', 'changelog', 'note'],
+  },
+  event_source: { type: 'string', nullable: false, enum: ['feed', 'deepdive', 'discover', 'manual'] },
+  feature: { type: 'string', nullable: false },
 };
 
 // The one-line human type description used in every handoff's field table

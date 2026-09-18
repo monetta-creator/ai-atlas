@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { isAdmin } from '@/lib/auth';
+import { isAdmin, isPortal } from '@/lib/auth';
 import { getGeneratedReport } from '@/lib/data';
 import Header from '@/components/Header';
 import SheetReadView from '@/components/reports/SheetReadView';
@@ -11,14 +11,19 @@ export const metadata = { title: 'Report · The AI Atlas' };
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
 // Read view of a generated report: public once published, admin-only as a
-// draft, 404 otherwise. The admin bar on top carries publish/delete.
+// draft, 404 otherwise. The four tooling report kinds add one more allowed
+// viewer: a portal keyholder may read a draft too (the /tooling/reports
+// console never auto-publishes a landscape/brief/features report). The admin
+// bar on top carries publish/delete.
 export default async function SheetPage({ params }: { params: Promise<{ id: string }> }) {
   const admin = await isAdmin();
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
   const saved = await getGeneratedReport(id);
   if (!saved) notFound();
-  if (!saved.is_published && !admin) notFound();
+  const isTooling = String(saved.kind).startsWith('tooling_');
+  const portal = isTooling && (await isPortal());
+  if (!(saved.is_published || admin || portal)) notFound();
 
   return (
     <>
@@ -29,7 +34,7 @@ export default async function SheetPage({ params }: { params: Promise<{ id: stri
             <SheetRow meta={saved} admin />
           </div>
         )}
-        <SheetReadView saved={saved} />
+        <SheetReadView saved={saved} viewer={{ admin, portal }} />
       </section>
     </>
   );

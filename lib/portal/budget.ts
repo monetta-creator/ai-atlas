@@ -12,8 +12,9 @@ import { one } from '@/lib/db';
 export const PORTAL_FEATURE = 'portal_ask';
 // Every feature slug that draws on the portal's daily budget. Portal-triggered
 // scout research (intel sweeps, document reads) all log as 'portal_scout';
-// per-tool granularity lives in ai_cost_log.metadata.tool.
-const PORTAL_FEATURES = ['portal_ask', 'portal_scout'];
+// per-tool granularity lives in ai_cost_log.metadata.tool. 'portal_tooling'
+// covers a portal keyholder's tooling-monitor deep dives and report legs.
+const PORTAL_FEATURES = ['portal_ask', 'portal_scout', 'portal_tooling'];
 
 function envNumber(name: string, fallback: number): number {
   const v = Number(process.env[name]);

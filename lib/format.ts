@@ -2,6 +2,7 @@ import type {
   ConfidenceLabel, Domain, Resolvability, Lens, Relation, Direction,
   SignalLens, Significance, ConceptStatus, SheetKind,
   CompanyStatus, CompanyStage, CompanyEventKind, ScoutVerdict,
+  ToolingStatus, ToolingMaturity, ToolingEventKind,
 } from './types';
 
 export const DOMAIN_LABEL: Record<Domain, string> = {
@@ -206,6 +207,15 @@ const FEATURE_LABEL: Record<string, string> = {
   scout_doc: 'Scout · document extraction',
   scout_competitors: 'Scout · competitor scan (web search)',
   portal_scout: 'Scout · portal research',
+  tooling_search: 'Tooling search',
+  tooling_triage: 'Tooling triage',
+  tooling_enumerate: 'Tooling enumeration (web search)',
+  tooling_enrich: 'Tooling enrichment',
+  tooling_score: 'Tooling scoring',
+  tooling_deepdive: 'Tooling deep dive (web search)',
+  tooling_report_sections: 'Tooling report · sections',
+  tooling_report_close: 'Tooling report · bottom line',
+  portal_tooling: 'Portal tooling research',
 };
 
 // ---- Startup Scout (migration 0034) ----
@@ -253,6 +263,10 @@ export const SHEET_KIND_LABEL: Record<SheetKind, string> = {
   lens: 'Lens deep report',
   atlas: 'Executive briefing',
   roundup: 'Weekly research roundup',
+  tooling_landscape: 'Tooling landscape',
+  tooling_brief: 'Build or buy brief',
+  tooling_entrants: 'New entrants',
+  tooling_features: 'Feature sheet',
 };
 
 export const SHEET_SECTION_TITLES: Record<SheetKind, { reading: string; connections: string; watch: string }> = {
@@ -261,11 +275,44 @@ export const SHEET_SECTION_TITLES: Record<SheetKind, { reading: string; connecti
   lens: { reading: 'What happened through this lens', connections: 'The cross-claim read', watch: 'What to watch' },
   atlas: { reading: 'Where the debate stands', connections: 'What moved', watch: 'What to watch' },
   roundup: { reading: 'The week in research', connections: 'Threads and the map', watch: 'Watch next week' },
+  tooling_landscape: { reading: 'The field', connections: 'Where the gaps are', watch: 'Watch' },
+  tooling_brief: { reading: 'What the market offers', connections: 'Build or buy', watch: 'Risks and next steps' },
+  tooling_entrants: { reading: 'New this week', connections: 'Moves on tracked products', watch: 'Watch' },
+  tooling_features: { reading: 'Features worth stealing', connections: 'Who does what', watch: 'Watch' },
 };
 
 export function featureLabel(slug: string): string {
   return FEATURE_LABEL[slug] ?? slug.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
+
+// ---- AI Tooling Monitor (migration 0054) ----
+export const TOOLING_STATUS_LABEL: Record<ToolingStatus, string> = {
+  candidate: 'Candidate',
+  cataloged: 'Cataloged',
+  parked: 'Parked',
+  dismissed: 'Dismissed',
+};
+
+export const TOOLING_MATURITY_LABEL: Record<ToolingMaturity, string> = {
+  startup_early: 'Early stage startup',
+  startup_growth: 'Growth stage startup',
+  scaleup: 'Scaleup',
+  incumbent: 'Incumbent',
+  big_tech: 'Big tech',
+  open_source_project: 'Open source project',
+  unknown: 'Maturity unknown',
+};
+
+export const TOOLING_EVENT_LABEL: Record<ToolingEventKind, string> = {
+  launch: 'Launch',
+  funding: 'Funding',
+  feature: 'Feature',
+  pricing: 'Pricing',
+  partnership: 'Partnership',
+  news: 'News',
+  changelog: 'Changelog',
+  note: 'Note',
+};
 
 export function timeAgo(iso: string | null): string {
   if (!iso) return 'not yet moved';

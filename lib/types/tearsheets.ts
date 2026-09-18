@@ -1,13 +1,16 @@
 import type { Direction, Domain, Lens, Relation, Resolvability, SignalLens, SignalOrigin, Significance, Weight } from './core';
 import type { ConceptStatus } from './concepts';
 import type { PaperReviewStatus, RisingReject } from './research';
+import type { ToolingMaturity, ToolingEventKind } from './tooling';
 // ---- The Report Portal's generated reports (tear sheets; migration 0030) ----
 // Claim/bridge tear sheets, lens deep reports, and the whole-Atlas executive
 // briefing share one storage row (generated_reports) and one narrative shape.
 // Packs are guest-safe by construction, like ThesisPack: a published report's
 // PDF is publicly downloadable, so nothing personal may enter a pack.
 
-export type SheetKind = 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup';
+export type SheetKind =
+  | 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup'
+  | 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features';
 
 // 'YYYY-MM-DD' bounds; both null = the full corpus.
 export interface SheetScope { from: string | null; to: string | null }
@@ -244,10 +247,128 @@ export interface RoundupPack {
   touchRollup: RoundupTouch[];
 }
 
+// ---- AI Tooling Monitor reports (migration 0054 added the four report_kind_t
+// values; this work package adds the pack shapes) -----------------------------
+// Four report kinds over the tooling catalog: a category landscape, a
+// build-vs-buy brief, the weekly new-entrants report (the second
+// auto-publishing kind, after the roundup), and a feature-steal sheet. Like
+// RoundupPack, these ride alongside SheetPack rather than inside it (no
+// `.node`/`.signals` shape) and join it only through AnySheetPack below.
+
+export interface ToolingProductRef {
+  id: string;
+  slug: string;
+  name: string;
+  vendor: string | null;
+  href: string;                      // '/tooling/<slug>'
+  url: string | null;
+  tag: string;                       // 'T1', 'T2', ... assigned in pack order
+  one_liner: string | null;
+  category: string;                  // tooling_categories.slug
+  category_name: string;
+  maturity: ToolingMaturity;
+  deployment: string[];
+  pricing_model: string | null;
+  compliance_claims: string[];
+  features: string[];
+  first_seen: string;                // 'YYYY-MM-DD'
+  fit_band: 'strong' | 'solid' | 'marginal' | 'weak' | null;
+}
+
+export interface ToolingEventRef {
+  product_slug: string;
+  product_name: string;
+  date: string;                      // 'YYYY-MM-DD'
+  kind: ToolingEventKind;
+  title: string;
+  url: string | null;
+}
+
+export interface ToolingLandscapeStats {
+  products: number;
+  byMaturity: Record<string, number>;
+  byDeployment: Record<string, number>;
+  byPricing: Record<string, number>;
+  topFeatures: { tag: string; count: number }[];
+}
+
+export interface ToolingLandscapePack {
+  kind: 'tooling_landscape';
+  category: string;                  // tooling_categories.slug
+  category_name: string;
+  dimensions: string[];
+  audience: 'executive' | 'engineering' | 'procurement';
+  products: ToolingProductRef[];
+  stats: ToolingLandscapeStats;
+  builtAt: string;                   // ISO
+}
+
+export interface ToolingBriefStats {
+  products: number;
+  byMaturity: Record<string, number>;
+  byDeployment: Record<string, number>;
+  topFeatures: { tag: string; count: number }[];
+  topUp?: boolean;                   // the market was topped up past the exact capability match
+}
+
+export interface ToolingBriefPack {
+  kind: 'tooling_brief';
+  capability: string;
+  category: string | null;           // tooling_categories.slug, optional narrowing
+  products: ToolingProductRef[];
+  internal: { ourContext: string | null };  // rendered only for admin/portal viewers
+  stats: ToolingBriefStats;
+  builtAt: string;
+}
+
+export interface ToolingEntrantsStats {
+  entrants: number;
+  byCategory: Record<string, number>;
+  deepDived: number;
+  events: number;
+}
+
+export interface ToolingEntrantsPack {
+  kind: 'tooling_entrants';
+  from: string;                      // 'YYYY-MM-DD'
+  to: string;
+  categories: string[];
+  products: ToolingProductRef[];
+  events: ToolingEventRef[];
+  stats: ToolingEntrantsStats;
+  builtAt: string;
+}
+
+export interface ToolingFeatureRow {
+  tag: string;
+  count: number;
+  products: string[];                // slugs
+  novel: boolean;                    // carried by exactly one product
+}
+
+export interface ToolingFeaturesStats {
+  products: number;
+  features: number;
+  novel: number;
+}
+
+export interface ToolingFeaturesPack {
+  kind: 'tooling_features';
+  category: string;                  // tooling_categories.slug
+  category_name: string;
+  focus: string | null;
+  products: ToolingProductRef[];
+  features: ToolingFeatureRow[];
+  stats: ToolingFeaturesStats;
+  builtAt: string;
+}
+
+export type ToolingPack = ToolingLandscapePack | ToolingBriefPack | ToolingEntrantsPack | ToolingFeaturesPack;
+
 // The union a generic "saved sheet" reader may see (the portal row, the PDF
-// shell, the read view's header). RoundupPack rides alongside SheetPack
-// rather than inside it, per the note above.
-export type AnySheetPack = SheetPack | RoundupPack;
+// shell, the read view's header). RoundupPack and ToolingPack ride alongside
+// SheetPack rather than inside it, per the notes above.
+export type AnySheetPack = SheetPack | RoundupPack | ToolingPack;
 
 // The narrative half: three gated sections + the close, uniform across kinds
 // (headings differ per kind at render time). citedTags/dropped are the citation
@@ -285,6 +406,10 @@ export interface GeneratedReportMeta {
     findings?: number;
     threadsUpdated?: number;
     risingRejects?: number;
+    // The four tooling report kinds project their own stats into this same bag.
+    products?: number;
+    entrants?: number;
+    features?: number;
   } | null;
   health?: AtlasSheetPack['health'] | null;   // atlas briefings carry health, not stats
 }

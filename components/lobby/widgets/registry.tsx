@@ -9,6 +9,7 @@ import TodaysSpend from './TodaysSpend';
 import TavilyQuota from './TavilyQuota';
 import LatestSignals from './LatestSignals';
 import AtlasStats from './AtlasStats';
+import ToolingEntrants from './ToolingEntrants';
 
 // Server-only: every entry here (bar the pure PortalTile) ends up pulling
 // lib/data, so this module must never be imported from a 'use client' file
@@ -24,6 +25,7 @@ const TILE_ROUTES: Record<string, { href: string; iconKey: keyof typeof PORTAL_I
   'tile-datasets': { href: '/datasets', iconKey: 'data' },
   'tile-research': { href: '/research', iconKey: 'research' },
   'tile-scout': { href: '/scout', iconKey: 'scout' },
+  'tile-tooling': { href: '/tooling', iconKey: 'tooling' },
 };
 
 // Curries PortalTile with one catalog entry's route + copy. A zero-arg
@@ -54,4 +56,6 @@ export const WIDGET_COMPONENTS: Record<string, WidgetComponent> = {
   'tile-datasets': makeTile('tile-datasets'),
   'tile-research': makeTile('tile-research'),
   'tile-scout': makeTile('tile-scout'),
+  'tile-tooling': makeTile('tile-tooling'),
+  'tooling-entrants': ToolingEntrants,
 };

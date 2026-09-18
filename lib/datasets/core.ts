@@ -36,6 +36,7 @@ type DatasetCategory =
   | 'scout'
   | 'scan'
   | 'intel'
+  | 'tooling'
   | 'meta';
 
 // `longtext` marks prose columns the explorer should truncate and the schema

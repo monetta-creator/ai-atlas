@@ -2,6 +2,7 @@ import { renderToBuffer } from '@react-pdf/renderer';
 import type { ReactNode } from 'react';
 import type {
   ClaimSheetPack, LensSheetPack, AtlasSheetPack, RoundupPack, SavedSheet, SheetEvidence, SheetSignal,
+  AnySheetPack, ToolingPack, ToolingProductRef, ToolingEventRef, ToolingFeatureRow,
 } from '@/lib/types';
 
 import { SIGNIFICANCE_LABEL, SHEET_KIND_LABEL, SHEET_SECTION_TITLES } from '@/lib/format';
@@ -389,13 +390,182 @@ function RoundupBody({ saved, pack, origin }: { saved: SavedSheet; pack: Roundup
   );
 }
 
-function SheetPdf({ saved, origin }: { saved: SavedSheet; origin: string }): ReactNode {
+// ---------------------------------------------------------------- tooling bodies
+
+function isToolingPack(pack: AnySheetPack): pack is ToolingPack {
+  return (
+    pack.kind === 'tooling_landscape' || pack.kind === 'tooling_brief' ||
+    pack.kind === 'tooling_entrants' || pack.kind === 'tooling_features'
+  );
+}
+
+function ToolingProductTable({ products, origin }: { products: ToolingProductRef[]; origin: string }): ReactNode {
+  if (!products.length) return null;
+  const shown = products.slice(0, 40);
+  return (
+    <View>
+      <SectionHead>Products</SectionHead>
+      <View style={s.rowHead}>
+        <Text style={[s.cellHead, { flex: 1.3 }]}>Product</Text>
+        <Text style={[s.cellHead, { width: 66 }]}>Maturity</Text>
+        <Text style={[s.cellHead, { flex: 0.9 }]}>Deployment</Text>
+        <Text style={[s.cellHead, { flex: 0.7 }]}>Pricing</Text>
+        <Text style={[s.cellHead, { flex: 1.3 }]}>Features</Text>
+      </View>
+      {shown.map((p) => (
+        <View key={p.id} style={s.row} wrap={false}>
+          <View style={{ flex: 1.3, paddingRight: 6 }}>
+            <Link src={`${origin}${p.href}`} style={[s.small, { color: COBALT }]}>{clip(p.name, 60)}</Link>
+            <Text style={[s.mono, { fontSize: 6.5, color: DIM }]}>
+              {[p.vendor, p.one_liner ? clip(p.one_liner, 70) : null].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+          <Text style={[s.small, { width: 66 }]}>{p.maturity}</Text>
+          <Text style={[s.small, { flex: 0.9 }]}>{p.deployment.join(', ') || '–'}</Text>
+          <Text style={[s.small, { flex: 0.7 }]}>{p.pricing_model ?? '–'}</Text>
+          <Text style={[s.small, { flex: 1.3 }]}>{clip(p.features.slice(0, 5).join(', '), 90) || '–'}</Text>
+        </View>
+      ))}
+      {products.length > shown.length && (
+        <Text style={[s.note, { marginTop: 4 }]}>And {products.length - shown.length} more products in the catalog.</Text>
+      )}
+    </View>
+  );
+}
+
+function ToolingEventsList({ events }: { events: ToolingEventRef[] }): ReactNode {
+  if (!events.length) return null;
+  const shown = events.slice(0, 40);
+  return (
+    <View>
+      <SectionHead>Moves on tracked products</SectionHead>
+      {shown.map((e, i) => (
+        <BulletRow key={i}>
+          {e.product_name}: {e.kind} &quot;{clip(e.title, 100)}&quot; on {e.date}
+        </BulletRow>
+      ))}
+      {events.length > shown.length && (
+        <Text style={[s.note, { marginTop: 4 }]}>And {events.length - shown.length} more moves this week.</Text>
+      )}
+    </View>
+  );
+}
+
+function ToolingFeatureMatrix({ features }: { features: ToolingFeatureRow[] }): ReactNode {
+  if (!features.length) return null;
+  return (
+    <View>
+      <SectionHead>Feature matrix</SectionHead>
+      <View style={s.rowHead}>
+        <Text style={[s.cellHead, { flex: 1 }]}>Feature</Text>
+        <Text style={[s.cellHead, { width: 40, textAlign: 'right' }]}>Count</Text>
+        <Text style={[s.cellHead, { flex: 2 }]}>Carried by</Text>
+      </View>
+      {features.slice(0, 40).map((f) => (
+        <View key={f.tag} style={s.row} wrap={false}>
+          <Text style={[s.small, { flex: 1 }]}>{f.tag}{f.novel ? ' (novel)' : ''}</Text>
+          <Text style={[s.mono, { width: 40, textAlign: 'right' }]}>{f.count}</Text>
+          <Text style={[s.small, { flex: 2 }]}>{f.products.join(', ')}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function ToolingInternalContext({ ourContext }: { ourContext: string }): ReactNode {
+  return (
+    <View style={s.panel} wrap={false}>
+      <Text style={s.panelKicker}>Internal context (not shown to guests)</Text>
+      <Text style={s.panelSub}>{ourContext}</Text>
+    </View>
+  );
+}
+
+function ToolingBody({
+  saved, pack, origin, includeInternal,
+}: { saved: SavedSheet; pack: ToolingPack; origin: string; includeInternal: boolean }): ReactNode {
+  if (pack.kind === 'tooling_landscape') {
+    const st = pack.stats;
+    return (
+      <>
+        <StatBand cells={[
+          { n: st.products, label: 'Products' },
+          { n: Object.keys(st.byMaturity).length, label: 'Maturity bands' },
+          { n: st.topFeatures.length, label: 'Top features' },
+        ]} />
+        <Text style={s.note}>
+          {pack.dimensions.length ? `Emphasizing: ${pack.dimensions.join(', ')}.` : 'The full category picture.'}
+        </Text>
+        <NarrativeSections saved={saved} origin={origin} />
+        <ToolingProductTable products={pack.products} origin={origin} />
+      </>
+    );
+  }
+  if (pack.kind === 'tooling_brief') {
+    const st = pack.stats;
+    return (
+      <>
+        <StatBand cells={[
+          { n: st.products, label: 'Products' },
+          { n: st.topFeatures.length, label: 'Top features' },
+        ]} />
+        <Text style={s.note}>
+          {`Build-or-buy brief for "${pack.capability}".`}
+          {st.topUp ? ' Market topped up beyond the exact match for a fuller picture.' : ''}
+        </Text>
+        {includeInternal && pack.internal.ourContext && <ToolingInternalContext ourContext={pack.internal.ourContext} />}
+        <NarrativeSections saved={saved} origin={origin} />
+        <ToolingProductTable products={pack.products} origin={origin} />
+      </>
+    );
+  }
+  if (pack.kind === 'tooling_entrants') {
+    const st = pack.stats;
+    return (
+      <>
+        <StatBand cells={[
+          { n: st.entrants, label: 'New entrants' },
+          { n: st.deepDived, label: 'Deep-dived' },
+          { n: st.events, label: 'Tracked-product moves' },
+        ]} />
+        <Text style={s.note}>{`Week of ${pack.from} to ${pack.to}.`}</Text>
+        <NarrativeSections saved={saved} origin={origin} />
+        <ToolingProductTable products={pack.products} origin={origin} />
+        <ToolingEventsList events={pack.events} />
+      </>
+    );
+  }
+  const st = pack.stats;
+  return (
+    <>
+      <StatBand cells={[
+        { n: st.products, label: 'Products' },
+        { n: st.features, label: 'Feature tags' },
+        { n: st.novel, label: 'Novel', tone: st.novel ? COBALT : undefined },
+      ]} />
+      <Text style={s.note}>{pack.focus ? `Focused on "${pack.focus}".` : 'The full feature picture.'}</Text>
+      <NarrativeSections saved={saved} origin={origin} />
+      <ToolingFeatureMatrix features={pack.features} />
+      <ToolingProductTable products={pack.products} origin={origin} />
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- document
+
+function SheetPdf({
+  saved, origin, includeInternal,
+}: { saved: SavedSheet; origin: string; includeInternal: boolean }): ReactNode {
   const pack = saved.pack;
   const kindLabel = SHEET_KIND_LABEL[pack.kind];
   const subjectLine =
     pack.kind === 'lens' ? `The Signal Board through the ${pack.label} lens.` :
     pack.kind === 'atlas' ? 'The state of the AI-economy debate across the Atlas.' :
     pack.kind === 'roundup' ? `Week of ${pack.scopeFrom} to ${pack.scopeTo}.` :
+    pack.kind === 'tooling_landscape' ? `The ${pack.category_name} category.` :
+    pack.kind === 'tooling_brief' ? `Build or buy: ${pack.capability}.` :
+    pack.kind === 'tooling_entrants' ? `New entrants, week of ${pack.from} to ${pack.to}.` :
+    pack.kind === 'tooling_features' ? `Feature landscape: ${pack.category_name}.` :
     `${pack.node.code} · ${pack.node.statement}`;
   const metaLines = [
     scopeLine(saved),
@@ -413,6 +583,8 @@ function SheetPdf({ saved, origin }: { saved: SavedSheet; origin: string }): Rea
           <AtlasBody saved={saved} pack={pack} origin={origin} />
         ) : pack.kind === 'roundup' ? (
           <RoundupBody saved={saved} pack={pack} origin={origin} />
+        ) : isToolingPack(pack) ? (
+          <ToolingBody saved={saved} pack={pack} origin={origin} includeInternal={includeInternal} />
         ) : (
           <ClaimBody saved={saved} pack={pack} origin={origin} />
         )}
@@ -423,9 +595,11 @@ function SheetPdf({ saved, origin }: { saved: SavedSheet; origin: string }): Rea
   );
 }
 
-export function renderSheetPdf(saved: SavedSheet, origin: string): Promise<Buffer> {
+// includeInternal (admin or portal) is the only thing that turns on a
+// build-vs-buy brief's internal-context block; every other kind ignores it.
+export function renderSheetPdf(saved: SavedSheet, origin: string, includeInternal = false): Promise<Buffer> {
   registerFonts();
-  return renderToBuffer(<SheetPdf saved={saved} origin={origin} />);
+  return renderToBuffer(<SheetPdf saved={saved} origin={origin} includeInternal={includeInternal} />);
 }
 
 export function sheetPdfFilename(saved: SavedSheet): string {

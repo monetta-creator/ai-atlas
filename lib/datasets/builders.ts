@@ -894,3 +894,149 @@ export async function buildIntelMetrics(q: Q, opts: DatasetOpts = {}): Promise<D
     params
   );
 }
+
+// ---------------------------------------------------------------------------
+// The AI Tooling Monitor (migration 0054). tooling-products and tooling-events
+// are KEY-GATED (the agent's advisory fit read and event provenance are not
+// for un-gated publication); tooling-features is key-gated too (a feature
+// matrix over the same curated products); tooling-catalog is the one PUBLIC,
+// guest-safe slice, cataloged products only, with no agent/dossier/deep-dive/
+// curation column. review_note, raw_content, and fetch_error never appear in
+// any of the four (the admin's working layer); events.note likewise never
+// appears (working provenance, kept off tooling-events by construction).
+
+export async function buildToolingProducts(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
+  return q<DatasetRow>(
+    `select p.id::text as id, p.slug, p.name, p.vendor, p.vendor_domain, p.url,
+            p.category, c.name as category_name,
+            array_to_string(p.secondary_categories, '; ') as secondary_categories,
+            p.one_liner, p.description,
+            array_to_string(p.target_buyer, '; ') as target_buyer,
+            array_to_string(p.deployment, '; ') as deployment,
+            p.pricing_model, p.pricing_note,
+            p.maturity::text as maturity,
+            p.founded_year, p.hq, p.funding_note,
+            array_to_string(p.notable_customers, '; ') as notable_customers,
+            array_to_string(p.integrations, '; ') as integrations,
+            array_to_string(p.compliance_claims, '; ') as compliance_claims,
+            array_to_string(p.models_used, '; ') as models_used,
+            array_to_string(p.features, '; ') as features,
+            p.feed_url, p.changelog_url, p.github_repo,
+            p.status::text as status,
+            case when p.pinned then 1 else 0 end as pinned,
+            p.agent_fit,
+            (p.agent_scores->>'relevance')::int as agent_relevance,
+            (p.agent_scores->>'enterprise_readiness')::int as agent_enterprise_readiness,
+            (p.agent_scores->>'differentiation')::int as agent_differentiation,
+            (p.agent_scores->>'momentum')::int as agent_momentum,
+            (p.agent_scores->>'build_difficulty')::int as agent_build_difficulty,
+            (select string_agg(x, '; ')
+               from jsonb_array_elements_text(coalesce(p.agent_scores->'steal', '[]'::jsonb)) x) as agent_steal,
+            p.agent_reason, p.agent_model,
+            p.dossier->>'summary' as dossier_summary,
+            (select string_agg(x, '; ')
+               from jsonb_array_elements_text(coalesce(p.dossier->'customers', '[]'::jsonb)) x) as customers,
+            (select string_agg(x, '; ')
+               from jsonb_array_elements_text(coalesce(p.dossier->'sources', '[]'::jsonb)) x) as sources,
+            p.deep_dive->>'summary' as deep_dive_summary,
+            to_char(p.deep_dived_at, 'YYYY-MM-DD') as deep_dived_at,
+            p.origin::text as origin, p.found_url,
+            to_char(p.first_seen, 'YYYY-MM-DD') as first_seen,
+            to_char(p.last_seen, 'YYYY-MM-DD') as last_seen,
+            p.enriched_by,
+            to_char(p.updated_at, 'YYYY-MM-DD') as updated_at
+       from tooling_products p
+       join tooling_categories c on c.slug = p.category
+      where p.status <> 'dismissed'
+      order by p.first_seen desc, p.id${limitClause}`,
+    params
+  );
+}
+
+export async function buildToolingEvents(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
+  // Never selects tooling_events.note (working provenance, admin-only).
+  // Restricted to non-dismissed products, matching buildToolingProducts's
+  // floor, so a rejected candidate's discovery chatter never ships.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
+  return q<DatasetRow>(
+    `select e.id::text as id, e.product_id::text as product_id,
+            p.slug as product_slug, p.name as product_name, p.category,
+            to_char(e.event_date, 'YYYY-MM-DD') as event_date,
+            e.kind::text as event_kind,
+            e.title, e.url,
+            e.source as event_source,
+            to_char(e.created_at, 'YYYY-MM-DD') as created_at
+       from tooling_events e
+       join tooling_products p on p.id = e.product_id
+      where p.status <> 'dismissed'
+      order by e.event_date desc, e.id${limitClause}`,
+    params
+  );
+}
+
+export async function buildToolingFeatures(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
+  // Long form: one row per (product, feature). Cataloged and parked only,
+  // the same floor the /tooling hub's parked list uses for portal keyholders.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
+  return q<DatasetRow>(
+    `select p.id::text as product_id, p.slug as product_slug, p.name as product_name,
+            p.vendor, p.category, p.status::text as status, f.feature
+       from tooling_products p
+      cross join lateral unnest(p.features) as f(feature)
+      where p.status in ('cataloged', 'parked')
+      order by p.slug, f.feature, p.id${limitClause}`,
+    params
+  );
+}
+
+export async function buildToolingCatalog(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
+  // The one PUBLIC tooling dataset: cataloged products only, descriptive
+  // columns only. No agent_*, dossier, deep_dive, status, pinned, origin, or
+  // found_url column exists in this query at all, so nothing curation- or
+  // agent-shaped can leak by a future column reorder.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
+  return q<DatasetRow>(
+    `select p.id::text as id, p.slug, p.name, p.vendor, p.url,
+            p.category, c.name as category_name,
+            p.one_liner, p.description,
+            array_to_string(p.target_buyer, '; ') as target_buyer,
+            array_to_string(p.deployment, '; ') as deployment,
+            p.pricing_model,
+            p.maturity::text as maturity,
+            p.founded_year, p.hq,
+            array_to_string(p.notable_customers, '; ') as notable_customers,
+            array_to_string(p.integrations, '; ') as integrations,
+            array_to_string(p.compliance_claims, '; ') as compliance_claims,
+            array_to_string(p.models_used, '; ') as models_used,
+            array_to_string(p.features, '; ') as features,
+            to_char(p.first_seen, 'YYYY-MM-DD') as first_seen,
+            to_char(p.last_seen, 'YYYY-MM-DD') as last_seen,
+            to_char(p.updated_at, 'YYYY-MM-DD') as updated_at
+       from tooling_products p
+       join tooling_categories c on c.slug = p.category
+      where p.status = 'cataloged'
+      order by p.first_seen desc, p.id${limitClause}`,
+    params
+  );
+}

@@ -25,6 +25,10 @@ export default function SheetRow({ meta, admin }: { meta: GeneratedReportMeta; a
       ? (meta.scope_from && meta.scope_to
           ? `Week of ${dateLabel(meta.scope_from)} to ${dateLabel(meta.scope_to)}`
           : 'This week')
+      : meta.kind === 'tooling_entrants'
+      ? (meta.scope_to ? `Week ending ${dateLabel(meta.scope_to)}` : 'This week')
+      // tooling_landscape / tooling_features carry the category name, tooling_brief
+      // the capability text; both are already stored human-readable in `subject`.
       : meta.subject;
   const scope = meta.scope_from || meta.scope_to
     ? `${meta.scope_from ?? 'start'} to ${meta.scope_to ?? 'now'}`
@@ -41,6 +45,10 @@ export default function SheetRow({ meta, admin }: { meta: GeneratedReportMeta; a
     if (s.findings !== undefined) chips.push(`${s.findings} findings`);
     if (s.threadsUpdated) chips.push(`${s.threadsUpdated} threads updated`);
     if (s.risingRejects) chips.push(`${s.risingRejects} rising rejects`);
+  } else if (meta.kind.startsWith('tooling_') && s) {
+    if (s.products !== undefined) chips.push(`${s.products} products`);
+    if (s.entrants !== undefined) chips.push(`${s.entrants} new entrants`);
+    if (s.features !== undefined) chips.push(`${s.features} feature tags`);
   } else if (s?.evidence) {
     chips.push(`${s.evidence.total} evidence: ${s.evidence.supports} support / ${s.evidence.contradicts} contradict / ${s.evidence.neutral} neutral`);
     if (s.signals?.total !== undefined) chips.push(`${s.signals.total} signals`);

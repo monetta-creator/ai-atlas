@@ -112,6 +112,20 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     access: 'public',
     span: 1,
   },
+  {
+    key: 'tile-tooling',
+    name: 'Tooling Monitor',
+    desc: 'The AI tool market, cataloged weekly.',
+    access: 'public',
+    span: 1,
+  },
+  {
+    key: 'tooling-entrants',
+    name: 'New AI tools this week',
+    desc: 'Cataloged AI products first seen in the last 7 days.',
+    access: 'public',
+    span: 2,
+  },
 ];
 
 // The board's starting lineup, before an admin ever customizes it.
@@ -125,6 +139,7 @@ export const DEFAULT_WIDGETS: string[] = [
   'tile-datasets',
   'tile-research',
   'tile-scout',
+  'tile-tooling',
   'add-document',
 ];
 

@@ -1,13 +1,13 @@
 import { widgetMeta } from '@/lib/widgets/catalog';
 import { WIDGET_COMPONENTS } from './widgets/registry';
 
-// The seven portal tiles and the upload door render their own card chrome
+// The eight portal tiles and the upload door render their own card chrome
 // (`.lobby-tile`, unchanged from the pre-widget-board lobby); everything
 // else gets the shared `.lw-card` wrapper.
 const BARE_KEYS = new Set([
   'add-document',
   'tile-signals', 'tile-blotter', 'tile-map', 'tile-reports',
-  'tile-datasets', 'tile-research', 'tile-scout',
+  'tile-datasets', 'tile-research', 'tile-scout', 'tile-tooling',
 ]);
 
 interface Cell {

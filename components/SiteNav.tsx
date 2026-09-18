@@ -25,6 +25,7 @@ export interface NavCounts {
   papers: number;
   scout: number;
   tickets: number;
+  tooling: number;
 }
 
 // The Explore dropdown mirrors the lobby tiles (minus Signal Board, which keeps
@@ -36,6 +37,7 @@ const EXPLORE_VIEWS = [
   { href: '/datasets', label: 'Data Portal' },
   { href: '/research', label: 'Research Portal' },
   { href: '/scout', label: 'Startup Scout' },
+  { href: '/tooling', label: 'Tooling Monitor' },
 ];
 const EXPLORE_MORE = [
   { href: '/bridges', label: 'Bridges' },
@@ -61,6 +63,7 @@ const ADMIN_ITEMS: AdminItem[] = [
   { href: '/theses', label: 'Theses' },
   { href: '/research/console', label: 'Papers', badge: 'papers' },
   { href: '/scout/console', label: 'Scout', badge: 'scout' },
+  { href: '/tooling/console', label: 'Tooling', badge: 'tooling', also: ['/tooling/reports'] },
   { href: '/sources', label: 'Sources', also: ['/ingest', '/source'] },
   { href: '/worldview', label: 'Map editor', also: ['/data'] },
   { href: '/tickets', label: 'Tickets', badge: 'tickets' },

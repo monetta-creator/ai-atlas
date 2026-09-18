@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { checkPortalKey, setPortalSession } from '@/lib/auth';
+import { safePath } from '@/lib/actions/shared';
 
 // The one server action that deliberately does NOT call requireAdmin(): it IS
 // the portal gate. checkPortalKey fails closed (no PORTAL_KEY set means the
@@ -18,5 +19,8 @@ export async function unlockPortalAction(_prev: UnlockState, formData: FormData)
     return { error: 'That key did not match. Check with the Atlas owner and try again.' };
   }
   await setPortalSession();
-  redirect('/ask');
+  // Optional return path (a hidden field on the unlock form): same-origin
+  // paths only, so the portal gate can never become an open redirect.
+  const next = String(formData.get('next') ?? '').trim();
+  redirect(next ? safePath(next) : '/ask');
 }

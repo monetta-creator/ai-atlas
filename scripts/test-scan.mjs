@@ -272,11 +272,14 @@ check('buildScanHandoff embeds every column key and a parseable JSON Schema', ()
   assert.ok(!text.includes('—'), 'handoff contains an em dash');
 });
 
-check('cronLabel renders daily and weekday crons, passes odd schedules through', () => {
+check('cronLabel renders daily, weekday, and day-of-week crons, passes odd schedules through', () => {
   assert.equal(cronLabel('0 9 * * *'), '09:00 UTC daily');
   assert.equal(cronLabel('30 11 * * *'), '11:30 UTC daily');
   assert.equal(cronLabel('0 9 * * 1-5'), '09:00 UTC weekdays');
-  assert.equal(cronLabel('0 9 * * 6'), '0 9 * * 6');
+  assert.equal(cronLabel('0 7 * * 1'), '07:00 UTC Mondays');
+  assert.equal(cronLabel('0 9 * * 6'), '09:00 UTC Saturdays');
+  assert.equal(cronLabel('0 9 * * 0'), '09:00 UTC Sundays');
+  assert.equal(cronLabel('0 9 5 * *'), '0 9 5 * *');
 });
 
 // ---- The signals-export sibling: same schema machinery, second def --------

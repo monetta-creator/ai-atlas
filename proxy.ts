@@ -68,6 +68,12 @@ export function proxy(req: NextRequest) {
     // isAdmin() and non-tracked companies 404 for guests at the data layer.
     pathname === '/scout' ||
     (pathname.startsWith('/scout/') && !pathname.startsWith('/scout/console')) ||
+    // The AI Tooling Monitor: public catalog + product profiles. The working
+    // console stays admin; portal keyholders carry no atlas_* session cookie,
+    // so /tooling/reports renders its own inline "team key required" panel
+    // (the /ask idiom) instead of bouncing here.
+    pathname === '/tooling' ||
+    (pathname.startsWith('/tooling/') && !pathname.startsWith('/tooling/console')) ||
     // Traceroute is a self-contained explainer: static journey data plus a scripted
     // inference walkthrough. It reads the supply-chain overlay for risk chips, which is
     // stripped server-side for guests, and it never calls a model.

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { RoundupPack, SavedSheet } from '@/lib/types';
 import { gateSheetNarrative } from '@/lib/tearsheet/generate';
 import { gateRoundupNarrative } from '@/lib/research/roundup';
+import ToolingReadView from './ToolingReadView';
 import {
   SIGNIFICANCE_LABEL, SHEET_KIND_LABEL, SHEET_SECTION_TITLES, directionColor, directionLabel,
 } from '@/lib/format';
@@ -11,10 +12,24 @@ import {
 // at the render boundary, belt and braces), then the signal record. The PDF
 // carries the full evidence ledger; this view links into the Atlas instead.
 // The weekly roundup (kind 'roundup') is a distinct pack shape (no node/
-// evidence/signals) and renders through its own RoundupReadView below.
-export default function SheetReadView({ saved }: { saved: SavedSheet }) {
+// evidence/signals) and renders through its own RoundupReadView below; the
+// four tooling kinds are likewise a distinct shape and render through
+// ToolingReadView, which additionally needs to know whether the current
+// viewer may see a build-vs-buy brief's internal-context block.
+export default function SheetReadView({
+  saved, viewer,
+}: {
+  saved: SavedSheet;
+  viewer: { admin: boolean; portal: boolean };
+}) {
   const pack = saved.pack;
   if (pack.kind === 'roundup') return <RoundupReadView saved={saved} pack={pack} />;
+  if (
+    pack.kind === 'tooling_landscape' || pack.kind === 'tooling_brief' ||
+    pack.kind === 'tooling_entrants' || pack.kind === 'tooling_features'
+  ) {
+    return <ToolingReadView saved={saved} pack={pack} viewer={viewer} />;
+  }
   const titles = SHEET_SECTION_TITLES[pack.kind];
   const n = gateSheetNarrative(saved.narrative, pack);
   const scope = saved.scope_from || saved.scope_to

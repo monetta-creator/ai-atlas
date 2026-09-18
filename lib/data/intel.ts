@@ -394,7 +394,7 @@ export interface TavilyQuota {
 
 export async function getTavilyQuota(): Promise<TavilyQuota> {
   const quotaRe = /quota|432/i;
-  const [usedRow, scanNotes, intelNotes] = await Promise.all([
+  const [usedRow, scanNotes, intelNotes, toolingNotes] = await Promise.all([
     // One cost-log row = one BATCH of Tavily calls; the true per-row call
     // count rides in metadata.queries (all three callers log it), so sum
     // that instead of counting rows. Rows without it count as one.
@@ -411,6 +411,12 @@ export async function getTavilyQuota(): Promise<TavilyQuota> {
       `select n as note from intel_runs, unnest(notes) as n
         where day >= date_trunc('month', now())::date`
     ),
+    // tooling_runs.day is weekly-keyed (the Monday UTC) or a pull's start
+    // day, still comparable against the month boundary the same way.
+    q<{ note: string }>(
+      `select n as note from tooling_runs, unnest(notes) as n
+        where day >= date_trunc('month', now())::date`
+    ),
   ]);
   const used = usedRow?.n ?? 0;
   const cap = Number(process.env.TAVILY_MONTHLY_CAP || 1000);
@@ -423,7 +429,10 @@ export async function getTavilyQuota(): Promise<TavilyQuota> {
     cap,
     projected,
     pctUsed: cap > 0 ? used / cap : 0,
-    capHit: scanNotes.some((r) => quotaRe.test(r.note)) || intelNotes.some((r) => quotaRe.test(r.note)),
+    capHit:
+      scanNotes.some((r) => quotaRe.test(r.note)) ||
+      intelNotes.some((r) => quotaRe.test(r.note)) ||
+      toolingNotes.some((r) => quotaRe.test(r.note)),
   };
 }
 

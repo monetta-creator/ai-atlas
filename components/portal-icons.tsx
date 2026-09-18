@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-// The seven portal icons, shared by the lobby tiles (app/page.tsx) and the
+// The eight portal icons, shared by the lobby tiles (app/page.tsx) and the
 // left-hand icon rail (components/PortalRail.tsx). Plain JSX constants with
 // no client or server dependencies, so both trees can import them.
 
@@ -64,6 +64,16 @@ export const PORTAL_ICONS: Record<string, ReactNode> = {
       <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
     </svg>
   ),
+  // A radar sweep: the tooling monitor scans the market on a recurring cadence.
+  tooling: (
+    <svg {...ICON_ATTRS}>
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4.5" />
+      <path d="M12 12L12 3.5" />
+      <path d="M12 12L17.5 8.2" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+    </svg>
+  ),
 };
 
 // Rail chrome icons beyond the six portals: home, the Explore globe, the Ask
@@ -115,4 +125,5 @@ export const PORTALS: { href: string; name: string; icon: ReactNode }[] = [
   { href: '/datasets', name: 'Data Portal', icon: PORTAL_ICONS.data },
   { href: '/research', name: 'Research Portal', icon: PORTAL_ICONS.research },
   { href: '/scout', name: 'Startup Scout', icon: PORTAL_ICONS.scout },
+  { href: '/tooling', name: 'Tooling Monitor', icon: PORTAL_ICONS.tooling },
 ];
