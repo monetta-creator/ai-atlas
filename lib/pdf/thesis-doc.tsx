@@ -101,7 +101,7 @@ function ThesisPdf({ report, narrative, origin }: {
                 <Link src={`${origin}/signals/${sig.id}`} style={[s.mono, { width: 30, color: COBALT }]}>{sig.tag}</Link>
                 <View style={{ flex: 1, paddingRight: 6 }}>
                   <Text style={s.small}>{clip(sig.title, 110)}</Text>
-                  <Text style={[s.mono, { fontSize: 6.5, color: DIM }]}>
+                  <Text style={[s.small, { fontSize: 6.5, lineHeight: 1.4 }]}>
                     {[SIGNIFICANCE_LABEL[sig.significance], sig.source_domain].filter(Boolean).join(' · ')}
                   </Text>
                 </View>

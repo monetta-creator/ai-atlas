@@ -3,9 +3,7 @@ import type { ReactNode } from 'react';
 import type { Report, SignalLens } from '@/lib/types';
 import { SIGNAL_LENS_LABEL, SIGNIFICANCE_LABEL, formatDateRange } from '@/lib/format';
 import {
-  registerFonts, s, COBALT, DIM, INK, LINE,
-  Document, Page, View, Text, Link,
-  PdfCover, PdfFooter, SectionHead, StatBand, Callout, Disclaimer, Html,
+  registerFonts, s, COBALT, INK, LINE, Document, Page, View, Text, Link, PdfCover, PdfFooter, SectionHead, StatBand, Callout, Disclaimer, Html,
 } from './shell';
 
 // The period-report PDF: cover, at-a-glance stat band, the per-lens callout grid,
@@ -111,7 +109,7 @@ function SignalRecord({ report, origin }: { report: Report; origin: string }): R
             <Link src={`${origin}/signals/${sig.id}`} style={[s.small, { color: INK, textDecoration: 'none' }]}>
               {clip(sig.title, 110)}
             </Link>
-            <Text style={[s.mono, { fontSize: 6.5, color: DIM }]}>
+            <Text style={[s.small, { fontSize: 6.5, lineHeight: 1.4 }]}>
               {[SIGNIFICANCE_LABEL[sig.significance], sig.lenses.map((l: SignalLens) => SIGNAL_LENS_LABEL[l]).join(', ')]
                 .filter(Boolean).join(' · ')}
             </Text>

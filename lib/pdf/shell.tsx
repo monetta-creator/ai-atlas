@@ -97,6 +97,12 @@ export const s = StyleSheet.create({
   row: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: LINE, paddingVertical: 4 },
   rowHead: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: INK, paddingBottom: 3 },
   cellHead: { fontFamily: 'JetBrains', fontSize: 6.5, letterSpacing: 1, color: FAINT, textTransform: 'uppercase' },
+  // JetBrains Mono is for CONTROLLED tokens only (codes, dates, counts,
+  // status words). Never put scraped or model-written text in it: the face's
+  // contextual alternates ("...", "//", "==", "--", "->", "::") substitute
+  // glyphs that fontkit 2.0.4's ESM build (the one Next bundles) cannot read
+  // (RangeError: Offset is outside the bounds of the DataView). Schibsted and
+  // Anton are unaffected. Verified 2026-09-18 on the tooling entrants PDF.
   mono: { fontFamily: 'JetBrains', fontSize: 8 },
   small: { fontSize: 8.5, color: DIM, lineHeight: 1.5 },
   disclaimer: { fontSize: 8, color: FAINT, lineHeight: 1.6, marginTop: 4 },

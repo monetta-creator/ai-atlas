@@ -5,11 +5,10 @@ import type {
   AnySheetPack, ToolingPack, ToolingProductRef, ToolingEventRef, ToolingFeatureRow,
 } from '@/lib/types';
 
-import { SIGNIFICANCE_LABEL, SHEET_KIND_LABEL, SHEET_SECTION_TITLES } from '@/lib/format';
+import { SIGNIFICANCE_LABEL, SHEET_KIND_LABEL, SHEET_SECTION_TITLES, TOOLING_MATURITY_LABEL } from '@/lib/format';
+import type { ToolingMaturity } from '@/lib/types';
 import {
-  registerFonts, s, COBALT, DIM, DIRECTION_COLOR,
-  Document, Page, View, Text, Link,
-  PdfCover, PdfFooter, SectionHead, StatBand, Callout, Disclaimer, Html,
+  registerFonts, s, COBALT, DIRECTION_COLOR, Document, Page, View, Text, Link, PdfCover, PdfFooter, SectionHead, StatBand, Callout, Disclaimer, Html,
 } from './shell';
 
 // The generated-report PDF (claim/bridge tear sheet, lens deep report, executive
@@ -88,7 +87,7 @@ function EvidenceLedger({ evidence }: { evidence: SheetEvidence[] }): ReactNode 
             ) : (
               <Text style={s.small}>{clip(e.source_title ?? e.signal_title ?? 'signal record', 70)}</Text>
             )}
-            <Text style={[s.mono, { fontSize: 6.5, color: DIM }]}>
+            <Text style={[s.small, { fontSize: 6.5, lineHeight: 1.4 }]}>
               {[e.source_outlet, e.source_published ?? e.noted_on, e.signal_tag].filter(Boolean).join(' · ')}
             </Text>
           </View>
@@ -116,7 +115,7 @@ function SignalRecord({ signals, origin, withDirection }: { signals: SheetSignal
           <Link src={`${origin}/signals/${sig.id}`} style={[s.mono, { width: 30, color: COBALT }]}>{sig.tag}</Link>
           <View style={{ flex: 1, paddingRight: 6 }}>
             <Text style={[s.small, { color: '#0f172a' }]}>{clip(sig.title, 110)}</Text>
-            <Text style={[s.mono, { fontSize: 6.5, color: DIM }]}>
+            <Text style={[s.small, { fontSize: 6.5, lineHeight: 1.4 }]}>
               {[SIGNIFICANCE_LABEL[sig.significance], sig.source_domain, withDirection ? sig.direction ?? undefined : undefined]
                 .filter(Boolean).join(' · ')}
             </Text>
@@ -350,7 +349,7 @@ function RoundupBody({ saved, pack, origin }: { saved: SavedSheet; pack: Roundup
               <View style={{ flex: 1.4, paddingRight: 6 }}>
                 <Link src={`${origin}/research/${p.id}`} style={[s.small, { color: COBALT }]}>{clip(p.title, 90)}</Link>
                 {p.headline_claim && (
-                  <Text style={[s.mono, { fontSize: 6.5, color: DIM }]}>{clip(p.headline_claim, 90)}</Text>
+                  <Text style={[s.small, { fontSize: 6.5, lineHeight: 1.4 }]}>{clip(p.headline_claim, 90)}</Text>
                 )}
               </View>
               <Text style={[s.small, { flex: 1 }]}>{p.effect_size ? clip(p.effect_size, 90) : '–'}</Text>
@@ -407,7 +406,7 @@ function ToolingProductTable({ products, origin }: { products: ToolingProductRef
       <SectionHead>Products</SectionHead>
       <View style={s.rowHead}>
         <Text style={[s.cellHead, { flex: 1.3 }]}>Product</Text>
-        <Text style={[s.cellHead, { width: 66 }]}>Maturity</Text>
+        <Text style={[s.cellHead, { width: 72 }]}>Maturity</Text>
         <Text style={[s.cellHead, { flex: 0.9 }]}>Deployment</Text>
         <Text style={[s.cellHead, { flex: 0.7 }]}>Pricing</Text>
         <Text style={[s.cellHead, { flex: 1.3 }]}>Features</Text>
@@ -416,11 +415,16 @@ function ToolingProductTable({ products, origin }: { products: ToolingProductRef
         <View key={p.id} style={s.row} wrap={false}>
           <View style={{ flex: 1.3, paddingRight: 6 }}>
             <Link src={`${origin}${p.href}`} style={[s.small, { color: COBALT }]}>{clip(p.name, 60)}</Link>
-            <Text style={[s.mono, { fontSize: 6.5, color: DIM }]}>
-              {[p.vendor, p.one_liner ? clip(p.one_liner, 70) : null].filter(Boolean).join(' · ')}
-            </Text>
+            {(() => {
+              // Body font, not JetBrains Mono: this is scraped text, and the
+              // mono face's contextual alternates ("...", "//", "->") crash
+              // fontkit's ESM build (see the mono note in shell.tsx). Never
+              // render an empty <Text> either.
+              const sub = [p.vendor, p.one_liner ? clip(p.one_liner, 70) : null].filter(Boolean).join(' · ');
+              return sub ? <Text style={[s.small, { fontSize: 6.5, lineHeight: 1.4 }]}>{sub}</Text> : null;
+            })()}
           </View>
-          <Text style={[s.small, { width: 66 }]}>{p.maturity}</Text>
+          <Text style={[s.small, { width: 72 }]}>{TOOLING_MATURITY_LABEL[p.maturity as ToolingMaturity] ?? p.maturity}</Text>
           <Text style={[s.small, { flex: 0.9 }]}>{p.deployment.join(', ') || '–'}</Text>
           <Text style={[s.small, { flex: 0.7 }]}>{p.pricing_model ?? '–'}</Text>
           <Text style={[s.small, { flex: 1.3 }]}>{clip(p.features.slice(0, 5).join(', '), 90) || '–'}</Text>
