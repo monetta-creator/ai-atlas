@@ -1,15 +1,18 @@
-'use client';
+"use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { setSheetPublishedAction, deleteSheetAction } from '@/lib/actions';
+import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { setSheetPublishedAction, deleteSheetAction } from "@/lib/actions";
 import {
-  REPORT_KIND_FILTERS, DRAFTS_FILTER, filterCards, paginate,
+  REPORT_KIND_FILTERS,
+  DRAFTS_FILTER,
+  filterCards,
+  paginate,
   type ReportCard,
-} from '@/lib/reports/cards';
-import ReportCover from './ReportCover';
+} from "@/lib/reports/cards";
+import ReportCover from "./ReportCover";
 
 // The Report Portal grid: search + kind filter + pagination over the cards
 // the server already assembled (sheets + period reports + thesis reports,
@@ -19,9 +22,13 @@ import ReportCover from './ReportCover';
 // derived computation.
 
 function runTransition(fn: () => void) {
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => void };
-  if (typeof doc.startViewTransition === 'function') {
-    doc.startViewTransition(() => { flushSync(fn); });
+  const doc = document as Document & {
+    startViewTransition?: (cb: () => void) => void;
+  };
+  if (typeof doc.startViewTransition === "function") {
+    doc.startViewTransition(() => {
+      flushSync(fn);
+    });
   } else {
     fn();
   }
@@ -39,7 +46,9 @@ function pageWindow(current: number, total: number, size = 7): number[] {
 }
 
 export default function ReportGrid({
-  cards, admin, initial,
+  cards,
+  admin,
+  initial,
 }: {
   cards: ReportCard[];
   admin: boolean;
@@ -58,7 +67,10 @@ export default function ReportGrid({
     // trailing-space edit), so a deep-linked ?page= survives the first tick.
     if (qInput.trim() === q) return;
     const id = setTimeout(() => {
-      runTransition(() => { setQ(qInput.trim()); setPage(1); });
+      runTransition(() => {
+        setQ(qInput.trim());
+        setPage(1);
+      });
     }, 150);
     return () => clearTimeout(id);
   }, [qInput, q]);
@@ -67,34 +79,47 @@ export default function ReportGrid({
   // `generate` param (the claim-page deep link into the console). Skip the
   // very first run so we don't rewrite a URL that already matches `initial`.
   useEffect(() => {
-    if (firstRender.current) { firstRender.current = false; return; }
-    const generate = new URLSearchParams(window.location.search).get('generate');
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    const generate = new URLSearchParams(window.location.search).get(
+      "generate",
+    );
     const usp = new URLSearchParams();
-    if (q) usp.set('q', q);
-    if (kind !== 'all') usp.set('kind', kind);
-    if (page !== 1) usp.set('page', String(page));
-    if (generate) usp.set('generate', generate);
+    if (q) usp.set("q", q);
+    if (kind !== "all") usp.set("kind", kind);
+    if (page !== 1) usp.set("page", String(page));
+    if (generate) usp.set("generate", generate);
     const qs = usp.toString();
-    window.history.replaceState(null, '', qs ? `/reports?${qs}` : '/reports');
+    window.history.replaceState(null, "", qs ? `/reports?${qs}` : "/reports");
   }, [q, kind, page]);
 
   function chooseKind(key: string) {
-    runTransition(() => { setKind(key); setPage(1); });
+    runTransition(() => {
+      setKind(key);
+      setPage(1);
+    });
   }
 
   function clearAll() {
-    runTransition(() => { setQInput(''); setQ(''); setKind('all'); setPage(1); });
+    runTransition(() => {
+      setQInput("");
+      setQ("");
+      setKind("all");
+      setPage(1);
+    });
   }
 
   function goToPage(p: number) {
     runTransition(() => setPage(p));
-    document.getElementById('rp-grid')?.scrollIntoView({ block: 'start' });
+    document.getElementById("rp-grid")?.scrollIntoView({ block: "start" });
   }
 
   const filtered = filterCards(cards, { q, kind, admin });
   const pageData = paginate(filtered, page);
   const draftCount = admin ? cards.filter((c) => !c.isPublished).length : 0;
-  const anyFilter = !!q || kind !== 'all';
+  const anyFilter = !!q || kind !== "all";
 
   return (
     <div>
@@ -128,22 +153,40 @@ export default function ReportGrid({
           </button>
         )}
         <span className="rp-count">
-          {anyFilter ? `${pageData.total} of ${cards.length} reports` : `${pageData.total} reports`}
+          {anyFilter
+            ? `${pageData.total} of ${cards.length} reports`
+            : `${pageData.total} reports`}
         </span>
         {anyFilter && (
-          <button type="button" className="btn btn--quiet btn--sm" onClick={clearAll}>Clear</button>
+          <button
+            type="button"
+            className="btn btn--quiet btn--sm"
+            onClick={clearAll}
+          >
+            Clear
+          </button>
         )}
       </div>
 
       {pageData.items.length === 0 ? (
         <div className="rp-empty">
-          No reports match.{' '}
-          <button type="button" className="btn btn--quiet btn--sm" onClick={clearAll}>Clear</button>
+          No reports match.{" "}
+          <button
+            type="button"
+            className="btn btn--quiet btn--sm"
+            onClick={clearAll}
+          >
+            Clear
+          </button>
         </div>
       ) : (
         <div id="rp-grid" className="rp-grid">
           {pageData.items.map((card) => (
-            <ReportCardView key={`${card.family}:${card.id}`} card={card} admin={admin} />
+            <ReportCardView
+              key={`${card.family}:${card.id}`}
+              card={card}
+              admin={admin}
+            />
           ))}
         </div>
       )}
@@ -164,7 +207,7 @@ export default function ReportGrid({
               type="button"
               className="lenschip"
               data-on={p === pageData.page || undefined}
-              aria-current={p === pageData.page ? 'page' : undefined}
+              aria-current={p === pageData.page ? "page" : undefined}
               onClick={() => goToPage(p)}
             >
               {p}
@@ -200,43 +243,64 @@ function ReportCardView({ card, admin }: { card: ReportCard; admin: boolean }) {
 
   return (
     <article className="rp-card" data-kind={card.kind}>
-      <Link href={card.href} className="rp-cover-link" aria-label={`Read ${card.title}`}>
+      <Link
+        href={card.href}
+        className="rp-cover-link"
+        aria-label={`Read ${card.title}`}
+      >
         <ReportCover card={card} />
       </Link>
       <div className="rp-info">
         <div className="rp-kicker">
-          {card.kindLabel}{!card.isPublished && admin ? ' · draft' : ''}
+          {card.kindLabel}
+          {!card.isPublished && admin ? " · draft" : ""}
         </div>
-        <Link href={card.href} className="rp-title">{card.title}</Link>
+        <Link href={card.href} className="rp-title">
+          {card.title}
+        </Link>
         {card.subject && <div className="rp-subject">{card.subject}</div>}
-        {card.chips.length > 0 && <div className="rp-chips">{card.chips.join(' · ')}</div>}
+        {card.chips.length > 0 && (
+          <div className="rp-chips">{card.chips.join(" · ")}</div>
+        )}
         <div className="rp-foot">
           <span className="rp-date">{card.date}</span>
-          <a href={card.pdfHref} className="btn btn--ghost btn--sm">PDF</a>
-          {admin && card.family === 'sheet' && (
-            <>
-              <button
-                type="button"
-                className="btn btn--quiet btn--sm"
-                disabled={busy}
-                onClick={() => void act(() => setSheetPublishedAction(card.id, !card.isPublished))}
-              >
-                {card.isPublished ? 'Unpublish' : 'Publish'}
-              </button>
-              <button
-                type="button"
-                className="btn btn--quiet btn--sm"
-                disabled={busy}
-                onClick={() => {
-                  if (window.confirm('Delete this report? This cannot be undone.')) {
-                    void act(() => deleteSheetAction(card.id));
+          <div className="rp-actions">
+            <a href={card.pdfHref} className="btn btn--ghost btn--sm">
+              PDF
+            </a>
+            {admin && card.family === "sheet" && (
+              <>
+                <button
+                  type="button"
+                  className="btn btn--quiet btn--sm"
+                  disabled={busy}
+                  onClick={() =>
+                    void act(() =>
+                      setSheetPublishedAction(card.id, !card.isPublished),
+                    )
                   }
-                }}
-              >
-                Delete
-              </button>
-            </>
-          )}
+                >
+                  {card.isPublished ? "Unpublish" : "Publish"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--quiet btn--sm"
+                  disabled={busy}
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Delete this report? This cannot be undone.",
+                      )
+                    ) {
+                      void act(() => deleteSheetAction(card.id));
+                    }
+                  }}
+                >
+                  Delete
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </article>

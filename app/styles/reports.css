@@ -144,12 +144,17 @@
   font-family: var(--font-mono); font-size: 11.5px; color: var(--faint-ink);
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
 }
+/* Footer: date left, actions right. Wraps so the admin's three buttons
+   drop to their own line inside the card instead of overflowing it. */
 .rp-foot {
-  display: flex; align-items: center; gap: 8px; margin-top: auto;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-top: auto; min-width: 0;
 }
 .rp-date {
-  font-family: var(--font-mono); font-size: 11.5px; color: var(--faint-ink); margin-right: auto;
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--faint-ink);
+  white-space: nowrap; margin-right: auto;
 }
+.rp-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+.rp-actions .btn--sm { padding-inline: 8px; }
 
 .rp-pager { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 26px; }
 
