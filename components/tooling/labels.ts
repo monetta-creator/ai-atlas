@@ -52,3 +52,33 @@ export const FIT_BAND_LABEL: Record<string, string> = {
   marginal: 'Marginal fit',
   weak: 'Weak fit',
 };
+
+// Known acronyms that should render uppercase (or in their canonical casing)
+// rather than title-cased, keyed by the value with separators stripped.
+const ACRONYMS: Record<string, string> = {
+  soc2: 'SOC 2',
+  hipaa: 'HIPAA',
+  gdpr: 'GDPR',
+  pci: 'PCI',
+  iso27001: 'ISO 27001',
+  fedramp: 'FedRAMP',
+  api: 'API',
+  sso: 'SSO',
+  sla: 'SLA',
+  llm: 'LLM',
+  rag: 'RAG',
+  gpt: 'GPT',
+};
+
+// Turns a raw snake/kebab-case extraction tag (compliance claims,
+// integrations, models used) into a readable label: underscores/hyphens
+// become spaces, the first letter capitalizes, and known acronyms render in
+// their canonical casing. Free-text fields (feature tags) should not go
+// through this, they are meant to render verbatim.
+export function humanize(v: string): string {
+  const key = v.trim().toLowerCase().replace(/[\s_-]+/g, '');
+  if (ACRONYMS[key]) return ACRONYMS[key];
+  const spaced = v.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!spaced) return spaced;
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}

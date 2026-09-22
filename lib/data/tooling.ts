@@ -448,6 +448,14 @@ export async function getToolingRuns(limit = 12): Promise<ToolingRun[]> {
   );
 }
 
+// The hub's count line: total cataloged products, independent of any filter.
+export async function countCataloged(): Promise<number> {
+  const row = await one<{ n: number }>(
+    `select count(*)::int as n from tooling_products where status = 'cataloged'`
+  );
+  return row?.n ?? 0;
+}
+
 // ---- Surface reads (hub, profile, packs) ------------------------------------
 
 export interface ProductSearchOpts {

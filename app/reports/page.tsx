@@ -1,45 +1,64 @@
-import Link from 'next/link';
-import { isAdmin } from '@/lib/auth';
+import { isAdmin, isPortal } from '@/lib/auth';
 import { listSavedReports, getLatestThesisReports, listGeneratedReports, getTargets } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
-import { formatDateRange, dateLabel } from '@/lib/format';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import SheetConsole from '@/components/reports/SheetConsole';
-import SheetRow from '@/components/reports/SheetRow';
+import ReportGrid from '@/components/reports/ReportGrid';
+import {
+  toSheetCard, toPeriodCard, toThesisCard, sortCards,
+  REPORT_KIND_FILTERS, DRAFTS_FILTER,
+} from '@/lib/reports/cards';
 
 export const dynamic = 'force-dynamic';
 // Hosts the sheet-generation server actions (pack + two model legs + save).
 export const maxDuration = 60;
 export const metadata = { title: 'Report Portal · The AI Atlas' };
 
-// The Report Portal: pre-ready generators (admin), then the published shelf.
-// Guests see published generated reports, period reports, and thesis reports,
-// each with its branded PDF download; drafts and the console are admin-only.
-// ?generate=claim&code=4.2 pre-fills the console (the claim pages link here).
+const VALID_KINDS = new Set([...REPORT_KIND_FILTERS.map((f) => f.key), DRAFTS_FILTER.key]);
+
+// The Report Portal: a five-wide grid of every report family (generated
+// sheets, period reports, thesis reports), each with a cover-page preview
+// mirroring the branded PDF's own cover. Filter/search/pagination run
+// client-side over the server-assembled card set (ReportGrid); the
+// generator console (admin) collapses into a <details> so the grid leads.
+// ?generate=claim&code=4.2 pre-fills and opens the console (claim pages
+// link here); ?q=/&kind=/&page= seed the grid's own state.
 export default async function ReportPortal({
   searchParams,
 }: {
-  searchParams: Promise<{ generate?: string | string[]; code?: string | string[] }>;
+  searchParams: Promise<{ q?: string; kind?: string; page?: string; generate?: string; code?: string }>;
 }) {
   const [admin, sp] = await Promise.all([isAdmin(), searchParams]);
+  const portal = await isPortal();
   const { editing, txt } = await getEditContext();
   const [reports, theses, generated, targets] = await Promise.all([
     listSavedReports(),
-    getLatestThesisReports(20),
-    listGeneratedReports(!admin),
+    getLatestThesisReports(50),
+    listGeneratedReports(!admin, { toolingDraftsForPortal: portal && !admin }),
     admin ? getTargets() : Promise.resolve({ claims: [], bridges: [] }),
   ]);
-  const published = generated.filter((g) => g.is_published);
-  const drafts = generated.filter((g) => !g.is_published);
+
+  const cards = sortCards([
+    ...generated.map(toSheetCard),
+    ...reports.map(toPeriodCard),
+    ...theses.map(toThesisCard),
+  ]);
+
   const gen = typeof sp.generate === 'string' ? sp.generate : undefined;
   const initialKind = gen === 'claim' || gen === 'lens' || gen === 'atlas' ? gen : undefined;
   const initialCode = typeof sp.code === 'string' ? sp.code : undefined;
 
+  const kindParam = typeof sp.kind === 'string' ? sp.kind : 'all';
+  const kind = VALID_KINDS.has(kindParam) && (kindParam !== DRAFTS_FILTER.key || admin) ? kindParam : 'all';
+  const pageParam = typeof sp.page === 'string' ? parseInt(sp.page, 10) : 1;
+  const page = Number.isFinite(pageParam) && pageParam >= 1 ? pageParam : 1;
+  const q = (typeof sp.q === 'string' ? sp.q : '').slice(0, 120);
+
   return (
     <>
       <Header admin={admin} />
-      <section className="wrap" style={{ maxWidth: 1080, paddingBottom: 100 }}>
+      <section className="wrap rp-wrap">
         <header className="pagehead" style={{ paddingBottom: 26 }}>
           <Editable
             as="h1"
@@ -60,78 +79,18 @@ export default async function ReportPortal({
         </header>
 
         {admin && (
-          <div style={{ marginBottom: 34 }}>
-            <div className="section-label">Generate a report</div>
+          <details className="rp-console" open={!!gen}>
+            <summary>Generate a report</summary>
             <SheetConsole
               claims={targets.claims.map((t) => ({ code: t.code, statement: t.statement }))}
               bridges={targets.bridges.map((t) => ({ code: t.code, statement: t.statement }))}
               initialKind={initialKind}
               initialCode={initialCode}
             />
-          </div>
+          </details>
         )}
 
-        {admin && drafts.length > 0 && (
-          <div style={{ marginBottom: 34 }}>
-            <div className="section-label">Drafts · {drafts.length} · publish to list them below</div>
-            <div className="flex flex-col gap-[10px]">
-              {drafts.map((g) => <SheetRow key={g.id} meta={g} admin />)}
-            </div>
-          </div>
-        )}
-
-        <div className="section-label">Generated reports · {published.length}</div>
-        {published.length === 0 ? (
-          <p className="text-sm" style={{ color: 'var(--faint-ink)' }}>Nothing published yet.</p>
-        ) : (
-          <div className="flex flex-col gap-[10px]">
-            {published.map((g) => <SheetRow key={g.id} meta={g} admin={admin} />)}
-          </div>
-        )}
-
-        <div className="section-label" style={{ marginTop: 28 }}>Period reports · {reports.length}</div>
-        {reports.length === 0 ? (
-          <p className="text-sm" style={{ color: 'var(--faint-ink)' }}>No saved reports yet.</p>
-        ) : (
-          <div className="flex flex-col gap-[10px]">
-            {reports.map((r) => (
-              <div key={r.id} className="plate flex items-baseline gap-3 flex-wrap">
-                <Link href={`/reports/${r.id}`} className="hover:underline"
-                  style={{ fontWeight: 600, fontSize: 15.5, color: 'var(--ink)', flex: 1, minWidth: 260 }}>
-                  {r.title}
-                </Link>
-                <span className="text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>
-                  {formatDateRange(r.date_from, r.date_to)}
-                  {r.lenses.length > 0 ? ` · ${r.lenses.length} lens${r.lenses.length === 1 ? '' : 'es'}` : ''}
-                  {dateLabel(r.updated_at) ? ` · saved ${dateLabel(r.updated_at)}` : ''}
-                </span>
-                <a href={`/reports/${r.id}/pdf`} className="btn btn--ghost btn--sm">PDF</a>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="section-label" style={{ marginTop: 28 }}>Thesis reports · {theses.length}</div>
-        {theses.length === 0 ? (
-          <p className="text-sm" style={{ color: 'var(--faint-ink)' }}>No thesis reports yet.</p>
-        ) : (
-          <div className="flex flex-col gap-[10px]">
-            {theses.map((t) => (
-              <div key={t.report_id} className="plate flex items-baseline gap-3 flex-wrap">
-                <Link href={`/thesis-report/${t.report_id}`} className="hover:underline"
-                  style={{ fontWeight: 600, fontSize: 15.5, color: 'var(--ink)', flex: 1, minWidth: 260 }}>
-                  {t.statement}
-                </Link>
-                <span className="text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>
-                  {t.matched} matched · {t.supports}s / {t.contradicts}c
-                  {dateLabel(t.generated_at) ? ` · ${dateLabel(t.generated_at)}` : ''}
-                </span>
-                <a href={`/thesis-report/${t.report_id}/pdf`} className="btn btn--ghost btn--sm">PDF</a>
-              </div>
-            ))}
-          </div>
-        )}
-
+        <ReportGrid cards={cards} admin={admin} initial={{ q, kind, page }} />
       </section>
     </>
   );

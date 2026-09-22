@@ -10,6 +10,14 @@ import type { ToolingProduct } from '@/lib/types';
 // and the "fit" chip disappears rather than needing a separate viewer prop.
 export default function ProductCard({ product }: { product: ToolingProduct }) {
   const band = fitBand(product.agent_fit ?? null);
+  const meta = [
+    ...(product.maturity !== 'unknown' ? [TOOLING_MATURITY_LABEL[product.maturity]] : []),
+    ...product.deployment.map((d) => DEPLOYMENT_LABEL[d] ?? d),
+    ...(product.pricing_model && product.pricing_model !== 'unknown'
+      ? [PRICING_LABEL[product.pricing_model] ?? product.pricing_model]
+      : []),
+    `first seen ${dateLabel(product.first_seen)}`,
+  ];
   return (
     <Link
       href={`/tooling/${product.slug}`}
@@ -17,19 +25,20 @@ export default function ProductCard({ product }: { product: ToolingProduct }) {
       style={{ background: 'var(--surface)', borderColor: 'var(--line)', color: 'var(--ink)', textDecoration: 'none' }}
     >
       <span className="flex items-baseline gap-2 flex-wrap">
-        {product.pinned && <span title="Pinned by an editor" style={{ color: 'var(--accent)' }}>★</span>}
+        {product.pinned && <span role="img" aria-label="Pinned by an editor" style={{ color: 'var(--accent)' }}>★</span>}
         <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15.5 }}>{product.name}</span>
         {product.vendor && (
           <span className="text-xs" style={{ color: 'var(--faint-ink)' }}>{product.vendor}</span>
         )}
       </span>
       {product.one_liner && <span className="text-sm" style={{ color: 'var(--dim)' }}>{product.one_liner}</span>}
-      <span className="flex items-center flex-wrap gap-2 text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}>
-        <span>{TOOLING_MATURITY_LABEL[product.maturity]}</span>
-        {product.deployment.map((d) => <span key={d}>{DEPLOYMENT_LABEL[d] ?? d}</span>)}
-        {product.pricing_model && <span>{PRICING_LABEL[product.pricing_model] ?? product.pricing_model}</span>}
-        <span>since {dateLabel(product.first_seen)}</span>
-        {band && <span style={{ color: 'var(--accent)' }}>✦ {FIT_BAND_LABEL[band]}</span>}
+      <span className="flex items-center flex-wrap gap-2 text-xs">
+        <span className="tl-meta">{meta.join(' · ')}</span>
+        {band && (
+          <span className="tl-fit" title={`Agent fit ${product.agent_fit}/100 on the team rubric, recommend-only`}>
+            ✦ {FIT_BAND_LABEL[band]}
+          </span>
+        )}
       </span>
       {product.features.length > 0 && (
         <span className="flex items-center flex-wrap gap-1.5">

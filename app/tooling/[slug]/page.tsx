@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { isAdmin, isPortal } from '@/lib/auth';
@@ -10,7 +11,7 @@ import DeepDivePanel from '@/components/tooling/DeepDivePanel';
 import AgentReadPanel from '@/components/tooling/AgentReadPanel';
 import ProductTools from '@/components/tooling/ProductTools';
 import DeleteEventButton from '@/components/tooling/DeleteEventButton';
-import { DEPLOYMENT_LABEL, PRICING_LABEL } from '@/components/tooling/labels';
+import { DEPLOYMENT_LABEL, PRICING_LABEL, humanize } from '@/components/tooling/labels';
 import type { ToolingViewer } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,23 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
+
+// Guest-viewer metadata read: cheap and never throws (a missing/parked
+// product just falls back to the generic title; the page body 404s on its
+// own admin/portal-aware read).
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  try {
+    const { slug } = await params;
+    const product = await getProduct(slug, { admin: false, portal: false });
+    return { title: `${product?.name ?? 'Product'} · AI Tooling Monitor` };
+  } catch {
+    return { title: 'AI Tooling Monitor' };
+  }
+}
 
 function fieldRow(label: string, value: string | number | null | undefined) {
   if (value === null || value === undefined || value === '') return null;
@@ -29,13 +47,18 @@ function fieldRow(label: string, value: string | number | null | undefined) {
   );
 }
 
-function tagList(label: string, items: string[] | undefined) {
+// humanizeItems: on for extraction tags meant to read as labels (compliance
+// claims, integrations, models used); off for free text the source material
+// already wrote out (target buyers' own enum labels, deep-dive prose lists).
+function tagList(label: string, items: string[] | undefined, humanizeItems = false) {
   if (!items?.length) return null;
   return (
     <div className="flex items-baseline flex-wrap gap-2 text-sm">
       <span style={{ color: 'var(--faint-ink)', minWidth: 130 }}>{label}</span>
       <span className="flex items-center flex-wrap gap-1.5">
-        {items.map((v) => <span key={v} className="badge" style={{ fontSize: 11 }}>{v}</span>)}
+        {items.map((v) => (
+          <span key={v} className="badge" style={{ fontSize: 11 }}>{humanizeItems ? humanize(v) : v}</span>
+        ))}
       </span>
     </div>
   );
@@ -69,9 +92,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
         <header className="pagehead" style={{ paddingBottom: 24 }}>
           <p className="text-xs" style={{ color: 'var(--faint-ink)', marginBottom: 8 }}>
-            <Link href="/tooling" className="hover:underline" style={{ color: 'var(--faint-ink)' }}>AI Tooling Monitor</Link>
+            <Link href="/tooling" className="hover:underline" style={{ color: 'inherit' }}>AI Tooling Monitor</Link>
             {' '}·{' '}
-            <Link href={`/tooling?category=${product.category}`} className="hover:underline" style={{ color: 'var(--faint-ink)' }}>
+            <Link href={`/tooling?category=${product.category}`} className="hover:underline" style={{ color: 'inherit' }}>
               {categoryName}
             </Link>
           </p>
@@ -113,9 +136,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             {fieldRow('HQ', product.hq)}
             {fieldRow('Funding', product.funding_note)}
             {tagList('Target buyers', product.target_buyer)}
-            {tagList('Integrations', product.integrations)}
-            {tagList('Compliance claims', product.compliance_claims)}
-            {tagList('Models used', product.models_used)}
+            {tagList('Integrations', product.integrations, true)}
+            {tagList('Compliance claims', product.compliance_claims, true)}
+            {tagList('Models used', product.models_used, true)}
             {tagList('Notable customers', product.notable_customers)}
             {product.feed_url && (
               <div className="flex items-baseline gap-2 text-sm">
@@ -155,7 +178,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
         {dossier?.summary && (
           <section style={{ marginBottom: 22 }}>
-            <div className="section-label">Dossier · machine-read</div>
+            <div className="section-label">Dossier · model-written summary</div>
             <div
               className="rounded-[var(--radius)] border p-3 text-sm"
               style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
@@ -173,7 +196,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
         {portal && (
           <section style={{ marginBottom: 22 }}>
-            <div className="section-label">Agent read · recommend-only</div>
+            <div className="section-label">Agent read · fit for our team, recommend-only</div>
             <AgentReadPanel fit={product.agent_fit} scores={product.agent_scores} reason={product.agent_reason} />
           </section>
         )}

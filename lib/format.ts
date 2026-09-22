@@ -149,7 +149,12 @@ export function dateLabel(iso: string | Date | null): string | null {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  // A bare 'YYYY-MM-DD' (Postgres date cast to text: run days, scope_to) parses
+  // as UTC midnight; formatting it in a US local zone would show the day before.
+  const dateOnly = typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso);
+  return d.toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', ...(dateOnly ? { timeZone: 'UTC' } : {}),
+  });
 }
 
 // "Jun 1–6, 2026" (same month) / "Jun 1 – Jul 2, 2026" / cross-year. Inputs are 'YYYY-MM-DD';

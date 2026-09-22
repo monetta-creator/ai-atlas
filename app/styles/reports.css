@@ -1,0 +1,159 @@
+/* ============================================================
+   REPORT PORTAL (.rp-*) — /reports cover grid.
+   The cover is a CSS miniature of the PDF cover (lib/pdf/shell.tsx
+   PdfCover): paper-white in both themes because it previews a PDF.
+   ============================================================ */
+
+.rp-wrap { max-width: 1360px; }
+
+.rp-console {
+  margin-bottom: 34px;
+  background: var(--surface);
+  border: 1px solid var(--frame);
+  padding: 16px 20px;
+}
+.rp-console > summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  list-style: none;
+}
+.rp-console > summary::-webkit-details-marker { display: none; }
+.rp-console > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--faint-ink);
+  transition: transform .15s var(--ease-soft);
+}
+.rp-console[open] > summary::before { transform: rotate(90deg); }
+.rp-console[open] > summary { margin-bottom: 16px; }
+
+.rp-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  margin-bottom: 18px;
+}
+.rp-toolbar .input { max-width: 320px; }
+
+.rp-count {
+  font-family: var(--font-mono); font-size: 12px; color: var(--faint-ink);
+  margin-left: auto;
+}
+
+.rp-grid {
+  display: grid;
+  gap: 22px 18px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+@media (max-width: 1279px) { .rp-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 1023px) { .rp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 767px)  { .rp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 479px)  { .rp-grid { grid-template-columns: 1fr; } }
+
+.rp-card {
+  display: flex; flex-direction: column; gap: 10px;
+}
+
+.rp-cover-link {
+  display: block;
+  transition: transform .2s var(--ease-soft), box-shadow .2s var(--ease-soft);
+}
+.rp-cover-link:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 40px -22px color-mix(in oklab, var(--ink) 60%, transparent);
+}
+
+/* The cover itself: fixed paper-white palette in BOTH themes (it previews a
+   PDF page, not a themed UI surface). Sized with container queries so every
+   card in the grid scales its cover type together as columns reflow. */
+/* .rp-cover is the size container; the cqw units live on .rp-cover-page and
+   its children (an element cannot resolve cqw against itself: on the
+   container they fall back to the viewport and blow the layout). */
+.rp-cover {
+  position: relative;
+  aspect-ratio: 1 / 1.414;
+  container-type: inline-size;
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid var(--frame);
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, .06);
+}
+.rp-cover-page {
+  position: absolute; inset: 0;
+  padding: 14cqw 9cqw 9cqw;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5cqw;
+}
+.rp-cover-wordmark {
+  font-family: var(--font-headline); font-size: 6cqw; letter-spacing: .18em;
+}
+.rp-cover-rule i { display: block; background: #0f172a; }
+.rp-cover-rule i:first-child { height: 1.2cqw; }
+.rp-cover-rule i:last-child { height: .4cqw; margin-top: .9cqw; }
+.rp-cover-kicker {
+  font-family: var(--font-mono); font-size: 3.6cqw; letter-spacing: .14em;
+  text-transform: uppercase; color: #2d5bff; margin-top: 4cqw;
+}
+.rp-cover-title {
+  font-family: var(--font-headline); font-size: 11cqw; line-height: 1.02; letter-spacing: -.005em;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden;
+  text-wrap: balance;
+}
+.rp-cover-subject {
+  font-size: 4.4cqw; line-height: 1.35; color: #5b6675;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+.rp-cover-meta {
+  font-family: var(--font-mono); font-size: 3.1cqw; color: #95a0b1; line-height: 1.5; margin-top: 2cqw;
+}
+.rp-cover-foot {
+  position: absolute; left: 9cqw; right: 9cqw; bottom: 7cqw;
+  font-size: 2.9cqw; line-height: 1.45; color: #95a0b1;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.rp-cover-ribbon {
+  position: absolute; top: 9cqw; right: -16cqw; transform: rotate(35deg);
+  background: #c8512f; color: #fff;
+  font-family: var(--font-mono); font-size: 3.4cqw; letter-spacing: .18em; text-transform: uppercase;
+  padding: .8cqw 18cqw;
+}
+/* A light per-kind tint on the kicker/rule; cheap, not load-bearing. */
+.rp-cover[data-kind^="tooling_"] .rp-cover-kicker { color: #4fae9f; }
+.rp-cover[data-kind="roundup"] .rp-cover-kicker { color: #b26a00; }
+
+.rp-info { display: flex; flex-direction: column; gap: 4px; }
+.rp-kicker {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--faint-ink);
+}
+.rp-title {
+  font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--ink);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.rp-title:hover { text-decoration: underline; }
+.rp-subject {
+  font-size: 13px; color: var(--dim);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.rp-chips {
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--faint-ink);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.rp-foot {
+  display: flex; align-items: center; gap: 8px; margin-top: auto;
+}
+.rp-date {
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--faint-ink); margin-right: auto;
+}
+
+.rp-pager { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 26px; }
+
+.rp-empty {
+  background: var(--surface); border: 1px solid var(--frame);
+  color: var(--faint-ink); text-align: center; padding: 40px;
+}

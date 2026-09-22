@@ -1,4 +1,6 @@
+import Link from 'next/link';
 import { isAdmin, isPortal } from '@/lib/auth';
+import { SHEET_KIND_LABEL, dateLabel } from '@/lib/format';
 import { getToolingCategories, listToolingReports } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
@@ -45,6 +47,9 @@ export default async function ToolingReportsPage() {
   );
 
   if (!admin && !portal) {
+    // Guests still get the shelf of PUBLISHED tooling reports (the same rows
+    // /reports lists); only generating one sits behind the team key.
+    const published = await listToolingReports({ admin: false, portal: false });
     return (
       <>
         <Header admin={admin} />
@@ -53,6 +58,31 @@ export default async function ToolingReportsPage() {
             {title}
             {lede}
           </header>
+          {published.length > 0 && (
+            <>
+              <div className="section-label">Published tooling reports · {published.length}</div>
+              <div className="flex flex-col gap-2" style={{ marginTop: 10, marginBottom: 30 }}>
+                {published.map((r) => (
+                  <div key={r.id} className="plate" style={{ display: 'block' }}>
+                    <div className="flex items-baseline gap-3 flex-wrap">
+                      <div style={{ flex: 1, minWidth: 240 }}>
+                        <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--ink)' }}>{r.title}</span>
+                        <div className="text-xs" style={{ color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)', marginTop: 4 }}>
+                          {SHEET_KIND_LABEL[r.kind as keyof typeof SHEET_KIND_LABEL] ?? r.kind}
+                          {r.subject ? ` · ${r.subject}` : ''}
+                          {dateLabel(r.generated_at) ? ` · ${dateLabel(r.generated_at)}` : ''}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/reports/sheet/${r.id}`} className="btn btn--ghost btn--sm">Read</Link>
+                        <a href={`/reports/sheet/${r.id}/pdf`} className="btn btn--ghost btn--sm">PDF</a>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
           <ToolingUnlock />
         </section>
       </>

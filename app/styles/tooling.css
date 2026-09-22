@@ -1,0 +1,91 @@
+/* ============================================================
+   AI TOOLING MONITOR (.tl-*) — /tooling hub + product pages.
+   Filter bar, new-this-week strip, cadence line, info button,
+   portal review plates. Cards keep their token-based inline
+   styles; this sheet holds only the shared chrome.
+   ============================================================ */
+
+.tl-titlerow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+.tl-info-btn {
+  width: 26px; height: 26px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--accent);
+  font: 600 13px/1 var(--font-mono);
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  transition: border-color .15s, background .15s;
+  align-self: center;
+}
+.tl-info-btn:hover {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+  background: color-mix(in oklab, var(--accent) 8%, var(--surface));
+}
+.tl-info-card { width: min(640px, 100%); }
+.tl-info-h {
+  font-family: var(--font-mono); font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--faint-ink); margin: 16px 0 4px;
+}
+.tl-info-p { font-size: 13.5px; line-height: 1.65; color: var(--dim); margin: 0 0 6px; }
+
+/* Cadence line under the lede */
+.tl-cadence {
+  font-family: var(--font-mono); font-size: 12px; color: var(--faint-ink);
+  margin: 0 0 16px;
+}
+
+/* Filter plate: search form + facet chips */
+.tl-filters {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 14px 16px; margin-bottom: 22px;
+}
+.tl-filters .touch-chip[data-on] {
+  background: color-mix(in oklab, var(--accent) 12%, var(--surface));
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+  color: var(--accent);
+}
+.tl-clear {
+  font-size: 12px; color: var(--faint-ink); text-decoration: none;
+}
+.tl-clear:hover { color: var(--accent); text-decoration: underline; }
+
+/* New-this-week strip */
+.tl-strip-head {
+  display: flex; align-items: center; gap: 12px; margin: 44px 0 18px;
+}
+.tl-strip-head .section-label { margin: 0; flex: 1; }
+.tl-strip-report {
+  font-size: 12.5px; color: var(--accent); text-decoration: none; white-space: nowrap;
+}
+.tl-strip-report:hover { text-decoration: underline; }
+
+.tl-strip {
+  display: flex; gap: 10px;
+  overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 6px;
+  mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+}
+.tl-strip-card {
+  flex: 0 0 260px; scroll-snap-align: start;
+  border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); text-decoration: none; padding: 10px;
+}
+.tl-strip-oneliner {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+.tl-empty { font-size: 13.5px; color: var(--faint-ink); margin: 0; }
+
+/* Card meta line + fit chip */
+.tl-meta { font-family: var(--font-mono); font-size: 12px; color: var(--faint-ink); }
+.tl-fit { color: var(--accent); }
+
+/* Portal review plates */
+.tl-details {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px 16px;
+}
+.tl-details summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+  color: var(--dim); font-size: 13.5px;
+}
+.tl-details summary::-webkit-details-marker { display: none; }
+.tl-details summary::before { content: '▸'; font-size: 11px; color: var(--faint-ink); }
+.tl-details[open] > summary::before { content: '▾'; }
+.tl-note { font-size: 12.5px; color: var(--faint-ink); margin: 4px 0 10px; }

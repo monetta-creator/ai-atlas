@@ -1,13 +1,15 @@
 import Link from 'next/link';
 import { isAdmin, isPortal, isPreview } from '@/lib/auth';
 import { getEditContext } from '@/lib/content';
-import { getToolingCategories, searchProducts, listToolingReports } from '@/lib/data';
+import { getToolingCategories, searchProducts, listToolingReports, getToolingRuns, countCataloged } from '@/lib/data';
+import { dateLabel } from '@/lib/format';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import ProductFilters from '@/components/tooling/ProductFilters';
 import ProductCard from '@/components/tooling/ProductCard';
 import NewEntrantsStrip from '@/components/tooling/NewEntrantsStrip';
 import AddProductForm from '@/components/tooling/AddProductForm';
+import ToolingInfo from '@/components/tooling/ToolingInfo';
 import type { ToolingViewer } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -48,12 +50,16 @@ export default async function ToolingPage({
   const maturity = clean(sp.maturity, MATURITIES);
   const pricing = clean(sp.pricing, PRICINGS);
 
-  const [categories, products, reports] = await Promise.all([
+  const [categories, products, reports, runs, total] = await Promise.all([
     getToolingCategories(false),
     searchProducts({ q, category, deployment, maturity, pricing, statuses: ['cataloged'], viewer, limit: 200 }),
     listToolingReports(viewer),
+    getToolingRuns(1),
+    countCataloged(),
   ]);
   const latestEntrantsReport = reports.find((r) => r.kind === 'tooling_entrants');
+  const run = runs[0];
+  const filtered = Boolean(q || category || deployment || maturity || pricing);
 
   const parked = viewer.portal
     ? await searchProducts({ statuses: ['parked'], viewer, limit: 60 })
@@ -78,13 +84,15 @@ export default async function ToolingPage({
       <Header admin={admin} />
       <section className="wrap" style={{ paddingBottom: 100 }}>
         <header className="pagehead" style={{ paddingBottom: 24 }}>
-          <Editable
-            as="h1"
-            k="tooling.title"
-            value={txt('tooling.title', 'AI Tooling Monitor')}
-            editing={editing}
-            style={{ marginBottom: 10 }}
-          />
+          <div className="tl-titlerow" style={{ marginBottom: 10 }}>
+            <Editable
+              as="h1"
+              k="tooling.title"
+              value={txt('tooling.title', 'AI Tooling Monitor')}
+              editing={editing}
+            />
+            <ToolingInfo />
+          </div>
           <Editable
             as="p"
             className="lede"
@@ -96,6 +104,15 @@ export default async function ToolingPage({
             editing={editing}
             style={{ marginBottom: 16 }}
           />
+          {run ? (
+            <p className="tl-cadence">
+              {run.status === 'running'
+                ? `Scan in progress · started ${dateLabel(run.day)} · ${run.found_count} found so far`
+                : `Last scan ${dateLabel(run.day)} · ${run.found_count} found · ${run.cataloged_count} cataloged · next scan Monday 07:00 UTC`}
+            </p>
+          ) : (
+            <p className="tl-cadence">First scan runs Monday 07:00 UTC</p>
+          )}
           {admin && (
             <div
               className="flex items-center flex-wrap gap-3 rounded-[var(--radius)] border p-3 text-sm"
@@ -110,37 +127,44 @@ export default async function ToolingPage({
           )}
         </header>
 
-        <form action="/tooling" method="GET" className="flex items-center gap-2" style={{ marginBottom: 16, maxWidth: 480 }}>
-          <input type="hidden" name="category" value={category ?? ''} />
-          <input type="hidden" name="deployment" value={deployment ?? ''} />
-          <input type="hidden" name="maturity" value={maturity ?? ''} />
-          <input type="hidden" name="pricing" value={pricing ?? ''} />
-          <input type="text" name="q" defaultValue={q ?? ''} placeholder="Search products…" className="input" />
-          <button type="submit" className="btn btn--primary btn--sm">Search</button>
-        </form>
+        <div className="tl-filters">
+          <form action="/tooling" method="GET" className="flex items-center gap-2" style={{ marginBottom: 16, maxWidth: 480 }}>
+            <input type="hidden" name="category" value={category ?? ''} />
+            <input type="hidden" name="deployment" value={deployment ?? ''} />
+            <input type="hidden" name="maturity" value={maturity ?? ''} />
+            <input type="hidden" name="pricing" value={pricing ?? ''} />
+            <input
+              type="text"
+              name="q"
+              defaultValue={q ?? ''}
+              placeholder="Search products…"
+              aria-label="Search products"
+              className="input"
+            />
+            <button type="submit" className="btn btn--primary btn--sm">Search</button>
+          </form>
 
-        <ProductFilters
-          categories={activeCategories.map((c) => ({ slug: c.slug, name: c.name }))}
-          current={{ q, category, deployment, maturity, pricing }}
+          <ProductFilters
+            categories={activeCategories.map((c) => ({ slug: c.slug, name: c.name }))}
+            current={{ q, category, deployment, maturity, pricing }}
+          />
+        </div>
+
+        <NewEntrantsStrip
+          viewer={viewer}
+          reportHref={latestEntrantsReport ? `/reports/sheet/${latestEntrantsReport.id}` : null}
         />
-
-        <NewEntrantsStrip viewer={viewer} />
-
-        {latestEntrantsReport && (
-          <p className="text-sm" style={{ marginBottom: 22 }}>
-            <Link href={`/reports/sheet/${latestEntrantsReport.id}`} style={{ color: 'var(--accent)' }}>
-              This week&apos;s new-entrants report →
-            </Link>
-          </p>
-        )}
 
         {viewer.portal && (
           <>
-            <details style={{ marginBottom: 22 }}>
-              <summary className="text-sm" style={{ color: 'var(--dim)', cursor: 'pointer' }}>
-                Parked by the agent · {parked.length}
+            <details className="tl-details" style={{ marginBottom: 22 }}>
+              <summary className="text-sm" style={{ color: 'var(--dim)' }}>
+                Held for review · {parked.length}
               </summary>
               <div className="flex flex-col gap-1" style={{ marginTop: 10 }}>
+                <p className="tl-note">
+                  Scored below the catalog threshold, or the homepage never fetched. Visible to team keyholders and admins only.
+                </p>
                 {parked.length === 0 ? (
                   <p className="text-sm" style={{ color: 'var(--faint-ink)' }}>Nothing parked right now.</p>
                 ) : (
@@ -163,11 +187,14 @@ export default async function ToolingPage({
               </div>
             </details>
 
-            <details style={{ marginBottom: 26 }}>
-              <summary className="text-sm" style={{ color: 'var(--dim)', cursor: 'pointer' }}>
+            <details className="tl-details" style={{ marginBottom: 26 }}>
+              <summary className="text-sm" style={{ color: 'var(--dim)' }}>
                 Add a product…
               </summary>
               <div style={{ marginTop: 10 }}>
+                <p className="tl-note">
+                  Lands as a candidate and is scored on the next run. If discovery already found it, you are routed to the existing entry.
+                </p>
                 <AddProductForm categories={activeCategories.map((c) => ({ slug: c.slug, name: c.name }))} />
               </div>
             </details>
@@ -175,12 +202,16 @@ export default async function ToolingPage({
         )}
 
         <p className="text-sm" style={{ color: 'var(--faint-ink)', marginBottom: 18 }}>
-          {products.length} product{products.length === 1 ? '' : 's'}
+          {filtered
+            ? `${products.length} of ${total} products match`
+            : `${total} cataloged product${total === 1 ? '' : 's'} across ${orderedCategories.length} categor${orderedCategories.length === 1 ? 'y' : 'ies'}`}
         </p>
 
         {products.length === 0 ? (
           <p className="text-sm" style={{ color: 'var(--faint-ink)' }}>
-            No cataloged products match these filters yet.
+            {q ? `No products match “${q}”.` : 'No cataloged products in this selection yet.'}
+            {' '}
+            <Link href="/tooling" style={{ color: 'var(--accent)' }}>Clear filters</Link>
           </p>
         ) : (
           [...orderedCategories.map((c) => c.slug), ...uncategorized].map((slug) => {

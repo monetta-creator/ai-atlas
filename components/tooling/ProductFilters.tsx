@@ -15,13 +15,7 @@ interface Filters {
   pricing?: string;
 }
 
-// Builds the /tooling URL for one chip: toggling the SAME value off (an
-// active chip clears itself), otherwise replacing that dimension's value
-// while carrying every other current filter (including q) forward.
-function chipHref(current: Filters, key: keyof Filters, value: string): string {
-  const next: Filters = { ...current };
-  if (next[key] === value) delete next[key];
-  else next[key] = value;
+function toQs(next: Filters): string {
   const params = new URLSearchParams();
   if (next.q) params.set('q', next.q);
   if (next.category) params.set('category', next.category);
@@ -30,6 +24,24 @@ function chipHref(current: Filters, key: keyof Filters, value: string): string {
   if (next.pricing) params.set('pricing', next.pricing);
   const qs = params.toString();
   return `/tooling${qs ? `?${qs}` : ''}`;
+}
+
+// Builds the /tooling URL for one chip: toggling the SAME value off (an
+// active chip clears itself), otherwise replacing that dimension's value
+// while carrying every other current filter (including q) forward.
+function chipHref(current: Filters, key: keyof Filters, value: string): string {
+  const next: Filters = { ...current };
+  if (next[key] === value) delete next[key];
+  else next[key] = value;
+  return toQs(next);
+}
+
+// The URL with one dimension dropped, everything else carried forward (the
+// search chip's × and, per-dimension, a future per-chip clear).
+function hrefWithout(current: Filters, key: keyof Filters): string {
+  const next: Filters = { ...current };
+  delete next[key];
+  return toQs(next);
 }
 
 function ChipRow({
@@ -50,11 +62,8 @@ function ChipRow({
             key={o.value}
             href={chipHref(current, filterKey, o.value)}
             className="touch-chip"
-            style={{
-              fontSize: 12,
-              padding: '5px 13px',
-              ...(active ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : {}),
-            }}
+            data-on={active ? '' : undefined}
+            style={{ fontSize: 12, padding: '5px 13px' }}
           >
             {o.label}
           </Link>
@@ -73,8 +82,22 @@ export default function ProductFilters({
   categories: { slug: string; name: string }[];
   current: Filters;
 }) {
+  const anyActive = Boolean(current.q || current.category || current.deployment || current.maturity || current.pricing);
   return (
     <div style={{ marginBottom: 18 }}>
+      {current.q && (
+        <div className="flex items-center flex-wrap gap-2" style={{ marginBottom: 8 }}>
+          <span className="text-xs" style={{ color: 'var(--faint-ink)', minWidth: 82 }}>Search</span>
+          <Link
+            href={hrefWithout(current, 'q')}
+            className="touch-chip"
+            data-on=""
+            style={{ fontSize: 12, padding: '5px 13px' }}
+          >
+            Search: &ldquo;{current.q}&rdquo; ×
+          </Link>
+        </div>
+      )}
       <ChipRow
         label="Category"
         current={current}
@@ -99,6 +122,11 @@ export default function ProductFilters({
         filterKey="pricing"
         options={PRICING_OPTIONS.map((p) => ({ value: p, label: PRICING_LABEL[p] }))}
       />
+      {anyActive && (
+        <div className="flex items-center justify-end">
+          <Link href="/tooling" className="tl-clear">Clear all ×</Link>
+        </div>
+      )}
     </div>
   );
 }

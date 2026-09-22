@@ -162,7 +162,7 @@ const GEN_REPORT_META = `
 // Strip stored narrative HTML to a plain-text excerpt (word-boundary clamp).
 // Text-only by construction: the preview can never carry a link, so it needs no
 // citation-gate pass (the full read view re-gates as always).
-function textExcerpt(html: string | null | undefined, max: number): string {
+export function textExcerpt(html: string | null | undefined, max: number): string {
   if (!html) return '';
   const text = html
     .replace(/<[^>]+>/g, ' ')
@@ -177,17 +177,28 @@ function textExcerpt(html: string | null | undefined, max: number): string {
   return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), max - 40))}…`;
 }
 
-export async function listGeneratedReports(publishedOnly: boolean): Promise<GeneratedReportMeta[]> {
+export async function listGeneratedReports(
+  publishedOnly: boolean,
+  opts?: { toolingDraftsForPortal?: boolean }
+): Promise<GeneratedReportMeta[]> {
   // The row-expansion preview projects only the small parts of the stored jsonb:
   // the bottom line (stripped to plain text below, so it carries no links and
   // needs no citation-gate pass) and the pack's deterministic stats/health.
+  // A portal keyholder (not admin) also sees unpublished tooling reports —
+  // /tooling/reports's own inline-unlock gate already covers those kinds, so
+  // the Report Portal shelf mirrors that visibility instead of hiding them.
+  const where = publishedOnly
+    ? (opts?.toolingDraftsForPortal
+        ? "where (is_published = true or kind::text like 'tooling_%')"
+        : 'where is_published = true')
+    : '';
   const rows = await q<GeneratedReportMeta & { bottom_line: string | null }>(
     `select ${GEN_REPORT_META},
             narrative->>'bottomLine' as bottom_line,
             pack->'stats' as stats,
             pack->'health' as health
        from generated_reports
-       ${publishedOnly ? 'where is_published = true' : ''}
+       ${where}
       order by generated_at desc, id`
   );
   return rows.map(({ bottom_line, ...r }) => ({

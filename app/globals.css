@@ -24,6 +24,8 @@
 @import "./styles/traceroute.css"; /* Traceroute explainer — scoped to .tr (/traceroute) */
 @import "./styles/costs-deck.css"; /* /costs/deck live 16:9 presentation stage (.cdk-*) */
 @import "./styles/education.css"; /* /education hub + guides (.edu) */
+@import "./styles/tooling.css"; /* /tooling hub + product pages (.tl-*) */
+@import "./styles/reports.css"; /* /reports cover grid (.rp-*) */
 
 /* Re-base the app's semantic Tailwind color/font utilities onto the design
    tokens so any utility usage (layout helpers, admin tooling, etc.) stays
