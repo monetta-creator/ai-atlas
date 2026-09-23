@@ -10,6 +10,7 @@ import ProductCard from '@/components/tooling/ProductCard';
 import NewEntrantsStrip from '@/components/tooling/NewEntrantsStrip';
 import AddProductForm from '@/components/tooling/AddProductForm';
 import ToolingInfo from '@/components/tooling/ToolingInfo';
+import ProductLogo from '@/components/tooling/ProductLogo';
 import type { ToolingViewer } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -128,22 +129,6 @@ export default async function ToolingPage({
         </header>
 
         <div className="tl-filters">
-          <form action="/tooling" method="GET" className="flex items-center gap-2" style={{ marginBottom: 16, maxWidth: 480 }}>
-            <input type="hidden" name="category" value={category ?? ''} />
-            <input type="hidden" name="deployment" value={deployment ?? ''} />
-            <input type="hidden" name="maturity" value={maturity ?? ''} />
-            <input type="hidden" name="pricing" value={pricing ?? ''} />
-            <input
-              type="text"
-              name="q"
-              defaultValue={q ?? ''}
-              placeholder="Search products…"
-              aria-label="Search products"
-              className="input"
-            />
-            <button type="submit" className="btn btn--primary btn--sm">Search</button>
-          </form>
-
           <ProductFilters
             categories={activeCategories.map((c) => ({ slug: c.slug, name: c.name }))}
             current={{ q, category, deployment, maturity, pricing }}
@@ -174,6 +159,7 @@ export default async function ToolingPage({
                       className="flex items-baseline flex-wrap gap-2 text-sm rounded-[var(--radius)] border p-2.5"
                       style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
                     >
+                      <ProductLogo name={p.name} domain={p.vendor_domain} url={p.url} size={20} />
                       <Link href={`/tooling/${p.slug}`} className="hover:underline" style={{ color: 'var(--ink)' }}>
                         {p.name}
                       </Link>
@@ -219,7 +205,10 @@ export default async function ToolingPage({
             if (!list.length) return null;
             return (
               <section key={slug} style={{ marginBottom: 26 }}>
-                <div className="section-label">{categoryName.get(slug) ?? slug} · {list.length}</div>
+                <div className="section-label">
+                  <Link href={`/tooling?category=${slug}`} className="tl-cat-link">{categoryName.get(slug) ?? slug}</Link>
+                  {' '}· {list.length}
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
                   {list.map((p) => <ProductCard key={p.id} product={p} />)}
                 </div>

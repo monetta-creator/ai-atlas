@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { TOOLING_MATURITY_LABEL } from '@/lib/format';
 import { DEPLOYMENT_LABEL, DEPLOYMENT_OPTIONS, PRICING_LABEL, PRICING_OPTIONS } from './labels';
@@ -7,7 +8,7 @@ import type { ToolingMaturity } from '@/lib/types';
 
 const MATURITIES = Object.keys(TOOLING_MATURITY_LABEL) as ToolingMaturity[];
 
-interface Filters {
+export interface Filters {
   q?: string;
   category?: string;
   deployment?: string;
@@ -15,7 +16,7 @@ interface Filters {
   pricing?: string;
 }
 
-function toQs(next: Filters): string {
+export function filtersHref(next: Filters): string {
   const params = new URLSearchParams();
   if (next.q) params.set('q', next.q);
   if (next.category) params.set('category', next.category);
@@ -26,107 +27,75 @@ function toQs(next: Filters): string {
   return `/tooling${qs ? `?${qs}` : ''}`;
 }
 
-// Builds the /tooling URL for one chip: toggling the SAME value off (an
-// active chip clears itself), otherwise replacing that dimension's value
-// while carrying every other current filter (including q) forward.
-function chipHref(current: Filters, key: keyof Filters, value: string): string {
-  const next: Filters = { ...current };
-  if (next[key] === value) delete next[key];
-  else next[key] = value;
-  return toQs(next);
-}
-
-// The URL with one dimension dropped, everything else carried forward (the
-// search chip's × and, per-dimension, a future per-chip clear).
-function hrefWithout(current: Filters, key: keyof Filters): string {
-  const next: Filters = { ...current };
-  delete next[key];
-  return toQs(next);
-}
-
-function ChipRow({
-  label, current, filterKey, options,
-}: {
-  label: string;
-  current: Filters;
-  filterKey: keyof Filters;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div className="flex items-center flex-wrap gap-2" style={{ marginBottom: 8 }}>
-      <span className="text-xs" style={{ color: 'var(--faint-ink)', minWidth: 82 }}>{label}</span>
-      {options.map((o) => {
-        const active = current[filterKey] === o.value;
-        return (
-          <Link
-            key={o.value}
-            href={chipHref(current, filterKey, o.value)}
-            className="touch-chip"
-            data-on={active ? '' : undefined}
-            style={{ fontSize: 12, padding: '5px 13px' }}
-          >
-            {o.label}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-
-// searchParams-driven filter chips: every chip is a plain link that rewrites
-// the /tooling URL, so the filtered view is bookmarkable and needs no client
-// state. Marked 'use client' per spec; the chips themselves are static links.
+// One toolbar row: the search box plus four dropdowns, one per facet. Every
+// control writes the /tooling URL (a select change navigates immediately,
+// the search box on submit), so the filtered view stays bookmarkable and the
+// server does the FTS. The category headings in the grid below link to
+// ?category=, so browsing by category never depended on the old chip wall.
 export default function ProductFilters({
   categories, current,
 }: {
   categories: { slug: string; name: string }[];
   current: Filters;
 }) {
+  const router = useRouter();
   const anyActive = Boolean(current.q || current.category || current.deployment || current.maturity || current.pricing);
+
+  function set(key: keyof Filters, value: string) {
+    const next: Filters = { ...current };
+    if (value) next[key] = value;
+    else delete next[key];
+    router.push(filtersHref(next));
+  }
+
   return (
-    <div style={{ marginBottom: 18 }}>
-      {current.q && (
-        <div className="flex items-center flex-wrap gap-2" style={{ marginBottom: 8 }}>
-          <span className="text-xs" style={{ color: 'var(--faint-ink)', minWidth: 82 }}>Search</span>
-          <Link
-            href={hrefWithout(current, 'q')}
-            className="touch-chip"
-            data-on=""
-            style={{ fontSize: 12, padding: '5px 13px' }}
-          >
-            Search: &ldquo;{current.q}&rdquo; ×
-          </Link>
-        </div>
-      )}
-      <ChipRow
-        label="Category"
-        current={current}
-        filterKey="category"
-        options={categories.map((c) => ({ value: c.slug, label: c.name }))}
+    <form
+      className="tl-toolbar"
+      action="/tooling"
+      method="GET"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const q = (new FormData(e.currentTarget).get('q') as string | null)?.trim() ?? '';
+        set('q', q);
+      }}
+    >
+      <input
+        type="search"
+        name="q"
+        defaultValue={current.q ?? ''}
+        placeholder="Search products…"
+        aria-label="Search products"
+        className="input tl-search"
       />
-      <ChipRow
-        label="Deployment"
-        current={current}
-        filterKey="deployment"
-        options={DEPLOYMENT_OPTIONS.map((d) => ({ value: d, label: DEPLOYMENT_LABEL[d] }))}
-      />
-      <ChipRow
-        label="Maturity"
-        current={current}
-        filterKey="maturity"
-        options={MATURITIES.map((m) => ({ value: m, label: TOOLING_MATURITY_LABEL[m] }))}
-      />
-      <ChipRow
-        label="Pricing"
-        current={current}
-        filterKey="pricing"
-        options={PRICING_OPTIONS.map((p) => ({ value: p, label: PRICING_LABEL[p] }))}
-      />
-      {anyActive && (
-        <div className="flex items-center justify-end">
-          <Link href="/tooling" className="tl-clear">Clear all ×</Link>
-        </div>
-      )}
-    </div>
+      <label className="tl-select">
+        <span>Category</span>
+        <select value={current.category ?? ''} onChange={(e) => set('category', e.target.value)}>
+          <option value="">All</option>
+          {categories.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+        </select>
+      </label>
+      <label className="tl-select">
+        <span>Deployment</span>
+        <select value={current.deployment ?? ''} onChange={(e) => set('deployment', e.target.value)}>
+          <option value="">Any</option>
+          {DEPLOYMENT_OPTIONS.map((d) => <option key={d} value={d}>{DEPLOYMENT_LABEL[d]}</option>)}
+        </select>
+      </label>
+      <label className="tl-select">
+        <span>Maturity</span>
+        <select value={current.maturity ?? ''} onChange={(e) => set('maturity', e.target.value)}>
+          <option value="">Any</option>
+          {MATURITIES.map((m) => <option key={m} value={m}>{TOOLING_MATURITY_LABEL[m]}</option>)}
+        </select>
+      </label>
+      <label className="tl-select">
+        <span>Pricing</span>
+        <select value={current.pricing ?? ''} onChange={(e) => set('pricing', e.target.value)}>
+          <option value="">Any</option>
+          {PRICING_OPTIONS.map((p) => <option key={p} value={p}>{PRICING_LABEL[p]}</option>)}
+        </select>
+      </label>
+      {anyActive && <Link href="/tooling" className="tl-clear">Clear all ×</Link>}
+    </form>
   );
 }

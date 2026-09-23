@@ -89,3 +89,30 @@
 .tl-details summary::before { content: '▸'; font-size: 11px; color: var(--faint-ink); }
 .tl-details[open] > summary::before { content: '▾'; }
 .tl-note { font-size: 12.5px; color: var(--faint-ink); margin: 4px 0 10px; }
+
+/* One-row toolbar: search + a dropdown per facet */
+.tl-toolbar { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 10px 14px; }
+.tl-toolbar .tl-search { flex: 1 1 220px; min-width: 200px; max-width: 360px; padding: 9px 12px; font-size: 14px; }
+.tl-select { display: flex; flex-direction: column; gap: 4px; flex: 0 1 auto; min-width: 0; }
+.tl-select > span { font-size: 11px; color: var(--faint-ink); font-family: var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.tl-select select {
+  font: inherit; font-size: 13.5px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 2px;
+  padding: 8px 30px 8px 10px; max-width: 260px;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--faint-ink) 50%), linear-gradient(135deg, var(--faint-ink) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 55%, calc(100% - 10px) 55%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  cursor: pointer;
+}
+.tl-select select:hover { border-color: color-mix(in oklab, var(--accent) 40%, var(--line)); }
+.tl-toolbar .tl-clear { align-self: center; padding-bottom: 2px; }
+.tl-cat-link { color: inherit; text-decoration: none; }
+.tl-cat-link:hover { color: var(--accent); }
+
+/* Vendor marks */
+.tl-logo { border-radius: 6px; flex: none; object-fit: contain; background: var(--surface); border: 1px solid var(--line); }
+.tl-logo--mono {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-weight: 600; letter-spacing: .02em; border: none;
+}

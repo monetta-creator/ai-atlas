@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { TOOLING_MATURITY_LABEL, dateLabel } from '@/lib/format';
 import { fitBand } from '@/lib/tooling/report-core';
 import { DEPLOYMENT_LABEL, PRICING_LABEL, FIT_BAND_LABEL } from './labels';
+import ProductLogo from './ProductLogo';
 import type { ToolingProduct } from '@/lib/types';
 
 // A catalog card for the /tooling grid. agent_fit/agent_scores/etc are portal-
@@ -24,7 +25,8 @@ export default function ProductCard({ product }: { product: ToolingProduct }) {
       className="rounded-[var(--radius)] border p-[var(--card-pad)] flex flex-col gap-2"
       style={{ background: 'var(--surface)', borderColor: 'var(--line)', color: 'var(--ink)', textDecoration: 'none' }}
     >
-      <span className="flex items-baseline gap-2 flex-wrap">
+      <span className="flex items-center gap-2 flex-wrap">
+        <ProductLogo name={product.name} domain={product.vendor_domain} url={product.url} size={28} />
         {product.pinned && <span role="img" aria-label="Pinned by an editor" style={{ color: 'var(--accent)' }}>★</span>}
         <span style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 15.5 }}>{product.name}</span>
         {product.vendor && (

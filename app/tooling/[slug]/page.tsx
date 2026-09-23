@@ -11,6 +11,7 @@ import DeepDivePanel from '@/components/tooling/DeepDivePanel';
 import AgentReadPanel from '@/components/tooling/AgentReadPanel';
 import ProductTools from '@/components/tooling/ProductTools';
 import DeleteEventButton from '@/components/tooling/DeleteEventButton';
+import ProductLogo from '@/components/tooling/ProductLogo';
 import { DEPLOYMENT_LABEL, PRICING_LABEL, humanize } from '@/components/tooling/labels';
 import type { ToolingViewer } from '@/lib/types';
 
@@ -98,10 +99,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               {categoryName}
             </Link>
           </p>
-          <h1 style={{ marginBottom: 8 }}>
-            {product.pinned && <span title="Pinned by an editor" style={{ color: 'var(--accent)', marginRight: 8 }}>★</span>}
-            {product.name}
-          </h1>
+          <div className="flex items-center gap-4" style={{ marginBottom: 8 }}>
+            <ProductLogo name={product.name} domain={product.vendor_domain} url={product.url} size={52} />
+            <h1 style={{ margin: 0 }}>
+              {product.pinned && <span role="img" aria-label="Pinned by an editor" style={{ color: 'var(--accent)', marginRight: 8 }}>★</span>}
+              {product.name}
+            </h1>
+          </div>
           <p className="text-sm" style={{ color: 'var(--dim)', marginBottom: 10 }}>
             {product.one_liner ?? 'No description yet.'}
           </p>

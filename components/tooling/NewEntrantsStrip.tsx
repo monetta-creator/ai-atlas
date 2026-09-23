@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getNewEntrants } from '@/lib/data';
 import { TOOLING_MATURITY_LABEL, dateLabel } from '@/lib/format';
+import ProductLogo from './ProductLogo';
 import type { ToolingViewer } from '@/lib/types';
 
 // "New this week" on the /tooling hub: cataloged products first seen in the
@@ -33,7 +34,10 @@ export default async function NewEntrantsStrip({
         <div className="tl-strip">
           {entrants.map((p) => (
             <Link key={p.id} href={`/tooling/${p.slug}`} className="tl-strip-card">
-              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14 }}>{p.name}</div>
+              <div className="flex items-center gap-2" style={{ fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: 14 }}>
+                <ProductLogo name={p.name} domain={p.vendor_domain} url={p.url} size={22} />
+                <span>{p.name}</span>
+              </div>
               {p.one_liner && (
                 <div className="tl-strip-oneliner text-xs" style={{ color: 'var(--dim)', marginTop: 4 }}>{p.one_liner}</div>
               )}
