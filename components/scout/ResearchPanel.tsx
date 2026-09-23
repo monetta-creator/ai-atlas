@@ -214,9 +214,10 @@ export default function ResearchPanel({
 
       <p className="text-xs" style={{ color: 'var(--faint-ink)' }}>
         The sweep searches the web for funding, product, team, and news. A document
-        upload extracts a PDF&apos;s text in your browser (the file never leaves your
-        machine) and reads it here. Facts fill only empty fields; new developments land
-        on the timeline. Nothing here changes the review status.
+        upload extracts a PDF&apos;s text in your browser: the file itself is not uploaded,
+        but the extracted text is sent to the server, stored with the company record, and
+        passed to the model. Facts fill only empty fields; new developments land on the
+        timeline. Nothing here changes the review status.
       </p>
 
       {documents.length > 0 && (

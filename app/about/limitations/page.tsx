@@ -11,22 +11,22 @@ const SECTIONS = [
   {
     id: 'one-lens',
     heading: 'One person, one lens',
-    body: 'This is one author’s map. The deep argument map covers one lens, the market and economics of AI; the Signal Board files developments under six audience lenses. The confidence levels are one person’s judgment, not a consensus or a measurement.',
+    body: 'This is the maintainer’s map, a personal project. The deep argument map covers one lens, the market and economics of AI; the Signal Board files developments under six audience lenses. The confidence levels are one person’s judgment, not a consensus or a measurement.',
   },
   {
     id: 'no-ingest',
-    heading: 'It does not ingest the news',
-    body: 'Nothing polls or auto-updates. Sources, signals, papers, and companies enter when the author runs a pipeline or adds them by hand. The map only reflects what the author has looked at, and it can lag events between updates.',
+    heading: 'The map does not update itself',
+    body: 'Collection is automatic; judgment is not. Weekday crons run the collection engines (the news scan, the Signal Board’s discovery pipeline, company intel, arXiv research, and a weekly tooling scan), and the Daily Edition is written from what they stored, on schedule, with no one present. The argument map is different: no confidence moves without the maintainer writing a reason, so the map reflects what the maintainer has judged and can lag the feed by days or weeks.',
   },
   {
     id: 'no-browse',
     heading: 'The AI mostly works from given text',
-    body: 'The recommend-only AI works from the text it is handed: a grounded call is auditable and its inputs are on the record. Web search exists in three bounded places: the discovery pipeline and the scout’s company discovery (both draft-only), and the Ask workspace’s web toggle, which lets an answer fill gaps the records leave, with the sources listed and no faithfulness guarantee on the web half. Deep research still searches the Atlas corpus, not the live web. A dossier or a draft is only as good as the text behind it and can be wrong or out of date.',
+    body: 'The recommend-only AI works from the text it is handed: a grounded call is auditable and its inputs are on the record. The live web reaches the system in two ways. The collection engines’ search legs run mostly on Tavily, a model-free search API, beside RSS feeds and primary sources (SEC EDGAR, FDIC, CFPB, arXiv, GitHub, Hacker News). Anthropic’s web_search, which lets the model search for itself, runs in a few bounded features: Scout’s company discovery, competitor scan, and intel sweeps, the Tooling Monitor’s deep dives and its big-pull category enumeration, and the Ask workspace’s web toggle, which lets an answer fill gaps the records leave, with the sources listed and no faithfulness guarantee on the web half; the collection engines fall back to it only when their model-free providers are not configured. With that toggle off, deep research searches the Atlas corpus, with one exception: a fresh question the records do not cover turns web search on for that turn, and the answer says so. A dossier or a draft is only as good as the text behind it and can be wrong or out of date.',
   },
   {
     id: 'retained-text',
-    heading: 'The article text is a working corpus, not a publication',
-    body: 'Every published signal keeps the text of the article behind it. That text grounds the AI’s answers and reports, and keyed readers can open it beside an answer to check a quote. It is never republished: public visitors get the summary, the finding, and a link to the original. Some outlets block fetching entirely, so their signals carry summaries and links rather than text.',
+    heading: 'The retained text is a working corpus, not a publication',
+    body: 'Every item the engines collect keeps the text behind it: articles, filings, papers, and the text extracted from uploaded documents, retained with no retention limit today. That text grounds the AI’s answers and reports. Public visitors get the summary, the finding, and a link to the original. Readers with an access key can open the retained text beside an answer to check a quote and download it in the key-gated datasets; it is not republished on the public pages. Some outlets block fetching entirely, so their items carry summaries and links rather than text.',
   },
   {
     id: 'reflexivity',
@@ -38,10 +38,10 @@ const SECTIONS = [
     heading: 'Not everything is built',
     body: (
       <ul>
-        <li>The propose-queue-accept ingest flow. The tool only recommends for now.</li>
-        <li>Scheduled discovery. The Signal Board’s pipeline, including its breaking-events sweep, runs only when the author triggers it by hand. The cron schedule is deferred.</li>
-        <li>The digest sender. The digest view renders and its audit table exists, but nothing emails it yet.</li>
-        <li>Uploaded PDFs are read for their text and never stored.</li>
+        <li>A propose-queue-accept flow for the argument map itself (the extraction_queue table is scaffolded, not wired). On the map the tool only recommends; the desks (signals, research, scout, tooling) already queue and accept.</li>
+        <li>A retention policy. Collected text is kept indefinitely; there is no deletion job, and archiving a row never deletes it.</li>
+        <li>The signal digest sender. The Signal Board’s digest view renders and its audit table exists, but nothing emails it. (The Atlas Agent’s daily brief is the one thing that emails, through Resend, when the maintainer configures it.)</li>
+        <li>File storage for uploads. An uploaded PDF is read for its text in the browser and the file is discarded; the extracted text is what gets stored and sent to the model.</li>
         <li>Generated PDFs carry no page numbers; a rendering-stack limitation, worked around with static footers.</li>
       </ul>
     ),
@@ -49,7 +49,7 @@ const SECTIONS = [
   {
     id: 'can-be-wrong',
     heading: 'Ways it can still be wrong',
-    body: 'The guardrails reduce the obvious problems, they do not remove them. Confidence levels can carry the author’s bias. Stances may be argued unevenly. Evidence can stay one-sided if the looking stops. Claims can go stale between updates. The scout’s company facts come from the web and can be thin or wrong until enriched and reviewed. The structure pushes against all of this; it guarantees none of it.',
+    body: 'The guardrails reduce the obvious problems, they do not remove them. Confidence levels can carry the maintainer’s bias. Stances may be argued unevenly. Evidence can stay one-sided if the looking stops. Claims can go stale between updates. The scout’s company facts come from the web and can be thin or wrong until enriched and reviewed. The Daily Edition, the scheduled reports, and the engines’ summaries and tags are model-written with no human review step, so they can misread a source. The structure pushes against all of this; it guarantees none of it.',
   },
 ];
 

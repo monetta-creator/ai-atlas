@@ -14,6 +14,9 @@ export const metadata = { title: 'Dataset · The AI Atlas' };
 // A dataset's public page: description, methodology, the auto-generated schema
 // table, downloads, and the in-browser explorer. Heavy datasets (bulk article
 // text) skip the explorer and, when key-gated, preview only for portal holders.
+// A key-gated dataset shows neither explorer nor preview until unlocked (the
+// datasets route refuses the fetch anyway, so rendering the explorer locked
+// would only surface a 4xx).
 export default async function DatasetPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const def = getDataset(slug);
@@ -21,6 +24,8 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
 
   const [admin, portal] = await Promise.all([isAdmin(), isPortal()]);
   const unlocked = !def.keyGated || portal;
+  const showExplorer = !def.heavy && unlocked;
+  const showPreview = def.heavy && unlocked;
 
   return (
     <>
@@ -39,11 +44,11 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
             </>
           ) : (
             <Link className="btn btn--primary btn--sm" href="/ask">
-              Unlock with the team key
+              Unlock with an access key
             </Link>
           )}
         >
-          /api/datasets/{def.slug} · {def.columns.length} columns{def.keyGated ? ' · team key required' : ''}
+          /api/datasets/{def.slug} · {def.columns.length} columns{def.keyGated ? ' · access key required' : ''}
         </PageTop>
 
         <p className="text-sm" style={{ color: 'var(--dim)', marginBottom: 10 }}>{def.description}</p>
@@ -76,14 +81,14 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
         <div style={{ margin: '26px 0' }}>
           <div className="section-label">{def.heavy ? 'Preview' : 'Explore'}</div>
           <div style={{ marginTop: 12 }}>
-            {!def.heavy ? (
+            {showExplorer ? (
               <DatasetExplorer slug={def.slug} columns={def.columns} />
-            ) : unlocked ? (
+            ) : showPreview ? (
               <DatasetPreview slug={def.slug} columns={def.columns} />
             ) : (
               <p style={{ fontSize: 13, color: 'var(--faint-ink)', maxWidth: 640, lineHeight: 1.7 }}>
-                This dataset holds the complete retained article text, so the preview and download
-                sit behind the shared team key. Unlock once at the Ask page and both open up.
+                This export needs an access key: the {def.heavy ? 'preview' : 'explorer'} and the
+                download sit behind it. Unlock once at the Ask page and both open up.
               </p>
             )}
           </div>

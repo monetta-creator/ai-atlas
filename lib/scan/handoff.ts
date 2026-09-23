@@ -217,8 +217,10 @@ source of truth if this document ever disagrees with it.
 ## 1. What this file is
 
 The complete corpus of PUBLISHED signals from the Atlas Signal Board: every
-tracked development a human reviewed and published, with its editorial
-writeup and its links into the Atlas argument map. Where the daily
+tracked development published by a human or, for high-significance pipeline
+drafts with a claim touch, by the 48-hour promotion policy (a human can
+archive the draft in that window; archiving vetoes the publish), with its
+editorial writeup and its links into the Atlas argument map. Where the daily
 external-scan file is raw discovery awaiting triage, these rows are the
 FINISHED product of that judgment on the outside. The intended flow inside:
 import every row through the same intake as the scan files, then promote

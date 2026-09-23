@@ -52,12 +52,12 @@ const SECTIONS = [
   {
     id: 'model-proposes',
     heading: 'The model proposes, the human commits',
-    body: 'The AI suggests and never commits. It never sets how far a source is trusted, never writes evidence, and never moves a confidence. The author changes every number by hand with a short reason, saved together and never edited later. The same rule runs everywhere: the discovery pipeline and the scout only ever create drafts and queue rows, the queue agents stamp recommendations a human accepts or ignores, and the gap diagnoses argue for missing nodes without creating them. Where the AI touches the live web (discovery, scout discovery, the Ask web toggle), the output is a draft, a queue entry, or an answer with its sources shown, never a write to the map.',
+    body: 'On the argument map the AI suggests and never commits. It never sets how far a source is trusted and never moves a confidence; the maintainer changes every number by hand with a short reason, saved together and never edited later. The model’s findings become evidence rows only when a signal is published, and unpublishing removes them; the maintainer can also attach a source to a claim by hand. The same rule runs across the desks: the discovery pipeline and the scout create drafts and queue rows, the queue agents stamp recommendations a human accepts or ignores, and the gap diagnoses argue for missing nodes without creating them. Two scheduled steps sit outside the hand gate and are stated here so they are not mistaken for it: the promotion policy publishes a high-significance pipeline draft that touches a claim after a 48-hour window in which a human can archive it (that publish writes evidence like any other), and the Tooling Monitor catalogs a product when its score clears a threshold. Where the system touches the live web (the collection engines’ feeds and search legs, Scout discovery, intel sweeps, and competitor scans, the tooling deep dives and pull enumeration, the Ask web toggle), the output is a collected item, a draft, a queue entry, or an answer with its sources shown, never a change to a confidence.',
   },
   {
     id: 'learning-loop',
     heading: 'The pipeline learns where to look, not what to believe',
-    body: 'The discovery pipeline keeps a track record of its own searches. Domains that never yield a draft get blocked from future discovery, domains that block fetching get routed straight through a reader service, and triage sees each domain’s history. That feedback changes where the model looks next, and nothing else. It never touches a claim, a confidence, or a piece of evidence.',
+    body: 'The discovery pipeline keeps a track record of its own searches. Domains that never yield a draft get blocked from future discovery, domains that block fetching get routed straight through a reader service (Jina Reader, which renders the page as text), and triage sees each domain’s history. That feedback changes where the model looks next, and nothing else. It never touches a claim, a confidence, or a piece of evidence.',
   },
   {
     id: 'citation-gate',
@@ -72,7 +72,7 @@ const SECTIONS = [
   {
     id: 'defaults',
     heading: 'Defaults to react against',
-    body: 'When the map is seeded, every confidence starts at the midpoint, which the author then has to move. The structure of the map came from an outside reviewer, but their confidence levels were thrown out on purpose. The rule is to take the structure and form independent conclusions.',
+    body: 'When the map is seeded, every confidence starts at the midpoint, which the maintainer then has to move. The structure of the map came from an outside reviewer, but their confidence levels were thrown out on purpose. The rule is to take the structure and form independent conclusions.',
   },
   {
     id: 'blocks',

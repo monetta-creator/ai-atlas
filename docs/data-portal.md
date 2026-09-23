@@ -1,7 +1,10 @@
 # The Datasets portal (`/datasets`)
 
-Written 2026-08-13, at v1 ship. The self-service data product over the Atlas: colleagues
-query the data, download structured datasets, and ask in plain language, without accounts.
+Written 2026-08-13, at v1 ship; counts refreshed 2026-09-23. The self-service data product
+over the Atlas: colleagues query the data, download structured datasets, and ask in plain
+language, without accounts. The registry (`lib/datasets/registry.ts`, `DATASETS`) is the
+source of truth for what exists: 24 datasets at this writing (23 plus the `catalog`
+self-description), 11 of them key-gated (`keyGated: true`).
 
 ## What it is
 
@@ -23,17 +26,28 @@ Three public surfaces plus one gated feature:
 
 ## Access model
 
-- Everything except Ask and the full-text dataset is public, at the same trust level as the
+- Everything except Ask and the key-gated datasets is public, at the same trust level as the
   existing reader surface: guest-safe **by construction** (builders never SELECT personal
   columns; `scripts/test-datasets.mjs` enforces the ban against serialized output).
-- The **portal key** (`PORTAL_KEY` env) unlocks Ask and the `articles-full-text` download via
-  a signed `atlas_portal` cookie (30 days). Onboard a colleague with one link:
-  `/datasets/enter?k=<key>`, or they paste the key into the inline panel on `/datasets/ask`.
-  Admins pass the portal gate implicitly. Unset `PORTAL_KEY` = portal features off.
+- The **access key** (`PORTAL_KEY` env; one shared team key today, per-person keys planned)
+  unlocks Ask and the 11 key-gated datasets via a signed `atlas_portal` cookie (30 days).
+  Key-gated means the file carries retained article text, machine-extracted records including
+  unreviewed items, agent scores, `rigor_prior`, or dossier fields: material a guest should
+  not get by URL. Onboard a colleague with one link: `/datasets/enter?k=<key>`, or they paste
+  the key into the inline panel on `/ask`. Admins pass the gate implicitly. Unset
+  `PORTAL_KEY` = key-gated features off.
+- Published signals in the `signals`, `signals-by-claim`, `evidence-ledger`, and
+  `articles-full-text` datasets were published by a human or, for high-significance pipeline
+  drafts with a claim touch, by the 48-hour promotion policy (mig 0055).
 - Budget: `PORTAL_DAILY_BUDGET_USD` (default 1.00) and `PORTAL_DAILY_MAX_CALLS` (default 200),
   both reset at midnight UTC. Over budget, Ask returns a friendly refusal and downloads keep working.
 
-## The 11 datasets
+## The datasets
+
+The original eleven (v1, 2026-08-13). The later families are the `research-export`,
+`scout-companies`/`scout-events`, `external-scan`/`signals-export`, the four `intel-*`
+files (`docs/intel-desk.md`), and the four `tooling-*` files (below); the registry is the
+list.
 
 | slug | what it is |
 |---|---|
@@ -42,7 +56,7 @@ Three public surfaces plus one gated feature:
 | `argument-edges` | The wiring, uuids resolved to codes, dangling edges dropped. |
 | `evidence-ledger` | Every public evidence row with direction, weight, excerpt. |
 | `sources` | Publicly cited bibliography with counts and a full-text flag. |
-| `articles-full-text` | Key-gated. Complete retained article text per published signal (`coalesce(sources.raw_text, signal_candidates.raw_content)`). |
+| `articles-full-text` | Key-gated. Complete retained article text per published signal (`coalesce(sources.raw_text, signal_candidates.raw_content)`). Retained indefinitely; there is no retention job. |
 | `concepts` | The terminology DAG with prerequisites and confirmed claim links. |
 | `signals-by-claim` | The touch matrix in long form with directions; the direction-balance dataset. |
 | `thesis-reports` | The standing-hypothesis scoreboard off the frozen packs. |
@@ -69,7 +83,7 @@ evidence -> counterpoint, with citations. Per team:
 - **regulatory / legal, compliance**: `signals?lens=regulatory` timeline plus
   `articles-full-text` for primary language.
 - **geopolitics / supply chain, gov affairs**: lens slice plus bridge claims in
-  `argument-nodes`/`argument-edges`, and `/supply-chain`.
+  `argument-nodes`/`argument-edges`, and `/traceroute`.
 - **capability / product, engineering**: `concepts` as onboarding data, `research-papers`.
 - **society / comms, brand**: the `counterpoint` column is a pre-drafted opposing read per
   development.

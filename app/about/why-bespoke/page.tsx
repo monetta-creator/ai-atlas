@@ -11,7 +11,7 @@ const SECTIONS = [
   {
     id: 'chatbots',
     heading: 'Why not just ask a chatbot',
-    body: 'A general chatbot answers from its training data plus, at best, a handful of live searches. It starts from zero every conversation: nothing accumulates, nothing is retained, and the same question next month redoes the same work with different results. This system inverts that. Collection is continuous and compounding: each day’s sweep lands in a permanent, deduplicated record with provenance, and a question asked today is answered from everything gathered so far, with citations back to the original documents. Chat is still an interface here, but it sits on top of a record rather than a memory.',
+    body: 'A general chatbot answers from its training data plus, at best, a handful of live searches. It starts from zero every conversation: nothing accumulates, nothing is retained, and the same question next month redoes the same work with different results. This system inverts that. Collection is continuous and compounding: each day’s sweep lands in a deduplicated record with provenance, retained with no retention limit today, and a question asked today is answered from everything gathered so far, with citations back to the original documents. Chat is still an interface here, but it sits on top of a record rather than a memory.',
   },
   {
     id: 'provenance',
@@ -30,7 +30,7 @@ const SECTIONS = [
       <ul>
         <li><strong>What to track</strong>: the company and topic registries are editable rows, not a vendor request.</li>
         <li><strong>What to ask</strong>: search queries are templates that rotate daily and can be rewritten in place.</li>
-        <li><strong>What to tag</strong>: the taxonomy is an editorial decision, changed with a deploy, enforced by allow-lists.</li>
+        <li><strong>What to tag</strong>: the taxonomy is an editorial decision, kept as registry rows in the database and enforced by allow-lists at enrichment time.</li>
         <li><strong>Which models</strong>: enrichment models are a picker, split-tested live, with per-model quality and cost tracked side by side.</li>
         <li><strong>How much to spend</strong>: every stage sits behind a daily budget cap, and every call is metered.</li>
         <li><strong>What ships</strong>: datasets are registry-driven, so a new export is a schema declaration, not a project.</li>
@@ -40,7 +40,7 @@ const SECTIONS = [
   {
     id: 'economics',
     heading: 'The economics',
-    body: 'The entire daily ingestion runs for pennies. Search uses model-free APIs. Enrichment runs on inexpensive open-weight models that are benchmarked head to head, and frontier models are reserved for the few places judgment matters. Costs are priced at call time against a rate card and surfaced on the same consoles that show coverage, so the spend is as visible as the output. Changing focus (a new company, a new topic, a new export) is an edit measured in minutes, not a procurement cycle measured in quarters.',
+    body: 'The entire daily ingestion runs for pennies. Search runs mostly on Tavily, a model-free API, beside RSS feeds and primary sources; Anthropic’s web_search, which has the model search for itself, is limited to Scout, the tooling deep dives and big-pull enumeration, and the Ask web toggle, plus a fallback the engines use only when their model-free providers are not configured. Enrichment runs on inexpensive open-weight models that are benchmarked head to head, and frontier models (Claude) are reserved for the few places judgment matters. Costs are priced at call time against a rate card and surfaced on the same consoles that show coverage, so the spend is as visible as the output. Changing focus (a new company, a new topic, a new export) is an edit measured in minutes, not a procurement cycle measured in quarters.',
   },
 ];
 

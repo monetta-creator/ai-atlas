@@ -73,7 +73,7 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
   {
     key: 'tile-blotter',
     name: 'News Blotter',
-    desc: 'The editor’s desk: the fortnight report, claims ledger, signal wire, and pipeline analytics.',
+    desc: 'The Daily Edition: a model-written AI newspaper each weekday, built from what the engines stored.',
     access: 'public',
     span: 1,
   },
@@ -87,7 +87,7 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
   {
     key: 'tile-reports',
     name: 'Report Portal',
-    desc: 'Saved period reports and thesis reports, published read-only from the corpus.',
+    desc: 'Generated sheets, roundups, the daily edition, and period and thesis reports, cited back to the corpus.',
     access: 'public',
     span: 1,
   },

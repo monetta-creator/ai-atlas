@@ -258,6 +258,10 @@ export default function FeedbackDialog({
                   id={`fb-email-${kind}`} className="input" required type="email" maxLength={200}
                   placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)}
                 />
+                <p className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 4 }}>
+                  Stored with the ticket: your email, the page you were on, your browser details, and any
+                  screenshots. Only the maintainer sees it.
+                </p>
               </div>
 
               <div className="field">

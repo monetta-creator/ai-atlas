@@ -37,24 +37,28 @@ runtime source of truth if the two ever disagree.
 
 An arXiv research funnel runs INSIDE the Atlas, outside this firewall: a
 daily pull from arXiv (cs.AI, cs.LG, cs.CL) is triaged for relevance against
-the Atlas argument map, a recommend-only model agent proposes track / note /
-dismiss for the pending queue, a HUMAN makes the actual review decision, and
-only then does a deeper per-paper pass extract a structured finding (a
-claim-shaped reading, not a summary) from the paper's full text.
+the Atlas argument map, a model agent proposes track / note / dismiss for the
+pending queue, and a deeper per-paper pass extracts a structured finding (a
+claim-shaped reading, not a summary) from the full text of every paper the
+agent recommends. Human review (track / note / dismiss) comes after, and a
+human decision is sticky: it is never overwritten by a later engine run.
 
 The division of labor is deliberate:
 - arXiv pull and triage: relevance filtering, mostly mechanical.
-- The agent: a recommendation only, never the decision.
-- The human review: the actual track / note / dismiss call, with a private
-  why that never leaves the Atlas (see review_note below).
-- Finding extraction: a bounded model read of the paper's full text, run only
-  on papers the human already put on the shelf.
+- The agent: a recommendation, which also decides which papers get the
+  extraction pass.
+- Finding extraction: a bounded model read of the paper's full text, run on
+  agent-recommended papers without waiting for a human.
+- The human review: the track / note / dismiss call, made after the fact and
+  sticky, with a private why that never leaves the Atlas (see review_note
+  below).
 
 This file is the finished output of that whole funnel: every paper currently
 on the reviewed shelf (tracked or noted), with its extraction and retained
 text. Papers never write evidence directly inside the Atlas; the only road
 from a paper into its own Argument Map is promotion to a Signal Board signal
-(promoted_signal_id, set only after a human publishes that signal). Treat the
+(promoted_signal_id, set when a human promotes the paper to a draft signal;
+that signal writes evidence only once it is published). Treat the
 rows here as strong drafts for your own internal promotion, not verdicts.
 
 ## 2. The file, formally (JSON Schema, draft 2020-12)

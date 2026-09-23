@@ -9,8 +9,10 @@ import Editable from '@/components/Editable';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Data Portal · The AI Atlas' };
 
-// The public Datasets portal hub: the catalog of downloadable, guest-safe
-// datasets plus the door to the team Ask surface. Nothing here calls a model.
+// The public Datasets portal hub: the catalog of downloadable datasets (public
+// ones guest-safe, the key-gated exports behind the access key) plus the door
+// to the team Ask surface. Nothing here calls a model. Every registry category
+// must appear in `categories` below or its datasets never render.
 export default async function DatasetsPage() {
   const [admin, portal] = await Promise.all([isAdmin(), isPortal()]);
   const { editing, txt } = await getEditContext();
@@ -22,6 +24,7 @@ export default async function DatasetsPage() {
     { key: 'research', label: 'Research' },
     { key: 'scout', label: 'Startup Scout' },
     { key: 'scan', label: 'External scan' },
+    { key: 'intel', label: 'Company intel' },
     { key: 'tooling', label: 'Tooling Monitor' },
     { key: 'meta', label: 'Meta' },
   ];
@@ -63,7 +66,7 @@ export default async function DatasetsPage() {
                         </p>
                         <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--faint-ink)' }}>
                           {d.slug} · {d.columns.length} columns · CSV / JSON
-                          {d.keyGated ? ' · team key required' : ''}
+                          {d.keyGated ? ' · access key required' : ''}
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 2 }}>
@@ -97,9 +100,12 @@ export default async function DatasetsPage() {
         })}
 
         <p style={{ fontSize: 12.5, color: 'var(--faint-ink)', lineHeight: 1.7, maxWidth: 640 }}>
-          Every dataset carries only the published, public layer of the Atlas: personal confidence
-          values, rationales, and source priors never enter a download. Full article text is an
-          internal working corpus; link to the original source when sharing outward.
+          Public datasets carry only the published layer of the Atlas. The key-gated exports add
+          retained article text and machine-extracted records; the argument map&apos;s personal layer
+          (confidence values, rationales, source reliability priors) never enters any download, and
+          the one reviewer-set value that does ship, the research export&apos;s rigor prior, rides only
+          behind the access key. Retained article text is an internal working corpus; link to the
+          original source when sharing outward.
         </p>
       </section>
     </>

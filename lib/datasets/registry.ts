@@ -153,7 +153,7 @@ const BASE: DatasetDef[] = [
     description:
       'The complete retained text of every published signal\'s underlying article: curated source text where it exists, otherwise the page text the discovery pipeline fetched.',
     methodology:
-      'One row per published signal that has text; curated source text wins over pipeline-cached text. This is a working corpus for internal research, provenance, and quotation. It is not a redistribution channel: do not republish articles outside the company, and link to the original source when sharing outward. Downloading requires the team portal key.',
+      'One row per published signal that has text; curated source text wins over pipeline-cached text. This is a working corpus for internal research, provenance, and quotation. It is not a redistribution channel: do not republish articles outside the company, and link to the original source when sharing outward. Downloading requires an access key.',
     category: 'sources',
     formats: ['csv', 'json'],
     heavy: true,
@@ -273,7 +273,7 @@ const BASE: DatasetDef[] = [
     description:
       'The firewall handoff of the reviewed arXiv shortlist: every tracked or noted paper with its extracted finding and retained full text.',
     methodology:
-      'Every paper the human review put on the shelf (tracked or noted), independent of triage status, full corpus on every download. headline_claim, the_test, effect_size, limitations, counterpoint, econ_implication, and who_cares come from the model extraction jsonb; all null until the paper has been analyzed. thread_slugs only lists CONFIRMED thread placements. review_note, the reviewer\'s private why for tracking a paper, never ships in this or any dataset. rigor_prior rides here only because this dataset requires the team portal key, the same scoped exception the signals-export dataset uses for touch_details; it stays banned from every guest-reachable dataset.',
+      'Every paper the human review put on the shelf (tracked or noted), independent of triage status, full corpus on every download. headline_claim, the_test, effect_size, limitations, counterpoint, econ_implication, and who_cares come from the model extraction jsonb; all null until the paper has been analyzed. thread_slugs only lists CONFIRMED thread placements. review_note, the reviewer\'s private why for tracking a paper, never ships in this or any dataset. rigor_prior rides here only because this dataset requires an access key, the same scoped exception the signals-export dataset uses for touch_details; it stays banned from every guest-reachable dataset.',
     category: 'research',
     formats: ['csv', 'json'],
     heavy: true,
@@ -360,7 +360,7 @@ const BASE: DatasetDef[] = [
     description:
       'One day of the automated external news scan: items across financial services and technology topics discovered from public press feeds and web search, with full text, a model summary, taxonomy tags, and named entities.',
     methodology:
-      'One row per item in one day\'s scan run; the latest completed day by default, or add ?day=YYYY-MM-DD for a specific day. Discovery is public press feeds plus per-topic web searches; page text is fetched directly with a reader fallback; enrichment is a small model pass whose tags come from a fixed topic taxonomy. relevance is advisory and downstream triage is expected. This is a working corpus, not a redistribution channel. Downloading requires the team portal key.',
+      'One row per item in one day\'s scan run; the latest completed day by default, or add ?day=YYYY-MM-DD for a specific day. Discovery is public press feeds plus per-topic web searches; page text is fetched directly with a reader fallback; enrichment is a small model pass whose tags come from a fixed topic taxonomy. relevance is advisory and downstream triage is expected. This is a working corpus, not a redistribution channel. Downloading requires an access key.',
     category: 'scan',
     formats: ['csv', 'json'],
     heavy: true,
@@ -402,7 +402,7 @@ const BASE: DatasetDef[] = [
     description:
       'Every published signal in the same row shape as the external-scan dataset, for a downstream intake that already speaks that schema: discovery metadata, the full editorial writeup composed into full_text, and the signal-native fields appended.',
     methodology:
-      'One row per published signal, full corpus on every download (re-import replaces; upsert on item_id). The leading columns mirror the external-scan contract key for key so the same importer ingests both files; the appended columns carry the signal-native detail, including per-touch direction and editorial reasoning. That per-touch detail plus retained article text is why the download requires the team portal key. This is a working corpus, not a redistribution channel.',
+      'One row per published signal, full corpus on every download (re-import replaces; upsert on item_id). The leading columns mirror the external-scan contract key for key so the same importer ingests both files; the appended columns carry the signal-native detail, including per-touch direction and editorial reasoning. That per-touch detail plus retained article text is why the download requires an access key. This is a working corpus, not a redistribution channel.',
     category: 'signals',
     formats: ['csv', 'json'],
     heavy: true,
@@ -448,7 +448,7 @@ const BASE: DatasetDef[] = [
     description:
       'One day of the Intel Desk collection engine: documents discovered about tracked companies from public press feeds, web search, and SEC filings, with full text, extracted facts, and a model summary.',
     methodology:
-      'One row per item in one day\'s intel run; the latest completed day by default, or add ?day=YYYY-MM-DD for a specific day. The leading columns mirror the external-scan contract key for key so the same firewall intake ingests both files: topic_slug carries the item\'s primary company_slug, tags carries its dimension tags, relevance carries its significance score, topic_code is always null (no company-level taxonomy code exists). full_text is a composed document: headline, summary, extracted facts, then the raw article text, capped at 24,000 characters. This is a working corpus, not a redistribution channel. Downloading requires the team portal key.',
+      'One row per item in one day\'s intel run; the latest completed day by default, or add ?day=YYYY-MM-DD for a specific day. The leading columns mirror the external-scan contract key for key so the same firewall intake ingests both files: topic_slug carries the item\'s primary company_slug, tags carries its dimension tags, relevance carries its significance score, topic_code is always null (no company-level taxonomy code exists). full_text is a composed document: headline, summary, extracted facts, then the raw article text, capped at 24,000 characters. This is a working corpus, not a redistribution channel. Downloading requires an access key.',
     category: 'intel',
     formats: ['csv', 'json'],
     heavy: true,
@@ -491,7 +491,7 @@ const BASE: DatasetDef[] = [
     description:
       'The Intel Desk registry: the companies under standing coverage, organized by tier, with their public identifiers and the machine\'s merged dossier summary.',
     methodology:
-      'One row per registry company, active or not. Identifier columns (ticker, cik, rssd_id, fdic_cert, lei) are join keys for licensed datasets held inside the importer\'s own environment; no licensed content is ever present in this file. The dossier is the machine\'s own merged research record, not human-reviewed prose. This is a working corpus, not a redistribution channel. Downloading requires the team portal key.',
+      'One row per registry company, active or not. Identifier columns (ticker, cik, rssd_id, fdic_cert, lei) are join keys for licensed datasets held inside the importer\'s own environment; no licensed content is ever present in this file. The dossier is the machine\'s own merged research record, not human-reviewed prose. This is a working corpus, not a redistribution channel. Downloading requires an access key.',
     category: 'intel',
     formats: ['csv', 'json'],
     heavy: true,
@@ -524,7 +524,7 @@ const BASE: DatasetDef[] = [
     description:
       'Structured, provenance-carrying facts about tracked companies, extracted by enrichment from collected items: one fact per row, with its dimension, value, and as-of date.',
     methodology:
-      'One row per extracted fact. Deduped per company at write time, so a fact is added once and kept. source_url resolves through the originating item and is null on the rare fact ingested without one. This is a working corpus, not a redistribution channel. Downloading requires the team portal key.',
+      'One row per extracted fact. Deduped per company at write time, so a fact is added once and kept. source_url resolves through the originating item and is null on the rare fact ingested without one. This is a working corpus, not a redistribution channel. Downloading requires an access key.',
     category: 'intel',
     formats: ['csv', 'json'],
     heavy: true,
@@ -549,7 +549,7 @@ const BASE: DatasetDef[] = [
     description:
       'LLM-free structured series for tracked companies, about a decade deep: the full FDIC call-report field set per bank, FR Y-9C holding-company consolidated items, curated SEC EDGAR XBRL concepts, and CFPB complaint counts: one metric-period value per row.',
     methodology:
-      'One row per (company, metric, period, source). Metric codes name their origin: fdic_<mnemonic> (FDIC RIS dictionary), y9c_<mdrm> (Federal Reserve MDRM), curated concept names for edgar_xbrl, cfpb_complaints_month/_30d. No model ever touches this table; every value traces to a public structured source. Quarterly sources refresh on the Monday cron (Y-9C by a quarterly file ingest); re-fetches upsert idempotently, so a re-download reflects the latest pull for a period without duplicating it. This is a working corpus, not a redistribution channel. Downloading requires the team portal key. Incremental pulls: add ?since=YYYY-MM-DD (rows fetched on or after that date) and/or ?source=<code>; the Monday engine stamps fetched_at on every refreshed row, so a weekly ?since= pull is the intended intake.',
+      'One row per (company, metric, period, source). Metric codes name their origin: fdic_<mnemonic> (FDIC RIS dictionary), y9c_<mdrm> (Federal Reserve MDRM), curated concept names for edgar_xbrl, cfpb_complaints_month/_30d. No model ever touches this table; every value traces to a public structured source. Quarterly sources refresh on the Monday cron (Y-9C by a quarterly file ingest); re-fetches upsert idempotently, so a re-download reflects the latest pull for a period without duplicating it. This is a working corpus, not a redistribution channel. Downloading requires an access key. Incremental pulls: add ?since=YYYY-MM-DD (rows fetched on or after that date) and/or ?source=<code>; the Monday engine stamps fetched_at on every refreshed row, so a weekly ?since= pull is the intended intake.',
     category: 'intel',
     formats: ['csv', 'json'],
     heavy: true,
@@ -573,7 +573,7 @@ const BASE: DatasetDef[] = [
     description:
       'The AI Tooling Monitor catalog: every product the market scan has kept, curated categories plus emergent feature tags, the agent\'s fit read, and the machine\'s merged dossier and deep dive.',
     methodology:
-      'Every product with a status other than dismissed: candidates awaiting review, cataloged and parked products, all included. A weekly engine discovers candidates from web search, Hacker News, Product Hunt, and GitHub, then a cheap model extracts facts from the homepage; a human curator pins, parks, or dismisses, and that decision is sticky, the scoring agent never relabels it. Deduplication matches on the normalized homepage URL first, then on a normalized name plus vendor domain. agent_fit and the five agent_* rubric scores are the scoring agent\'s advisory read, never a verdict; agent_steal lists up to three features worth stealing. dossier_summary, customers, and sources come from the machine\'s own merged research record, monotonically updated across homepage enrichment and deep dives; a deep dive is automatic for high-fit new entrants and available on demand for any product. review_note, raw_content, and fetch_error are the admin\'s working layer and never ship. Downloading requires the team portal key.',
+      'Every product with a status other than dismissed: candidates awaiting review, cataloged and parked products, all included. A weekly engine discovers candidates from web search, Hacker News, Product Hunt, and GitHub, then a cheap model extracts facts from the homepage; a human curator pins, parks, or dismisses, and that decision is sticky, the scoring agent never relabels it. Deduplication matches on the normalized homepage URL first, then on a normalized name plus vendor domain. agent_fit and the five agent_* rubric scores are the scoring agent\'s advisory read, never a verdict; agent_steal lists up to three features worth stealing. dossier_summary, customers, and sources come from the machine\'s own merged research record, monotonically updated across homepage enrichment and deep dives; a deep dive is automatic for high-fit new entrants and available on demand for any product. review_note, raw_content, and fetch_error are the admin\'s working layer and never ship. Downloading requires an access key.',
     category: 'tooling',
     formats: ['csv', 'json'],
     heavy: true,
@@ -637,7 +637,7 @@ const BASE: DatasetDef[] = [
     description:
       'The event timelines of every non-dismissed Tooling Monitor product: launches, funding, feature and pricing changes, partnerships, changelog entries, and notable news, one row per event.',
     methodology:
-      'Events on every product that is not dismissed, matching what each profile\'s timeline shows. Logged by the weekly feed poll, an on-demand deep dive, or by hand; each carries its source URL when one was reported. The admin\'s private working note behind an event never ships in this or any dataset. Downloading requires the team portal key.',
+      'Events on every product that is not dismissed, matching what each profile\'s timeline shows. Logged by the weekly feed poll, an on-demand deep dive, or by hand; each carries its source URL when one was reported. The admin\'s private working note behind an event never ships in this or any dataset. Downloading requires an access key.',
     category: 'tooling',
     formats: ['csv', 'json'],
     keyGated: true,
@@ -662,7 +662,7 @@ const BASE: DatasetDef[] = [
     description:
       'The Tooling Monitor\'s feature matrix in long form: one row per (cataloged or parked product, normalized feature tag), for who-does-what comparisons across a category.',
     methodology:
-      'Feature tags are free-form at discovery time and normalized in code into a shared vocabulary, capped per product. Rows cover cataloged and parked products only; a dismissed or unreviewed candidate product carries no rows here. Downloading requires the team portal key.',
+      'Feature tags are free-form at discovery time and normalized in code into a shared vocabulary, capped per product. Rows cover cataloged and parked products only; a dismissed or unreviewed candidate product carries no rows here. Downloading requires an access key.',
     category: 'tooling',
     formats: ['csv', 'json'],
     keyGated: true,
@@ -683,7 +683,7 @@ const BASE: DatasetDef[] = [
     description:
       'The public AI Tooling Monitor catalog: every cataloged product with its category, what it does, who it is for, and its features. No agent scores, dossier, or curation detail.',
     methodology:
-      'Cataloged products only, the same floor the public /tooling hub renders; parked and dismissed products, and any product still awaiting review, are absent. Descriptive facts only: no fit score, dossier, deep dive, or provenance column exists in this file by construction, so nothing here needs the team portal key.',
+      'Cataloged products only, the same floor the public /tooling hub renders; parked and dismissed products, and any product still awaiting review, are absent. Descriptive facts only: no fit score, dossier, deep dive, or provenance column exists in this file by construction, so nothing here needs an access key.',
     category: 'tooling',
     formats: ['csv', 'json'],
     columns: [

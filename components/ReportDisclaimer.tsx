@@ -23,8 +23,9 @@ function DisclaimerBody() {
         </li>
         <li>
           <strong>It can only describe developments that actually exist.</strong> The narrative is
-          grounded solely in signals a human reviewed and published to the Signal Board, together with
-          the discovery pipeline&apos;s recorded candidates. The model receives the real developments,
+          grounded solely in signals published to the Signal Board, by a human or, for
+          high-significance pipeline drafts, by the 48-hour promotion policy, together with the
+          discovery pipeline&apos;s recorded candidates. The model receives the real developments,
           their sources, and the claims they bear on, and is instructed never to invent a development,
           a number, a URL, or a link that is not in that supplied data.
         </li>
@@ -42,8 +43,9 @@ function DisclaimerBody() {
         </li>
         <li>
           <strong>A human is in the loop.</strong> The Atlas runs on a simple principle: the model
-          proposes and the human commits. The underlying signals are human-published, and the
-          report&apos;s author can review and edit every section, and revise or remove the callouts,
+          proposes and the human commits. The underlying signals were published by a human or, for
+          high-significance pipeline drafts, by the promotion policy after a 48-hour window in which a
+          human could archive them, and the report&apos;s author can review and edit every section, and revise or remove the callouts,
           before saving and sharing it.
         </li>
       </ul>

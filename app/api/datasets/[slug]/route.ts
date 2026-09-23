@@ -31,7 +31,7 @@ export async function GET(
 
   if (def.keyGated && !(await isPortal())) {
     return new Response(
-      'This dataset needs the team portal key. Unlock it at /ask, then retry the download.',
+      'This dataset needs an access key. Unlock it at /ask, then retry the download.',
       { status: 401, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } }
     );
   }

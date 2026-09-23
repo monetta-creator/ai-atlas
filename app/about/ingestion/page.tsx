@@ -11,7 +11,7 @@ const SECTIONS = [
   {
     id: 'standing-intake',
     heading: 'A standing intake of outside signal',
-    body: 'Every weekday morning, before anyone opens the site, the system sweeps the outside world. Press feeds and news wires across a configurable set of topics. Targeted news search for every tracked company and theme. Primary regulatory sources, including securities filings within a day of posting. Each item it finds is fetched in full text, deduplicated against everything already seen, and stored with its provenance: the source, the URL, the date, and how it was discovered. Nothing arrives as a paraphrase. The article, the filing, or the release itself is retained.',
+    body: 'Every weekday morning, before anyone opens the site, scheduled jobs sweep the outside world. Press feeds and news wires across a configurable set of topics. Targeted news search, through a model-free search API, for every tracked company and theme. Primary regulatory sources, including securities filings within a day of posting. Each item found is fetched in full text (a reader service stands in for hosts that block a direct fetch), deduplicated against everything already seen, and stored with its provenance: the source, the URL, the date, and how it was discovered. Where the fetch succeeds, the article, the filing, or the release itself is retained, not a paraphrase, with no retention limit today; an item whose host blocks fetching keeps its search summary and link.',
   },
   {
     id: 'structure',
@@ -31,7 +31,7 @@ const SECTIONS = [
   {
     id: 'discipline',
     heading: 'Metered, gated, auditable',
-    body: 'Every model call is logged with its cost at the moment it happens, and daily budget caps sit in front of every billable step. The grunt work (summarizing, tagging, extraction) runs on inexpensive open-weight models that are benchmarked against each other in live A/B splits; frontier models are reserved for the places judgment actually matters. Humans review before anything the models produce becomes part of the argument map. And every run leaves a trail: day grids, health panels, per-run notes, so a quiet failure is a visible flag rather than a silent gap.',
+    body: 'Every model call and every search call is logged with its cost at the moment it happens, and daily budget caps sit in front of every billable step. The grunt work (summarizing, tagging, extraction, relevance scoring) runs on inexpensive open-weight models hosted on OpenRouter (Qwen, GLM, and DeepSeek flash-class models today), benchmarked against each other in live A/B splits; Claude models are reserved for the reasoning legs: dossiers, report narratives, deep dives, and the Ask answers. Nothing the models produce moves a confidence on the argument map; a confidence changes only when a human writes a reason. A signal reaches the board when a human publishes its draft, or when the promotion policy publishes a high-significance draft that touches a claim after a 48-hour window in which a human can archive it. The Daily Edition and the scheduled reports publish without a review step. And every run leaves a trail: day grids, health panels, per-run notes, so a quiet failure is a visible flag rather than a silent gap.',
   },
 ];
 

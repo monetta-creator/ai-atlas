@@ -12,7 +12,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
     sections: [
       {
         heading: 'Five report families',
-        body: 'Generated sheets cover one claim, one lens, or the whole Atlas, drafted on demand from the console below. Period reports compile a date range across the Signal Board. Thesis reports track one investment thesis against the map. The weekly tooling entrants report and the Friday research roundup are the two kinds that auto-publish; everything else is a human publish.',
+        body: 'Generated sheets cover one claim, one lens, or the whole Atlas, drafted on demand from the console below. Period reports compile a date range across the Signal Board. Thesis reports track one investment thesis against the map. The Daily Edition, the weekly tooling entrants report, and the Friday research roundup are the three kinds that auto-publish; period reports are public on save; everything else is a human publish.',
       },
       {
         heading: 'The citation gate',
@@ -20,7 +20,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
       {
         heading: 'Publishing is the gate',
-        body: 'A generated report is a draft until an admin publishes it. Guests see published reports only; admins and, for the four tooling report kinds, portal keyholders can read a draft. Each row expands to a preview (a text abstract plus deterministic stats) before committing to the full read.',
+        body: 'A generated sheet is a draft until an admin publishes it, except the three auto-publishing kinds (the Daily Edition, the tooling entrants report, the research roundup), which go public when they run. Guests see published reports only; admins and, for the four tooling report kinds, portal keyholders can read a draft. Each row expands to a preview (a text abstract plus deterministic stats) before committing to the full read.',
       },
     ],
   },
@@ -162,7 +162,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
       {
         heading: 'What the rest of this section covers',
-        body: 'Guardrails explains the schema rules that enforce falsifiability. Glossary defines every term. Limitations is an honest account of what the tool does not do. Signal ingestion and Why bespoke explain the intake and the case for a purpose-built system over a general chatbot or a commercial platform.',
+        body: 'Guardrails explains the schema rules that enforce falsifiability. Glossary defines every term. Limitations is an honest account of what the tool does not do. Signal ingestion and Why bespoke explain the intake and the case for a purpose-built system over a general chatbot or a commercial platform. Data handling says where the data comes from, which outside services process it, what is stored, and who can see what.',
       },
     ],
   },
@@ -219,6 +219,21 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
     ],
   },
+  '/about/data-handling': {
+    title: 'About: Data handling',
+    summary:
+      'Where the data comes from, which outside services process it, what is stored and for how long, what counts as personal data here, and who can see what.',
+    sections: [
+      {
+        heading: 'A personal project, public by URL',
+        body: 'The site runs on the maintainer’s own hosting accounts and is not an employer system or any organization’s official view. Every engine reads public sources only, and the text it collects is sent to outside model, search, and fetch providers whose own retention terms apply.',
+      },
+      {
+        heading: 'Kept indefinitely, three access tiers',
+        body: 'Full article text, filings, paper text, extracted facts, and report packs are stored with no retention limit or deletion job; archiving hides, it does not delete. A guest sees the public layer, an access key unlocks Ask and the key-gated datasets, and the admin sees the personal layer and the consoles. Do not enter confidential information into Ask, uploads, or forms.',
+      },
+    ],
+  },
   '/about/why-bespoke': {
     title: 'About: Why bespoke',
     summary:
@@ -266,7 +281,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
     sections: [
       {
         heading: 'The daily run',
-        body: 'Weekday discovery runs lens query batches over Tavily (LLM-free) plus a lens-agnostic breaking-events sweep, checkpointed so each unit fits well inside the function budget. Triage and analysis run on a cheap utility model by default, with an OpenRouter model picker for a per-candidate analysis A/B.',
+        body: 'Weekday discovery runs lens query batches over Tavily (LLM-free) plus a lens-agnostic breaking-events sweep, checkpointed so each unit fits well inside the function budget. Triage runs on the cheap utility model (Claude Sonnet when OpenRouter is not configured); analysis runs on Claude Sonnet by default, or on the OpenRouter models picked in the console for a per-candidate analysis A/B.',
       },
       {
         heading: 'Coverage and text',
@@ -358,11 +373,11 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
   },
   '/reports/sheet/[id]': {
     title: 'About this generated report',
-    summary: 'A generated report: one claim, one lens, the whole Atlas, a weekly tooling entrants sheet, or the Friday research roundup, citation-gated against the live corpus.',
+    summary: 'A generated report: one claim, one lens, the whole Atlas, one of the four tooling reports (landscape, build-vs-buy brief, new entrants, features), or the Friday research roundup, citation-gated against the live corpus.',
     sections: [
       {
         heading: 'Draft until published',
-        body: 'Public once published, admin-only as a draft. The four tooling report kinds add one exception: a portal keyholder may also read a draft, since that console never auto-publishes a landscape, brief, or features report.',
+        body: 'Public once published, admin-only as a draft. The tooling entrants report and the research roundup publish on their own when they run. The four tooling report kinds add one exception: a portal keyholder may also read a draft, since that console never auto-publishes a landscape, brief, or features report.',
       },
       {
         heading: 'The citation gate',

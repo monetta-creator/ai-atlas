@@ -88,6 +88,24 @@ check("pathwayFor('/claim/3.3', 'Claim 3.3') = Claims & Theses(link), Claim 3.3(
   ]);
 });
 
+check("groupFor('/about/data-handling').key === 'about' and the leaf is a public, listed tab", () => {
+  const group = groupFor('/about/data-handling');
+  assert.equal(group?.key, 'about');
+  const leaf = leafFor('/about/data-handling', group);
+  assert.equal(leaf?.label, 'Data handling');
+  assert.equal(leaf?.access, 'public');
+  const tabs = tabsFor('/about/data-handling', guest).map((l) => l.href);
+  assert.ok(tabs.includes('/about/data-handling'), 'guest tabs list /about/data-handling');
+  assert.ok(!tabs.includes('/about/architecture'), 'architecture stays hidden');
+});
+
+check("pathwayFor('/about/data-handling', 'Data handling') = About(link), Data handling(null)", () => {
+  assert.deepEqual(pathwayFor('/about/data-handling', 'Data handling'), [
+    { label: 'About', href: '/about' },
+    { label: 'Data handling', href: null },
+  ]);
+});
+
 check("publicParentFor('/worldview').href === '/map'", () => {
   assert.equal(publicParentFor('/worldview').href, '/map');
 });

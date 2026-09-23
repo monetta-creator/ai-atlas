@@ -103,9 +103,11 @@ export function toSheetCard(meta: GeneratedReportMeta): ReportCard {
     chips,
     date: dateLabel(meta.generated_at) ?? meta.generated_at.slice(0, 10),
     sortDate: meta.generated_at,
-    // The edition reads on the blotter, not the generic sheet view.
+    // The edition reads on the blotter, not the generic sheet view, and its PDF
+    // is the blotter's deck PDF: the sheet PDF route renders a tear-sheet
+    // layout over an edition pack and fails.
     href: meta.kind === 'edition' && meta.scope_to ? `/blotter/${meta.scope_to}` : `/reports/sheet/${meta.id}`,
-    pdfHref: `/reports/sheet/${meta.id}/pdf`,
+    pdfHref: meta.kind === 'edition' && meta.scope_to ? `/blotter/${meta.scope_to}/pdf` : `/reports/sheet/${meta.id}/pdf`,
     isPublished: meta.is_published,
   };
 }

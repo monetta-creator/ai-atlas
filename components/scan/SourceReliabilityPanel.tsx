@@ -33,7 +33,7 @@ export default function SourceReliabilityPanel({
         Source reliability · last {days} days
       </div>
       <div className="text-xs" style={{ color: 'var(--faint-ink)', marginBottom: 10 }}>
-        Reliability is derived from the source, not the text. Kevin does not tune it by hand.
+        Reliability is derived from the source, not the text. The maintainer does not tune it by hand.
       </div>
 
       <div

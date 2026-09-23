@@ -17,7 +17,7 @@ export const PAGE_INFO_A: Record<string, PageInfoContent> = {
       },
       {
         heading: 'Where these come from',
-        body: 'A weekday discovery pipeline drafts most signals from web search; some are added by hand from a source. Nothing is public until it is published, which is also the moment its findings enter the Argument Map as evidence.',
+        body: 'A weekday discovery pipeline drafts most signals from web search; some are added by hand from a source. Nothing is public until it is published, either by a human or, for high-significance pipeline drafts with a claim touch, by the 48-hour promotion policy; publishing is also the moment its findings enter the Argument Map as evidence.',
       },
       {
         heading: 'Guests vs. admin',

@@ -270,7 +270,7 @@ export default function ToolingReportConsole({
               onChange={(e) => setBContext(e.target.value)}
               placeholder="What we already have, budget, timeline, constraints…" />
             <p className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 4 }}>
-              Stays hidden from guests and is never quoted verbatim; it only shapes the build-or-buy read.
+              Sent to the model with the catalog and stored in the report pack; visible to keyholders and admins, never to guests.
             </p>
           </div>
         </div>

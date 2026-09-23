@@ -35,7 +35,7 @@ import type { ArgumentGapScan, ConceptGapScan } from '../types';
 // Every entry calls an EXISTING library function, never a server action
 // (actions redirect/revalidate, which an agent-driven call has no use for),
 // and never a getOrCreate* unless createsRun is true. `tier` decides who may
-// run it: 'auto' the agent itself on the hourly tick, 'propose' Kevin (the
+// run it: 'auto' the agent itself on the hourly tick, 'propose' the maintainer (the
 // drawer's Do it button, or the chat's run_remedy tool), 'never' nobody but a
 // human clicking somewhere else in the app.
 
@@ -561,7 +561,7 @@ export async function executeRemedy(opts: {
   }).catch(() => {});
 
   if (opts.findingKey) {
-    const who = opts.actor === 'agent' ? 'Agent' : 'Kevin';
+    const who = opts.actor === 'agent' ? 'Agent' : 'The maintainer';
     const stamp = now.toISOString().slice(11, 16);
     await m.stampFindingAction(opts.findingKey, `${who} ran "${remedy.label}" at ${stamp} UTC: ${result.summary}`).catch(() => {});
   }

@@ -71,10 +71,14 @@ A market monitor for AI tooling: a curated registry of product categories
 weekly for new and updated products by web search, Hacker News, Product
 Hunt, and GitHub. A cheap model extracts descriptive facts from each
 product's homepage; a scoring agent gives an advisory fit read for a
-regulated financial-services buyer; a human curator decides what actually
-enters the public catalog. High-fit new entrants get an automatic deep
-dive (a further web-researched read: strengths, weaknesses, pricing detail,
-competitors, recent news); any product can get one on demand.
+regulated financial-services buyer; a product at or above the catalog score
+threshold whose homepage could be read enters the public catalog
+automatically; anything else (below the threshold, or no readable homepage)
+is parked for human review, and a human decision (catalog, park, dismiss) is
+sticky.
+High-fit new entrants get an automatic deep dive (a further web-researched
+read: strengths, weaknesses, pricing detail, competitors, recent news); any
+product can get one on demand.
 
 The division of labor mirrors the Atlas's other collection engines:
 - OUTSIDE (this monitor): discovery, fetching, descriptive extraction, an
@@ -207,7 +211,8 @@ status on tooling-products (and, filtered, on tooling-features) is the
 human curation layer, and it is STICKY once a human sets it:
 - candidate: found by discovery, not yet reviewed. Absent from
   tooling-catalog and tooling-features.
-- cataloged: a human confirmed it belongs in the public catalog. Present in
+- cataloged: in the public catalog, either by scoring at or above the catalog
+  threshold with a readable homepage or by a human's decision. Present in
   every file.
 - parked: reviewed and kept for reference, but not promoted to the public
   catalog. Present in tooling-products and tooling-features, absent from

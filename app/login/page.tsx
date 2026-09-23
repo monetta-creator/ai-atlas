@@ -82,6 +82,13 @@ export default async function LoginPage({
           >
             Guest opens the share view: the public map with the personal layer hidden.
           </p>
+          <p
+            className="text-center"
+            style={{ color: 'var(--faint-ink)', fontSize: 11.5, lineHeight: 1.5, marginTop: 8 }}
+          >
+            The site itself is public and needs no login. An access key unlocks Ask and the key-gated
+            data exports.
+          </p>
         </div>
 
         <p className="text-center" style={{ marginTop: 20, fontSize: 12 }}>
