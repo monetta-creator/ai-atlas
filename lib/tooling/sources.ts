@@ -1,4 +1,4 @@
-import { tavilyQuery } from '../scan/search-tavily';
+import { tavilyQuery, tavilyAvailable, TAVILY_QUOTA_NOTE } from '../scan/search-tavily';
 import { recordApiCall } from '../cost';
 import { assertPublicHttpUrl } from '../pipeline/web';
 import { mapHnHits, mapGithubRepos, mapProductHuntPosts, mapTavilyHits, resolveToolingTokens } from './core';
@@ -61,6 +61,10 @@ export async function searchTavilyForCategory(opts: {
       : (opts.category.pull_queries ?? []).slice(0, 3);
   const queries = rawQueries.map((q) => resolveToolingTokens(q, dayISO)).filter((q) => q.trim());
   if (!queries.length) return { hits: [], note: null };
+  // Tavily's quota breaker (lib/scan/tavily-breaker.ts): after one 432 this
+  // month's credits are gone for every category; skip with one note and let
+  // HN + GitHub carry the discovery unit.
+  if (!tavilyAvailable()) return { hits: [], note: `tavily (${opts.category.slug}): skipped, ${TAVILY_QUOTA_NOTE}` };
 
   const t0 = Date.now();
   const byUrl = new Map<string, RawHit>();
