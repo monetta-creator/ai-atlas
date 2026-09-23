@@ -6,12 +6,12 @@ import type {
 
 // ---- Nav queue badges -------------------------------------------------------
 // One cheap round trip for the admin nav's live counts: work waiting in an
-// in-flight pipeline run, active signal drafts, and the paper review queue.
-// Called by Header ONLY for admins, so guests never pay for it.
+// in-flight pipeline run, active signal drafts, the paper review queue, and
+// pending access requests. Called by Header ONLY for admins, so guests never pay for it.
 async function loadNavCounts(): Promise<{
-  pipeline: number; drafts: number; papers: number; scout: number; tickets: number; tooling: number;
+  pipeline: number; drafts: number; papers: number; scout: number; tickets: number; tooling: number; access: number;
 }> {
-  const row = await one<{ pipeline: number; drafts: number; papers: number; scout: number; tickets: number; tooling: number }>(
+  const row = await one<{ pipeline: number; drafts: number; papers: number; scout: number; tickets: number; tooling: number; access: number }>(
     `select
        (select count(*) from signal_candidates sc
           join pipeline_runs r on r.id = sc.run_id
@@ -23,9 +23,10 @@ async function loadNavCounts(): Promise<{
        (select count(*) from companies where status = 'queued')::int as scout,
        (select count(*) from tickets where status = 'open')::int as tickets,
        (select count(*) from tooling_products
-         where status = 'cataloged' and first_seen >= current_date - 7 and reviewed_at is null)::int as tooling`
+         where status = 'cataloged' and first_seen >= current_date - 7 and reviewed_at is null)::int as tooling,
+       (select count(*) from portal_access_requests where status = 'pending')::int as access`
   );
-  return row ?? { pipeline: 0, drafts: 0, papers: 0, scout: 0, tickets: 0, tooling: 0 };
+  return row ?? { pipeline: 0, drafts: 0, papers: 0, scout: 0, tickets: 0, tooling: 0, access: 0 };
 }
 
 // Deduped per request with React cache(): Header and the page's PageTop both

@@ -36,7 +36,7 @@ const TERMS: { id: string; term: string; def: string }[] = [
   { id: 'report', term: 'Report', def: 'A generated, citation-gated document: a period report, tear sheet, briefing, roundup, tooling report, thesis report, or the daily edition, downloadable as a PDF. Most publish by hand; the daily edition, the Friday research roundup, and the Monday tooling entrants report publish on schedule.' },
   { id: 'citation-gate', term: 'Citation gate', def: 'The check that strips any generated citation the underlying data pack cannot vouch for. Runs at generation, save, and render.' },
   { id: 'human-gate', term: 'Human gate', def: 'The rule that no confidence changes without a person: confidences move by hand with a reason, recommendations are accepted by hand, and signal drafts publish by hand or, for high-significance pipeline drafts that touch a claim, by the promotion policy after its 48-hour veto window.' },
-  { id: 'access-key', term: 'Access key', def: 'The key (one shared team key today) that unlocks the portal tier: Ask, the key-gated datasets with retained text and machine-extracted records, tooling reports, and Scout’s research tools. Guests without one see the public layer.' },
+  { id: 'access-key', term: 'Access key', def: 'The per-person key, issued by the maintainer on request and expiring after 90 days, that unlocks the portal tier: Ask, the key-gated datasets with retained text and machine-extracted records, tooling reports, and Scout’s research tools. Guests without one see the public layer.' },
 ];
 
 export default async function GlossaryPage() {

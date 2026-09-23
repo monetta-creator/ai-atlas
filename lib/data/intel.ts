@@ -10,13 +10,15 @@ import type { IntelCompany, IntelRun, IntelPrefs, IntelTier, IntelMetricSource }
 // Haiku fallback): the singleton is created lazily by the first toggle or
 // picker save (the migration also seeds it, so this is a defensive fallback).
 export async function getIntelPrefs(): Promise<IntelPrefs> {
-  const row = await one<{ enabled: boolean; enrich_models: string[]; utility_model: string | null }>(
-    `select enabled, enrich_models, utility_model from intel_prefs where id = true`
+  const row = await one<{ enabled: boolean; enrich_models: string[]; utility_model: string | null; deck_enabled: boolean | null; deck_model: string | null }>(
+    `select enabled, enrich_models, utility_model, deck_enabled, deck_model from intel_prefs where id = true`
   );
   return {
     enabled: row?.enabled ?? true,
     enrich_models: row?.enrich_models ?? [],
     utility_model: row?.utility_model ?? null,
+    deck_enabled: row?.deck_enabled ?? true,
+    deck_model: row?.deck_model ?? 'claude-haiku-4-5',
   };
 }
 
@@ -340,6 +342,7 @@ export interface IntelCompanyYield {
   name: string;
   tier: IntelTier;
   active: boolean;
+  domain: string | null;
   items: number;
   itemsByFeed: number;
   itemsBySearch: number;
@@ -352,11 +355,11 @@ export interface IntelCompanyYield {
 export async function getIntelCompanyYield(days = 30): Promise<IntelCompanyYield[]> {
   const interval = `${Math.max(1, Math.round(days))} days`;
   const rows = await q<{
-    slug: string; name: string; tier: IntelTier; active: boolean;
+    slug: string; name: string; tier: IntelTier; active: boolean; domain: string | null;
     items: number; items_feed: number; items_search: number; items_filing: number;
     facts: number; last_item: string | null;
   }>(
-    `select c.slug, c.name, c.tier, c.active,
+    `select c.slug, c.name, c.tier, c.active, c.domain,
             count(i.id)::int as items,
             count(i.id) filter (where i.discovered_via = 'feed')::int as items_feed,
             count(i.id) filter (where i.discovered_via = 'search')::int as items_search,
@@ -368,12 +371,12 @@ export async function getIntelCompanyYield(days = 30): Promise<IntelCompanyYield
        left join (intel_items i
                   join intel_runs r on r.id = i.run_id and r.day > current_date - $1::interval)
               on i.company_slug = c.slug
-      group by c.slug, c.name, c.tier, c.active
+      group by c.slug, c.name, c.tier, c.active, c.domain
       order by c.tier, c.slug`,
     [interval]
   );
   return rows.map((r) => ({
-    slug: r.slug, name: r.name, tier: r.tier, active: r.active,
+    slug: r.slug, name: r.name, tier: r.tier, active: r.active, domain: r.domain,
     items: r.items, itemsByFeed: r.items_feed, itemsBySearch: r.items_search, itemsByFiling: r.items_filing,
     facts: r.facts, lastItem: r.last_item,
     dry: r.items === 0,

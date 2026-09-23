@@ -23,6 +23,7 @@ import { getOrCreateToolingRun as toolingGetOrCreate, claimToolingRun, advanceTo
 
 import { runWeeklyRoundup } from '../research/roundup';
 import { runWeeklyEntrantsReport } from '../tooling/reports';
+import { runIntelDeck } from '../intel/deck-run';
 import { generateQuestionSummary } from '../summary';
 import { diagnoseArgumentGaps, htmlToText } from '../argument-gaps';
 import { validateGapRecommendations } from '../gaps-core';
@@ -312,6 +313,18 @@ export const REMEDIES: Record<string, Remedy> = {
       );
       if ('skipped' in value) return { ok: true, result: { skipped: value.skipped }, summary: `Skipped: ${value.skipped}.` };
       return { ok: true, result: { reportId: value.reportId, costUsd }, summary: "Generated this week's tooling entrants report." };
+    },
+  },
+
+  'reports.intel_deck': {
+    key: 'reports.intel_deck',
+    label: "Generate today's company intel deck",
+    tier: 'propose', costsModel: true, reversible: false, createsRun: false,
+    run: async () => {
+      const day = new Date().toISOString().slice(0, 10);
+      const { value, costUsd } = await measureCost(['intel_deck_sentence'], () => runIntelDeck(day));
+      if ('skipped' in value) return { ok: true, result: { skipped: value.skipped }, summary: `Skipped: ${value.skipped}.` };
+      return { ok: true, result: { reportId: value.id, companies: value.companies, costUsd }, summary: "Generated today's company intel deck." };
     },
   },
 

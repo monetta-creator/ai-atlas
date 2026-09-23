@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { CostDeck, DeckSlide } from '@/lib/costs-deck';
+import { monogram } from '@/lib/logo';
 
 // Renders every DeckSlide kind into a { id, title, node } item for
 // DeckController. Server component, pure functions of the CostDeck payload:
@@ -427,6 +428,85 @@ function BulletsSlide(s: Extract<DeckSlide, { kind: 'bullets' }>) {
   );
 }
 
+// The company intel deck's per-company slide. The mark is the favicon URL
+// the client renders (a broken image falls back to the monogram through the
+// same CSS class the tooling catalog uses); the sentence is link segments.
+function CompanySlide(s: Extract<DeckSlide, { kind: 'company' }>) {
+  const mono = monogram(s.title);
+  return (
+    <div className="cdk-slide">
+      <div className="cdk-co-head">
+        {s.logoSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element -- remote favicon, no next/image domain list
+          <img className="cdk-co-logo" src={s.logoSrc} alt="" width={44} height={44} loading="lazy" referrerPolicy="no-referrer" />
+        ) : (
+          <span className="cdk-co-logo cdk-co-logo--mono" style={{ background: mono.bg, color: mono.fg }} aria-hidden="true">{mono.initials}</span>
+        )}
+        <div className="cdk-co-name">
+          <div className="cdk-kicker">{s.kicker}</div>
+          <h2 className="cdk-co-title">{s.title}</h2>
+          <div className="cdk-co-meta">{[s.tier, s.ticker, s.domain].filter(Boolean).join(' · ')}</div>
+        </div>
+      </div>
+      <div className="cdk-co-body">
+        <div className="cdk-co-col">
+          <div className="cdk-co-h">The day</div>
+          {s.items.length === 0 && <div className="cdk-co-empty">No new items in the window.</div>}
+          {s.items.map((it, i) => (
+            <div className="cdk-co-item" key={i}>
+              <a href={it.url} target="_blank" rel="noopener noreferrer" className="cdk-co-item-hed">{it.headline}</a>
+              <div className="cdk-co-item-meta">{it.meta}</div>
+            </div>
+          ))}
+          {s.filings.length > 0 && (
+            <>
+              <div className="cdk-co-h">Filings</div>
+              {s.filings.map((f, i) => (
+                <div className="cdk-co-item" key={`f${i}`}>
+                  <a href={f.url} target="_blank" rel="noopener noreferrer" className="cdk-co-item-hed">{f.headline}</a>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+        <div className="cdk-co-col">
+          {s.facts.length > 0 && (
+            <>
+              <div className="cdk-co-h">Facts extracted</div>
+              {s.facts.map((f, i) => (
+                <div className="cdk-co-fact" key={i}>
+                  <span className="cdk-co-fact-text">{f.text}</span>
+                  <span className="cdk-co-fact-meta">{f.meta}</span>
+                </div>
+              ))}
+            </>
+          )}
+          {s.metrics.length > 0 && (
+            <>
+              <div className="cdk-co-h">Metrics</div>
+              {s.metrics.map((m, i) => (
+                <div className="cdk-co-metric" key={i}>
+                  <span className="cdk-co-metric-l">{m.label}</span>
+                  <span className="cdk-co-metric-v">{m.value}</span>
+                  {m.delta && <span className="cdk-co-metric-d">{m.delta}</span>}
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </div>
+      {s.sentence && (
+        <div className="cdk-co-sentence">
+          {s.sentence.map((seg, i) => seg.href
+            ? <a key={i} href={seg.href} target="_blank" rel="noopener noreferrer">{seg.text}</a>
+            : <span key={i}>{seg.text}</span>)}
+        </div>
+      )}
+      <Takeaway text={s.takeaway} />
+    </div>
+  );
+}
+
 // Fixed log10 domain shared with the PDF renderer ($500-$100k) so the two
 // exports read as the same chart, not just the same numbers.
 
@@ -497,6 +577,7 @@ function renderSlide(slide: DeckSlide) {
     case 'divider': return <DividerSlide {...slide} />;
     case 'matrix': return <MatrixSlide {...slide} />;
     case 'bullets': return <BulletsSlide {...slide} />;
+    case 'company': return <CompanySlide {...slide} />;
     case 'price-compare': return <PriceCompareSlide {...slide} />;
   }
 }

@@ -2,7 +2,9 @@ import { one } from '../../db';
 import {
   getDailyJobStatus, getScanHealth, getIntelHealth, getResearchHealth, getToolingHealth,
   getTavilyQuota, getTextCoverage, getZeroYieldDomains, getRoundupForWeek, getToolingReportForWeek,
+  getIntelPrefs,
 } from '../../data';
+import { getIntelDeckForDay } from '../../data/intel-deck';
 import { checkPipelineBudget } from '../../pipeline/budget';
 import { checkScanBudget } from '../../scan/budget';
 import { checkIntelBudget } from '../../intel/budget';
@@ -243,6 +245,30 @@ const reportsEntrantsMissing: AgentCheck = {
   },
 };
 
+const reportsIntelDeckMissing: AgentCheck = {
+  key: 'reports.intel_deck_missing',
+  title: 'Daily company intel deck',
+  domain: 'engines',
+  run: async (ctx) => {
+    const dow = ctx.now.getUTCDay();
+    if (dow < 1 || dow > 5) return [];
+    const minutesUtc = ctx.now.getUTCHours() * 60 + ctx.now.getUTCMinutes();
+    if (minutesUtc < 16 * 60 + 40) return [];
+    const prefs = await getIntelPrefs();
+    if (!prefs.deck_enabled) return [];
+    const today = ctx.now.toISOString().slice(0, 10);
+    const existing = await getIntelDeckForDay(today);
+    if (existing) return [];
+    return [{
+      key: 'reports.intel_deck_missing', checkKey: 'reports.intel_deck_missing', severity: 'warn',
+      title: `Company intel deck missing for ${today}`,
+      detail: `No company intel deck exists for ${today} yet. It should have generated at 16:20 UTC via the /api/cron/intel-deck cron.`,
+      metric: { day: today }, href: '/intel',
+      remedy: remedyRef('reports.intel_deck', "Generate today's company intel deck"),
+    }];
+  },
+};
+
 const ERROR_NOTE_RE = /error|429|timeout|quota/i;
 
 const notesErrors: AgentCheck = {
@@ -284,5 +310,6 @@ export const ENGINE_CHECKS: AgentCheck[] = [
   pipelineZeroYield,
   reportsRoundupMissing,
   reportsEntrantsMissing,
+  reportsIntelDeckMissing,
   notesErrors,
 ];

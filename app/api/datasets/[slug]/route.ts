@@ -1,13 +1,20 @@
-import type { NextRequest } from 'next/server';
+import { after, type NextRequest } from 'next/server';
 import { q } from '@/lib/db';
-import { isPortal } from '@/lib/auth';
+import { identityFromRequest, touchKey, unauthorizedMessage } from '@/lib/portal/identity';
+import { logPortalUsage } from '@/lib/mutations/portal';
 import { isSignalLens } from '@/lib/datasets/core';
 import { getDataset } from '@/lib/datasets/registry';
 import { datasetFileName, datasetToCSV, datasetToJSON } from '@/lib/datasets/serialize';
 
 // The Datasets portal download route: /api/datasets/<slug>?format=csv|json[&lens=...].
 // Public (allow-listed in proxy.ts; its matcher does not exempt /api/*), except
-// key-gated datasets (bulk article text), which require the portal cookie.
+// key-gated datasets (bulk article text), which require a portal identity
+// (lib/portal/identity.ts: admin, the legacy team-key cookie, or a per-person
+// access key by cookie or Authorization/X-Atlas-Key header). Identified pulls
+// are logged to portal_usage; anonymous public downloads are not.
+// Bookkeeping runs inside next/server's after() so the insert outlives the
+// flushed response, and only for an ACTIVE identity (a lapsed key pulling a
+// public dataset is neither logged as a keyholder nor bumps last_used_at).
 // Node runtime: builders run on lib/db's pg pool. No model call; maxDuration
 // raised for the million-row intel-metrics export (measured ~10s locally, but
 // prod pooler latency deserves headroom over the platform default).
@@ -29,14 +36,19 @@ export async function GET(
     return Response.json({ error: 'Unknown dataset. See /api/datasets/catalog.' }, { status: 404 });
   }
 
-  if (def.keyGated && !(await isPortal())) {
-    return new Response(
-      'This dataset needs an access key. Unlock it at /ask, then retry the download.',
-      { status: 401, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } }
-    );
-  }
-
   const sp = req.nextUrl.searchParams;
+  const identity = await identityFromRequest(req);
+
+  if (def.keyGated && !identity.active) {
+    const denied = unauthorizedMessage(identity);
+    if (sp.get('format') === 'csv') {
+      return new Response(denied.body.message, {
+        status: denied.status,
+        headers: { ...denied.headers, 'Content-Type': 'text/plain; charset=utf-8' },
+      });
+    }
+    return Response.json(denied.body, { status: denied.status, headers: denied.headers });
+  }
 
   // ?preview=N: a limit-capable, JSON-only peek, for a quick in-browser look
   // at a heavy or key-gated dataset without pulling the whole corpus. Parsed
@@ -112,6 +124,23 @@ export async function GET(
   }
 
   const rows = await def.build(q, { lens, day, since, source, host: req.nextUrl.origin, limit: previewLimit });
+  if (identity.active && identity.tier !== 'none') {
+    const tier = identity.tier;
+    const ua = (req.headers.get('user-agent') ?? '').slice(0, 300) || null;
+    after(() => Promise.all([
+      logPortalUsage({
+        keyId: identity.keyId,
+        identity: tier,
+        kind: 'dataset',
+        datasetSlug: def.slug,
+        spec: { format, lens, day, since, source, preview: previewLimit ?? null },
+        rows: rows.length,
+        status: 200,
+        ua,
+      }),
+      touchKey(identity.keyId),
+    ]));
+  }
   // A preview never writes the no-store full-download header, even key-gated:
   // it's a small, cheap peek, so it's safe to cache briefly per-viewer.
   const cache = isPreview

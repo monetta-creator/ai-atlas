@@ -66,7 +66,8 @@ export async function extractFromDocument(
   companyId: string,
   docId: string,
   steering: string | null,
-  feature: string   // 'scout_doc' (admin) | 'portal_scout' (keyholder)
+  feature: string,   // 'scout_doc' (admin) | 'portal_scout' (keyholder)
+  metadata?: Record<string, unknown>   // e.g. { portal_key_id } for the per-key budget
 ): Promise<{ filled: string[]; eventsAdded: number; eventsSkipped: number }> {
   const company = await one<{
     name: string; one_liner: string | null; ai_tech: string | null;
@@ -103,6 +104,7 @@ export async function extractFromDocument(
     maxTokens: 1500,
     effort: 'low',
     feature,
+    metadata: { ...metadata, company_id: companyId, tool: 'doc' },
     timeoutMs: 55_000,
     maxRetries: 0,
   });

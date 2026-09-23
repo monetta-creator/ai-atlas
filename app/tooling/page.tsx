@@ -122,7 +122,7 @@ export default async function ToolingPage({
               </summary>
               <div className="flex flex-col gap-1" style={{ marginTop: 10 }}>
                 <p className="tl-note">
-                  Scored below the catalog threshold, or the homepage never fetched. Visible to team keyholders and admins only.
+                  Scored below the catalog threshold, or the homepage never fetched. Visible to keyholders and admins only.
                 </p>
                 {parked.length === 0 ? (
                   <p className="text-sm" style={{ color: 'var(--faint-ink)' }}>Nothing parked right now.</p>

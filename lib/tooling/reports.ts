@@ -346,9 +346,10 @@ export interface ToolingSectionsOut {
 // opts.feature overrides the cost-log feature slug (default
 // 'tooling_report_sections'): the /tooling/reports console's actions pass
 // 'portal_tooling' for a non-admin keyholder's turn, so the portal daily
-// budget's feature-filtered sum actually counts it.
+// budget's feature-filtered sum actually counts it; opts.metadata carries the
+// keyholder's portal_key_id for the per-key sum.
 export async function generateToolingSections(
-  pack: ToolingPack, steering: string | null, opts?: { feature?: string }
+  pack: ToolingPack, steering: string | null, opts?: { feature?: string; metadata?: Record<string, unknown> }
 ): Promise<ToolingSectionsOut> {
   const voice = pack.kind === 'tooling_brief' ? `${VOICE}${BRIEF_INTERNAL_NOTE}` : VOICE;
   const out = await runStructured<{ reading?: string; connections?: string; watch?: string }>({
@@ -360,7 +361,7 @@ export async function generateToolingSections(
     maxTokens: 2000,
     effort: 'medium',
     feature: opts?.feature ?? 'tooling_report_sections',
-    metadata: { kind: pack.kind },
+    metadata: { ...opts?.metadata, kind: pack.kind },
     timeoutMs: 55_000,
     maxRetries: 0,
   });
@@ -410,7 +411,7 @@ const CLOSE_SCHEMA = {
 export async function generateToolingClose(
   pack: ToolingPack,
   sections: { readingMd: string; connectionsMd: string; watchMd: string },
-  opts?: { feature?: string }
+  opts?: { feature?: string; metadata?: Record<string, unknown> }
 ): Promise<{ bottomLineHtml: string; title: string; dropped: string[] }> {
   const titles = SHEET_SECTION_TITLES[pack.kind];
   const system = pack.kind === 'tooling_brief' ? `${CLOSE_SYSTEM}${BRIEF_INTERNAL_NOTE}` : CLOSE_SYSTEM;
@@ -435,7 +436,7 @@ export async function generateToolingClose(
     maxTokens: 700,
     effort: 'medium',
     feature: opts?.feature ?? 'tooling_report_close',
-    metadata: { kind: pack.kind },
+    metadata: { ...opts?.metadata, kind: pack.kind },
     timeoutMs: 55_000,
     maxRetries: 0,
   });

@@ -13,7 +13,7 @@ check('well-formed ids and static siblings pass through', () => {
     `/thesis-report/${U}`, `/thesis-report/${U}/pdf`, `/reports/${U}`, `/reports/${U}/pdf`, `/reports/sheet/${U}`, `/reports/sheet/${U}/pdf`,
     '/signals', '/signals/new', '/signals/drafts', '/signals/digest', '/research/console', '/research/digest', '/research/threads/labor-automation-evidence',
     '/scout/console', '/theses/new', '/reports', '/reports/period', '/reports/sheet', '/blotter', '/blotter/archive', '/blotter/desk',
-    '/blotter/2026-09-22', '/blotter/2026-09-22/pdf', `/signals/${U.toUpperCase()}`, '/claim/7.1', '/tooling/anything', '/sources']) {
+    '/blotter/2026-09-22', '/blotter/2026-09-22/pdf', '/intel/deck', '/intel/deck/none', '/intel/deck/2026-09-23', '/intel/deck/2026-09-23/pdf', '/intel', `/signals/${U.toUpperCase()}`, '/claim/7.1', '/tooling/anything', '/sources']) {
     assert.equal(isMalformedDetailPath(p), false, p);
   }
 });
@@ -21,7 +21,7 @@ check('well-formed ids and static siblings pass through', () => {
 check('malformed ids and impossible days are rejected', () => {
   for (const p of ['/signals/not-a-uuid', '/signals/123/edit', '/research/abc', '/scout/x', '/source/1', '/theses/zzz',
     '/thesis-report/nope/pdf', '/reports/abc', '/reports/sheet/abc', '/reports/sheet/abc/pdf', '/blotter/2026-13-45',
-    '/blotter/2026-02-30', '/blotter/yesterday', `/signals/${U}x`, '/signals/------------------------------------']) {
+    '/blotter/2026-02-30', '/blotter/yesterday', '/intel/deck/latest', '/intel/deck/2026-13-01/pdf', `/signals/${U}x`, '/signals/------------------------------------']) {
     assert.equal(isMalformedDetailPath(p), true, p);
   }
 });

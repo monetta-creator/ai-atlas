@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
     "/ingestion/deck/pdf": ["./lib/pdf/fonts/*.ttf"],
     "/education/[slug]/deck/pdf": ["./lib/pdf/fonts/*.ttf"],
     "/blotter/[day]/pdf": ["./lib/pdf/fonts/*.ttf"],
+    "/intel/deck/[day]/pdf": ["./lib/pdf/fonts/*.ttf"],
   },
 };
 

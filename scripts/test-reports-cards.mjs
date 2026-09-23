@@ -7,6 +7,7 @@
 // Run: node scripts/test-reports-cards.mjs
 
 import assert from 'node:assert/strict';
+import { dateLabel } from '../lib/format.ts';
 import {
   toSheetCard, toPeriodCard, toThesisCard, filterCards, paginate, sortCards,
   REPORT_KIND_FILTERS, DRAFTS_FILTER, toDeckCard } from '../lib/reports/cards.ts';
@@ -156,10 +157,24 @@ check('filterCards: drafts filter applies for an admin viewer', () => {
   assert.equal(out[0].id, 's1');
 });
 
+check('toSheetCard: the company intel deck reads on /intel/deck/<day>, is portal-only, and chips its day counts', () => {
+  const c = toSheetCard({
+    id: 'd1', kind: 'intel_deck', subject: null, title: 'Company intel, Sep 23',
+    scope_from: '2026-09-22', scope_to: '2026-09-23', is_published: true, generated_at: '2026-09-23T16:20:00Z',
+    abstract: null, stats: { companies: 12, movers: 3, quiet: 9, items: 40, facts: 31 },
+  });
+  assert.equal(c.href, '/intel/deck/2026-09-23');
+  assert.equal(c.pdfHref, '/intel/deck/2026-09-23/pdf');
+  assert.equal(c.access, 'portal');
+  assert.deepEqual(c.chips, ['12 companies', '3 moves', '9 quiet']);
+  assert.equal(c.kindLabel, 'Company intel deck');
+  assert.equal(c.subject, dateLabel('2026-09-23'));
+});
+
 check('REPORT_KIND_FILTERS / DRAFTS_FILTER: keys are stable and in order', () => {
   assert.deepEqual(
     REPORT_KIND_FILTERS.map((f) => f.key),
-    ['all', 'claim', 'bridge', 'lens', 'atlas', 'roundup', 'edition', 'tooling', 'period', 'thesis', 'deck']
+    ['all', 'claim', 'bridge', 'lens', 'atlas', 'roundup', 'edition', 'intel_deck', 'tooling', 'period', 'thesis', 'deck']
   );
   assert.equal(DRAFTS_FILTER.key, 'drafts');
 });

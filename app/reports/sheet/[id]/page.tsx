@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { isAdmin, isPortal } from '@/lib/auth';
 import { getGeneratedReport } from '@/lib/data';
+import { isPortalOnlyKind } from '@/lib/reports/access';
 import PageTop from '@/components/PageTop';
 import SheetReadView from '@/components/reports/SheetReadView';
 import SheetActions from './SheetActions';
@@ -24,8 +25,13 @@ export default async function SheetPage({ params }: { params: Promise<{ id: stri
   // Editions are generated_reports rows too, but they read at /blotter/<day>,
   // not here: send anyone who lands on a sheet URL for one straight there.
   if (saved.kind === 'edition' && saved.scope_to) redirect(`/blotter/${saved.scope_to}`);
+  if (saved.kind === 'intel_deck' && saved.scope_to) redirect(`/intel/deck/${saved.scope_to}`);
   const isTooling = String(saved.kind).startsWith('tooling_');
-  const portal = isTooling && (await isPortal());
+  const keyed = await isPortal(); // revocation-aware (lib/auth.ts)
+  // Portal-only kinds (lib/reports/access.ts) name tracked companies: a
+  // guest gets a 404 even when the row is published.
+  if (isPortalOnlyKind(String(saved.kind)) && !(admin || keyed)) notFound();
+  const portal = isTooling && keyed;
   if (!(saved.is_published || admin || portal)) notFound();
 
   return (

@@ -1,4 +1,4 @@
-import { isAdmin, isEditMode, isPortal, isPreview } from './auth';
+import { isAdmin, isEditMode, isPortalCookie, isPreview } from './auth';
 
 // Who the site chrome renders for. Header (rendered once in the root layout)
 // and GET /api/nav/viewer both call this, so the client can tell when the
@@ -21,8 +21,10 @@ export async function getChromeViewer(): Promise<ChromeViewer> {
   const editing = showAdmin && (await isEditMode());
   // The portal tier (team key unlock) rides no atlas_admin/atlas_guest cookie
   // of its own, so the rail/mobile-sheet tree needs it separately from admin
-  // to show portal-only leaves (e.g. /tooling/reports) to keyholders.
-  const portal = !showAdmin && (await isPortal());
+  // to show portal-only leaves (e.g. /tooling/reports) to keyholders. The
+  // cookie-only read is deliberate here (no DB hit per layout render): a
+  // revoked key shows a nav leaf whose page then refuses it via isPortal().
+  const portal = !showAdmin && (await isPortalCookie());
   const key = [admin, preview, editing, portal].map((b) => (b ? '1' : '0')).join('');
   return { admin, preview, showAdmin, editing, portal, key };
 }

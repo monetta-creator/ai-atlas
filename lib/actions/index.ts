@@ -21,3 +21,4 @@ export * from './tooling';
 export * from './tooling-reports';
 export * from './agent';
 export * from './edition';
+export * from './portal';

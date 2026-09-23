@@ -141,6 +141,25 @@ export type DeckSlide =
       bullets: { lead: string; text: string; href?: string; meta?: string }[];
       takeaway: string;
     }
+  // One tracked company's day (the company intel deck): a mark, yesterday's
+  // headlines with links, extracted facts, filings, metric moves, and a cited
+  // one-sentence read as link-bearing segments (the PDF cannot render HTML).
+  | {
+      kind: 'company';
+      kicker: string;
+      title: string;
+      tier: string;
+      ticker: string | null;
+      domain: string | null;
+      logoSrc: string | null;       // web: favicon url; null = monogram
+      logoDataUri: string | null;   // pdf: baked PNG; null = monogram
+      items: { headline: string; url: string; meta: string }[];
+      facts: { text: string; meta: string }[];
+      filings: { headline: string; url: string }[];
+      metrics: { label: string; value: string; delta: string | null }[];
+      sentence: { text: string; href?: string }[] | null;
+      takeaway: string;
+    }
   | {
       kind: 'price-compare';
       kicker: string;

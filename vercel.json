@@ -19,6 +19,7 @@
     { "path": "/api/cron/tooling/sweep", "schedule": "20 8 * * 1" },
     { "path": "/api/cron/tooling/sweep2", "schedule": "0 17 * * 1" },
     { "path": "/api/cron/roundup", "schedule": "0 21 * * 5" },
+    { "path": "/api/cron/intel-deck", "schedule": "20 16 * * 1-5" },
     { "path": "/api/cron/edition", "schedule": "45 16 * * 1-5" },
     { "path": "/api/cron/feeds", "schedule": "30 20 * * 1-5" },
     { "path": "/api/cron/agent", "schedule": "45 * * * *" },

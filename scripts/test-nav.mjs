@@ -106,6 +106,22 @@ check("pathwayFor('/about/data-handling', 'Data handling') = About(link), Data h
   ]);
 });
 
+check("groupFor('/access').key === 'desk' and the leaf is admin-only with the 'access' badge", () => {
+  const group = groupFor('/access');
+  assert.equal(group?.key, 'desk');
+  const leaf = leafFor('/access', group);
+  assert.equal(leaf?.label, 'Access');
+  assert.equal(leaf?.access, 'admin');
+  assert.equal(leaf?.badge, 'access');
+  assert.ok(!tabsFor('/access', guest).some((l) => l.href === '/access'), 'guests never see the Access leaf');
+  assert.ok(!tabsFor('/access', holder).some((l) => l.href === '/access'), 'keyholders never see the Access leaf');
+  assert.ok(tabsFor('/access', admin).some((l) => l.href === '/access'), 'admins see the Access leaf');
+});
+
+check("publicParentFor('/access').href === '/'", () => {
+  assert.equal(publicParentFor('/access').href, '/');
+});
+
 check("publicParentFor('/worldview').href === '/map'", () => {
   assert.equal(publicParentFor('/worldview').href, '/map');
 });
@@ -152,6 +168,27 @@ check('isChromeless: login, showcase, decks and print digests render without the
   for (const p of ['/', '/ask', '/blotter', '/education/agentic-harnesses', '/costs', '/research', '/signals', '/blotter/2026-09-22/pdf-not', '/education/x/deck/extra']) {
     assert.equal(isChromeless(p), false, p);
   }
+});
+
+check("isChromeless: the intel deck stage (and its 'none' plate) render without chrome, the redirect keeps it", () => {
+  assert.equal(isChromeless('/intel/deck/2026-09-23'), true);
+  assert.equal(isChromeless('/intel/deck/none'), true);
+  assert.equal(isChromeless('/intel/deck'), false);
+});
+
+check("groupFor('/intel/deck/2026-09-23').key === 'reports' and the leaf is portal-only", () => {
+  const group = groupFor('/intel/deck/2026-09-23');
+  assert.equal(group?.key, 'reports');
+  const leaf = leafFor('/intel/deck/2026-09-23', group);
+  assert.equal(leaf?.label, 'Intel deck');
+  assert.equal(leaf?.access, 'portal');
+  assert.ok(!tabsFor('/intel/deck/2026-09-23', guest).some((l) => l.href === '/intel/deck'), 'guests never see the Intel deck leaf');
+  assert.ok(tabsFor('/intel/deck/2026-09-23', holder).some((l) => l.href === '/intel/deck'), 'portal holders see the Intel deck leaf');
+  assert.ok(tabsFor('/intel/deck/2026-09-23', admin).some((l) => l.href === '/intel/deck'), 'admins see the Intel deck leaf');
+});
+
+check("publicParentFor('/intel/deck/2026-09-23').href === '/reports'", () => {
+  assert.equal(publicParentFor('/intel/deck/2026-09-23').href, '/reports');
 });
 
 console.log(`\n${pass} passed · ${fail} failed`);

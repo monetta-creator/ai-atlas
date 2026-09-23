@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { isAdmin, isPortal } from '@/lib/auth';
 import { getGeneratedReport } from '@/lib/data';
+import { isPortalOnlyKind } from '@/lib/reports/access';
 import { renderSheetPdf, sheetPdfFilename } from '@/lib/pdf/sheet-doc';
 
 // The branded PDF download for a generated report. Public ONLY once the report
@@ -24,7 +25,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!saved) return new Response('Not found', { status: 404 });
   const admin = await isAdmin();
   const isTooling = String(saved.kind).startsWith('tooling_');
-  const portal = isTooling && (await isPortal());
+  const keyed = await isPortal(); // revocation-aware (lib/auth.ts)
+  // Portal-only kinds (lib/reports/access.ts) name tracked companies: a
+  // guest gets a 404 even when the row is published.
+  if (isPortalOnlyKind(String(saved.kind)) && !(admin || keyed)) return new Response('Not found', { status: 404 });
+  const portal = isTooling && keyed;
   if (!(saved.is_published || admin || portal)) return new Response('Not found', { status: 404 });
 
   const buf = await renderSheetPdf(saved, req.nextUrl.origin, admin || portal);

@@ -17,6 +17,7 @@ import AskComposer from '@/components/ask/AskComposer';
 import AskPeek from '@/components/ask/AskPeek';
 import { buildHighlight, type DocHighlight } from '@/components/ask/AskDoc';
 import PortalUnlock from '@/components/datasets/PortalUnlock';
+import type { RenewalState } from '@/components/portal/RenewalNotice';
 
 export type AskMode = 'admin' | 'portal' | 'locked';
 
@@ -27,12 +28,14 @@ const DATASET_TOKEN = /\[dataset\s+([a-z0-9-]+)\]/gi;
 // persist in localStorage (components/ask/store.ts); the in-flight answer lives
 // in state here and is committed to the store once, at completion/abort/error.
 export default function AskWorkspace({
-  mode, validIds, datasets, initialQuestion,
+  mode, validIds, datasets, initialQuestion, keyState,
 }: {
   mode: AskMode;
   validIds: ValidIdsPlain;
   datasets: DatasetSuggestionMeta[];
   initialQuestion?: string;
+  // Locked mode only: a lapsed key's state, for the unlock panel's notice.
+  keyState?: RenewalState | null;
 }) {
   const convos = useAskConvos();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -504,7 +507,7 @@ export default function AskWorkspace({
         {locked ? (
           <div className="ask-composer">
             <div className="ask-composer-inner" style={{ display: 'block' }}>
-              <PortalUnlock />
+              <PortalUnlock keyState={keyState} />
             </div>
           </div>
         ) : (

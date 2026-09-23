@@ -4,7 +4,7 @@
 // client-safe: no db, no auth; callers pass the viewer.
 
 export type Access = 'public' | 'portal' | 'admin';
-export type BadgeKey = 'pipeline' | 'drafts' | 'papers' | 'scout' | 'tickets' | 'tooling' | 'agent';
+export type BadgeKey = 'pipeline' | 'drafts' | 'papers' | 'scout' | 'tickets' | 'tooling' | 'access' | 'agent';
 
 export interface NavViewer {
   admin: boolean;
@@ -75,6 +75,7 @@ export const NAV_TREE: NavGroup[] = [
     detailPrefixes: ['/reports/'],
     children: [
       { href: '/reports', label: 'Portal', access: 'public' },
+      { href: '/intel/deck', label: 'Intel deck', access: 'portal' },
       { href: '/reports/period', label: 'Period generator', access: 'admin' },
     ],
   },
@@ -140,6 +141,7 @@ export const NAV_ISLAND: NavGroup[] = [
     children: [
       { href: '/agent', label: 'Atlas Agent', access: 'admin', badge: 'agent' },
       { href: '/tickets', label: 'Tickets', access: 'admin', badge: 'tickets' },
+      { href: '/access', label: 'Access', access: 'admin', badge: 'access' },
       { href: '/costs', label: 'Costs', access: 'admin', also: ['/costs/'] },
       { href: '/showcase', label: 'Showcase', access: 'admin', hidden: true },
     ],
@@ -255,7 +257,7 @@ export type NavCounts = Record<Exclude<BadgeKey, 'agent'>, number>;
 // click); ChromeGate hides it on these paths: the login card, the unlisted
 // showcase deck, the 16:9 deck stages, and the print digests.
 const CHROMELESS_EXACT = new Set(['/login', '/showcase', '/costs/deck', '/ingestion/deck', '/research/digest', '/signals/digest']);
-const CHROMELESS_RE = [/^\/education\/[^/]+\/deck\/?$/];
+const CHROMELESS_RE = [/^\/education\/[^/]+\/deck\/?$/, /^\/intel\/deck\/(\d{4}-\d{2}-\d{2}|none)\/?$/];
 
 export function isChromeless(pathname: string): boolean {
   const p = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;

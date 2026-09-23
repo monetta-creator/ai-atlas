@@ -337,3 +337,27 @@ a.cdk-bullet-lead { color: var(--accent); text-decoration: none; }
   .cdk-bill-cols { grid-template-columns: 1fr; }
   .cdk-stat-grid { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(3, 1fr); }
 }
+
+/* ---- company slide (the company intel deck) ---- */
+.cdk-co-head { display: flex; align-items: center; gap: 1.6cqw; padding-bottom: 1.6cqh; border-bottom: 0.07cqw solid var(--line); }
+.cdk-co-logo { width: 4.6cqw; height: 4.6cqw; border-radius: 0.6cqw; object-fit: contain; background: var(--surface); flex: none; }
+.cdk-co-logo--mono { display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.7cqw; }
+.cdk-co-name { min-width: 0; }
+.cdk-co-title { font-family: var(--font-headline); font-size: 3.4cqw; line-height: 1; margin: 0.2cqh 0 0; color: var(--ink); }
+.cdk-co-meta { font-family: var(--font-mono); font-size: 1cqw; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint-ink); margin-top: 0.5cqh; }
+.cdk-co-body { display: grid; grid-template-columns: 1fr 1fr; gap: 3cqw; flex: 1; min-height: 0; overflow: hidden; padding-top: 1.2cqh; }
+.cdk-co-col { min-width: 0; }
+.cdk-co-h { font-family: var(--font-mono); font-size: 0.95cqw; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint-ink); margin: 1.4cqh 0 0.8cqh; padding-bottom: 0.4cqh; border-bottom: 0.07cqw solid var(--line); }
+.cdk-co-item { margin-bottom: 1cqh; }
+.cdk-co-item-hed { font-size: 1.35cqw; line-height: 1.35; color: var(--accent); text-decoration: none; }
+.cdk-co-item-meta { font-family: var(--font-mono); font-size: 0.9cqw; color: var(--faint-ink); margin-top: 0.2cqh; }
+.cdk-co-empty { font-size: 1.3cqw; color: var(--dim); font-style: italic; }
+.cdk-co-fact { display: flex; flex-direction: column; margin-bottom: 0.9cqh; }
+.cdk-co-fact-text { font-size: 1.3cqw; line-height: 1.35; color: var(--ink); }
+.cdk-co-fact-meta { font-family: var(--font-mono); font-size: 0.9cqw; color: var(--faint-ink); }
+.cdk-co-metric { display: flex; gap: 1cqw; font-size: 1.25cqw; margin-bottom: 0.5cqh; }
+.cdk-co-metric-l { color: var(--dim); flex: 1; }
+.cdk-co-metric-v { font-family: var(--font-mono); color: var(--ink); }
+.cdk-co-metric-d { font-family: var(--font-mono); color: var(--accent); }
+.cdk-co-sentence { font-size: 1.55cqw; line-height: 1.45; color: var(--ink); padding-top: 1.4cqh; margin-top: 1cqh; border-top: 0.07cqw solid var(--line); }
+.cdk-co-sentence a { color: var(--accent); text-decoration: none; }

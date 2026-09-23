@@ -5,7 +5,9 @@
 // slide so the portal card previews what the deck opens with. Pure: no db
 // import, so it is safe for the client grid and the plain-Node test.
 
-export type DeckAccess = 'admin' | 'public';
+// 'portal': access-key holders and the admin (the company intel deck names
+// tracked companies, so it never reaches guests).
+export type DeckAccess = 'admin' | 'portal' | 'public';
 
 export interface DeckEntry {
   id: string;            // stable key, also the card id

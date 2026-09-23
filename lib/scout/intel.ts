@@ -34,7 +34,8 @@ interface IntelOut {
 export async function runIntelSweep(
   companyId: string,
   steering: string | null,
-  feature: string   // 'scout_intel' (admin) | 'portal_scout' (keyholder)
+  feature: string,   // 'scout_intel' (admin) | 'portal_scout' (keyholder)
+  metadata?: Record<string, unknown>   // e.g. { portal_key_id } for the per-key budget
 ): Promise<{ filled: string[]; eventsAdded: number; eventsSkipped: number }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is required for the intel sweep.');
@@ -123,7 +124,7 @@ Run web searches for its funding history, product and technology, team, traction
     model: MODEL,
     usage: msg.usage,
     wallMs: Date.now() - t0,
-    metadata: { company_id: companyId, tool: 'intel' },
+    metadata: { ...metadata, company_id: companyId, tool: 'intel' },
   });
 
   const tu = msg.content.find(

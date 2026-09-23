@@ -60,7 +60,7 @@ export default function DatasetPreview({
       </div>
       {status === 'locked' && (
         <p className="text-xs" style={{ color: 'var(--faint-ink)' }}>
-          Key-gated: unlock with the team key on <Link href="/ask">/ask</Link>.
+          Key-gated: unlock with an access key on <Link href="/ask">/ask</Link>.
         </p>
       )}
       {status === 'error' && (

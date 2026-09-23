@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { isAdmin, isPortal } from '@/lib/auth';
+import { getPortalIdentity } from '@/lib/portal/identity';
 import { SIGNAL_LENSES } from '@/lib/datasets/core';
 import { DATASETS } from '@/lib/datasets/registry';
 import { getEditContext } from '@/lib/content';
 import PageTop from '@/components/PageTop';
 import Editable from '@/components/Editable';
+import RenewalNotice, { type RenewalState } from '@/components/portal/RenewalNotice';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Data Portal · The AI Atlas' };
@@ -12,9 +13,18 @@ export const metadata = { title: 'Data Portal · The AI Atlas' };
 // The public Datasets portal hub: the catalog of downloadable datasets (public
 // ones guest-safe, the key-gated exports behind the access key) plus the door
 // to the team Ask surface. Nothing here calls a model. Every registry category
-// must appear in `categories` below or its datasets never render.
-export default async function DatasetsPage() {
-  const [admin, portal] = await Promise.all([isAdmin(), isPortal()]);
+// must appear in `categories` below or its datasets never render. The enter
+// link lands here with ?key=expired|revoked when a lapsed key was used, so
+// the notice renders even before the cookie identity says so.
+export default async function DatasetsPage({ searchParams }: { searchParams: Promise<{ key?: string }> }) {
+  const [identity, sp] = await Promise.all([getPortalIdentity(), searchParams]);
+  const admin = identity.tier === 'admin';
+  const portal = identity.active;
+  const notice: RenewalState | null = identity.state === 'expired' || identity.state === 'revoked'
+    ? identity
+    : sp.key === 'expired' || sp.key === 'revoked'
+      ? { state: sp.key, expiresAt: null }
+      : null;
   const { editing, txt } = await getEditContext();
   const categories: { key: string; label: string }[] = [
     { key: 'signals', label: 'Signals' },
@@ -44,8 +54,15 @@ export default async function DatasetsPage() {
               editing={editing}
             />
           }
-          action={<Link href="/ask" className="btn btn--primary">Ask the Atlas</Link>}
+          action={
+            <>
+              {!portal && <Link href="/datasets/request" className="btn btn--ghost">Request access</Link>}
+              <Link href="/ask" className="btn btn--primary">Ask the Atlas</Link>
+            </>
+          }
         />
+
+        <RenewalNotice identity={notice} style={{ marginBottom: 24 }} />
 
         {categories.map((cat) => {
           const list = DATASETS.filter((d) => d.category === cat.key);

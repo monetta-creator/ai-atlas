@@ -1,6 +1,9 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import crypto from 'node:crypto';
+import { cache } from 'react';
+import { one } from './db';
+import { parseCookieValue, portalCookieGrants, type PortalCookie } from './portal/keys';
 
 // The Admin/Guest gate. Admin sessions are a signed HMAC cookie; the guest
 // cookie is a non-privileged UX flag. The security boundary (can a guest see
@@ -33,17 +36,22 @@ function sign(value: string): string {
   return `${value}.${hmac(value)}`;
 }
 
-function verify(token: string | undefined, expected: 'admin' | 'portal'): boolean {
-  if (!token) return false;
+// The signed value, or null when the signature does not verify.
+function signedValue(token: string | undefined): string | null {
+  if (!token) return null;
   const i = token.lastIndexOf('.');
-  if (i < 0) return false;
+  if (i < 0) return null;
   const value = token.slice(0, i);
   const sig = token.slice(i + 1);
   const want = hmac(value);
   const a = Buffer.from(sig);
   const b = Buffer.from(want);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b) && value === expected;
+  if (a.length !== b.length) return null;
+  return crypto.timingSafeEqual(a, b) ? value : null;
+}
+
+function verify(token: string | undefined, expected: 'admin' | 'portal'): boolean {
+  return signedValue(token) === expected;
 }
 
 export async function isAdmin(): Promise<boolean> {
@@ -60,19 +68,64 @@ export async function requireAdminPage(): Promise<true> {
   return true;
 }
 
-// The portal tier: a signed cookie unlocked by the shared team key (PORTAL_KEY).
-// It grants exactly one thing beyond the public surface: the billable portal
-// features (/api/portal/ask and key-gated dataset downloads). It carries no
-// write authority and no personal-layer access; admins pass implicitly.
+// The portal tier: a signed cookie unlocked by an access key. Two cookie
+// values verify: the legacy `portal` (the shared PORTAL_KEY team key) and the
+// per-person `portal:<keyId>:<expEpochSeconds>` (migration 0060). It grants the
+// billable portal features (/api/portal/ask, key-gated datasets, tooling
+// reports, Scout research tools), no write authority, no personal layer;
+// admins pass implicitly.
+//
+// isPortal() is AUTHORITATIVE: for a per-person cookie it resolves the key
+// row (one primary-key lookup, cached per request) and grants only while the
+// key is active, so Revoke in the /access console stops every gated surface
+// at once, whatever expiry the cookie carries. isPortalCookie() is the cheap
+// cookie-only read for the site chrome (lib/chrome-viewer.ts), where the only
+// consequence of a stale cookie is a portal-tier nav leaf that then 401s.
+// lib/portal/identity.ts builds on the same cookie read and adds header keys.
+export async function readPortalCookie(): Promise<PortalCookie | null> {
+  const store = await cookies();
+  const value = signedValue(store.get(PORTAL_COOKIE)?.value);
+  return value ? parseCookieValue(value) : null;
+}
+
+interface PortalKeyStateRow { expires_at: string; revoked_at: string | null }
+
+const portalKeyStateRow = cache(async (keyId: string): Promise<PortalKeyStateRow | null> =>
+  one<PortalKeyStateRow>(
+    `select expires_at::text as expires_at, revoked_at::text as revoked_at from portal_keys where id = $1::uuid`,
+    [keyId]
+  )
+);
+
+export async function isPortalCookie(): Promise<boolean> {
+  const store = await cookies();
+  if (verify(store.get(ADMIN_COOKIE)?.value, 'admin')) return true;
+  const c = parseCookieValue(signedValue(store.get(PORTAL_COOKIE)?.value) ?? '');
+  if (!c) return false;
+  return c.legacy || c.exp * 1000 > Date.now();
+}
+
 export async function isPortal(): Promise<boolean> {
   const store = await cookies();
   if (verify(store.get(ADMIN_COOKIE)?.value, 'admin')) return true;
-  return verify(store.get(PORTAL_COOKIE)?.value, 'portal');
+  const c = parseCookieValue(signedValue(store.get(PORTAL_COOKIE)?.value) ?? '');
+  if (!c) return false;
+  if (c.legacy) return true;
+  return portalCookieGrants(c, await portalKeyStateRow(c.keyId));
 }
 
-export async function setPortalSession(): Promise<void> {
+// No arguments = the legacy team-key session. With a key id and expiry, the
+// per-person session; the cookie itself still lives MAX_AGE, the embedded
+// expiry is what the cheap isPortalCookie() checks (isPortal() reads the row).
+export async function setPortalSession(key?: { keyId: string; expiresAt: Date }): Promise<void> {
   const store = await cookies();
-  store.set(PORTAL_COOKIE, sign('portal'), baseCookie);
+  const value = key ? `portal:${key.keyId}:${Math.floor(key.expiresAt.getTime() / 1000)}` : 'portal';
+  store.set(PORTAL_COOKIE, sign(value), baseCookie);
+}
+
+export async function clearPortalSession(): Promise<void> {
+  const store = await cookies();
+  store.delete(PORTAL_COOKIE);
 }
 
 // Same shape as checkPassword: fail closed when PORTAL_KEY is unset (the portal

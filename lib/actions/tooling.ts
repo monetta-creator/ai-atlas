@@ -2,9 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { requireAdmin, requirePortal, str, parseStringArray, UUID_RE } from './shared';
-import { isAdmin } from '../auth';
-import { checkPortalBudget } from '../portal/budget';
+import { requireAdmin, requirePortal, portalKeyMetadata, str, parseStringArray, UUID_RE } from './shared';
+import { checkKeyBudget, checkPortalBudget } from '../portal/budget';
 import { getOrCreateToolingRun, claimToolingRun, advanceToolingRun, progressOf } from '../tooling/engine';
 import { getToolingRun, getToolingCategories, getToolingPrefs, getProduct } from '../data/tooling';
 import {
@@ -347,25 +346,32 @@ export async function addProductAction(formData: FormData): Promise<void> {
 }
 
 // The Scout gate template (gateScoutTarget), applied to tooling: requirePortal
-// admits admins implicitly; a non-admin's target must be visible to a portal
-// viewer (candidate/parked/cataloged, never dismissed) and pass the shared
-// daily budget before a Sonnet call is spent. Admin calls log feature
+// admits admins and refuses a revoked/expired key; a non-admin's target must
+// be visible to a portal viewer (candidate/parked/cataloged, never dismissed)
+// and pass the shared daily budget plus, for a per-person key, that key's own
+// cap before a Sonnet call is spent. Admin calls log feature
 // 'tooling_deepdive'; portal calls log 'portal_tooling' (summed by
-// checkPortalBudget alongside portal_ask/portal_scout).
+// checkPortalBudget alongside portal_ask/portal_scout) stamped with the key id.
 export async function deepDiveAction(
   id: string, steering: string | null
 ): Promise<{ ok: true; eventsAdded: number } | { ok: false; error: string }> {
-  await requirePortal();
-  const admin = await isAdmin();
+  const viewer = await requirePortal();
+  const admin = viewer.tier === 'admin';
   if (!UUID_RE.test(id)) return { ok: false, error: GENERIC_PRODUCT_ERROR };
   const product = await getProduct(id, { admin, portal: true });
   if (!product) return { ok: false, error: GENERIC_PRODUCT_ERROR };
   if (!admin) {
     const budget = await checkPortalBudget();
     if (!budget.ok) return { ok: false, error: 'The team daily AI budget is spent. It resets at midnight UTC.' };
+    if (viewer.tier === 'key' && viewer.keyId) {
+      const own = await checkKeyBudget(viewer.keyId);
+      if (!own.ok) return { ok: false, error: 'Your access key has reached its daily budget. It resets at midnight UTC.' };
+    }
   }
   const steer = String(steering ?? '').trim().slice(0, 1500) || null;
-  const result = await runDeepDive(id, steer, admin ? 'tooling_deepdive' : 'portal_tooling', { timeoutMs: 90_000 });
+  const result = await runDeepDive(id, steer, admin ? 'tooling_deepdive' : 'portal_tooling', {
+    timeoutMs: 90_000, metadata: portalKeyMetadata(viewer),
+  });
   if (!result.ok) return { ok: false, error: result.error };
   revalidatePath('/tooling');
   revalidatePath(`/tooling/${product.slug}`);

@@ -24,8 +24,10 @@ export const deDash = (s: string): string => s.replace(/\s*—\s*/g, ', ');
 // scan/intel/pipeline engines use).
 export const EDITION_PRESS_UTC = '16:45:00';
 
-export function windowFor(day: string): { from: string; to: string } {
-  const to = new Date(`${day}T${EDITION_PRESS_UTC}Z`);
+// `pressUtc` lets another daily product (the company intel deck, 16:20 UTC)
+// reuse the press-to-press semantics with its own press time.
+export function windowFor(day: string, pressUtc: string = EDITION_PRESS_UTC): { from: string; to: string } {
+  const to = new Date(`${day}T${pressUtc}Z`);
   const from = new Date(to);
   from.setUTCDate(from.getUTCDate() - lookbackDays(day));
   return { from: from.toISOString(), to: to.toISOString() };

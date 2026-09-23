@@ -12,7 +12,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
     sections: [
       {
         heading: 'Five report families',
-        body: 'Generated sheets cover one claim, one lens, or the whole Atlas, drafted on demand from the console below. Period reports compile a date range across the Signal Board. Thesis reports track one investment thesis against the map. The Daily Edition, the weekly tooling entrants report, and the Friday research roundup are the three kinds that auto-publish; period reports are public on save; everything else is a human publish.',
+        body: 'Generated sheets cover one claim, one lens, or the whole Atlas, drafted on demand from the console below. Period reports compile a date range across the Signal Board. Thesis reports track one investment thesis against the map. The Daily Edition, the Friday research roundup, the Monday tooling entrants report, and the weekday company intel deck are the four kinds that auto-publish; the intel deck stays access-key holders and admin only, since it names tracked companies. Period reports are public on save; everything else is a human publish.',
       },
       {
         heading: 'The citation gate',
@@ -20,7 +20,22 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
       {
         heading: 'Publishing is the gate',
-        body: 'A generated sheet is a draft until an admin publishes it, except the three auto-publishing kinds (the Daily Edition, the tooling entrants report, the research roundup), which go public when they run. Guests see published reports only; admins and, for the four tooling report kinds, portal keyholders can read a draft. Each row expands to a preview (a text abstract plus deterministic stats) before committing to the full read.',
+        body: 'A generated sheet is a draft until an admin publishes it, except the four auto-publishing kinds (the Daily Edition, the Friday research roundup, the Monday tooling entrants report, and the weekday company intel deck), which go public when they run. The intel deck still stays behind an access key or the admin session even once published, since it names tracked companies. Guests see published reports only; admins and, for the four tooling report kinds, portal keyholders can read a draft. Each row expands to a preview (a text abstract plus deterministic stats) before committing to the full read.',
+      },
+    ],
+  },
+  '/intel/deck': {
+    title: 'Company intel deck',
+    summary:
+      "Every weekday at 16:20 UTC the Intel Desk's collected items, extracted facts, filings, and metric moves for each tracked company become a 16:9 deck: a one-line cited read per company plus a cross-company front.",
+    sections: [
+      {
+        heading: 'Auto-published, access-key gated',
+        body: 'The deck publishes the moment it generates, no human step. It never goes fully public: an access key or the admin session is required, since it names the companies the desk tracks.',
+      },
+      {
+        heading: "What is in a company's read",
+        body: "One cited sentence per company, drawn from that day's collected items, extracted facts, filings, and metric moves, plus a front page ranking the day's biggest movers across the whole registry.",
       },
     ],
   },
@@ -347,6 +362,42 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
     ],
   },
+  '/access': {
+    title: 'How the access console works',
+    summary: 'Who holds an access key, who is asking for one, and what each key has pulled. Keys are per person, expire on a date, and can be renewed or revoked here.',
+    sections: [
+      {
+        heading: 'Requests',
+        body: 'The public request form posts here with a name, a work email, and a reason. Approving issues a key, emails the holder a one-link sign-in, and links the request to the key. Declining closes the request; nothing is deleted.',
+      },
+      {
+        heading: 'Keys',
+        body: 'Each key is shown once at issuance and stored only as a hash, so a lost key means a new one. A key carries its own daily Ask budget and call cap, an expiry date (90 days by default), and a last-used stamp. Renewal extends from the later of today and the current expiry; revocation is immediate and keeps the usage history.',
+      },
+      {
+        heading: 'Usage',
+        body: 'Every dataset pull, schema read, Ask turn, natural-language query, deck view, and saved view is logged against the key that made it, with today\'s model spend beside it. Anonymous public downloads are not logged. The legacy shared team key still works and logs without a key.',
+      },
+    ],
+  },
+  '/datasets/request': {
+    title: 'Requesting an access key',
+    summary: 'An access key unlocks the key-gated datasets, the natural-language query builder, and the Ask chat on this site. Ask for one here; the maintainer reviews each request by hand.',
+    sections: [
+      {
+        heading: 'What you get',
+        body: 'A personal key, sent to your work email as a one-link sign-in, with a daily budget for the model-backed features. Public datasets and reports need no key at all.',
+      },
+      {
+        heading: 'What is kept',
+        body: 'Your name, email, and reason, plus a hashed form of your network address for abuse review. Once a key is issued, its use is logged against the key so the maintainer can see what the portal is being used for. Nothing you type into Ask is stored on the server.',
+      },
+      {
+        heading: 'Expiry and renewal',
+        body: 'Keys expire after a set period and can be renewed by the maintainer without a new request. An expired key keeps your saved views.',
+      },
+    ],
+  },
   '/agent': {
     title: 'How the Atlas Agent works',
     summary: 'The resident operator: what is slipping, what it did, what needs your tap.',
@@ -457,7 +508,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
       {
         heading: 'Key-gated datasets',
-        body: 'Some datasets, like the retained article full text, need the shared team key. Unlock once at the Ask page and both the preview and the download open up for the rest of the session.',
+        body: 'Some datasets, like the retained article full text, need an access key. Unlock once at the Ask page and both the preview and the download open up for the rest of the session.',
       },
     ],
   },

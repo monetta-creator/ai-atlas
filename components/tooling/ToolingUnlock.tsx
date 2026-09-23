@@ -19,7 +19,7 @@ export default function ToolingUnlock() {
     <div className="plate" style={{ padding: 'var(--card-pad)', maxWidth: 560 }}>
       <div className="section-label">Team access</div>
       <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--dim)', margin: '10px 0 14px' }}>
-        Generating a tooling report runs a live model call, so it sits behind the shared team key.
+        Generating a tooling report runs a live model call, so it sits behind an access key.
         Paste the key once and this browser stays unlocked for 30 days.
       </p>
       <form action={formAction} className="flex items-center gap-3 flex-wrap">

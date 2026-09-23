@@ -37,6 +37,7 @@ export function proxy(req: NextRequest) {
     pathname === '/api/tooling/events' ||
     pathname === '/api/nav/viewer' ||
     pathname === '/api/tickets' ||
+    pathname === '/api/access/request' ||
     pathname.startsWith('/api/cron/');
 
   if (!entered && !isPublic) {

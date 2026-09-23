@@ -18,3 +18,4 @@ export * from './home';
 export * from './tooling';
 export * from './agent';
 export * from './editions';
+export * from './portal';

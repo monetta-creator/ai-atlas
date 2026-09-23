@@ -18,7 +18,8 @@ import type { ToolingMaturity, ToolingEventKind } from './tooling';
 export type SheetKind =
   | 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup'
   | 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features'
-  | 'edition';
+  | 'edition'
+  | 'intel_deck';
 
 // 'YYYY-MM-DD' bounds; both null = the full corpus.
 export interface SheetScope { from: string | null; to: string | null }
@@ -418,6 +419,12 @@ export interface GeneratedReportMeta {
     products?: number;
     entrants?: number;
     features?: number;
+    // The company intel deck projects its own day counts into this same bag.
+    companies?: number;
+    movers?: number;
+    quiet?: number;
+    items?: number;
+    facts?: number;
   } | null;
   health?: AtlasSheetPack['health'] | null;   // atlas briefings carry health, not stats
 }

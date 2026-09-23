@@ -1,4 +1,4 @@
-import { isAdmin, isPortal } from '@/lib/auth';
+import { getPortalIdentity } from '@/lib/portal/identity';
 import { getAskClientData } from '@/lib/ask/retrieve';
 import { DATASETS } from '@/lib/datasets/registry';
 import AskWorkspace from '@/components/ask/AskWorkspace';
@@ -15,8 +15,13 @@ export const metadata = { title: 'Ask the Atlas' };
 // ?q= seeds a first turn (the lobby's chat launcher); the workspace fires it
 // once on mount and strips the param from the URL.
 export default async function AskPage({ searchParams }: { searchParams: Promise<{ q?: string | string[] }> }) {
-  const [admin, portal, sp] = await Promise.all([isAdmin(), isPortal(), searchParams]);
-  const mode = admin ? 'admin' : portal ? 'portal' : 'locked';
+  const [identity, sp] = await Promise.all([getPortalIdentity(), searchParams]);
+  const mode = identity.tier === 'admin' ? 'admin' : identity.active ? 'portal' : 'locked';
+  // A lapsed key (expired or revoked) lands in locked mode; the unlock panel
+  // renders the renewal notice from these two fields.
+  const keyState = identity.state === 'expired' || identity.state === 'revoked'
+    ? { state: identity.state, expiresAt: identity.expiresAt }
+    : null;
   const validIds = await getAskClientData();
   const datasets = DATASETS.map((d) => ({ slug: d.slug, title: d.title, description: d.description }));
   const rawQ = typeof sp.q === 'string' ? sp.q : undefined;
@@ -24,7 +29,7 @@ export default async function AskPage({ searchParams }: { searchParams: Promise<
 
   return (
     <div className="ask-page">
-      <AskWorkspace mode={mode} validIds={validIds} datasets={datasets} initialQuestion={initialQuestion} />
+      <AskWorkspace mode={mode} validIds={validIds} datasets={datasets} initialQuestion={initialQuestion} keyState={keyState} />
     </div>
   );
 }

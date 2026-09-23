@@ -1,9 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { isAdmin } from '../auth';
-import { checkPortalBudget } from '../portal/budget';
-import { requireAdmin, requirePortal, UUID_RE } from './shared';
+import { checkKeyBudget, checkPortalBudget } from '../portal/budget';
+import type { PortalIdentity } from '../portal/identity';
+import { requireAdmin, requirePortal, portalKeyMetadata, UUID_RE } from './shared';
 import { getGeneratedReport } from '../data';
 import { saveGeneratedReport, setGeneratedReportPublished } from '../mutations';
 import {
@@ -41,15 +41,35 @@ function budgetMessage(budget: { spentUsd: number; capUsd: number }): string {
     `$${budget.capUsd.toFixed(2)}). Try again tomorrow, or ask the Atlas owner to raise PORTAL_DAILY_BUDGET_USD.`;
 }
 
+// A non-admin keyholder's model leg passes the portal-wide budget and, for a
+// per-person key, that key's own daily cap. Returns the error message or null.
+async function portalBudgetError(viewer: PortalIdentity): Promise<string | null> {
+  if (viewer.tier === 'admin') return null;
+  const budget = await checkPortalBudget();
+  if (!budget.ok) return budgetMessage(budget);
+  if (viewer.tier === 'key' && viewer.keyId) {
+    const own = await checkKeyBudget(viewer.keyId);
+    if (!own.ok) return 'Your access key has reached its daily budget. It resets at midnight UTC.';
+  }
+  return null;
+}
+
+// The keyholder's cost-log options: feature 'portal_tooling' so the portal
+// budget counts the leg, metadata.portal_key_id so the per-key sum does.
+function portalLegOpts(viewer: PortalIdentity): { feature: string; metadata?: Record<string, unknown> } | undefined {
+  if (viewer.tier === 'admin') return undefined;
+  return { feature: 'portal_tooling', metadata: portalKeyMetadata(viewer) };
+}
+
 export async function buildToolingPackAction(
   kind: string,
   params: Record<string, unknown>
 ): Promise<{ ok: true; pack: ToolingPack } | { ok: false; error: string }> {
-  await requirePortal();
+  const identity = await requirePortal();
   if (!(TOOLING_REPORT_KINDS as readonly string[]).includes(kind)) {
     return { ok: false, error: 'Bad report kind.' };
   }
-  const admin = await isAdmin();
+  const admin = identity.tier === 'admin';
   const viewer: ToolingViewer = { admin, portal: true };
   const k = kind as ToolingReportKind;
   try {
@@ -73,16 +93,13 @@ export async function generateToolingSectionsAction(
   pack: ToolingPack,
   steering: string | null
 ): Promise<{ ok: true; sections: ToolingSectionsOut } | { ok: false; error: string }> {
-  await requirePortal();
+  const viewer = await requirePortal();
   if (!isValidToolingPack(pack)) return { ok: false, error: 'No pack. Build the report pack first.' };
-  const admin = await isAdmin();
-  if (!admin) {
-    const budget = await checkPortalBudget();
-    if (!budget.ok) return { ok: false, error: budgetMessage(budget) };
-  }
+  const budgetError = await portalBudgetError(viewer);
+  if (budgetError) return { ok: false, error: budgetError };
   const steer = String(steering ?? '').trim().slice(0, 1500) || null;
   try {
-    const sections = await generateToolingSections(pack, steer, admin ? undefined : { feature: 'portal_tooling' });
+    const sections = await generateToolingSections(pack, steer, portalLegOpts(viewer));
     return { ok: true, sections };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'section generation error' };
@@ -93,13 +110,10 @@ export async function generateToolingCloseAction(
   pack: ToolingPack,
   sections: { readingMd: string; connectionsMd: string; watchMd: string }
 ): Promise<{ ok: true; bottomLineHtml: string; title: string; dropped: string[] } | { ok: false; error: string }> {
-  await requirePortal();
+  const viewer = await requirePortal();
   if (!isValidToolingPack(pack)) return { ok: false, error: 'No pack. Build the report pack first.' };
-  const admin = await isAdmin();
-  if (!admin) {
-    const budget = await checkPortalBudget();
-    if (!budget.ok) return { ok: false, error: budgetMessage(budget) };
-  }
+  const budgetError = await portalBudgetError(viewer);
+  if (budgetError) return { ok: false, error: budgetError };
   try {
     const out = await generateToolingClose(
       pack,
@@ -108,7 +122,7 @@ export async function generateToolingCloseAction(
         connectionsMd: String(sections?.connectionsMd ?? ''),
         watchMd: String(sections?.watchMd ?? ''),
       },
-      admin ? undefined : { feature: 'portal_tooling' }
+      portalLegOpts(viewer)
     );
     return { ok: true, ...out };
   } catch (e) {

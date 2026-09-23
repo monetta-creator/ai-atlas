@@ -3,6 +3,7 @@
 // renderBriefHtml loads under plain-Node type stripping for the test script.
 
 import type { AgentBrief, AgentFinding, AgentPrefs, BriefMemo } from './types';
+import { sendEmail } from '../email/resend.ts';
 
 const DEFAULT_BASE = 'https://ai-atlas-kevin-michel-s-projects.vercel.app';
 
@@ -93,34 +94,10 @@ export function renderBriefHtml(day: string, memo: BriefMemo, findings: AgentFin
 </body></html>`;
 }
 
+// Delegates to the shared sender (lib/email/resend.ts); kept as a named
+// export so the runner and the resend-on-demand action read the same.
 export async function sendBriefEmail(opts: { to: string; subject: string; html: string }): Promise<{ ok: boolean; id?: string; error?: string }> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey || !opts.to?.trim()) return { ok: false, error: 'Resend not configured' };
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: process.env.AGENT_EMAIL_FROM || 'Atlas Agent <onboarding@resend.dev>',
-        to: [opts.to],
-        subject: opts.subject,
-        html: opts.html,
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      return { ok: false, error: `Resend ${res.status}: ${body.slice(0, 300)}` };
-    }
-    const json = (await res.json().catch(() => ({}))) as { id?: string };
-    return { ok: true, id: json.id };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'sendBriefEmail failed' };
-  } finally {
-    clearTimeout(timer);
-  }
+  return sendEmail({ ...opts, from: process.env.AGENT_EMAIL_FROM || 'Atlas Agent <onboarding@resend.dev>' });
 }
 
 // Referenced by callers that want the brief's subject line consistent

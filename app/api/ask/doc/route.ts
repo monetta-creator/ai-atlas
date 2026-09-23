@@ -1,11 +1,14 @@
 import type { NextRequest } from 'next/server';
 import { q } from '@/lib/db';
-import { isAdmin, isPortal } from '@/lib/auth';
+import { isAdmin } from '@/lib/auth';
+import { identityFromRequest } from '@/lib/portal/identity';
 
 // The Ask workspace's document viewer: GET /api/ask/doc?signal=<uuid> returns
 // the retained article text behind a signal so keyed readers can read the
 // source beside the answer. Allow-listed in proxy.ts (the matcher does not
 // exempt /api) but gated HERE: admin or portal-key holders only, never guests.
+// The gate is the authoritative identity (lib/portal/identity.ts), so a
+// revoked or expired key is refused at once whatever its cookie says.
 // The text is the internal working corpus (sources.raw_text from manual
 // ingest, else the pipeline's cached page text) and is never public.
 export const dynamic = 'force-dynamic';
@@ -22,7 +25,8 @@ interface DocRow {
 }
 
 export async function GET(req: NextRequest): Promise<Response> {
-  if (!(await isPortal())) {
+  const identity = await identityFromRequest(req);
+  if (!identity.active) {
     return Response.json({ error: 'Locked.' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
   }
   const id = req.nextUrl.searchParams.get('signal') ?? '';

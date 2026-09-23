@@ -11,6 +11,7 @@ import { checkIntelBudget } from '@/lib/intel/budget';
 import { cronLabel } from '@/lib/scan/handoff';
 import vercelConfig from '@/vercel.json';
 import IntelConsole from '@/components/intel/IntelConsole';
+import EntityLogo from '@/components/EntityLogo';
 import IntelEnabledToggle from '@/components/intel/IntelEnabledToggle';
 import CompanyToggle from '@/components/intel/CompanyToggle';
 import SynthesizeButton from '@/components/intel/SynthesizeButton';
@@ -332,6 +333,7 @@ export default async function IntelPage() {
                         style={{ ...panel, opacity: c.active ? 1 : 0.55 }}
                       >
                         <div className="flex items-center flex-wrap gap-3 text-xs" style={{ color: 'var(--dim)' }}>
+                          <EntityLogo name={c.name} domain={c.domain} size={20} />
                           <span style={{ color: 'var(--ink)' }}>{c.name}</span>
                           <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--faint-ink)' }}>{c.slug}</span>
                           {c.niche && <span style={{ color: 'var(--faint-ink)' }}>{c.niche}</span>}
@@ -536,7 +538,12 @@ export default async function IntelPage() {
                 <tbody>
                   {companyYield.map((c) => (
                     <tr key={c.slug} style={{ color: 'var(--dim)', opacity: c.active ? 1 : 0.5 }}>
-                      <td style={{ padding: '4px 10px', borderBottom: '1px solid var(--line)' }}>{c.name}</td>
+                      <td style={{ padding: '4px 10px', borderBottom: '1px solid var(--line)' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          <EntityLogo name={c.name} domain={c.domain} size={16} />
+                          {c.name}
+                        </span>
+                      </td>
                       <td style={{ padding: '4px 10px', borderBottom: '1px solid var(--line)' }}>{TIER_LABEL[c.tier]}</td>
                       <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{c.itemsByFeed}</td>
                       <td style={{ padding: '4px 10px', textAlign: 'right', borderBottom: '1px solid var(--line)' }}>{c.itemsBySearch}</td>

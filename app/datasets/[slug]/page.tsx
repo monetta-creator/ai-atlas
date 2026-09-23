@@ -1,12 +1,13 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { isAdmin, isPortal } from '@/lib/auth';
+import { getPortalIdentity } from '@/lib/portal/identity';
 import { SIGNAL_LENSES } from '@/lib/datasets/core';
 import { getDataset } from '@/lib/datasets/registry';
 import PageTop from '@/components/PageTop';
 import DatasetSchemaTable from '@/components/datasets/DatasetSchemaTable';
 import DatasetExplorer from '@/components/datasets/DatasetExplorer';
 import DatasetPreview from '@/components/datasets/DatasetPreview';
+import RenewalNotice from '@/components/portal/RenewalNotice';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Dataset · The AI Atlas' };
@@ -22,7 +23,9 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
   const def = getDataset(slug);
   if (!def) notFound();
 
-  const [admin, portal] = await Promise.all([isAdmin(), isPortal()]);
+  const identity = await getPortalIdentity();
+  const admin = identity.tier === 'admin';
+  const portal = identity.active;
   const unlocked = !def.keyGated || portal;
   const showExplorer = !def.heavy && unlocked;
   const showPreview = def.heavy && unlocked;
@@ -43,13 +46,18 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
               <a className="btn btn--ghost btn--sm" href={`/api/datasets/${def.slug}?format=json`}>JSON</a>
             </>
           ) : (
-            <Link className="btn btn--primary btn--sm" href="/ask">
-              Unlock with an access key
-            </Link>
+            <>
+              <Link className="btn btn--ghost btn--sm" href="/datasets/request">Request access</Link>
+              <Link className="btn btn--primary btn--sm" href="/ask">
+                Unlock with an access key
+              </Link>
+            </>
           )}
         >
           /api/datasets/{def.slug} · {def.columns.length} columns{def.keyGated ? ' · access key required' : ''}
         </PageTop>
+
+        {def.keyGated && <RenewalNotice identity={identity} style={{ marginBottom: 20 }} />}
 
         <p className="text-sm" style={{ color: 'var(--dim)', marginBottom: 10 }}>{def.description}</p>
 
@@ -88,7 +96,8 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
             ) : (
               <p style={{ fontSize: 13, color: 'var(--faint-ink)', maxWidth: 640, lineHeight: 1.7 }}>
                 This export needs an access key: the {def.heavy ? 'preview' : 'explorer'} and the
-                download sit behind it. Unlock once at the Ask page and both open up.
+                download sit behind it. Unlock once at the Ask page and both open up, or{' '}
+                <Link href="/datasets/request">request an access key</Link>.
               </p>
             )}
           </div>

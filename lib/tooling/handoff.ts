@@ -93,7 +93,7 @@ Four files, downloaded independently:
   download (re-import replaces; upsert makes that idempotent).
 - tooling-catalog: the same corpus filtered to cataloged products only, with
   no agent, dossier, deep dive, or curation column. This is the one file
-  that needs no team key; the other three do.
+  that needs no access key; the other three do.
 
 Identity is stable across a product's life: id never changes, slug rarely
 changes (only on a deliberate rename), and url can change at any time (a
@@ -170,7 +170,7 @@ ${fieldTable(features)}
 Cataloged products only, the same floor the public /tooling hub renders,
 with no agent score, dossier, deep dive, status, pinned flag, origin, or
 found_url column: none of that exists in this file at all. This is the one
-tooling file that needs no team key; download it for a guest-safe, purely
+tooling file that needs no access key; download it for a guest-safe, purely
 descriptive read of the market.
 
 \`\`\`json

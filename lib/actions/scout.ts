@@ -6,7 +6,8 @@ import { isAdmin } from '../auth';
 import * as m from '../mutations';
 import {
   getScoutVerticals, getCompany, getCompanyDocumentText } from '../data';
-import { checkPortalBudget } from '../portal/budget';
+import { checkKeyBudget, checkPortalBudget } from '../portal/budget';
+import type { PortalIdentity } from '../portal/identity';
 import { discoverScoutBatch } from '../scout/discovery';
 import { scoutPlan, type ScoutBatchRef } from '../scout/core';
 import { scoreScoutChunk } from '../scout/agent';
@@ -17,7 +18,7 @@ import { scanCompetitors } from '../scout/competitors';
 import type {
   CompanyStatus, CompanyStage, CompanyEventKind,
 } from '../types';
-import { UUID_RE, requireAdmin, requirePortal, str } from './shared';
+import { UUID_RE, portalKeyMetadata, requireAdmin, requirePortal, str } from './shared';
 
 // ---- Startup Scout (/scout; migration 0034) ---------------------------------
 const COMPANY_STATUSES: CompanyStatus[] = ['queued', 'tracked', 'dismissed', 'archived'];
@@ -220,25 +221,33 @@ export async function acceptScoutRecommendationsAction(verdict: string): Promise
 
 // ---- Scout research tools (admin + portal, budget-metered) ------------------
 // THE GATE TEMPLATE for every portal-permitted scout action:
-//   1. requirePortal() (admits admins); compute admin for the feature slug.
+//   1. requirePortal() (admits admins, refuses a revoked/expired key) returns
+//      the identity; compute admin for the feature slug.
 //   2. Validate inputs; steering is a one-off instruction, never persisted.
 //   3. Portal viewers may only touch companies they can SEE (tracked/queued);
 //      the failure is the SAME generic error as an unknown id, so a keyholder
 //      cannot probe for dismissed targets.
-//   4. Portal calls pass the daily budget check first.
+//   4. Portal calls pass the daily budget checks first: the portal-wide one
+//      and, for a per-person key, that key's own cap (checkKeyBudget).
 //   5. Feature slug: admin work logs per-tool; portal work logs 'portal_scout'
-//      (summed by checkPortalBudget), tool kept in metadata.
+//      (summed by checkPortalBudget), tool kept in metadata, and a per-person
+//      key's calls carry metadata.portal_key_id (portalKeyMetadata) so the
+//      per-key sum and the /access console see them.
 
 const GENERIC_TARGET_ERROR = 'Unknown company.';
 
-async function gateScoutTarget(id: string, admin: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
+async function gateScoutTarget(id: string, viewer: PortalIdentity): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!UUID_RE.test(id)) return { ok: false, error: GENERIC_TARGET_ERROR };
-  if (!admin) {
+  if (viewer.tier !== 'admin') {
     const visible = await getCompany(id, { admin: false, portal: true });
     if (!visible) return { ok: false, error: GENERIC_TARGET_ERROR };
     const budget = await checkPortalBudget();
     if (!budget.ok) {
       return { ok: false, error: 'The team daily AI budget is spent. It resets at midnight UTC.' };
+    }
+    if (viewer.tier === 'key' && viewer.keyId) {
+      const own = await checkKeyBudget(viewer.keyId);
+      if (!own.ok) return { ok: false, error: 'Your access key has reached its daily budget. It resets at midnight UTC.' };
     }
   }
   return { ok: true };
@@ -247,13 +256,13 @@ async function gateScoutTarget(id: string, admin: boolean): Promise<{ ok: true }
 export async function intelSweepAction(id: string, steering: string): Promise<{
   ok: boolean; filled?: string[]; events?: number; skipped?: number; error?: string;
 }> {
-  await requirePortal();
-  const admin = await isAdmin();
-  const gate = await gateScoutTarget(id, admin);
+  const viewer = await requirePortal();
+  const admin = viewer.tier === 'admin';
+  const gate = await gateScoutTarget(id, viewer);
   if (!gate.ok) return { ok: false, error: gate.error };
   const steer = String(steering ?? '').trim().slice(0, 1000) || null;
   try {
-    const r = await runIntelSweep(id, steer, admin ? 'scout_intel' : 'portal_scout');
+    const r = await runIntelSweep(id, steer, admin ? 'scout_intel' : 'portal_scout', portalKeyMetadata(viewer));
     revalidatePath('/scout');
     return { ok: true, filled: r.filled, events: r.eventsAdded, skipped: r.eventsSkipped };
   } catch (e) {
@@ -267,9 +276,9 @@ export async function intelSweepAction(id: string, steering: string): Promise<{
 export async function extractCompanyDocAction(
   companyId: string, filename: string, text: string, steering: string
 ): Promise<{ ok: boolean; filled?: string[]; events?: number; skipped?: number; error?: string }> {
-  await requirePortal();
-  const admin = await isAdmin();
-  const gate = await gateScoutTarget(companyId, admin);
+  const viewer = await requirePortal();
+  const admin = viewer.tier === 'admin';
+  const gate = await gateScoutTarget(companyId, viewer);
   if (!gate.ok) return { ok: false, error: gate.error };
   const body = String(text ?? '');
   if (body.length < 200) return { ok: false, error: 'The document text is too short to read.' };
@@ -281,7 +290,7 @@ export async function extractCompanyDocAction(
       company_id: companyId, filename: name, origin: admin ? 'admin' : 'portal', text: body,
     });
     try {
-      const r = await extractFromDocument(companyId, docId, steer, admin ? 'scout_doc' : 'portal_scout');
+      const r = await extractFromDocument(companyId, docId, steer, admin ? 'scout_doc' : 'portal_scout', portalKeyMetadata(viewer));
       revalidatePath('/scout');
       return { ok: true, filled: r.filled, events: r.eventsAdded, skipped: r.eventsSkipped };
     } catch (e) {
@@ -300,16 +309,16 @@ export async function extractCompanyDocAction(
 export async function reExtractDocAction(docId: string, steering: string): Promise<{
   ok: boolean; filled?: string[]; events?: number; skipped?: number; error?: string;
 }> {
-  await requirePortal();
-  const admin = await isAdmin();
+  const viewer = await requirePortal();
+  const admin = viewer.tier === 'admin';
   if (!UUID_RE.test(docId)) return { ok: false, error: GENERIC_TARGET_ERROR };
   const doc = await getCompanyDocumentText(docId);
   if (!doc) return { ok: false, error: GENERIC_TARGET_ERROR };
-  const gate = await gateScoutTarget(doc.company_id, admin);
+  const gate = await gateScoutTarget(doc.company_id, viewer);
   if (!gate.ok) return { ok: false, error: gate.error };
   const steer = String(steering ?? '').trim().slice(0, 1000) || null;
   try {
-    const r = await extractFromDocument(doc.company_id, docId, steer, admin ? 'scout_doc' : 'portal_scout');
+    const r = await extractFromDocument(doc.company_id, docId, steer, admin ? 'scout_doc' : 'portal_scout', portalKeyMetadata(viewer));
     revalidatePath('/scout');
     return { ok: true, filled: r.filled, events: r.eventsAdded, skipped: r.eventsSkipped };
   } catch (e) {

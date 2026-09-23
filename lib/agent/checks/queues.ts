@@ -2,7 +2,9 @@ import { one } from '../../db';
 import {
   getPipelinePrefs, getDraftBacklogStats, getDedupeScan, getToolingHealth, getToolingNavCount,
   getTickets, listGeneratedReports, getArgumentGapScan, getConceptGapScan, getRuns,
+  getPendingAccessCount, getOldestPendingAccessDays, listKeysExpiringWithin,
 } from '../../data';
+import { expiresInDays } from '../../portal/keys';
 import { remedyRef } from '../remedies';
 import { daysSince } from '../time';
 import type { AgentCheck, FindingInput, Severity } from '../types';
@@ -297,6 +299,54 @@ const pipelineCoverageMisses: AgentCheck = {
   },
 };
 
+// Access requests waiting on the maintainer (migration 0060). A person asked
+// for a key and heard nothing: warn from the first pending request, high once
+// the oldest has waited over 3 days. No remedy: issuing a key is a human call.
+const accessRequestsPending: AgentCheck = {
+  key: 'access.requests_pending',
+  title: 'Access requests pending',
+  domain: 'queues',
+  run: async () => {
+    const [count, oldestDays] = await Promise.all([getPendingAccessCount(), getOldestPendingAccessDays()]);
+    if (count === 0) return [];
+    const oldest = Math.floor(oldestDays ?? 0);
+    const severity: Severity = oldest > 3 ? 'high' : 'warn';
+    return [{
+      key: 'access.requests_pending',
+      checkKey: 'access.requests_pending',
+      severity,
+      title: `${count} access request${count === 1 ? '' : 's'} pending, oldest ${oldest} day${oldest === 1 ? '' : 's'}`,
+      detail: `${count} person${count === 1 ? ' has' : 's have'} asked for an access key and ${count === 1 ? 'is' : 'are'} waiting on a decision, the oldest for ${oldest} day${oldest === 1 ? '' : 's'}. Approve (which issues and emails a key) or decline on the access console.`,
+      metric: { pending: count, oldestDays: oldest },
+      href: '/access',
+      remedy: null,
+    }];
+  },
+};
+
+// Keys about to lapse: an informational heads-up so a renewal lands before
+// a colleague's downloads start returning 401.
+const accessKeysExpiring: AgentCheck = {
+  key: 'access.keys_expiring',
+  title: 'Access keys expiring soon',
+  domain: 'queues',
+  run: async (ctx) => {
+    const keys = await listKeysExpiringWithin(7);
+    if (!keys.length) return [];
+    const named = keys.slice(0, 5).map((k) => `${k.name} (${expiresInDays(k.expires_at, ctx.now)}d)`).join(', ');
+    return [{
+      key: 'access.keys_expiring',
+      checkKey: 'access.keys_expiring',
+      severity: 'info',
+      title: `${keys.length} access key${keys.length === 1 ? '' : 's'} expiring within 7 days`,
+      detail: `${named}${keys.length > 5 ? ` and ${keys.length - 5} more` : ''}. Renew on the access console before the holder's downloads and Ask turns start failing; an expired key keeps its saved views.`,
+      metric: { count: keys.length, keys: keys.map((k) => ({ id: k.id, name: k.name, expiresAt: k.expires_at })) },
+      href: '/access',
+      remedy: null,
+    }];
+  },
+};
+
 export const QUEUE_CHECKS: AgentCheck[] = [
   draftsBacklog,
   draftsPromotionDue,
@@ -308,4 +358,6 @@ export const QUEUE_CHECKS: AgentCheck[] = [
   reportsUnpublished,
   gapsStaleRecs,
   pipelineCoverageMisses,
+  accessRequestsPending,
+  accessKeysExpiring,
 ];

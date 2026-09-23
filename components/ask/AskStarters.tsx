@@ -20,7 +20,7 @@ export default function AskStarters({
       <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--dim)', maxWidth: 560, margin: 0 }}>
         Grounded answers over everything the Atlas tracks: signals, claims and their evidence,
         concepts, theses, and the retained article text. Every reference is cited and links back
-        to its record{locked ? '. Unlock below with the team key to start.' : '.'}
+        to its record{locked ? '. Unlock below with an access key to start.' : '.'}
       </p>
       <ExamplePill onPick={onPick} />
       <StartHere variant="link" onPick={onPick} />

@@ -48,7 +48,7 @@ const CORE: Record<string, PageInfoContent> = {
     sections: [
       {
         heading: 'What is here',
-        body: 'Each dataset page shows its schema, a methodology note, a preview you can filter and group in the browser, and download links. Public datasets are cached at the edge; the key-gated ones (full article text, the firewall exports) need the team key.',
+        body: 'Each dataset page shows its schema, a methodology note, a preview you can filter and group in the browser, and download links. Public datasets are cached at the edge; the key-gated ones (full article text, the firewall exports) need an access key.',
       },
       {
         heading: 'Guest safety',

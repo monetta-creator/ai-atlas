@@ -76,7 +76,7 @@ export async function saveGeneratedReport(input: {
   kind:
     | 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup'
     | 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features'
-    | 'edition';
+    | 'edition' | 'intel_deck';
   subject: string | null;
   title: string;
   scope_from: string | null;

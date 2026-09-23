@@ -35,7 +35,7 @@ export async function runDeepDive(
   productId: string,
   steering: string | null,
   feature: 'tooling_deepdive' | 'portal_tooling',
-  opts: { runId?: string | null; timeoutMs?: number } = {}
+  opts: { runId?: string | null; timeoutMs?: number; metadata?: Record<string, unknown> } = {}
 ): Promise<{ ok: true; eventsAdded: number } | { ok: false; error: string }> {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -115,7 +115,7 @@ Run web searches for its strengths and weaknesses, pricing, compliance and secur
       model: MODEL,
       usage: msg.usage,
       wallMs: Date.now() - t0,
-      metadata: { tooling_run: opts.runId ?? null, product_id: productId, tool: 'deepdive' },
+      metadata: { ...opts.metadata, tooling_run: opts.runId ?? null, product_id: productId, tool: 'deepdive' },
     });
 
     const tu = msg.content.find(

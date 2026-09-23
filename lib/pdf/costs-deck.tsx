@@ -1,6 +1,7 @@
 import {
-  renderToBuffer, Document, Page, View, Text, StyleSheet, Svg, Rect, Line, Link,
+  renderToBuffer, Document, Page, View, Text, StyleSheet, Svg, Rect, Line, Link, Image,
 } from '@react-pdf/renderer';
+import { monogram } from '@/lib/logo';
 import type { ReactNode } from 'react';
 import type { CostDeck, DeckSlide, DeckStat } from '@/lib/costs-deck';
 import { registerFonts, COBALT, INK, DIM, LINE, PdfFooter, StatBand } from './shell';
@@ -551,6 +552,116 @@ function BulletsSlide({ slide }: { slide: Extract<DeckSlide, { kind: 'bullets' }
   );
 }
 
+// ---------------------------------------------------------- company
+
+// Rows per column on the PDF company slide: five headlines or facts fit the
+// clipped 296pt column at these sizes; the web stage shows six.
+const PDF_ROWS = 5;
+
+const co = StyleSheet.create({
+  head: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 10 },
+  logo: { width: 40, height: 40, borderRadius: 6 },
+  mono: { width: 40, height: 40, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  monoText: { fontFamily: 'Schibsted', fontWeight: 700, fontSize: 15 },
+  kicker: { fontFamily: 'JetBrains', fontSize: 8, letterSpacing: 1.2, textTransform: 'uppercase', color: COBALT, marginBottom: 2 },
+  title: { fontFamily: 'Anton', fontSize: 26, color: INK, lineHeight: 1.15 },
+  meta: { fontFamily: 'JetBrains', fontSize: 8, color: DIM, marginTop: 3 },
+  // Fixed-height, clipped: s.body is content-sized, so a flex: 1 child here
+  // measures 0 tall and every row paints on one line (seen on the first
+  // rendered deck). 296pt leaves room for the head, the sentence and the
+  // takeaway on the 540pt page; the columns clip instead of spilling onto a
+  // second page.
+  body: { flexDirection: 'row', gap: 22, height: 296, overflow: 'hidden' },
+  col: { flex: 1, overflow: 'hidden' },
+  h: { fontFamily: 'JetBrains', fontSize: 7.5, letterSpacing: 1, textTransform: 'uppercase', color: DIM, marginTop: 8, marginBottom: 4, paddingBottom: 3, borderBottomWidth: 0.6, borderBottomColor: LINE },
+  hed: { fontFamily: 'Schibsted', fontSize: 10, color: INK, lineHeight: 1.3 },
+  hedLink: { fontFamily: 'Schibsted', fontSize: 10, color: COBALT, textDecoration: 'none', lineHeight: 1.3 },
+  itemMeta: { fontFamily: 'JetBrains', fontSize: 7, color: DIM, marginBottom: 5 },
+  fact: { fontFamily: 'Schibsted', fontSize: 9.5, color: INK, lineHeight: 1.35, marginBottom: 3 },
+  factMeta: { fontFamily: 'JetBrains', fontSize: 7, color: DIM },
+  metric: { flexDirection: 'row', gap: 8, marginBottom: 3 },
+  metricL: { fontFamily: 'Schibsted', fontSize: 9, color: DIM, flex: 1 },
+  metricV: { fontFamily: 'JetBrains', fontSize: 9, color: INK },
+  metricD: { fontFamily: 'JetBrains', fontSize: 9, color: COBALT },
+  empty: { fontFamily: 'Schibsted', fontSize: 9.5, color: DIM, fontStyle: 'italic' },
+  sentence: { fontFamily: 'Schibsted', fontSize: 11, color: INK, lineHeight: 1.4, marginTop: 8, paddingTop: 8, borderTopWidth: 0.6, borderTopColor: LINE },
+  sentenceLink: { color: COBALT, textDecoration: 'none' },
+});
+
+// Its own Page (not SlideBody): the head row carries the kicker and title
+// beside the mark, so the frame's kicker/rule/title stack would print empty.
+function CompanySlide({ slide }: { slide: Extract<DeckSlide, { kind: 'company' }> }): ReactNode {
+  const mono = monogram(slide.title);
+  return (
+    <Page size={PAGE_SIZE} style={s.page}>
+      <View style={s.body} wrap={false}>
+      <View style={co.head} wrap={false}>
+        {slide.logoDataUri ? (
+          // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image takes no alt; the mark is decorative
+          <Image src={slide.logoDataUri} style={co.logo} />
+        ) : (
+          <View style={[co.mono, { backgroundColor: mono.bgHex }]}>
+            <Text style={[co.monoText, { color: mono.fgHex }]}>{mono.initials}</Text>
+          </View>
+        )}
+        <View>
+          <Text style={co.kicker}>{slide.kicker}</Text>
+          <Text style={co.title}>{slide.title}</Text>
+          <Text style={co.meta}>{[slide.tier, slide.ticker, slide.domain].filter(Boolean).join(' · ')}</Text>
+        </View>
+      </View>
+      <View style={co.body}>
+        <View style={co.col}>
+          <Text style={co.h}>The day</Text>
+          {slide.items.length === 0 && <Text style={co.empty}>No new items in the window.</Text>}
+          {slide.items.slice(0, PDF_ROWS).map((it, i) => (
+            <View key={i} wrap={false}>
+              <Link src={it.url} style={co.hedLink}>{it.headline}</Link>
+              <Text style={co.itemMeta}>{it.meta}</Text>
+            </View>
+          ))}
+          {slide.filings.length > 0 && <Text style={co.h}>Filings</Text>}
+          {slide.filings.map((f, i) => (
+            <View key={`f${i}`} wrap={false}><Link src={f.url} style={co.hedLink}>{f.headline}</Link></View>
+          ))}
+        </View>
+        <View style={co.col}>
+          {slide.facts.length > 0 && <Text style={co.h}>Facts extracted</Text>}
+          {slide.facts.slice(0, PDF_ROWS).map((f, i) => (
+            <View key={i} wrap={false}>
+              <Text style={co.fact}>{f.text}</Text>
+              <Text style={co.factMeta}>{f.meta}</Text>
+            </View>
+          ))}
+          {slide.metrics.length > 0 && <Text style={co.h}>Metrics</Text>}
+          {slide.metrics.map((m, i) => (
+            <View key={i} style={co.metric} wrap={false}>
+              <Text style={co.metricL}>{m.label}</Text>
+              <Text style={co.metricV}>{m.value}</Text>
+              {m.delta ? <Text style={co.metricD}>{m.delta}</Text> : null}
+            </View>
+          ))}
+        </View>
+      </View>
+      {slide.sentence && (
+        <Text style={co.sentence}>
+          {slide.sentence.map((seg, i) => seg.href
+            ? <Link key={i} src={seg.href} style={co.sentenceLink}>{seg.text}</Link>
+            : <Text key={i}>{seg.text}</Text>)}
+        </Text>
+      )}
+      </View>
+      {slide.takeaway ? (
+        <View style={s.takeawayAbsolute} wrap={false}>
+          <Text style={s.takeawayLabel}>Takeaway</Text>
+          <Text style={s.takeawayText}>{slide.takeaway}</Text>
+        </View>
+      ) : null}
+      <DeckFooter />
+    </Page>
+  );
+}
+
 // ---------------------------------------------------------- price-compare
 
 function PriceCompareSlide({ slide }: { slide: Extract<DeckSlide, { kind: 'price-compare' }> }): ReactNode {
@@ -636,6 +747,7 @@ function SlideForKind({ slide }: { slide: DeckSlide }): ReactNode {
     case 'divider': return <DividerSlide slide={slide} />;
     case 'matrix': return <MatrixSlide slide={slide} />;
     case 'bullets': return <BulletsSlide slide={slide} />;
+    case 'company': return <CompanySlide slide={slide} />;
     case 'price-compare': return <PriceCompareSlide slide={slide} />;
     default: {
       const exhaustive: never = slide;

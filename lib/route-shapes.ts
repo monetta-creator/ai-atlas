@@ -47,5 +47,11 @@ export function isMalformedDetailPath(pathname: string): boolean {
     if (!seg || seg === 'archive' || seg === 'desk') return false;
     return !isRealDay(seg);
   }
+  // The company intel deck: /intel/deck (latest) and /intel/deck/<day>[/pdf].
+  if (path.startsWith('/intel/deck/')) {
+    const seg = path.slice('/intel/deck/'.length).split('/')[0];
+    if (!seg || seg === 'none') return false; // 'none' = the empty-state plate /intel/deck redirects to
+    return !isRealDay(seg);
+  }
   return false;
 }

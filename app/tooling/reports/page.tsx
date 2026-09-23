@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { isAdmin, isPortal } from '@/lib/auth';
+import { getPortalIdentity } from '@/lib/portal/identity';
 import { SHEET_KIND_LABEL, dateLabel } from '@/lib/format';
 import { getToolingCategories, listToolingReports } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
@@ -7,6 +7,7 @@ import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ToolingUnlock from '@/components/tooling/ToolingUnlock';
 import ToolingReportConsole from '@/components/tooling/ToolingReportConsole';
+import RenewalNotice from '@/components/portal/RenewalNotice';
 
 export const dynamic = 'force-dynamic';
 // Hosts the pack -> sections -> close -> save chain, each its own bounded
@@ -21,7 +22,9 @@ export const metadata = { title: 'Tooling reports · The AI Atlas' };
 // visitor with neither the admin session nor the portal cookie sees the
 // inline unlock panel instead of the console (never a /login bounce).
 export default async function ToolingReportsPage() {
-  const [admin, portal, { editing, txt }] = await Promise.all([isAdmin(), isPortal(), getEditContext()]);
+  const [identity, { editing, txt }] = await Promise.all([getPortalIdentity(), getEditContext()]);
+  const admin = identity.tier === 'admin';
+  const portal = identity.active;
 
   const title = (
     <Editable
@@ -65,7 +68,11 @@ export default async function ToolingReportsPage() {
               </div>
             </>
           )}
+          <RenewalNotice identity={identity} style={{ marginBottom: 12 }} />
           <ToolingUnlock />
+          <p style={{ marginTop: 14, fontSize: 12.5, color: 'var(--faint-ink)' }}>
+            No key yet? <Link href="/datasets/request">Request an access key</Link>.
+          </p>
         </section>
       </>
     );

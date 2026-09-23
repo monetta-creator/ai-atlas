@@ -28,7 +28,7 @@ export interface ResolvedLane {
 
 export async function resolveLane(
   msgs: AskWireMessage[],
-  opts: { mode: AskMode; tagStart?: number; classifyFeature?: string },
+  opts: { mode: AskMode; tagStart?: number; classifyFeature?: string; classifyMetadata?: Record<string, unknown> },
 ): Promise<ResolvedLane> {
   const ns = await loadNamespace();
   const latest = msgs[msgs.length - 1].content;
@@ -38,7 +38,7 @@ export async function resolveLane(
       // Passed only when the caller has one: the deep route mints its own tags.
       ...(opts.tagStart === undefined ? {} : { tagStart: opts.tagStart }),
     }),
-    classifyQuestion(latest, beatDescriptionFrom(ns), priorUserTurn(msgs), opts.classifyFeature),
+    classifyQuestion(latest, beatDescriptionFrom(ns), priorUserTurn(msgs), opts.classifyFeature, opts.classifyMetadata),
   ]);
   const lane = decideLane({
     hitCount: ctx.hitCount, maxRank: ctx.maxRank, explicit: ctx.explicit,

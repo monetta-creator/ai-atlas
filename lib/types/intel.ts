@@ -134,4 +134,6 @@ export interface IntelPrefs {
   enabled: boolean;
   enrich_models: string[];         // empty = Haiku baseline
   utility_model: string | null;
+  deck_enabled: boolean;           // the company intel deck (0061)
+  deck_model: string;              // its one narrative call, default GLM
 }

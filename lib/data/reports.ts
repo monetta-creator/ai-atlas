@@ -1,4 +1,5 @@
 import { q, one } from '../db';
+import { PORTAL_ONLY_KINDS } from '../reports/access';
 import type {
   Domain, ConfidenceLabel,
   SignalLens, ReportTouch, SavedReportMeta, Report,
@@ -179,7 +180,7 @@ export function textExcerpt(html: string | null | undefined, max: number): strin
 
 export async function listGeneratedReports(
   publishedOnly: boolean,
-  opts?: { toolingDraftsForPortal?: boolean }
+  opts?: { toolingDraftsForPortal?: boolean; portal?: boolean }
 ): Promise<GeneratedReportMeta[]> {
   // The row-expansion preview projects only the small parts of the stored jsonb:
   // the bottom line (stripped to plain text below, so it carries no links and
@@ -187,10 +188,14 @@ export async function listGeneratedReports(
   // A portal keyholder (not admin) also sees unpublished tooling reports —
   // /tooling/reports's own inline-unlock gate already covers those kinds, so
   // the Report Portal shelf mirrors that visibility instead of hiding them.
+  // Portal-only kinds (lib/reports/access.ts: the company intel deck names
+  // tracked companies) are excluded in SQL unless the viewer holds an access
+  // key or is the admin (publishedOnly=false is the admin's own listing).
+  const guestClause = publishedOnly && !opts?.portal ? ` and kind::text <> all($1::text[])` : '';
   const where = publishedOnly
     ? (opts?.toolingDraftsForPortal
         ? "where (is_published = true or kind::text like 'tooling_%')"
-        : 'where is_published = true')
+        : 'where is_published = true') + guestClause
     : '';
   const rows = await q<GeneratedReportMeta & { bottom_line: string | null }>(
     `select ${GEN_REPORT_META},
@@ -199,7 +204,8 @@ export async function listGeneratedReports(
             pack->'health' as health
        from generated_reports
        ${where}
-      order by generated_at desc, id`
+      order by generated_at desc, id`,
+    guestClause ? [PORTAL_ONLY_KINDS] : []
   );
   return rows.map(({ bottom_line, ...r }) => ({
     ...r,

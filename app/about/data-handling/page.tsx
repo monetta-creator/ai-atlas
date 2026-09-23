@@ -83,7 +83,7 @@ const SECTIONS = [
   {
     id: 'access-tiers',
     heading: 'Access tiers',
-    body: `Three tiers. A guest, with no session at all, sees the public layer: the surfaces above with confidences stripped, published signals only, and the ${DATASET_COUNT - KEY_GATED_COUNT} public datasets. An access key (one shared team key today; per-person keys are planned) unlocks Ask, the ${KEY_GATED_COUNT} key-gated datasets (retained article text, machine-extracted records including items no human has reviewed, agent scores, rigor priors, and dossier fields), tooling reports and drafts, and the Scout research tools and document upload. The admin, one password, sees the personal layer (confidences, rationales, reliability priors), every draft, and the operating consoles.`,
+    body: `Three tiers. A guest, with no session at all, sees the public layer: the surfaces above with confidences stripped, published signals only, and the ${DATASET_COUNT - KEY_GATED_COUNT} public datasets. An access key (per-person, issued by the maintainer on request through the request form, expiring after 90 days unless renewed; a legacy shared key remains during the migration) unlocks Ask, the ${KEY_GATED_COUNT} key-gated datasets (retained article text, machine-extracted records including items no human has reviewed, agent scores, rigor priors, and dossier fields), tooling reports and drafts, and the Scout research tools and document upload. The admin, one password, sees the personal layer (confidences, rationales, reliability priors), every draft, and the operating consoles.`,
   },
   {
     id: 'model-written',
@@ -91,21 +91,23 @@ const SECTIONS = [
     body: (
       <>
         <p>
-          Most of what the models produce is a proposal a human then commits or discards. Six things publish without a
-          human step:
+          Most of what the models produce is a proposal a human then commits or discards. Seven things publish without
+          a human step:
         </p>
         <ul>
           <li>The Daily Edition, written each weekday from what the engines already stored, by default by a GLM model via OpenRouter (the model is a setting).</li>
           <li>The Friday research roundup and the Monday tooling entrants report, both written by Claude Sonnet.</li>
+          <li>The weekday company intel deck, written from the Intel Desk’s collected items, extracted facts, filings, and metric moves; it goes out to access-key holders and the admin only, never guests, since it names the companies the desk tracks.</li>
           <li>High-significance pipeline signal drafts that touch at least one claim, published after a veto window (48 hours by default) unless a human archives them first.</li>
           <li>Tooling products scored at or above the catalog threshold, which enter the public catalog automatically.</li>
           <li>Period reports, which are public as soon as the admin saves one.</li>
         </ul>
         <p>
-          The Daily Edition, the research roundup, the tooling reports, the generated sheets, and the thesis reports
-          pass a citation gate, so a link the records cannot vouch for is stripped. Period reports are edited by the
-          admin before saving; a signal draft’s claim touches are checked against live claim codes but its text is not
-          link-gated. A confidence on the argument map never moves without a human-written rationale.
+          The Daily Edition, the research roundup, the tooling reports, the generated sheets, the thesis reports, and
+          the company intel deck pass a citation gate, so a link the records cannot vouch for is stripped. Period
+          reports are edited by the admin before saving; a signal draft’s claim touches are checked against live claim
+          codes but its text is not link-gated. A confidence on the argument map never moves without a human-written
+          rationale.
         </p>
       </>
     ),

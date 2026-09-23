@@ -8,7 +8,8 @@
 // with no UUID_RE check, a "type:id" target string split by hand, and the
 // duplicate-key error message. Use them instead of re-inlining any of the three.
 
-import { isAdmin, isPortal } from '../auth';
+import { isAdmin } from '../auth';
+import { getPortalIdentity, type PortalIdentity } from '../portal/identity';
 import type {
   Direction, Weight, } from '../types';
 
@@ -16,12 +17,23 @@ export async function requireAdmin() {
   if (!(await isAdmin())) throw new Error('Unauthorized');
 }
 
-// Admin-or-portal gate for the scout research surface: isPortal() admits
-// admins implicitly (lib/auth.ts). Portal-permitted actions ALSO re-check the
-// target company's visibility and the daily budget; see the gate template on
-// intelSweepAction.
-export async function requirePortal() {
-  if (!(await isPortal())) throw new Error('Unauthorized');
+// Admin-or-portal gate for the scout and tooling research surfaces. Resolves
+// the AUTHORITATIVE identity (lib/portal/identity.ts: admin cookie, legacy
+// team key, or a per-person key whose row is still active, so a revoked key
+// is refused at once) and returns it, so the action can stamp its model calls
+// with the key id (metadata.portal_key_id) and check the per-key budget.
+// Portal-permitted actions ALSO re-check the target's visibility and the
+// daily budgets; see the gate template on intelSweepAction.
+export async function requirePortal(): Promise<PortalIdentity> {
+  const id = await getPortalIdentity();
+  if (!id.active) throw new Error('Unauthorized');
+  return id;
+}
+
+// The per-key stamp for a portal-triggered model call: undefined for the
+// admin and the legacy team key (portal-wide budget only).
+export function portalKeyMetadata(id: PortalIdentity): { portal_key_id: string } | undefined {
+  return id.tier === 'key' && id.keyId ? { portal_key_id: id.keyId } : undefined;
 }
 
 export function str(fd: FormData, key: string): string {

@@ -59,9 +59,12 @@ Never use an em dash in any text you write; use a comma or a period instead.`;
 // the question it continues. The classifier sees both; the lane rule then
 // needs no blanket exemption for follow-ups.
 // `feature` is the cost-log slug: the portal route passes its own so the
-// classifier call counts toward the portal's daily budget.
+// classifier call counts toward the portal's daily budget. `metadata` rides
+// onto the cost row (the portal route stamps portal_key_id so the per-key
+// budget sees the classifier call too).
 export async function classifyQuestion(
   question: string, beatDescription: string, prior?: string, feature = 'ask_classify',
+  metadata?: Record<string, unknown>,
 ): Promise<ClassifyResult> {
   const trimmed = question.trim();
   if (!trimmed) return FAIL_OPEN;
@@ -78,6 +81,7 @@ export async function classifyQuestion(
       maxTokens: 200,
       timeoutMs: 6000,
       feature,
+      metadata,
     });
     const beat: Beat = BEATS.includes(out.beat as Beat) ? (out.beat as Beat) : 'atlas';
     const fresh = out.fresh === true || looksFresh(question);
