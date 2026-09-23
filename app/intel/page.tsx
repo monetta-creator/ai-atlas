@@ -73,6 +73,15 @@ export default async function IntelPage() {
   const host = `${hostName.startsWith('localhost') ? 'http' : 'https'}://${hostName}`;
   const allCrons = (vercelConfig as { crons: { path: string; schedule: string }[] }).crons;
   const crons = allCrons.filter((c) => c.path.startsWith('/api/cron/intel'));
+  // The late feed sweep (/api/cron/feeds) is a separate cron shared with scan,
+  // not an intel-prefixed path, so it falls out of the filter above; shown
+  // here for schedule visibility only, kept out of the handoff's `crons` list
+  // since that document is intel's own contract, not the sweep's.
+  const feedsCron = allCrons.find((c) => c.path === '/api/cron/feeds');
+  const scheduleLine = crons
+    .map((c) => `${cronLabel(c.schedule)} (${c.path})`)
+    .concat(feedsCron ? [`${cronLabel(feedsCron.schedule)} (Late feed sweep)`] : [])
+    .join(' · ');
   const latestDay = runs.find((r) => r.status === 'completed')?.day ?? null;
 
   // At-a-glance lines for the download cards: what each dataset is (the
@@ -205,7 +214,7 @@ export default async function IntelPage() {
             <div className="flex items-center gap-3 flex-wrap">
               <IntelEnabledToggle enabled={prefs.enabled} />
               <span className="text-xs" style={{ color: 'var(--dim)' }}>
-                {crons.map((c) => `${cronLabel(c.schedule)} (${c.path})`).join(' · ')}
+                {scheduleLine}
               </span>
             </div>
             <div className="text-xs" style={{ color: 'var(--dim)', marginTop: 12, display: 'grid', gap: 4 }}>

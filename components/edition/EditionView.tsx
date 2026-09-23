@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { SavedEdition } from '@/lib/edition/types';
 import { allowlistForEdition } from '@/lib/edition/pack';
+import { fmtChange } from '@/lib/edition/markets';
 import { enforceCitations } from '@/lib/citations';
 import { dateLabel } from '@/lib/format';
 
@@ -30,6 +31,20 @@ function GoTo({ href, className, children }: { href: string; className?: string;
     <a href={href} target="_blank" rel="noopener noreferrer" className={className}>
       {children}
     </a>
+  );
+}
+
+// A 22-point sparkline of daily closes; server-rendered SVG, no library.
+function Spark({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const w = 56; const h = 16;
+  const min = Math.min(...values); const max = Math.max(...values);
+  const span = max - min || 1;
+  const pts = values.map((v, i) => `${((i / (values.length - 1)) * w).toFixed(1)},${(h - ((v - min) / span) * h).toFixed(1)}`).join(' ');
+  return (
+    <svg className="ed-spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
+      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
   );
 }
 
@@ -69,6 +84,19 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
         ))}
       </div>
 
+      {pack.markets && pack.markets.rows.length > 0 && (
+        <div className="ed-markets" aria-label="Market strip">
+          {pack.markets.rows.map((m) => (
+            <span key={m.symbol} className="ed-market" data-dir={m.changePct > 0 ? 'up' : m.changePct < 0 ? 'down' : 'flat'}>
+              <span className="ed-market-label">{m.label}</span>
+              <Spark values={m.spark} />
+              <span className="ed-market-price">{m.price.toFixed(m.price >= 100 ? 0 : 2)}</span>
+              <span className="ed-market-chg">{fmtChange(m.changePct)}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="ed-body">
         <div className="ed-front">
           {narrative.front.map((item, i) => (
@@ -91,45 +119,63 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
           <p className="ed-kicker">The column</p>
           <h2 className="ed-column-title">{narrative.column.title}</h2>
           {columnHtml && <div className="ed-column-prose" dangerouslySetInnerHTML={{ __html: columnHtml }} />}
-
-          {pack.thingsHappen.length > 0 && (
-            <div className="ed-things">
-              <p className="ed-section-head">Things happen</p>
-              <ul className="ed-things-list">
-                {pack.thingsHappen.map((t) => (
-                  <li key={t.url}>
-                    <GoTo href={t.href ?? t.url}>{t.headline}</GoTo>
-                    <span className="ed-things-meta">
-                      {t.domain}
-                      {t.tier != null && ' · '}
-                      <TierChip tier={t.tier} />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       </div>
 
-      <div className="ed-sections">
-        {pack.companies.length > 0 && (
-          <div>
-            <p className="ed-section-head">Companies</p>
-            {pack.companies.map((co) => (
-              <div key={co.companySlug} className="ed-company">
-                <p className="ed-company-name">{co.companyName}</p>
-                {co.facts.slice(0, 4).map((f, i) => (
-                  <p key={i} className="ed-fact">
-                    {f.fact}{f.valueText ? `: ${f.valueText}` : ''}
-                    {f.url && <GoTo href={f.url}>source</GoTo>}
-                  </p>
-                ))}
+      {pack.thingsHappen.length > 0 && (
+        <section className="ed-things">
+          <p className="ed-section-head">Things happen · {pack.thingsHappen.length}</p>
+          <div className="ed-cardgrid">
+            {pack.thingsHappen.map((t) => (
+              <GoTo key={t.url} href={t.href ?? t.url} className="ed-card">
+                <span className="ed-card-hed">{t.headline}</span>
+                <span className="ed-card-foot">
+                  <span className="ed-card-domain">{t.domain}</span>
+                  <TierChip tier={t.tier} />
+                  <span className="ed-card-arrow" aria-hidden="true">↗</span>
+                </span>
+              </GoTo>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(pack.hn?.length ?? 0) > 0 && (
+        <section className="ed-hn">
+          <p className="ed-section-head">What builders are reading · Hacker News front page</p>
+          <div className="ed-cardgrid">
+            {pack.hn!.map((h) => (
+              <div key={h.hnUrl} className="ed-card ed-card--hn">
+                <GoTo href={h.url ?? h.hnUrl} className="ed-card-hed">{h.title}</GoTo>
+                <span className="ed-card-foot">
+                  <span className="ed-card-domain">{h.points} points</span>
+                  <a href={h.hnUrl} target="_blank" rel="noopener noreferrer" className="ed-card-comments">{h.comments} comments ↗</a>
+                </span>
               </div>
             ))}
           </div>
-        )}
+        </section>
+      )}
 
+      {pack.sources.length > 0 && (
+        <section className="ed-sources">
+          <div className="ed-sources-head">
+            <span className="ed-sources-big">{pack.numbers.outlets}</span>
+            <span className="ed-sources-label">outlets read today<br />across {pack.numbers.itemsRead} items</span>
+          </div>
+          <div className="ed-sources-chips">
+            {pack.sources.map((src) => (
+              <span key={src.domain} className="ed-source-chip">
+                <TierChip tier={src.tier} />
+                <span className="ed-source-domain">{src.domain}</span>
+                <span className="ed-source-count">{src.count}</span>
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="ed-sections">
         {pack.papers.length > 0 && (
           <div>
             <p className="ed-section-head">Research</p>
@@ -167,28 +213,12 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
             <p className="ed-blind-empty">Nothing the desk knows it missed today.</p>
           )}
         </div>
-
-        {pack.sources.length > 0 && (
-          <div>
-            <p className="ed-section-head">Sources</p>
-            <ul className="ed-sources-list">
-              {pack.sources.map((s) => (
-                <li key={s.domain}>
-                  <span className="ed-sources-domain">
-                    <TierChip tier={s.tier} />
-                    {s.domain}
-                  </span>
-                  <span className="ed-sources-count">{s.count}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
 
       <p className="ed-footer">
         Generated {dateLabel(pack.generatedAt)} from {pack.numbers.itemsRead} items the engines stored; every
         link resolves to a stored record or its source.
+        {pack.markets && ` Market prices as of ${new Date(pack.markets.asOf).toISOString().slice(11, 16)} UTC, unofficial feed.`}
         {admin && ` Model: ${narrative.model ?? 'not recorded'}.`}
       </p>
     </div>

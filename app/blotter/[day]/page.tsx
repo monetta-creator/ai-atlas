@@ -7,6 +7,7 @@ import { dateLabel } from '@/lib/format';
 import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import EditionView from '@/components/edition/EditionView';
+import EditionPdfButton from '@/components/edition/EditionPdfButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,6 +55,7 @@ export default async function BlotterDay({ params }: { params: Promise<{ day: st
           infoKey="/blotter/[day]"
           compact
           viewer={{ admin, portal: admin }}
+          action={<EditionPdfButton day={day} />}
         >
           <span className="flex items-center gap-3 flex-wrap">
             {prev ? (

@@ -126,6 +126,13 @@ export async function getScanRun(runId: string): Promise<ScanRun | null> {
   return one<ScanRun>(`select ${RUN_COLUMNS} from scan_runs where id = $1`, [runId]);
 }
 
+// The late feed sweep's lookup (lib/feeds/late-sweep.ts): find the day's row
+// without creating one (createScanRun upserts; a weekday with no morning run
+// yet is left to the agent's findings, not silently started here).
+export async function getScanRunByDay(day: string): Promise<ScanRun | null> {
+  return one<ScanRun>(`select ${RUN_COLUMNS} from scan_runs where day = $1::date`, [day]);
+}
+
 // Run history for the console, with the per-run model spend joined from the
 // cost log via metadata.scan_run (scan calls never set pipeline_run_id: that
 // column is FK'd to pipeline_runs).

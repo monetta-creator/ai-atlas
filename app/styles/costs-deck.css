@@ -187,7 +187,9 @@
 .cdk-bullet-mark { width: 0.9cqw; height: 0.9cqw; margin-top: 0.55cqw; flex: none; background: var(--accent); border-radius: 1px; }
 .cdk-bullet-copy { font-size: 1.6cqw; line-height: 1.5; color: var(--dim); max-width: 84cqw; }
 .cdk-bullet-lead { font-weight: 700; color: var(--ink); }
+a.cdk-bullet-lead { color: var(--accent); text-decoration: none; }
 .cdk-bullet-text { color: var(--dim); }
+.cdk-bullet-meta { font-size: 1.2cqw; color: var(--faint-ink); margin-top: 0.3cqh; }
 
 /* ---- divider slide ---- */
 .cdk-divider { justify-content: center; align-items: center; text-align: center; }

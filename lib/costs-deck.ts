@@ -138,7 +138,7 @@ export type DeckSlide =
       kind: 'bullets';
       kicker: string;
       title: string;
-      bullets: { lead: string; text: string }[];
+      bullets: { lead: string; text: string; href?: string; meta?: string }[];
       takeaway: string;
     }
   | {

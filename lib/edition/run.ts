@@ -37,12 +37,25 @@ export async function runDailyEdition(
   let dropped: string[] = [];
 
   if (budget.ok) {
-    front = await generateFront(pack, prefs.model, prefs.front_items);
-    const columnOut = await generateColumn(pack, front, prefs.model);
-    column = { title: columnOut.title, html: columnOut.html };
-    citedTags = columnOut.cited;
-    dropped = columnOut.dropped;
+    // A malformed model reply (the cheap endpoints do this now and then) must
+    // not cost the day its paper: fall back leg by leg to the deterministic
+    // front and a missing column, and record why.
     model = prefs.model;
+    try {
+      front = await generateFront(pack, prefs.model, prefs.front_items);
+    } catch (e) {
+      front = deterministicFront(pack, prefs.front_items);
+      dropped = [`front leg failed: ${e instanceof Error ? e.message : 'model error'}`];
+    }
+    try {
+      const columnOut = await generateColumn(pack, front, prefs.model);
+      column = { title: columnOut.title, html: columnOut.html };
+      citedTags = columnOut.cited;
+      dropped = [...dropped, ...columnOut.dropped];
+    } catch (e) {
+      column = { title: 'No column today', html: '' };
+      dropped = [...dropped, `column leg failed: ${e instanceof Error ? e.message : 'model error'}`];
+    }
   } else {
     front = deterministicFront(pack, prefs.front_items);
     column = { title: 'No column today', html: '' };

@@ -1,5 +1,5 @@
 import {
-  renderToBuffer, Document, Page, View, Text, StyleSheet, Svg, Rect, Line,
+  renderToBuffer, Document, Page, View, Text, StyleSheet, Svg, Rect, Line, Link,
 } from '@react-pdf/renderer';
 import type { ReactNode } from 'react';
 import type { CostDeck, DeckSlide, DeckStat } from '@/lib/costs-deck';
@@ -205,6 +205,10 @@ const s = StyleSheet.create({
   bulletMark: { width: 6, height: 6, marginTop: 5, marginRight: 12, backgroundColor: COBALT },
   bulletCopy: { flex: 1, fontSize: 11, lineHeight: 1.5, color: DIM },
   bulletLead: { fontWeight: 'bold', color: INK },
+  // A bullet whose lead links out (the edition deck's "go deeper" / source
+  // items): cobalt, bold, no underline beyond the color itself.
+  bulletLeadLink: { fontWeight: 'bold', color: COBALT, textDecoration: 'none' },
+  bulletMeta: { fontSize: 8, color: DIM, marginTop: 2, lineHeight: 1.3 },
 });
 
 // -------------------------------------------------------------- slide shell
@@ -528,11 +532,18 @@ function BulletsSlide({ slide }: { slide: Extract<DeckSlide, { kind: 'bullets' }
         {slide.bullets.map((b, i) => (
           <View key={i} style={s.bulletRow} wrap={false}>
             <View style={s.bulletMark} />
-            <Text style={s.bulletCopy}>
-              <Text style={s.bulletLead}>{b.lead}</Text>
-              {' '}
-              {b.text}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={s.bulletCopy}>
+                {b.href ? (
+                  <Link src={b.href} style={s.bulletLeadLink}>{b.lead}</Link>
+                ) : (
+                  <Text style={s.bulletLead}>{b.lead}</Text>
+                )}
+                {b.text ? ' ' : ''}
+                {b.text}
+              </Text>
+              {b.meta && <Text style={s.bulletMeta}>{b.meta}</Text>}
+            </View>
           </View>
         ))}
       </View>

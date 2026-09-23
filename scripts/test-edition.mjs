@@ -2,6 +2,8 @@
 // Run: node scripts/test-edition.mjs
 import assert from 'node:assert/strict';
 import { tokens, sameStory, clusterStories, itemWeight, aiWeight, coverageLine } from '../lib/edition/cluster.ts';
+import { pickAiHits } from '../lib/edition/hn.ts';
+import { parseChart, fmtChange } from '../lib/edition/markets.ts';
 
 let pass = 0; let fail = 0;
 function check(name, fn) { try { fn(); pass += 1; console.log(`  ok  ${name}`); } catch (e) { fail += 1; console.error(`FAIL  ${name}\n      ${e.message}`); } }
@@ -75,6 +77,23 @@ check('aiWeight: finance-only items are discounted, AI items and lens items are 
 check('ranking: an AI story outranks a finance story of equal relevance', () => {
   const cs = clusterStories([it('a', 'Fed raises rates 25 basis points'), it('b', 'Nvidia unveils next GPU for inference')]);
   assert.equal(cs[0].id, 'b');
+});
+
+check('pickAiHits keeps AI titles, sorts by points, caps', () => {
+  const out = pickAiHits([
+    { title: 'Show HN: a new Rust web framework', points: 900, objectID: '1' },
+    { title: 'OpenAI releases a new model', points: 300, objectID: '2', num_comments: 40 },
+    { title: 'Why LLM agents fail at long tasks', points: 500, objectID: '3', url: 'https://x' },
+  ], 5);
+  assert.deepEqual(out.map((h) => h.title), ['Why LLM agents fail at long tasks', 'OpenAI releases a new model']);
+  assert.equal(out[0].hnUrl, 'https://news.ycombinator.com/item?id=3');
+});
+check('parseChart reads price, change and a sparkline; rejects junk', () => {
+  const row = parseChart('NVDA', 'Nvidia', { chart: { result: [{ meta: { regularMarketPrice: 228.87, regularMarketChangePercent: 0.655 }, indicators: { quote: [{ close: [1, 2, null, 3] }] } }] } });
+  assert.equal(row.price, 228.87);
+  assert.deepEqual(row.spark, [1, 2, 3]);
+  assert.equal(fmtChange(row.changePct), '+0.7%');
+  assert.equal(parseChart('X', 'x', {}), null);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

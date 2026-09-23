@@ -409,9 +409,14 @@ function BulletsSlide(s: Extract<DeckSlide, { kind: 'bullets' }>) {
             <div className="cdk-bullet-row" key={i}>
               <span className="cdk-bullet-mark" aria-hidden="true" />
               <div className="cdk-bullet-copy">
-                <span className="cdk-bullet-lead">{b.lead}</span>
+                {b.href ? (
+                  <a href={b.href} target="_blank" rel="noopener noreferrer" className="cdk-bullet-lead">{b.lead}</a>
+                ) : (
+                  <span className="cdk-bullet-lead">{b.lead}</span>
+                )}
                 {' '}
                 <span className="cdk-bullet-text">{b.text}</span>
+                {b.meta && <div className="cdk-bullet-meta">{b.meta}</div>}
               </div>
             </div>
           ))}

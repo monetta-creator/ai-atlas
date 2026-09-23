@@ -64,6 +64,26 @@ export interface EditionSourceRow {
   count: number;
 }
 
+// "What builders are reading": Hacker News front-page stories that name AI,
+// fetched at edition time from the free Algolia API (no cron, no table).
+export interface EditionHnItem {
+  title: string;
+  url: string | null;       // the story's own link (null for Ask HN etc.)
+  hnUrl: string;            // the comments page
+  points: number;
+  comments: number;
+}
+
+// The market strip: an AI basket priced at edition time from a keyless
+// quote endpoint; the whole strip is omitted when the source fails.
+export interface EditionMarketRow {
+  symbol: string;
+  label: string;
+  price: number;
+  changePct: number;        // day change, percent
+  spark: number[];          // recent daily closes, oldest first (up to 22)
+}
+
 export interface EditionPack {
   day: string;              // YYYY-MM-DD (the edition's date)
   windowFrom: string;       // ISO timestamps of the intake window
@@ -78,6 +98,8 @@ export interface EditionPack {
   blindSpots: EditionBlindSpot[];
   sources: EditionSourceRow[];
   claimsTouched: { code: string; statement: string; href: string; signalHrefs: string[] }[];
+  hn?: EditionHnItem[];
+  markets?: { asOf: string; rows: EditionMarketRow[] } | null;
   generatedAt: string;
 }
 

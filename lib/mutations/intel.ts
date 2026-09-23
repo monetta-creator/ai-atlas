@@ -45,6 +45,27 @@ export async function claimIntelRun(runId: string): Promise<boolean> {
   return Boolean(row);
 }
 
+// The late feed sweep (20:30 UTC weekdays, lib/feeds/late-sweep.ts): reopens
+// TODAY's already-completed run at step 'feeds' so advanceIntelRun re-pulls
+// the RSS/Atom feeds and hydrates/enriches whatever is new, under the same
+// daily budget. Only a 'completed' row with no live lease is eligible (a
+// 'running' row means a window is still in progress; a 'failed' row is left
+// for claimIntelRun's own resume path, not this one). The caller still calls
+// claimIntelRun right after to take the real 5-minute lease; this just flips
+// the row back into a resumable state.
+export async function reopenIntelRunForSweep(runId: string): Promise<boolean> {
+  const row = await one<{ id: string }>(
+    `update intel_runs
+        set status = 'running', step = 'feeds', lease_until = null, error = null, updated_at = now()
+      where id = $1
+        and status = 'completed'
+        and (lease_until is null or lease_until < now())
+      returning id::text as id`,
+    [runId]
+  );
+  return Boolean(row);
+}
+
 // Lease renewal between work units (only the holder calls this) and release on
 // clean exit (so a same-day manual resume never waits out the lease).
 export async function renewIntelLease(runId: string): Promise<void> {

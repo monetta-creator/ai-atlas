@@ -17,6 +17,8 @@
 import { q, one } from '../db.ts';
 import { lookbackDays } from '../scan/core.ts';
 import { clusterStories, coverageLine } from './cluster.ts';
+import { fetchHnAiFront } from './hn.ts';
+import { fetchMarketStrip } from './markets.ts';
 import type { StoryItem, StoryCluster } from './cluster';
 import type {
   EditionPack, EditionNumbers, EditionThing, EditionCompanyNote, EditionPaper, EditionTool,
@@ -35,28 +37,19 @@ export const deDash = (s: string): string => s.replace(/\s*—\s*/g, ', ');
 // their own catch-up. Half-open [from, to) in UTC, matching the rest of the
 // codebase's date-range idiom (e.g. lib/data/reports.ts's `< ($2::date + 1)`)
 // rather than an inclusive 23:59:59 upper bound.
-export function windowFor(day: string): { from: string; to: string; fromDay: string } {
-  const dayDate = new Date(`${day}T00:00:00Z`);
-  const days = lookbackDays(day);
-  const fromDate = new Date(dayDate);
-  fromDate.setUTCDate(fromDate.getUTCDate() - (days - 1));
-  const toDate = new Date(dayDate);
-  toDate.setUTCDate(toDate.getUTCDate() + 1);
-  return { from: fromDate.toISOString(), to: toDate.toISOString(), fromDay: fromDate.toISOString().slice(0, 10) };
-}
+// The edition's window is "since the last edition": it closes at press time
+// (EDITION_PRESS_UTC on the edition's day) and opens at the previous
+// weekday's press time, so the 20:30 UTC late feed sweep lands in the next
+// morning's paper instead of falling between two calendar days. Monday's
+// window reaches back to Friday's press time (lookbackDays = 3). `fromDay`
+// is kept for callers that label the window by date.
+export const EDITION_PRESS_UTC = '16:45:00';
 
-// The pipeline's own day starts at 06:00 UTC, not midnight
-// (PIPELINE_DAY_START_SQL, lib/pipeline/config.ts): a run created between
-// 00:00 and 06:00 UTC belongs to the PREVIOUS day. Shift the edition's window
-// by 6 hours so signal_candidates.created_at is read on the pipeline's own
-// day boundary, not the calendar one.
-function pipelineWindowFor(day: string): { from: string; to: string } {
-  const w = windowFor(day);
-  const from = new Date(w.from);
-  from.setUTCHours(from.getUTCHours() + 6);
-  const to = new Date(w.to);
-  to.setUTCHours(to.getUTCHours() + 6);
-  return { from: from.toISOString(), to: to.toISOString() };
+export function windowFor(day: string): { from: string; to: string; fromDay: string } {
+  const to = new Date(`${day}T${EDITION_PRESS_UTC}Z`);
+  const from = new Date(to);
+  from.setUTCDate(from.getUTCDate() - lookbackDays(day));
+  return { from: from.toISOString(), to: to.toISOString(), fromDay: from.toISOString().slice(0, 10) };
 }
 
 function domainOf(url: string | null | undefined): string | null {
@@ -96,7 +89,6 @@ interface SignalRow {
 
 export async function buildEditionPack(day: string): Promise<EditionPack> {
   const w = windowFor(day);
-  const pw = pipelineWindowFor(day);
   const isMonday = new Date(`${day}T00:00:00Z`).getUTCDay() === 1;
 
   const [scanRows, intelRows, candidateRows, signalRows, factRows, paperRows, coverageRow, countRow] = await Promise.all([
@@ -105,26 +97,24 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
               si.relevance::float as relevance, to_char(si.published_date, 'YYYY-MM-DD') as published_date,
               si.summary, si.entities, si.tags
          from scan_items si
-         join scan_runs sr on sr.id = si.run_id
-        where sr.day between $1::date and $2::date
+        where si.created_at >= $1::timestamptz and si.created_at < $2::timestamptz
           and coalesce(si.relevance, 0) >= 0.55
           and (si.source_tier is null or si.source_tier <= 3)
           and coalesce(si.content_kind, '') <> 'marketing'
         order by si.relevance desc nulls last`,
-      [w.fromDay, day]
+      [w.from, w.to]
     ),
     q<IntelRow>(
       `select ii.id, ii.headline, ii.url, ii.source_domain, ii.source_tier, ii.content_kind,
               ii.significance::float as significance, to_char(ii.published_date, 'YYYY-MM-DD') as published_date,
               ii.summary, ii.entities, ii.dimensions
          from intel_items ii
-         join intel_runs ir on ir.id = ii.run_id
-        where ir.day between $1::date and $2::date
+        where ii.created_at >= $1::timestamptz and ii.created_at < $2::timestamptz
           and coalesce(ii.significance, 0) >= 0.55
           and (ii.source_tier is null or ii.source_tier <= 3)
           and coalesce(ii.content_kind, '') <> 'marketing'
         order by ii.significance desc nulls last`,
-      [w.fromDay, day]
+      [w.from, w.to]
     ),
     q<CandidateRow>(
       `select sc.id, sc.headline, sc.url, sc.source_domain,
@@ -132,7 +122,7 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
          from signal_candidates sc
         where sc.triage_status = 'approved'
           and sc.created_at >= $1::timestamptz and sc.created_at < $2::timestamptz`,
-      [pw.from, pw.to]
+      [w.from, w.to]
     ),
     q<SignalRow>(
       `select s.id, s.title, s.summary, to_char(s.published_at, 'YYYY-MM-DD') as published_date,
@@ -308,6 +298,11 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
 
   // ---- numbers --------------------------------------------------------
 
+  // Two free strips fetched at build time (no cron, no table): the Hacker
+  // News front page filtered to AI, and the market basket. Either may come
+  // back empty; the view omits what is missing.
+  const [hn, markets] = await Promise.all([fetchHnAiFront(8), fetchMarketStrip()]);
+
   const outletSet = new Set(allItems.map((it) => it.domain).filter(Boolean));
   const numbers: EditionNumbers = {
     itemsRead: scanRows.length + intelRows.length + candidateRows.length,
@@ -332,6 +327,8 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
     blindSpots,
     sources,
     claimsTouched,
+    hn,
+    markets,
     generatedAt: new Date().toISOString(),
   };
 }

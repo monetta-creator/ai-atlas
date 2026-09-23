@@ -7,6 +7,7 @@ import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import EditionView from '@/components/edition/EditionView';
 import RunEditionButton from '@/components/edition/RunEditionButton';
+import EditionPdfButton from '@/components/edition/EditionPdfButton';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Daily edition · The AI Atlas' };
@@ -41,7 +42,16 @@ export default async function Blotter() {
               editing={editing}
             />
           }
-          action={admin ? <RunEditionButton /> : undefined}
+          action={
+            edition ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                {admin && <RunEditionButton />}
+                <EditionPdfButton day={edition.day} />
+              </div>
+            ) : admin ? (
+              <RunEditionButton />
+            ) : undefined
+          }
         >
           {edition ? `Edition No. ${edition.pack.issueNumber} · ${dateLabel(edition.day)}` : 'No edition yet'}
         </PageTop>

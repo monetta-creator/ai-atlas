@@ -24,20 +24,19 @@ console.log('edition pack:');
 
 // ---------------------------------------------------------------- windowFor
 
-check('windowFor: a weekday is a single-day window', () => {
-  // 2026-09-23 is a Wednesday.
+check('windowFor: a weekday closes at press time and opens at the previous press time', () => {
+  // 2026-09-23 is a Wednesday; press time is 16:45 UTC.
   const w = windowFor('2026-09-23');
-  assert.equal(w.fromDay, '2026-09-23');
-  assert.equal(w.from, '2026-09-23T00:00:00.000Z');
-  assert.equal(w.to, '2026-09-24T00:00:00.000Z');
+  assert.equal(w.to, '2026-09-23T16:45:00.000Z');
+  assert.equal(w.from, '2026-09-22T16:45:00.000Z');
+  assert.equal(w.fromDay, '2026-09-22');
 });
 
-check('windowFor: Monday reaches back to cover Saturday and Sunday', () => {
+check('windowFor: Monday reaches back to Friday press time (covers the weekend)', () => {
   // 2026-09-21 is a Monday.
   const w = windowFor('2026-09-21');
-  assert.equal(w.fromDay, '2026-09-19'); // Saturday
-  assert.equal(w.from, '2026-09-19T00:00:00.000Z');
-  assert.equal(w.to, '2026-09-22T00:00:00.000Z');
+  assert.equal(w.from, '2026-09-18T16:45:00.000Z'); // Friday
+  assert.equal(w.to, '2026-09-21T16:45:00.000Z');
 });
 
 // ---------------------------------------------------------------- dedash

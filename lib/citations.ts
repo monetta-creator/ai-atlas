@@ -9,7 +9,11 @@ import sanitizeHtml from 'sanitize-html';
 // this. Runs at generation time AND again at the save/render boundaries.
 
 const HTML_OPTS: sanitizeHtml.IOptions = {
-  allowedTags: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a', 'h2', 'h3', 'blockquote', 'code'],
+  // 'span' must be allowed: a dropped link is transformed into one, and
+  // sanitize-html emits a mismatched closing tag for the NEXT kept link when
+  // the transformed tag is not on the list (found 2026-09-23 by the edition
+  // deck's tests: "<a href>text</span>").
+  allowedTags: ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a', 'span', 'h2', 'h3', 'blockquote', 'code'],
   allowedAttributes: { a: ['href', 'title', 'target', 'rel'] },
   allowedSchemes: ['http', 'https'],
 };
