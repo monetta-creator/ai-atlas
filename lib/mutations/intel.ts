@@ -66,6 +66,25 @@ export async function reopenIntelRunForSweep(runId: string): Promise<boolean> {
   return Boolean(row);
 }
 
+// Re-run the search leg of a completed run (the scan's reopenScanRunForSearch
+// twin): drops the 'search:*' units from the swept checkpoint and reopens at
+// step 'search'; feeds and filings keep their checkpoints. Driven by
+// GET /api/cron/intel?rerun=search.
+export async function reopenIntelRunForSearch(runId: string): Promise<boolean> {
+  const row = await one<{ id: string }>(
+    `update intel_runs
+        set status = 'running', step = 'search', lease_until = null, error = null, updated_at = now(),
+            swept_units = coalesce(
+              (select array_agg(u) from unnest(swept_units) as u where u not like 'search:%'), '{}')
+      where id = $1
+        and status = 'completed'
+        and (lease_until is null or lease_until < now())
+      returning id::text as id`,
+    [runId]
+  );
+  return Boolean(row);
+}
+
 // Lease renewal between work units (only the holder calls this) and release on
 // clean exit (so a same-day manual resume never waits out the lease).
 export async function renewIntelLease(runId: string): Promise<void> {

@@ -24,12 +24,18 @@ export interface DailyJob {
   finishedAtET: string | null;
   error: string | null;
   yesterdayIncomplete: boolean;
+  // A completed run that lost a leg (today: the search legs on a spent Tavily
+  // quota). Derived from the run's persisted notes; the run is still 'done'
+  // for the state machine, but the widget shows it amber with this reason.
+  warning: string | null;
 }
 
 export interface DailyJobStatus {
   day: string;
   weekend: boolean;
   ready: boolean;
+  // ready, but at least one job carries a warning: the data is partial.
+  degraded: boolean;
   readyAtET: string | null;
   jobs: DailyJob[];
 }
@@ -40,6 +46,7 @@ interface RunRowBase {
   error: string | null;
   finished_et: string | null;
   finished_epoch: number | null;
+  notes_text: string | null;
 }
 
 interface ScanRunRow extends RunRowBase {
@@ -67,7 +74,18 @@ interface ResearchRunRow extends RunRowBase {
 // latest finish across jobs) — one shared tail for all three run queries.
 const RUN_TIME_COLUMNS = `
   to_char(updated_at at time zone 'America/New_York', 'FMHH12:MI AM') as finished_et,
-  extract(epoch from updated_at) as finished_epoch`;
+  extract(epoch from updated_at) as finished_epoch,
+  array_to_string(coalesce(notes, '{}'), E'\n') as notes_text`;
+
+// What a completed run's notes say went missing. Tavily's 432 (monthly
+// credits spent) is the one known case: the engines note it once per run
+// since 2026-09-23 ("search skipped ...: Tavily quota exhausted (432)") and
+// noted every failed unit before that. Both spellings match.
+function warningFromNotes(notes: string | null): string | null {
+  if (!notes) return null;
+  if (/Tavily 432|Tavily quota exhausted/i.test(notes)) return 'search legs skipped: Tavily quota';
+  return null;
+}
 
 function getScanRunToday(): Promise<ScanRunRow | null> {
   return one<ScanRunRow>(
@@ -167,20 +185,23 @@ function resolveJob(
 ): DailyJob {
   if (row) {
     if (row.status === 'running') {
-      return { key, label, console: consoleHref, state: 'running', step: row.step, detail, finishedAtET: null, error: null, yesterdayIncomplete };
+      return { key, label, console: consoleHref, state: 'running', step: row.step, detail, finishedAtET: null, error: null, yesterdayIncomplete, warning: null };
     }
     if (row.status === 'completed') {
-      return { key, label, console: consoleHref, state: 'done', step: null, detail, finishedAtET: row.finished_et, error: null, yesterdayIncomplete };
+      return {
+        key, label, console: consoleHref, state: 'done', step: null, detail,
+        finishedAtET: row.finished_et, error: null, yesterdayIncomplete, warning: warningFromNotes(row.notes_text),
+      };
     }
     if (row.status === 'failed') {
       return {
         key, label, console: consoleHref, state: 'failed', step: null, detail,
-        finishedAtET: null, error: row.error ? row.error.slice(0, 120) : null, yesterdayIncomplete,
+        finishedAtET: null, error: row.error ? row.error.slice(0, 120) : null, yesterdayIncomplete, warning: null,
       };
     }
   }
   const state: JobState = !enabled ? 'paused' : weekend ? 'off' : 'pending';
-  return { key, label, console: consoleHref, state, step: null, detail: null, finishedAtET: null, error: null, yesterdayIncomplete };
+  return { key, label, console: consoleHref, state, step: null, detail: null, finishedAtET: null, error: null, yesterdayIncomplete, warning: null };
 }
 
 export async function getDailyJobStatus(): Promise<DailyJobStatus> {
@@ -239,5 +260,6 @@ export async function getDailyJobStatus(): Promise<DailyJobStatus> {
       : null;
   }
 
-  return { day, weekend, ready, readyAtET, jobs };
+  const degraded = ready && considered.some((j) => j.warning !== null);
+  return { day, weekend, ready, degraded, readyAtET, jobs };
 }

@@ -1,4 +1,5 @@
 import * as m from '../mutations';
+import { tavilyAvailable, TAVILY_QUOTA_NOTE } from '../scan/search-tavily';
 import {
   getRun, getPipelinePrefs, getTodayDailyRunId, getApprovedCandidates, countPendingCandidates,
 } from '../data';
@@ -84,6 +85,18 @@ export async function advancePipelineRun(runId: string, deadlineAt: number): Pro
           await m.updateRun(runId, { step: 'triage', status: 'running', error: null });
           continue;
         }
+        // Tavily's quota breaker (lib/scan/search-tavily.ts): the lens batches
+        // and the breaking sweep are Tavily legs; after one 432 the rest would
+        // fail identically, so they are checkpointed as done under one note.
+        // CourtListener is its own API and still runs.
+        if (process.env.TAVILY_API_KEY && !tavilyAvailable()) {
+          const skipped = units.filter((u) => !done.has(u) && u !== 'courtlistener');
+          if (skipped.length) {
+            notes.push(`discovery skipped (${skipped.length} units): ${TAVILY_QUOTA_NOTE}`);
+            for (const u of skipped) await m.markDiscoveryUnitDone(runId, u);
+            continue;
+          }
+        }
         try {
           if (next === 'sweep') {
             await discoverBreakingSweep(runId, sinceISO);
@@ -134,10 +147,14 @@ export async function advancePipelineRun(runId: string, deadlineAt: number): Pro
           const restingErrors = approved.filter((c) => !c.signal_id).length;
           if (restingErrors > 0) notes.push(`analysis: completing with ${restingErrors} errored candidate(s) resting`);
           // Coverage (advisory, never fatal), then complete.
-          try {
-            await runCoverageCheck(runId);
-          } catch (e) {
-            notes.push(`coverage check failed: ${String((e as Error)?.message ?? 'error').slice(0, 120)}`);
+          if (process.env.TAVILY_API_KEY && !tavilyAvailable()) {
+            notes.push(`coverage check skipped: ${TAVILY_QUOTA_NOTE}`);
+          } else {
+            try {
+              await runCoverageCheck(runId);
+            } catch (e) {
+              notes.push(`coverage check failed: ${String((e as Error)?.message ?? 'error').slice(0, 120)}`);
+            }
           }
           await m.updateRun(runId, { step: 'complete', status: 'completed', error: null });
           await m.recomputeRunCounts(runId);

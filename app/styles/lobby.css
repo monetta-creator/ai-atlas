@@ -190,6 +190,7 @@
 .lw-dot[data-state="done"] { background: var(--supports); }
 .lw-dot[data-state="running"] { background: var(--accent); }
 .lw-dot[data-state="failed"] { background: var(--heat-4); }
+.lw-dot[data-state="degraded"] { background: var(--heat-3); }
 .lw-cron-head .lw-dot { width: 10px; height: 10px; }
 
 .lw-jobs { display: flex; flex-wrap: wrap; gap: 10px; }

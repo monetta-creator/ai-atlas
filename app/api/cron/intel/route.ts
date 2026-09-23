@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { getOrCreateTodayIntelRun, claimIntelRun, advanceIntelRun } from '@/lib/intel/engine';
 import { getIntelRun, getIntelPrefs } from '@/lib/data/intel';
-import { failIntelRun } from '@/lib/mutations/intel';
+import { failIntelRun, reopenIntelRunForSearch } from '@/lib/mutations/intel';
 
 // The intel desk's cron driver: one run per UTC weekday through the
 // checkpointed engine (feeds, search, filings, hydrate, enrich). Same gate
@@ -32,7 +32,13 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
   const deadlineAt = Date.now() + WORK_BUDGET_MS;
   const { runId, day } = await getOrCreateTodayIntelRun();
-  const existing = await getIntelRun(runId);
+  let existing = await getIntelRun(runId);
+  // ?rerun=search reopens a completed run at the search step (see
+  // reopenIntelRunForSearch). Bearer-gated like the rest.
+  const rerun = req.nextUrl.searchParams.get('rerun');
+  if (rerun === 'search' && existing?.status === 'completed') {
+    if (await reopenIntelRunForSearch(runId)) existing = await getIntelRun(runId);
+  }
   if (existing?.status === 'completed') {
     pingDeadman(process.env.HC_PING_URL_INTEL);
     return Response.json({ day, done: true, alreadyComplete: true });

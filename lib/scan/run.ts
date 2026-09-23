@@ -10,7 +10,7 @@ import {
 } from '../mutations/scan';
 import { fetchFeed } from './feeds';
 import { searchTopicNews, type RawScanItem } from './web';
-import { searchTopicNewsTavily } from './search-tavily';
+import { searchTopicNewsTavily, tavilyAvailable, TAVILY_QUOTA_NOTE } from './search-tavily';
 import { searchTopicNewsGdelt, gdeltAvailable } from './search-gdelt';
 import { enrichScanItem } from './enrich';
 import { ensemblePanel } from './ensemble';
@@ -102,6 +102,17 @@ export async function advanceScanRun(runId: string, deadlineAt: number): Promise
         if (!budget.ok) {
           notes.push(`budget cap reached ($${budget.spentUsd.toFixed(2)} of $${budget.capUsd.toFixed(2)}): skipping remaining topic searches`);
           await setScanStep(runId, 'hydrate');
+          continue;
+        }
+        // Tavily's quota breaker (search-tavily.ts): with the month's credits
+        // spent every remaining topic would fail the same way (GDELT is the
+        // only other provider and its circuit is open whenever Tavily is the
+        // fallback in practice), so skip the leg with one note. Tomorrow's
+        // run retries; the credits reset with the month.
+        if (process.env.TAVILY_API_KEY && !tavilyAvailable()) {
+          const remaining = topics.filter((t) => !run.searched_topics.includes(t.slug));
+          notes.push(`search skipped (${remaining.length} topics): ${TAVILY_QUOTA_NOTE}`);
+          for (const t of remaining) await markScanTopicSearched(run.id, t.slug);
           continue;
         }
         const topicIndex = topics.indexOf(next);

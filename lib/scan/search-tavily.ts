@@ -6,14 +6,24 @@ import type { RawScanItem } from './web';
 // The scan's LLM-free search leg: Tavily's news search replaces the
 // Sonnet + web_search call, because that call's own prompt forbade judgment
 // and returned only url/headline/date lists — exactly what a search API
-// returns directly. One API call per query (a topic sends at most two), free
-// tier 1,000/month against roughly 700 used.
+// returns directly. One API call per query (a topic sends at most two). The
+// account is on the 4,000-credit plan since 2026-09-23: the free 1,000 ran
+// out on 09-22 (about 60 queries per weekday across scan, pipeline, intel and
+// tooling is ~1,300 a month).
 //
 // Each topic logs one $0 recordApiCall (model 'tavily-search', usage null,
 // deliberately no rate card) so the /scan run history and /costs keep their
 // per-run call counts without inventing a token price for a search API.
 
 const TAVILY_URL = 'https://api.tavily.com/search';
+
+// The quota circuit breaker lives in tavily-breaker.ts (dependency-free so
+// scripts/test-scan.mjs can load it); re-exported here for the engines.
+export {
+  TAVILY_QUOTA_STATUS, TAVILY_QUOTA_NOTE, tavilyAvailable, markTavilyQuotaExhausted,
+  resetTavilyBreaker, isTavilyQuotaError,
+} from './tavily-breaker';
+import { TAVILY_QUOTA_STATUS, markTavilyQuotaExhausted } from './tavily-breaker';
 
 // One raw Tavily query (shared with the pipeline's search legs,
 // lib/pipeline/search.ts, and lib/tooling/sources.ts): 20s abort, throws on
@@ -54,6 +64,7 @@ export async function tavilyQuery(opts: {
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
+      if (res.status === TAVILY_QUOTA_STATUS) markTavilyQuotaExhausted();
       throw new Error(`Tavily ${res.status}: ${body.slice(0, 160)}`);
     }
     const data = (await res.json()) as { results?: TavilyResult[] };
@@ -95,6 +106,7 @@ export async function searchTopicNewsTavily(opts: {
       });
       if (!res.ok) {
         const body = await res.text().catch(() => '');
+        if (res.status === TAVILY_QUOTA_STATUS) markTavilyQuotaExhausted();
         throw new Error(`Tavily ${res.status}: ${body.slice(0, 160)}`);
       }
       const data = (await res.json()) as { results?: Parameters<typeof mapTavilyResults>[0] };

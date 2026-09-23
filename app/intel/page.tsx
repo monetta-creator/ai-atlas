@@ -230,7 +230,7 @@ export default async function IntelPage() {
               </span>
               <span>
                 Search: {tavily
-                  ? 'Tavily news search (LLM-free, free tier, shared with the scan)'
+                  ? 'Tavily news search (LLM-free, 4,000-credit plan shared with the scan)'
                   : 'claude-sonnet-4-6 + web_search (set TAVILY_API_KEY to switch to the free leg)'}
                 {' '}· Enrichment: {prefs.enrich_models.length
                   ? prefs.enrich_models.map((id) => modelLabel.get(id) ?? id).join(' / ') + ' via OpenRouter'

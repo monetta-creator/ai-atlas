@@ -170,6 +170,25 @@ export async function setAnalysisStatus(
 
 // Mark one discovery unit done ('market:0', 'sweep'). Append-if-absent, so a
 // retried unit never double-records.
+// Re-run discovery on a completed run (the scan's reopenScanRunForSearch
+// twin): clears the discovered_units checkpoint and reopens at 'discovery';
+// triage then sees the new candidates alongside any earlier ones, analysis
+// and the coverage check run again. Driven by
+// GET /api/cron/pipeline?rerun=discovery.
+export async function reopenPipelineRunForDiscovery(runId: string): Promise<boolean> {
+  const row = await one<{ id: string }>(
+    `update pipeline_runs
+        set status = 'running', step = 'discovery', discovered_units = '{}', lease_until = null,
+            error = null, updated_at = now()
+      where id = $1
+        and status = 'completed'
+        and (lease_until is null or lease_until < now())
+      returning id::text as id`,
+    [runId]
+  );
+  return Boolean(row);
+}
+
 export async function markDiscoveryUnitDone(runId: string, unit: string): Promise<void> {
   await exec(
     `update pipeline_runs

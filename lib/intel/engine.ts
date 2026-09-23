@@ -14,6 +14,7 @@ import { lookbackDays, withinWindow } from '../scan/core';
 import { fetchCandidateText, FetchFailure, domainOf } from '../pipeline/web';
 import { pickEnrichModel } from '../scan/models';
 import { searchCompanyNewsTavily } from './search';
+import { tavilyAvailable, TAVILY_QUOTA_NOTE } from '../scan/search-tavily';
 import { fetchRecentFilings } from './edgar';
 import { fetchEdgarMetrics, fetchFdicMetricsFull, fetchCfpbComplaints } from './metrics';
 import { fetchAtsSnapshot, ATS_BUCKET_CODES } from './ats';
@@ -106,6 +107,15 @@ export async function advanceIntelRun(runId: string, deadlineAt: number): Promis
         const due = searchDueSlugs(companies.map((c) => c.slug), run.day);
         const next = nextUnsweptSlug(due, 'search', run.swept_units);
         if (!next) {
+          await setIntelStep(runId, 'filings');
+          continue;
+        }
+        // Tavily's quota breaker (lib/scan/search-tavily.ts): one 432 means
+        // every remaining company would fail the same way; skip the leg with
+        // one note (feeds and filings still ran) and let tomorrow retry.
+        if (!tavilyAvailable()) {
+          const remaining = due.filter((slug) => !run.swept_units.includes(sweepUnit('search', slug)));
+          notes.push(`search skipped (${remaining.length} companies): ${TAVILY_QUOTA_NOTE}`);
           await setIntelStep(runId, 'filings');
           continue;
         }

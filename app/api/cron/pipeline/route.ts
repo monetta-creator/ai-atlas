@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { getOrCreateDailyRun, advancePipelineRun } from '@/lib/pipeline/engine';
 import { getRun, getPipelinePrefs } from '@/lib/data';
-import { claimPipelineRun, updateRun } from '@/lib/mutations/pipeline';
+import { claimPipelineRun, updateRun, reopenPipelineRunForDiscovery } from '@/lib/mutations/pipeline';
 import { publishDueDrafts } from '@/lib/mutations/signals';
 
 // The discovery pipeline's cron driver (lifted out of the shared
@@ -49,7 +49,13 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
   const deadlineAt = Date.now() + WORK_BUDGET_MS;
   const { runId } = await getOrCreateDailyRun();
-  const run = await getRun(runId);
+  let run = await getRun(runId);
+  // ?rerun=discovery reopens a completed run at discovery (see
+  // reopenPipelineRunForDiscovery). Bearer-gated like the rest.
+  const rerun = req.nextUrl.searchParams.get('rerun');
+  if (rerun === 'discovery' && run?.status === 'completed') {
+    if (await reopenPipelineRunForDiscovery(runId)) run = await getRun(runId);
+  }
   if (run?.status === 'completed') {
     pingDeadman(process.env.HC_PING_URL_PIPELINE);
     return Response.json({ runId, done: true, alreadyComplete: true, promoted });

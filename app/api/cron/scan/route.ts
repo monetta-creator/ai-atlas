@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { getOrCreateTodayRun, claimScanRun, advanceScanRun } from '@/lib/scan/run';
 import { getScanRun, getScanPrefs } from '@/lib/data/scan';
-import { failScanRun } from '@/lib/mutations/scan';
+import { failScanRun, reopenScanRunForSearch } from '@/lib/mutations/scan';
 
 // The External Scan's cron driver: GET /api/cron/scan, invoked by the weekday
 // vercel.json crons (the /sweep sibling is the second invocation that
@@ -43,7 +43,13 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
   const deadlineAt = Date.now() + WORK_BUDGET_MS;
   const { runId, day } = await getOrCreateTodayRun();
-  const existing = await getScanRun(runId);
+  let existing = await getScanRun(runId);
+  // ?rerun=search reopens a completed run at the search step (the 2026-09-23
+  // Tavily-quota day; see reopenScanRunForSearch). Bearer-gated like the rest.
+  const rerun = req.nextUrl.searchParams.get('rerun');
+  if (rerun === 'search' && existing?.status === 'completed') {
+    if (await reopenScanRunForSearch(runId)) existing = await getScanRun(runId);
+  }
   if (existing?.status === 'completed') {
     pingDeadman(process.env.HC_PING_URL_SCAN);
     return Response.json({ day, done: true, alreadyComplete: true });

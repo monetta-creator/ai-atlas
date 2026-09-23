@@ -66,6 +66,26 @@ export async function reopenScanRunForSweep(runId: string): Promise<boolean> {
   return Boolean(row);
 }
 
+// Re-run the search legs of a completed run (the 2026-09-23 Tavily quota
+// day: every topic search failed, the run still completed on feeds alone).
+// Clears the searched_topics checkpoint and reopens at step 'search'; feeds
+// are not re-pulled, and hydrate/enrich then take whatever the searches add.
+// Driven by GET /api/cron/scan?rerun=search. Same eligibility as the sweep
+// reopen: a 'completed' row with no live lease.
+export async function reopenScanRunForSearch(runId: string): Promise<boolean> {
+  const row = await one<{ id: string }>(
+    `update scan_runs
+        set status = 'running', step = 'search', searched_topics = '{}', lease_until = null,
+            error = null, updated_at = now()
+      where id = $1
+        and status = 'completed'
+        and (lease_until is null or lease_until < now())
+      returning id::text as id`,
+    [runId]
+  );
+  return Boolean(row);
+}
+
 // Lease renewal between work units (only the holder calls this) and release on
 // clean exit (so a same-day manual resume never waits out the lease).
 export async function renewScanLease(runId: string): Promise<void> {

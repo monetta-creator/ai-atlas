@@ -17,6 +17,10 @@ function headline(status: DailyJobStatus, considered: DailyJob[], doneCount: num
         : considered.length === 1
           ? `1 job (${considered[0].label.toLowerCase()})`
           : `${considered.length} jobs`;
+    if (status.degraded) {
+      const reasons = Array.from(new Set(considered.map((j) => j.warning).filter((w): w is string => !!w)));
+      return `Today’s data is partial · ${reasons.join('; ')} · ${scope} done by ${status.readyAtET} ET`;
+    }
     return `Today’s data is ready · ${scope} done by ${status.readyAtET} ET`;
   }
   if (considered.length === 0) {
@@ -37,7 +41,7 @@ function headline(status: DailyJobStatus, considered: DailyJob[], doneCount: num
 
 function jobSubline(job: DailyJob): string {
   switch (job.state) {
-    case 'done': return `${job.detail ?? '–'} · done ${job.finishedAtET ?? '–'}`;
+    case 'done': return `${job.detail ?? '–'} · done ${job.finishedAtET ?? '–'}${job.warning ? ` · ${job.warning}` : ''}`;
     case 'running': return `${job.detail ?? 'working'} · ${job.step ?? '–'}`;
     case 'failed': return `failed · ${job.error ?? '–'}`;
     case 'paused': return 'paused';
@@ -66,7 +70,7 @@ export default async function CronTracker() {
   const doneCount = considered.filter((j) => j.state === 'done').length;
   const anyFailed = considered.some((j) => j.state === 'failed');
   const anyRunning = considered.some((j) => j.state === 'running');
-  const headState = status.ready ? 'done' : anyFailed ? 'failed' : anyRunning ? 'running' : 'pending';
+  const headState = status.ready ? (status.degraded ? 'degraded' : 'done') : anyFailed ? 'failed' : anyRunning ? 'running' : 'pending';
 
   return (
     <>
@@ -80,7 +84,7 @@ export default async function CronTracker() {
         {status.jobs.map((job) => (
           <Link key={job.key} href={job.console} className="lw-job">
             <span className="lw-job-label">
-              <span className="lw-dot" data-state={job.state} aria-hidden="true" />
+              <span className="lw-dot" data-state={job.warning ? 'degraded' : job.state} aria-hidden="true" />
               {job.label}
               {job.yesterdayIncomplete && <span className="lw-stale">yesterday incomplete</span>}
             </span>

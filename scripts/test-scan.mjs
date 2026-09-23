@@ -17,6 +17,7 @@ import {
 } from '../lib/scan/handoff.ts';
 import { getDataset } from '../lib/datasets/registry.ts';
 import { isGdeltTransportError, gdeltAvailable, markGdeltDown } from '../lib/scan/search-gdelt.ts';
+import { tavilyAvailable, markTavilyQuotaExhausted, resetTavilyBreaker, isTavilyQuotaError } from '../lib/scan/tavily-breaker.ts';
 import {
   rateDomainByRule, priorityOf, normalizeDomain, KIND_TIER, curatedDomainCount, isContentKind,
 } from '../lib/scan/source-tiers.ts';
@@ -197,6 +198,17 @@ check('isGdeltTransportError: flags only errors marked transport', () => {
   assert.equal(isGdeltTransportError(marked), true);
   assert.equal(isGdeltTransportError(null), false);
   assert.equal(isGdeltTransportError('not an error object'), false);
+});
+
+check('tavily quota breaker: available by default, down after a 432, reset restores it', () => {
+  resetTavilyBreaker();
+  assert.equal(tavilyAvailable(), true);
+  markTavilyQuotaExhausted(60_000);
+  assert.equal(tavilyAvailable(), false);
+  resetTavilyBreaker();
+  assert.equal(tavilyAvailable(), true);
+  assert.equal(isTavilyQuotaError(new Error('Tavily 432: {"detail":...}')), true);
+  assert.equal(isTavilyQuotaError(new Error('Tavily 500: boom')), false);
 });
 
 await checkAsync('gdelt circuit breaker: available by default, unavailable after markGdeltDown, available again after its window', async () => {
