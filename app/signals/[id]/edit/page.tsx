@@ -14,6 +14,8 @@ export default async function EditSignalPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const gate = await adminGate(`/signals/${id}/edit`, 'Edit signal');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
@@ -25,7 +27,7 @@ export default async function EditSignalPage({ params }: { params: Promise<{ id:
 
   const { claims, bridges } = await getTargets();
   const sources = (await getSources()).map((s) => ({ id: s.id, title: s.title }));
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

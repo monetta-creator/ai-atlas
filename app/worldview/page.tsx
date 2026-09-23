@@ -21,11 +21,13 @@ export const dynamic = 'force-dynamic';
 export default async function WorldviewPage() {
   const gate = await adminGate('/worldview', 'Worldview & spine');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const [{ spine, positions }, nodes] = await Promise.all([getWorldview(), getNodeOptions()]);
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   const optionGroup = (label: string, opts: NodeOption[]) => (
     <optgroup label={label}>

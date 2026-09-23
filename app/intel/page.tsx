@@ -57,6 +57,8 @@ const TIER_LABEL: Record<IntelTier, string> = {
 export default async function IntelPage() {
   const gate = await adminGate('/intel', 'Intel desk');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
   const [companies, runs, prefs, budget, health, modelStats, companyYield, quota, metricsCoverage, dsStats, tierStats, recentTiers, h] = await Promise.all([
@@ -131,7 +133,7 @@ export default async function IntelPage() {
   for (const t of TIER_ORDER) byTier.set(t, []);
   for (const c of companies) byTier.get(c.tier)?.push(c);
   const quotaWarn = quota.pctUsed > 0.85 || quota.projected > quota.cap;
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

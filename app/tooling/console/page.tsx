@@ -41,6 +41,8 @@ const WEEK_STRIP_LENGTH = 26;
 export default async function ToolingConsolePage() {
   const gate = await adminGate('/tooling/console', 'Tooling console');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
 
   const weekDay = weekKeyToday();
@@ -92,7 +94,7 @@ export default async function ToolingConsolePage() {
   const weeklyCap = Number(process.env.TOOLING_WEEKLY_BUDGET_USD || 4);
   const pullCap = Number(process.env.TOOLING_PULL_BUDGET_USD || 12);
   const quotaWarn = quota.pctUsed > 0.85 || quota.projected > quota.cap;
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

@@ -21,8 +21,10 @@ export default async function Blotter() {
   const admin = (await isAdmin()) && !(await isPreview());
   const { editing, txt } = await getEditContext();
 
-  const edition = await getLatestEdition(!admin);
-  const counts = admin ? await getNavCounts().catch(() => null) : null;
+  const [edition, counts] = await Promise.all([
+    getLatestEdition(!admin),
+    admin ? getNavCounts().catch(() => null) : Promise.resolve(null),
+  ]);
 
   return (
     <>

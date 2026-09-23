@@ -129,18 +129,18 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
       [w.from, w.to]
     ),
     // Window on when a signal went public, not its editorial date: pipeline
-    // drafts carry the article's date and the promotion policy publishes them
-    // 48h+ later (auto_published_at). A human publishing an old draft is
-    // still missed; that needs a first_published_at column.
+    // drafts carry the article's date and are published hours or days later,
+    // by a human or the promotion policy. first_published_at (0059) records
+    // that moment; the coalesce covers rows from before it existed.
     q<SignalRow>(
       `select s.id, s.title, s.summary, to_char(s.published_at, 'YYYY-MM-DD') as published_date,
               s.claim_touches, src.url as source_url
          from signals s
          left join sources src on src.id = s.source_id
         where s.is_published = true
-          and coalesce(s.auto_published_at, s.published_at) >= $1::timestamptz
-          and coalesce(s.auto_published_at, s.published_at) < $2::timestamptz
-        order by coalesce(s.auto_published_at, s.published_at) desc`,
+          and coalesce(s.first_published_at, s.auto_published_at, s.published_at) >= $1::timestamptz
+          and coalesce(s.first_published_at, s.auto_published_at, s.published_at) < $2::timestamptz
+        order by coalesce(s.first_published_at, s.auto_published_at, s.published_at) desc`,
       [w.from, w.to]
     ),
     q<{ company_slug: string; company_name: string; fact: string; value_text: string | null; url: string | null }>(

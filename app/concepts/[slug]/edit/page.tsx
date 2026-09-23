@@ -20,6 +20,8 @@ export default async function EditConceptPage({
   const { slug } = await params;
   const gate = await adminGate(`/concepts/${slug}/edit`, 'Edit concept');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
@@ -30,7 +32,7 @@ export default async function EditConceptPage({
   ]);
   if (!data) notFound();
   const { concept, prerequisite_ids, claim_codes } = data;
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

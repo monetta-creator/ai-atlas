@@ -46,6 +46,8 @@ const pct = (num: number, den: number): string => (den > 0 ? `${Math.round((num 
 export default async function ResearchConsolePage() {
   const gate = await adminGate('/research/console', 'Research console');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
@@ -80,7 +82,7 @@ export default async function ResearchConsolePage() {
       })
     : '';
   const completedRuns = Math.max(1, health.runs.completed);
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   // The agent's recommendations turn the queue into a decision surface: track
   // candidates first (confidence desc), then notes, unprocessed, and dismissals

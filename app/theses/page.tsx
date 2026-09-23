@@ -15,10 +15,12 @@ export const metadata = { title: 'Theses · The AI Atlas' };
 export default async function ThesesPage() {
   const gate = await adminGate('/theses', 'Theses');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
   const theses = await getTheses();
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

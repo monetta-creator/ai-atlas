@@ -27,6 +27,8 @@ const excerpt = (html: string, n = 190) => {
 // fetched for guests, so nothing private reaches the RSC payload.
 export default async function ResearchPage() {
   const personal = await isAdmin();
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = personal ? getNavCounts().catch(() => null) : Promise.resolve(null);
   const { editing, txt } = await getEditContext();
 
   const [threads, tracked, noted, freshPapers, freshRevisions, touchRollup, latestRoundup] = await Promise.all([
@@ -35,7 +37,7 @@ export default async function ResearchPage() {
     getLatestRoundup(),
   ]);
   const pastRoundups = latestRoundup ? await getPastRoundups(latestRoundup.id) : [];
-  const counts = personal ? await getNavCounts().catch(() => null) : null;
+  const counts = await countsP;
   const fresh = freshPapers.length + freshRevisions.length;
 
   return (

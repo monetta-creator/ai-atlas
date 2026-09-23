@@ -23,6 +23,8 @@ export default async function NewClaimPage({
   const { slug } = await params;
   const gate = await adminGate(`/q/${slug}/claim/new`, 'New claim');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
@@ -72,7 +74,7 @@ export default async function NewClaimPage({
     }
   }
 
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

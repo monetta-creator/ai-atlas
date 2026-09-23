@@ -20,6 +20,8 @@ export const metadata = { title: 'Draft queue · The AI Atlas' };
 export default async function DraftsPage() {
   const gate = await adminGate('/signals/drafts', 'Draft queue');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
@@ -34,7 +36,7 @@ export default async function DraftsPage() {
     getDraftBacklogStats(policy),
     getTargets(),
   ]);
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
   const statements: Record<string, string> = {};
   for (const t of [...targets.claims, ...targets.bridges]) statements[t.code] = t.statement;
   // Reconcile the persisted scan against live drafts so it never shows a since-removed one.

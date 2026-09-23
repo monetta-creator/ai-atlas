@@ -10,11 +10,13 @@ export const dynamic = 'force-dynamic';
 export default async function SourcesPage() {
   const gate = await adminGate('/sources', 'Sources');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const [sources, graph] = await Promise.all([getSourcesWithCounts(), getEvidenceGraph()]);
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

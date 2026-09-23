@@ -36,10 +36,12 @@ function tileGrid(tiles: { label: string; value: string; sub: string }[]) {
 export default async function IngestionPage() {
   const gate = await adminGate('/ingestion', 'Signal ingestion');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
   const ledger = await getIngestionLedger();
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   const mChars = ledger.corpus.charsTotal / 1_000_000;
 

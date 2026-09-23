@@ -89,8 +89,10 @@ async function insertSignalRow(
   const row = (
     await c.query(
       `insert into signals
-         (title, summary, significance, lenses, claim_touches, touch_details, source_id, published_at, is_published, origin, drafted_by)
-       values ($1, $2, $3, $4::signal_lens_t[], $5::text[], $6::jsonb, $7, coalesce($8::timestamptz, now()), $9, $10, $11)
+         (title, summary, significance, lenses, claim_touches, touch_details, source_id, published_at, is_published, origin, drafted_by,
+          first_published_at)
+       values ($1, $2, $3, $4::signal_lens_t[], $5::text[], $6::jsonb, $7, coalesce($8::timestamptz, now()), $9, $10, $11,
+               case when $9 then now() end)
        returning id`,
       [
         input.title,
@@ -228,13 +230,15 @@ export async function updateSignal(id: string, input: SignalInput): Promise<void
 }
 
 // Visibility gate + the evidence commit: publishing materializes a signal's evidence
-// into the map; unpublishing removes it. The editorial date (published_at) is untouched.
+// into the map; unpublishing removes it. The editorial date (published_at) is untouched;
+// first_published_at (0059) is stamped on the first publish and never moved.
 // Publishing also clears archived_at (a published signal is never an archived draft).
 export async function setSignalPublished(id: string, published: boolean): Promise<void> {
   await withTx(async (c) => {
     await c.query(
       `update signals set is_published = $1,
               archived_at = case when $1 then null else archived_at end,
+              first_published_at = case when $1 then coalesce(first_published_at, now()) else first_published_at end,
               updated_at = now()
         where id = $2`,
       [published, id]
@@ -320,7 +324,8 @@ export async function publishDueDrafts(opts: {
     // SELECT above must stay archived, and a human publish un-archives by design.
     const ok = await withTx(async (c) => {
       const r = await c.query(
-        `update signals set is_published = true, auto_published_at = now(), updated_at = now()
+        `update signals set is_published = true, auto_published_at = now(),
+                first_published_at = coalesce(first_published_at, now()), updated_at = now()
           where id = $1 and is_published = false and archived_at is null
           returning id`,
         [id]

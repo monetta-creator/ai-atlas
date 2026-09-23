@@ -27,13 +27,15 @@ export default async function SourcePage({
   const { id } = await params;
   const gate = await adminGate(`/source/${id}`, 'Source');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
 
   const data = await getSource(id);
   if (!data) notFound();
   const { source, evidence } = data;
   const { claims, bridges } = await getTargets();
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
   const sourceTitle = source.title || 'Untitled source';
 
   return (

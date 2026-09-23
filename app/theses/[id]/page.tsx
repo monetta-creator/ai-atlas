@@ -26,6 +26,8 @@ export default async function ThesisPage({ params }: { params: Promise<{ id: str
   if (!UUID_RE.test(id)) notFound();
   const gate = await adminGate(`/theses/${id}`, 'Thesis');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
 
   const thesis = await getThesis(id);
@@ -54,7 +56,7 @@ export default async function ThesisPage({ params }: { params: Promise<{ id: str
       ? `/bridge/new?gap=${encodeURIComponent(r.code)}&thesis=${thesis.id}`
       : `/q/${r.question_slug}/claim/new?gap=${encodeURIComponent(r.code)}&thesis=${thesis.id}`,
   }));
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

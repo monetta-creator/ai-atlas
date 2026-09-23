@@ -12,12 +12,14 @@ export const metadata = { title: 'New signal · The AI Atlas' };
 export default async function NewSignalPage() {
   const gate = await adminGate('/signals/new', 'New signal');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const { claims, bridges } = await getTargets();
   const sources = (await getSources()).map((s) => ({ id: s.id, title: s.title }));
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

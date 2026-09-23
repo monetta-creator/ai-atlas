@@ -19,6 +19,8 @@ export default async function NewConceptPage({
 }) {
   const gate = await adminGate('/concepts/new', 'New concept');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
@@ -55,7 +57,7 @@ export default async function NewConceptPage({
     }
   }
 
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

@@ -43,6 +43,8 @@ const panel = {
 export default async function ScanPage() {
   const gate = await adminGate('/scan', 'External scan');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
   const [topics, runs, prefs, budget, health, signalCount, modelStats, tierStats, recentTiers, ensemble, h] = await Promise.all([
@@ -101,7 +103,7 @@ export default async function ScanPage() {
   });
   const pct = (num: number, den: number): string => (den > 0 ? `${Math.round((num / den) * 100)}%` : '–');
   const completedRuns = Math.max(1, health.runs.completed);
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { isMalformedDetailPath } from './lib/route-shapes';
 
 // Open by default (2026-09-23). Every PAGE renders sessionless now: admin
 // pages gate themselves with adminGate() (lib/admin-gate.tsx) and render an
@@ -13,6 +14,15 @@ import type { NextRequest } from 'next/server';
 // CRON_SECRET for /api/cron/*, isPortal() for the datasets/portal/ask
 // routes, full in-route validation for /api/tickets).
 export function proxy(req: NextRequest) {
+  // A detail URL whose id cannot exist (not a UUID, an impossible date) gets a
+  // real 404 here, before the page streams behind loading.tsx and the status
+  // is locked at 200 (lib/route-shapes.ts). Rewriting to a path with no route
+  // renders the app's not-found page with a 404 status.
+  if (isMalformedDetailPath(req.nextUrl.pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/_not-found-malformed';
+    return NextResponse.rewrite(url);
+  }
   const { pathname } = req.nextUrl;
   const entered =
     req.cookies.has('atlas_admin') || req.cookies.has('atlas_guest');

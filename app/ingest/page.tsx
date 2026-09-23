@@ -14,9 +14,11 @@ export const maxDuration = 60;
 export default async function IngestPage() {
   const gate = await adminGate('/ingest', 'Add a source');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

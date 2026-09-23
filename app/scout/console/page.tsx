@@ -26,6 +26,8 @@ export const metadata = { title: 'Scout console · The AI Atlas' };
 export default async function ScoutConsolePage() {
   const gate = await adminGate('/scout/console', 'Scout console');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
@@ -43,7 +45,7 @@ export default async function ScoutConsolePage() {
     if (oa !== ob) return oa - ob;
     return (b.agent_confidence ?? 0) - (a.agent_confidence ?? 0);
   });
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

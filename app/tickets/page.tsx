@@ -22,6 +22,8 @@ export default async function TicketsPage({
 }) {
   const gate = await adminGate('/tickets', 'Tickets');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
   const sp = await searchParams;
@@ -29,7 +31,7 @@ export default async function TicketsPage({
   const status = sp.status && STATUSES.has(sp.status) ? (sp.status as TicketStatus) : undefined;
   const tickets = await getTickets({ kind, status });
   const openCount = tickets.filter((t) => t.status === 'open').length;
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   const chip = (href: string, label: string, active: boolean) => (
     <Link key={href} href={href} className="touch-chip"

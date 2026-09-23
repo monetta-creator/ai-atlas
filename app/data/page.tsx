@@ -11,6 +11,8 @@ export const dynamic = 'force-dynamic';
 export default async function DataPage() {
   const gate = await adminGate('/data', 'Data');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
@@ -19,7 +21,7 @@ export default async function DataPage() {
     getNodeLensMap(),
   ]);
   const lensesFor = (type: string, id: string) => lensMap[`${type}:${id}`] ?? [];
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>

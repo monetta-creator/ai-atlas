@@ -14,11 +14,13 @@ export const metadata = { title: 'Calibration · The AI Atlas' };
 export default async function CalibrationPage() {
   const gate = await adminGate('/calibration', 'Calibration');
   if (gate) return gate;
+  // Started before the page's own reads so the tab badges load beside them.
+  const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const data = await getCalibration();
-  const counts = await getNavCounts().catch(() => null);
+  const counts = await countsP;
 
   return (
     <>
