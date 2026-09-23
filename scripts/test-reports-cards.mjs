@@ -9,8 +9,8 @@
 import assert from 'node:assert/strict';
 import {
   toSheetCard, toPeriodCard, toThesisCard, filterCards, paginate, sortCards,
-  REPORT_KIND_FILTERS, DRAFTS_FILTER,
-} from '../lib/reports/cards.ts';
+  REPORT_KIND_FILTERS, DRAFTS_FILTER, toDeckCard } from '../lib/reports/cards.ts';
+import { DECKS, visibleDecks } from '../lib/reports/decks.ts';
 
 let pass = 0;
 let fail = 0;
@@ -132,7 +132,7 @@ check('filterCards: drafts filter applies for an admin viewer', () => {
 check('REPORT_KIND_FILTERS / DRAFTS_FILTER: keys are stable and in order', () => {
   assert.deepEqual(
     REPORT_KIND_FILTERS.map((f) => f.key),
-    ['all', 'claim', 'bridge', 'lens', 'atlas', 'roundup', 'tooling', 'period', 'thesis']
+    ['all', 'claim', 'bridge', 'lens', 'atlas', 'roundup', 'tooling', 'period', 'thesis', 'deck']
   );
   assert.equal(DRAFTS_FILTER.key, 'drafts');
 });
@@ -173,6 +173,42 @@ check('sortCards: newest sortDate first, title tiebreaks', () => {
     generated_at: '2026-09-05T00:00:00Z', matched: 1, supports: 1, contradicts: 0, mixed: 0 });
   const sorted = sortCards([a, b, c]);
   assert.deepEqual(sorted.map((x) => x.id), ['c', 'b', 'a']);
+});
+
+// ---------------------------------------------------------------- decks
+
+check('toDeckCard: undated deck family with its own kind label and access', () => {
+  const c = toDeckCard(DECKS[0]);
+  assert.equal(c.family, 'deck');
+  assert.equal(c.kind, 'deck');
+  assert.equal(c.kindLabel, '16:9 deck');
+  assert.equal(c.sortDate, '');
+  assert.equal(c.href, '/costs/deck');
+  assert.equal(c.pdfHref, '/costs/deck/pdf');
+  assert.equal(c.access, 'admin');
+  assert.ok(c.chips.includes('admin only'));
+});
+
+check('visibleDecks: guests get only public decks, admins get all', () => {
+  assert.ok(visibleDecks(false).every((d) => d.access === 'public'));
+  assert.equal(visibleDecks(true).length, DECKS.length);
+  assert.ok(visibleDecks(false).length >= 1);
+});
+
+check('sortCards: decks sort after every dated report, in registry order', () => {
+  const dated = toThesisCard({ report_id: 'x', thesis_id: 't', title: 'Old', statement: 's',
+    generated_at: '2020-01-01T00:00:00Z', matched: 1, supports: 1, contradicts: 0, mixed: 0 });
+  const decks = DECKS.map(toDeckCard);
+  const sorted = sortCards([...decks, dated]);
+  assert.equal(sorted[0].id, 'x');
+  assert.deepEqual(sorted.slice(1).map((c) => c.id), DECKS.map((d) => d.id));
+});
+
+check('filterCards: the deck chip isolates decks and q matches a deck title', () => {
+  const cards = [...DECKS.map(toDeckCard)];
+  assert.equal(filterCards(cards, { q: '', kind: 'deck', admin: true }).length, DECKS.length);
+  assert.equal(filterCards(cards, { q: '1000x', kind: 'all', admin: true }).length, 1);
+  assert.equal(filterCards(cards, { q: '', kind: 'thesis', admin: true }).length, 0);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

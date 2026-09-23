@@ -6,9 +6,10 @@ import Editable from '@/components/Editable';
 import SheetConsole from '@/components/reports/SheetConsole';
 import ReportGrid from '@/components/reports/ReportGrid';
 import {
-  toSheetCard, toPeriodCard, toThesisCard, sortCards,
+  toSheetCard, toPeriodCard, toThesisCard, toDeckCard, sortCards,
   REPORT_KIND_FILTERS, DRAFTS_FILTER,
 } from '@/lib/reports/cards';
+import { visibleDecks } from '@/lib/reports/decks';
 
 export const dynamic = 'force-dynamic';
 // Hosts the sheet-generation server actions (pack + two model legs + save).
@@ -43,6 +44,9 @@ export default async function ReportPortal({
     ...generated.map(toSheetCard),
     ...reports.map(toPeriodCard),
     ...theses.map(toThesisCard),
+    // The 16:9 decks (admin-only ones filtered here, before anything reaches
+    // the client): undated, so sortCards places them after the reports.
+    ...visibleDecks(admin).map(toDeckCard),
   ]);
 
   const gen = typeof sp.generate === 'string' ? sp.generate : undefined;

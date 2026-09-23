@@ -1,6 +1,7 @@
 import { SHEET_KIND_LABEL, SIGNAL_LENS_LABEL, dateLabel, formatDateRange } from '../format.ts';
 import type { GeneratedReportMeta, SavedReportMeta, SignalLens } from '../types';
 import type { ThesisTrackerEntry } from '../data/desk';
+import type { DeckEntry } from './decks.ts';
 
 // Pure card-shaping for the Report Portal grid (app/reports/page.tsx +
 // components/reports/ReportGrid.tsx). No @/lib/db import anywhere in this
@@ -9,7 +10,7 @@ import type { ThesisTrackerEntry } from '../data/desk';
 // 'use client' component, and relative (not '@/...') so plain-Node type
 // stripping can load it in scripts/test-reports-cards.mjs.
 
-export type ReportFamily = 'sheet' | 'period' | 'thesis';
+export type ReportFamily = 'sheet' | 'period' | 'thesis' | 'deck';
 
 export interface ReportCard {
   id: string;
@@ -21,11 +22,12 @@ export interface ReportCard {
   metaLines: string[]; // what the PDF cover shows under the subject
   abstract: string | null; // sheet bottom line (already plain text); null for others
   chips: string[]; // deterministic stats
-  date: string; // display date (dateLabel of generated_at / saved)
-  sortDate: string; // ISO-ish for sorting desc
+  date: string; // display date (dateLabel of generated_at / saved); decks say "Live" or "Evergreen"
+  sortDate: string; // ISO-ish for sorting desc; '' = undated (decks), sorted after every dated report
   href: string;
   pdfHref: string;
   isPublished: boolean;
+  access?: 'admin' | 'public'; // decks only: admin decks carry real spend
 }
 
 export const PAGE_SIZE = 15;
@@ -155,6 +157,35 @@ export function toThesisCard(e: ThesisTrackerEntry): ReportCard {
   };
 }
 
+// ---------------------------------------------------------------- deck
+
+// A 16:9 slide deck (lib/reports/decks.ts). Undated on purpose: the live
+// decks rebuild their numbers on open, the guide decks are evergreen copy,
+// so sortDate is '' and sortCards places them after every dated report.
+export function toDeckCard(d: DeckEntry): ReportCard {
+  const chips: string[] = [];
+  if (d.slides) chips.push(`${d.slides} slides`);
+  chips.push(d.live ? 'live numbers, rebuilt on open' : 'fixed editorial copy');
+  if (d.access === 'admin') chips.push('admin only');
+  return {
+    id: d.id,
+    family: 'deck',
+    kind: 'deck',
+    kindLabel: '16:9 deck',
+    title: d.title,
+    subject: d.subtitle,
+    metaLines: [d.kicker, d.live ? 'Numbers as of the day it is opened' : `${d.slides ?? ''} slides`.trim()],
+    abstract: null,
+    chips,
+    date: d.live ? 'Live' : 'Evergreen',
+    sortDate: '',
+    href: d.href,
+    pdfHref: d.pdfHref,
+    isPublished: true,
+    access: d.access,
+  };
+}
+
 // ---------------------------------------------------------------- filters
 
 export interface ReportKindFilter {
@@ -173,6 +204,7 @@ export const REPORT_KIND_FILTERS: ReportKindFilter[] = [
   { key: 'tooling', label: 'Tooling', match: (c) => c.kind.startsWith('tooling_') },
   { key: 'period', label: 'Period', match: (c) => c.kind === 'period' },
   { key: 'thesis', label: 'Thesis', match: (c) => c.kind === 'thesis' },
+  { key: 'deck', label: 'Decks', match: (c) => c.family === 'deck' },
 ];
 
 export const DRAFTS_FILTER: ReportKindFilter = {
@@ -224,8 +256,13 @@ export function paginate<T>(items: T[], page: number, size: number = PAGE_SIZE):
 
 // ---------------------------------------------------------------- sort
 
+// Dated reports newest first; undated cards (sortDate '', the decks) after
+// all of them, in registry order (a stable sort keeps their input order).
 export function sortCards(cards: ReportCard[]): ReportCard[] {
   return [...cards].sort((a, b) => {
+    if (!a.sortDate && !b.sortDate) return 0;
+    if (!a.sortDate) return 1;
+    if (!b.sortDate) return -1;
     if (a.sortDate !== b.sortDate) return a.sortDate < b.sortDate ? 1 : -1;
     return a.title.localeCompare(b.title);
   });

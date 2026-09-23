@@ -122,6 +122,44 @@
   font-family: var(--font-mono); font-size: 3.4cqw; letter-spacing: .18em; text-transform: uppercase;
   padding: .8cqw 18cqw;
 }
+/* ---- Decks: a landscape 16:9 title slide on a dark stage frame ---- */
+.rp-cover--deck {
+  aspect-ratio: 16 / 9;
+  background: #0b1120;            /* the deck stage's dark chrome */
+  border-color: #0b1120;
+  padding: 12px;                  /* px, never cqw, on the container element itself */
+}
+.rp-deck-slide {
+  position: relative; inset: auto;
+  height: 100%; background: #ffffff; color: #0f172a;
+  padding: 7cqw 7cqw 5.5cqw; gap: 2cqw;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.rp-deck-kicker {
+  font-family: var(--font-mono); font-size: 2.6cqw; letter-spacing: .16em; text-transform: uppercase; color: #2d5bff;
+}
+.rp-deck-title {
+  font-family: var(--font-headline); font-size: 7.2cqw; line-height: 1.04; letter-spacing: -.005em;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; text-wrap: balance;
+}
+.rp-deck-subtitle {
+  font-size: 2.7cqw; line-height: 1.4; color: #5b6675; max-width: 82%;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+.rp-deck-foot {
+  position: absolute; left: 7cqw; right: 7cqw; bottom: 4cqw;
+  display: flex; justify-content: space-between; gap: 2cqw;
+  font-family: var(--font-mono); font-size: 2.2cqw; letter-spacing: .12em; color: #95a0b1;
+}
+.rp-deck-foot span:first-child { font-family: var(--font-headline); letter-spacing: .18em; color: #0f172a; }
+.rp-deck-tag {
+  position: absolute; top: 0; left: 0;
+  background: #0b1120; color: rgba(255,255,255,.85);
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  padding: 4px 8px 5px;
+}
+.rp-card[data-kind="deck"] .rp-kicker { color: var(--accent); }
+
 /* A light per-kind tint on the kicker/rule; cheap, not load-bearing. */
 .rp-cover[data-kind^="tooling_"] .rp-cover-kicker { color: #4fae9f; }
 .rp-cover[data-kind="roundup"] .rp-cover-kicker { color: #b26a00; }

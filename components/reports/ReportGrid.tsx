@@ -265,6 +265,9 @@ function ReportCardView({ card, admin }: { card: ReportCard; admin: boolean }) {
         <div className="rp-foot">
           <span className="rp-date">{card.date}</span>
           <div className="rp-actions">
+            {card.family === 'deck' && (
+              <Link href={card.href} className="btn btn--primary btn--sm">Open</Link>
+            )}
             <a href={card.pdfHref} className="btn btn--ghost btn--sm">
               PDF
             </a>
