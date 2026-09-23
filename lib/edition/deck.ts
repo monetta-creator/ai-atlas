@@ -2,49 +2,18 @@ import { parse, NodeType } from 'node-html-parser';
 import type { HTMLElement as ParsedElement, Node as ParsedNode } from 'node-html-parser';
 import { enforceCitations } from '../citations.ts';
 import { fmtChange } from './markets.ts';
-import type { CitationAllowlist } from '../citations';
+import { allowlistForEdition } from './pure.ts';
 import type { CostDeck, DeckSlide } from '../costs-deck';
-import type { SavedEdition, EditionPack } from './types';
+import type { SavedEdition } from './types';
 import { dateLabel } from '../format.ts';
 
 // The Daily Edition's 16:9 deck: buildEditionDeck turns a SavedEdition into
 // the same CostDeck shape the cost report and education guides render
-// (lib/costs-deck.ts / lib/pdf/costs-deck.tsx). PURE and DB-free by design
-// (scripts/test-edition-deck.mjs loads it under plain-Node type stripping):
-// every relative import carries an explicit .ts extension, and this module
-// deliberately does NOT import lib/edition/pack.ts (which pulls ../db.ts at
-// load time), allowlistForEdition's logic is duplicated below instead.
+// (lib/costs-deck.ts / lib/pdf/costs-deck.tsx). Pure and DB-free: every
+// relative import carries an explicit .ts extension so
+// scripts/test-edition-deck.mjs loads it under plain Node.
 
 type Bullet = { lead: string; text: string; href?: string; meta?: string };
-
-// ---------------------------------------------------------------- allowlist
-// Duplicated from lib/edition/pack.ts's allowlistForEdition (kept in lockstep
-// by hand; both are short and change rarely) so this module never imports
-// pack.ts's ../db.ts dependency chain.
-function allowlistForEditionPure(pack: EditionPack): CitationAllowlist {
-  const hrefs = new Set<string>();
-  const tagByHref = new Map<string, string>();
-  for (const c of pack.clusters) {
-    for (const it of c.items) {
-      hrefs.add(it.url);
-      if (it.href) hrefs.add(it.href);
-    }
-  }
-  for (const t of pack.thingsHappen) {
-    hrefs.add(t.url);
-    if (t.href) hrefs.add(t.href);
-  }
-  for (const p of pack.papers) hrefs.add(p.href);
-  for (const t of pack.tools) hrefs.add(t.href);
-  for (const c of pack.claimsTouched) {
-    hrefs.add(c.href);
-    for (const h of c.signalHrefs) hrefs.add(h);
-    tagByHref.set(c.href, c.code);
-  }
-  for (const co of pack.companies) for (const f of co.facts) if (f.url) hrefs.add(f.url);
-  for (const b of pack.blindSpots) if (b.url) hrefs.add(b.url);
-  return { hrefs, tagByHref };
-}
 
 // ---------------------------------------------------------------- helpers
 
@@ -61,7 +30,8 @@ const isElement = (n: ParsedNode): n is ParsedElement => n.nodeType === NodeType
 // Plain-text paragraphs from the citation-gated column HTML: one entry per
 // p/h2/h3/blockquote/li, in document order. Not a full HTML-to-text
 // converter, just enough for the discrete allowedTags set lib/citations.ts
-// permits (p/br/strong/em/u/ul/ol/li/a/h2/h3/blockquote/code).
+// permits (p/br/strong/b/em/i/u/ul/ol/li/a/span/h2/h3/blockquote/code; span
+// is what a dropped link becomes).
 function htmlToParagraphs(html: string): string[] {
   const root = parse(html);
   const BLOCK_TAGS = new Set(['p', 'h2', 'h3', 'blockquote']);
@@ -159,7 +129,7 @@ export function buildEditionDeck(edition: SavedEdition, origin: string): CostDec
     { n: String(pack.numbers.itemsRead), l: 'Items read' },
     { n: String(pack.numbers.outlets), l: 'Outlets' },
     { n: String(pack.numbers.signalsPublished), l: 'Signals published' },
-    { n: String(pack.numbers.papersKept), l: 'Papers kept' },
+    { n: String(pack.numbers.papersKept), l: 'Papers analyzed' },
     { n: String(pack.numbers.clusters), l: 'Stories' },
     ...(pack.numbers.newTools > 0 ? [{ n: String(pack.numbers.newTools), l: 'New tools' }] : []),
   ];
@@ -210,7 +180,7 @@ export function buildEditionDeck(edition: SavedEdition, origin: string): CostDec
     subtitle: '',
   });
 
-  const allow = allowlistForEditionPure(pack);
+  const allow = allowlistForEdition(pack);
   const { html: gatedColumnHtml } = enforceCitations(narrative.column.html, allow);
   const paragraphs = gatedColumnHtml ? htmlToParagraphs(gatedColumnHtml) : [];
   const columnChunks = chunkParagraphs(paragraphs, 700, 3);

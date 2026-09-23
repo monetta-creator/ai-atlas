@@ -2,12 +2,14 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { ArticleHit, AtlasSearchHit, PeekKind, PeekPayload } from './search';
 import type { AskCostReport, AskWebSource } from './history';
 import type { DeclinePayload, Lane } from './lanes';
+import { deDash } from '../voice.ts';
 
 // Pure helpers for the deep-research loop behind /api/ask/deep: the signal-tag
 // minter, the tool definitions and their input validation, tool-result
 // rendering, the NDJSON wire protocol, and the deep-mode system addendum.
-// Dependency-free at runtime (type-only imports) so scripts/test-deep.mjs can
-// load it under plain Node type stripping, mirroring lib/ask/history.ts.
+// The only runtime import is lib/voice.ts (pure, zero-import; explicit .ts
+// path) so scripts/test-deep.mjs can load it under plain Node type stripping,
+// mirroring lib/ask/history.ts.
 
 // Loop guards: the research loop is bounded on every axis (rounds, calls per
 // round, chars per result, total context, wall clock) so a runaway session can
@@ -462,7 +464,7 @@ export function parseVerifyOutput(
       const excerpt = typeof f.excerpt === 'string' ? f.excerpt.trim().slice(0, 140) : '';
       const issue = typeof f.issue === 'string' ? f.issue.trim().slice(0, 280) : '';
       // The verifier is told never to write an em dash and still does now and then.
-      if (excerpt && issue) flags.push({ excerpt: excerpt.replace(/\s*\u2014\s*/g, ', '), issue: issue.replace(/\s*\u2014\s*/g, ', ') });
+      if (excerpt && issue) flags.push({ excerpt: deDash(excerpt), issue: deDash(issue) });
     }
   }
   const verdictLanguage: string[] = [];

@@ -144,8 +144,10 @@ async function loadAgentPulse(): Promise<AgentPulse> {
   };
 }
 
-// Deduped per request with React cache(): Header and the page's PageTop both
-// read it on every admin navigation (2026-09-23 latency pass).
+// Wrapped in React cache() to mirror getNavCounts. Header reads it once per
+// layout render and /api/agent/pulse once per poll, so today the wrapper
+// dedupes nothing, but it costs nothing and keeps a second same-request
+// reader free.
 export const getAgentPulse = cache(loadAgentPulse);
 
 export async function listAgentActions(limit = 50): Promise<AgentAction[]> {
@@ -185,7 +187,11 @@ export async function listBriefs(limit = 30): Promise<AgentBrief[]> {
   );
 }
 
-const SPEND_FEATURES = ['agent_brief', 'agent_chat', 'agent_remedy'];
+// The one definition of today's agent spend (checkAgentBudget and the /agent
+// page both read it). Remedy spend never carries an agent_* feature (callees
+// log under their own tags), so it is counted from agent_actions.cost_usd
+// instead; no double count.
+const SPEND_FEATURES = ['agent_brief', 'agent_chat'];
 
 export async function getAgentSpendToday(): Promise<{ usd: number; calls: number }> {
   const row = await one<{ usd: number; calls: number }>(

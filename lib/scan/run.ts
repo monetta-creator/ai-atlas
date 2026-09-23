@@ -104,12 +104,12 @@ export async function advanceScanRun(runId: string, deadlineAt: number): Promise
           await setScanStep(runId, 'hydrate');
           continue;
         }
-        // Tavily's quota breaker (search-tavily.ts): with the month's credits
+        // Tavily's quota breaker (lib/scan/tavily-breaker.ts): with the month's credits
         // spent every remaining topic would fail the same way (GDELT is the
         // only other provider and its circuit is open whenever Tavily is the
         // fallback in practice), so skip the leg with one note. Tomorrow's
         // run retries; the credits reset with the month.
-        if (process.env.TAVILY_API_KEY && !tavilyAvailable()) {
+        if (!tavilyAvailable()) {
           const remaining = topics.filter((t) => !run.searched_topics.includes(t.slug));
           notes.push(`search skipped (${remaining.length} topics): ${TAVILY_QUOTA_NOTE}`);
           for (const t of remaining) await markScanTopicSearched(run.id, t.slug);

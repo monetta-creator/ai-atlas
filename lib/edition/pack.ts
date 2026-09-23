@@ -4,53 +4,19 @@
 // summaries and in-app hrefs only, never review notes, raw text or admin
 // columns (the roundup/tooling-report discipline, lib/research/roundup.ts).
 //
-// PLAIN-NODE LOADABLE: scripts/test-edition-pack.mjs imports windowFor and
-// allowlistForEdition directly from this file. Every relative import this
-// module needs AT LOAD TIME therefore carries an explicit .ts extension (the
-// lib/pipeline/config.ts convention) and resolves to a dependency-light
-// module (db.ts, scan/core.ts, edition/cluster.ts — none of which have their
-// own relative imports). The one DB-touching read this file does NOT need at
-// load time (the Monday tooling-entrants pull, which drags in lib/data/tooling
-// -> lib/db with no .ts extension) is dynamically imported inside
-// buildEditionPack instead, so it is never resolved by the pure test.
+// The pure helpers (windowFor, allowlistForEdition, the front validators)
+// live in ./pure.ts; this module owns the DB reads.
 
 import { q, one } from '../db.ts';
-import { lookbackDays } from '../scan/core.ts';
-import { clusterStories, coverageLine } from './cluster.ts';
+import { clusterStories } from './cluster.ts';
 import { fetchHnAiFront } from './hn.ts';
 import { fetchMarketStrip } from './markets.ts';
-import type { StoryItem, StoryCluster } from './cluster';
+import { windowFor, thingsHappenFor } from './pure.ts';
+import type { StoryItem } from './cluster';
 import type {
-  EditionPack, EditionNumbers, EditionThing, EditionCompanyNote, EditionPaper, EditionTool,
-  EditionBlindSpot, EditionSourceRow, EditionFrontItem,
+  EditionPack, EditionNumbers, EditionCompanyNote, EditionPaper, EditionTool,
+  EditionBlindSpot, EditionSourceRow,
 } from './types';
-import type { CitationAllowlist } from '../citations';
-
-// Belt-and-braces on the no-em-dash rule, same as lib/research/roundup.ts's
-// deDash: the model is instructed never to use one, this is the backstop.
-export const deDash = (s: string): string => s.replace(/\s*—\s*/g, ', ');
-
-// ---------------------------------------------------------------- window
-
-// Monday's window reaches back over the weekend (lookbackDays returns 3 on a
-// Monday, 1 otherwise), same rule the scan/intel/pipeline engines use for
-// their own catch-up. Half-open [from, to) in UTC, matching the rest of the
-// codebase's date-range idiom (e.g. lib/data/reports.ts's `< ($2::date + 1)`)
-// rather than an inclusive 23:59:59 upper bound.
-// The edition's window is "since the last edition": it closes at press time
-// (EDITION_PRESS_UTC on the edition's day) and opens at the previous
-// weekday's press time, so the 20:30 UTC late feed sweep lands in the next
-// morning's paper instead of falling between two calendar days. Monday's
-// window reaches back to Friday's press time (lookbackDays = 3). `fromDay`
-// is kept for callers that label the window by date.
-export const EDITION_PRESS_UTC = '16:45:00';
-
-export function windowFor(day: string): { from: string; to: string; fromDay: string } {
-  const to = new Date(`${day}T${EDITION_PRESS_UTC}Z`);
-  const from = new Date(to);
-  from.setUTCDate(from.getUTCDate() - lookbackDays(day));
-  return { from: from.toISOString(), to: to.toISOString(), fromDay: from.toISOString().slice(0, 10) };
-}
 
 function domainOf(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -128,19 +94,19 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
           and sc.created_at >= $1::timestamptz and sc.created_at < $2::timestamptz`,
       [w.from, w.to]
     ),
-    // Window on when a signal went public, not its editorial date: pipeline
-    // drafts carry the article's date and are published hours or days later,
-    // by a human or the promotion policy. first_published_at (0059) records
-    // that moment; the coalesce covers rows from before it existed.
+    // Window on first_published_at (0059), when the signal went public, not
+    // published_at, the editorial date: pipeline drafts carry the article's
+    // date and are published hours or days later, by a human or the promotion
+    // policy. Every publishing writer stamps it and 0059 backfilled the rest.
     q<SignalRow>(
       `select s.id, s.title, s.summary, to_char(s.published_at, 'YYYY-MM-DD') as published_date,
               s.claim_touches, src.url as source_url
          from signals s
          left join sources src on src.id = s.source_id
         where s.is_published = true
-          and coalesce(s.first_published_at, s.auto_published_at, s.published_at) >= $1::timestamptz
-          and coalesce(s.first_published_at, s.auto_published_at, s.published_at) < $2::timestamptz
-        order by coalesce(s.first_published_at, s.auto_published_at, s.published_at) desc`,
+          and s.first_published_at >= $1::timestamptz
+          and s.first_published_at < $2::timestamptz
+        order by s.first_published_at desc`,
       [w.from, w.to]
     ),
     q<{ company_slug: string; company_name: string; fact: string; value_text: string | null; url: string | null }>(
@@ -152,12 +118,18 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
         order by f.company_slug, f.created_at desc`,
       [w.from, w.to]
     ),
+    // The research engine's analyze step extracts findings from agent-positive
+    // kept papers the same day they arrive; a human review_status lands days
+    // later, so a same-day tracked/noted predicate read 0 every edition. Read
+    // the engine-analyzed papers in the window instead, human-confirmed first,
+    // and never one a human dismissed (an explicit "no" recorded with a why).
     q<{ id: string; title: string; headline_claim: string | null; who_cares: { lens: string; note: string }[] | null }>(
       `select p.id, p.title, p.extraction->>'headline_claim' as headline_claim, p.extraction->'who_cares' as who_cares
          from papers p
-        where p.review_status in ('tracked', 'noted')
+        where p.triage_status = 'kept' and p.extraction is not null
+          and p.review_status <> 'dismissed'
           and p.created_at >= $1::timestamptz and p.created_at < $2::timestamptz
-        order by p.created_at desc
+        order by (p.review_status in ('tracked','noted')) desc, p.created_at desc
         limit 8`,
       [w.from, w.to]
     ),
@@ -202,11 +174,11 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
   const clustersFull = clusterStories(allItems);
   const clusters = clustersFull.slice(0, 40).map((c) => ({ ...c, items: c.items.slice(0, 12) }));
 
-  // ---- things happen (the ranked tail, 8..30) ---------------------------
+  // ---- things happen ----------------------------------------------------
 
-  const thingsHappen: EditionThing[] = clustersFull.slice(7, 30).map((c) => ({
-    headline: c.lead.headline, url: c.lead.url, domain: c.lead.domain, tier: c.lead.tier, href: c.lead.href,
-  }));
+  // The ranked tail after the default 7-item front; runDailyEdition rebuilds
+  // it against the actual front picks.
+  const thingsHappen = thingsHappenFor(clustersFull, new Set(clustersFull.slice(0, 7).map((c) => c.id)));
 
   // ---- companies ----------------------------------------------------------
 
@@ -233,11 +205,10 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
 
   let tools: EditionTool[] = [];
   if (isMonday) {
-    // Dynamic import: lib/data/tooling.ts imports '../db' with no .ts
-    // extension, which plain Node's ESM resolver cannot follow (verified:
-    // extensionless relative specifiers 404 under node's type stripping).
-    // A dynamic import is resolved only when this branch actually runs
-    // (never under the pure test), so it never breaks that load.
+    // Dynamic import, resolved only when this branch runs: lib/data/tooling.ts
+    // imports '../db' with no .ts extension, which plain Node's ESM resolver
+    // cannot follow. Nothing pure loads this module any more (./pure.ts holds
+    // that half), so this is now only a cheap lazy load.
     const { getNewEntrants } = await import('../data/tooling');
     const since = new Date(`${day}T00:00:00Z`);
     since.setUTCDate(since.getUTCDate() - 7);
@@ -367,110 +338,4 @@ async function resolveClaimHrefs(
       return { code: r.code, statement: r.statement, href, signalHrefs };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
-}
-
-// ---------------------------------------------------------------- citation gate
-
-// Every url/href the front + column legs may cite: every story item's
-// external url, every signal/paper/tool/claim in-app href. Pure, DB-free —
-// safe for scripts/test-edition-pack.mjs.
-export function allowlistForEdition(pack: EditionPack): CitationAllowlist {
-  const hrefs = new Set<string>();
-  const tagByHref = new Map<string, string>();
-  for (const c of pack.clusters) {
-    for (const it of c.items) {
-      hrefs.add(it.url);
-      if (it.href) hrefs.add(it.href);
-    }
-  }
-  for (const t of pack.thingsHappen) {
-    hrefs.add(t.url);
-    if (t.href) hrefs.add(t.href);
-  }
-  for (const p of pack.papers) hrefs.add(p.href);
-  for (const t of pack.tools) hrefs.add(t.href);
-  for (const c of pack.claimsTouched) {
-    hrefs.add(c.href);
-    for (const h of c.signalHrefs) hrefs.add(h);
-    tagByHref.set(c.href, c.code);
-  }
-  for (const co of pack.companies) for (const f of co.facts) if (f.url) hrefs.add(f.url);
-  for (const b of pack.blindSpots) if (b.url) hrefs.add(b.url);
-  return { hrefs, tagByHref };
-}
-
-// ---------------------------------------------------------------- front validation
-
-// What the model's submit_front tool returns, before validation: every field
-// is untrusted input (the tool schema only guarantees the shape, not that
-// clusterId names a real cluster or that goDeeperHref is one of its urls).
-export interface RawFrontItem {
-  clusterId?: unknown;
-  headline?: unknown;
-  why?: unknown;
-  numbers?: unknown;
-  goDeeperHref?: unknown;
-}
-
-export function goDeeperLabel(href: string): string {
-  if (href.startsWith('/signals/')) return 'Read the signal';
-  if (href.startsWith('/research/')) return 'Read the paper';
-  if (href.startsWith('/tooling/')) return 'Read the product page';
-  return 'Read the source';
-}
-
-// The deterministic backstop between the model's front-item picks and the
-// rendered page (lib/edition/generate.ts's generateFront calls this after
-// the model call; scripts/test-edition-pack.mjs exercises it directly, no
-// model or DB involved). Drops items naming a cluster outside `clusters`,
-// substitutes a goDeeperHref that is not one of that cluster's own item
-// urls/hrefs with the cluster's lead href, and clamps the result to `n`.
-export function validateFrontItems(
-  clusters: StoryCluster[], raw: RawFrontItem[], n: number
-): EditionFrontItem[] {
-  const byId = new Map(clusters.map((c) => [c.id, c]));
-  const out: EditionFrontItem[] = [];
-  for (const it of raw) {
-    const c = byId.get(typeof it.clusterId === 'string' ? it.clusterId : '');
-    if (!c) continue;
-    const allow = new Set<string>();
-    for (const item of c.items) {
-      allow.add(item.url);
-      if (item.href) allow.add(item.href);
-    }
-    const leadHref = c.lead.href ?? c.lead.url;
-    let href = typeof it.goDeeperHref === 'string' ? it.goDeeperHref : '';
-    if (!allow.has(href)) href = leadHref;
-    const numbersRaw = typeof it.numbers === 'string' ? deDash(it.numbers).trim() : '';
-    out.push({
-      clusterId: c.id,
-      headline: deDash(typeof it.headline === 'string' && it.headline ? it.headline : c.lead.headline).trim(),
-      why: deDash(typeof it.why === 'string' ? it.why : '').trim(),
-      numbers: numbersRaw || null,
-      goDeeperHref: href,
-      goDeeperLabel: goDeeperLabel(href),
-      coverage: coverageLine(c),
-    });
-    if (out.length >= n) break;
-  }
-  return out;
-}
-
-// The no-budget / no-model fallback (lib/edition/run.ts): the top n clusters
-// by score, headline = lead headline, why = the lead's summary first
-// sentence (or empty), numbers always null (never invented without a model).
-export function deterministicFront(pack: EditionPack, n: number): EditionFrontItem[] {
-  return pack.clusters.slice(0, Math.max(0, n)).map((c) => {
-    const href = c.lead.href ?? c.lead.url;
-    const firstSentence = c.lead.summary ? c.lead.summary.split(/(?<=[.!?])\s/)[0] : '';
-    return {
-      clusterId: c.id,
-      headline: c.lead.headline,
-      why: firstSentence,
-      numbers: null,
-      goDeeperHref: href,
-      goDeeperLabel: goDeeperLabel(href),
-      coverage: coverageLine(c),
-    };
-  });
 }

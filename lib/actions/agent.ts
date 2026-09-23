@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { getFindingByKey } from '../data/agent';
 import * as m from '../mutations';
+import { runDailyBrief } from '../agent/brief';
 import { executeRemedy, REMEDIES } from '../agent/remedies';
 import { runChecks } from '../agent/runner';
 import type { AgentPrefs, FindingState, RemedyResult } from '../agent/types';
@@ -76,18 +77,15 @@ export async function runChecksNowAction(): Promise<{
   return result;
 }
 
-// Guarded dynamic import: lib/agent/brief.ts is a later work package's
-// deliverable, so this action must type-check and run before it lands.
+// Runs the daily brief on demand (idempotent on the UTC day; budget and
+// model guards live inside runDailyBrief).
 export async function runBriefNowAction(): Promise<{ ok: boolean; error?: string }> {
   await requireAdmin();
   try {
-    const briefModulePath = '../agent/brief';
-    const mod: { runDailyBrief?: (now: Date) => Promise<unknown> } = await import(briefModulePath);
-    if (typeof mod.runDailyBrief !== 'function') return { ok: false, error: 'The daily brief is not wired up yet.' };
-    await mod.runDailyBrief(new Date());
+    await runDailyBrief(new Date());
     revalidatePath('/agent');
     return { ok: true };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'The daily brief is not wired up yet.' };
+    return { ok: false, error: e instanceof Error ? e.message : 'The daily brief failed.' };
   }
 }

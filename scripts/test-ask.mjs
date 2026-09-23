@@ -191,7 +191,7 @@ check('store: deleteConvo removes', () => {
 
 // ---- web sources (the web-search toggle's sentinel wire) ---------------------
 const {
-  encodeWebSources, extractWebSources, collectWebSources, WEB_SOURCES_MARKER,
+  encodeWebSources, extractWebSources, collectWebSources, createWebSourceCollector, WEB_SOURCES_MARKER,
 } = await import('../lib/ask/history.ts');
 
 check('web sources: encode/extract round trip', () => {
@@ -234,6 +234,70 @@ check('collectWebSources: dedupes by url, skips non-text blocks', () => {
   assert.deepEqual(collectWebSources(msg), [
     { url: 'https://a.com/x', title: 'A' },
     { url: 'https://b.com/y', title: 'https://b.com/y' },
+  ]);
+});
+
+// ---- web-source collector (the three routes' shared accumulator) -------------
+const cite = (url, title) => ({
+  type: 'content_block_delta',
+  delta: { type: 'citations_delta', citation: { type: 'web_search_result_location', url, title } },
+});
+const resultBlock = (n) => ({
+  type: 'content_block_start',
+  content_block: {
+    type: 'web_search_tool_result',
+    content: Array.from({ length: n }, (_, i) => ({ type: 'web_search_result', url: `https://r${i}.com`, title: `R${i}` })),
+  },
+});
+check('collector: a citations_delta event adds a source', () => {
+  const c = createWebSourceCollector(3);
+  assert.deepEqual(c.fromStreamEvent(cite('https://a.com/x', 'A')), [{ url: 'https://a.com/x', title: 'A' }]);
+  assert.deepEqual(c.list(), [{ url: 'https://a.com/x', title: 'A' }]);
+});
+check('collector: a non-web citation type is ignored', () => {
+  const c = createWebSourceCollector(3);
+  const ev = { type: 'content_block_delta', delta: { type: 'citations_delta', citation: { type: 'char_location', url: 'https://x.com' } } };
+  assert.deepEqual(c.fromStreamEvent(ev), []);
+  assert.deepEqual(c.fromStreamEvent({ type: 'message_start' }), []);
+  assert.deepEqual(c.list(), []);
+});
+check('collector: a result block with 5 results at cap 3 yields 3 seen and 3 listed', () => {
+  const c = createWebSourceCollector(3);
+  const seen = c.fromStreamEvent(resultBlock(5));
+  assert.equal(seen.length, 3);
+  assert.equal(c.list().length, 3);
+  assert.equal(c.list()[2].url, 'https://r2.com');
+  // fromContentBlocks reads the same block shape off a finished message.
+  const c5 = createWebSourceCollector(5);
+  assert.equal(c5.fromContentBlocks([{ type: 'text' }, resultBlock(5).content_block]).length, 5);
+  assert.deepEqual(c5.fromContentBlocks([{ type: 'text' }]), []);
+});
+check('collector: a duplicate url is seen again but list() stays deduped', () => {
+  const c = createWebSourceCollector(3);
+  c.fromStreamEvent(cite('https://a.com/x', 'A'));
+  assert.deepEqual(c.fromStreamEvent(cite('https://a.com/x', 'A again')), [{ url: 'https://a.com/x', title: 'A again' }]);
+  assert.deepEqual(c.list(), [{ url: 'https://a.com/x', title: 'A' }]);
+});
+check('collector: a null title falls back to the url, long fields clamp', () => {
+  const c = createWebSourceCollector(3);
+  c.fromStreamEvent(cite('https://b.com/y', null));
+  c.fromStreamEvent(cite(`https://c.com/${'z'.repeat(700)}`, 't'.repeat(300)));
+  assert.equal(c.list()[0].title, 'https://b.com/y');
+  assert.equal(c.list()[1].url.length, 600);
+  assert.equal(c.list()[1].title.length, 200);
+});
+check('collector: fromMessage merges finalMessage citations without duplicating', () => {
+  const c = createWebSourceCollector(3);
+  c.fromStreamEvent(cite('https://a.com/x', 'A'));
+  c.fromMessage({ content: [
+    { type: 'text', citations: [
+      { type: 'web_search_result_location', url: 'https://a.com/x', title: 'A' },
+      { type: 'web_search_result_location', url: 'https://d.com/w', title: 'D' },
+    ] },
+  ] });
+  assert.deepEqual(c.list(), [
+    { url: 'https://a.com/x', title: 'A' },
+    { url: 'https://d.com/w', title: 'D' },
   ]);
 });
 

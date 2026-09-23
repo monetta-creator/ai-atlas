@@ -8,7 +8,7 @@ export interface EditionNumbers {
   itemsRead: number;        // scan + intel + pipeline candidates in the window
   outlets: number;          // distinct source domains
   signalsPublished: number;
-  papersKept: number;
+  papersKept: number;       // papers the engine analyzed in the window (human-confirmed first)
   newTools: number;         // 0 outside a Monday
   clusters: number;
 }

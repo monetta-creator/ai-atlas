@@ -10,6 +10,8 @@ import assert from 'node:assert/strict';
 const {
   decideLane, splitBeyond, composeDecline, encodeDecline, extractDecline,
   laneAddendum, priorUserTurn, BEYOND_MARKER, DECLINE_MARKER, LANE_LABEL, ASK_PERSONA, SCOPE_WITH_BEYOND,
+  STRONG_RANK, MID_RANK, WEAK_RANK,
+  looksFresh, cleanTopic, parseLane, beatDescriptionFrom, questionLinksFrom,
 } = await import('../lib/ask/lanes.ts');
 
 let failures = 0;
@@ -29,8 +31,13 @@ const sig = (over) => ({ hitCount: 0, maxRank: 0, explicit: false, beat: 'atlas'
 check('decideLane: explicit code match is always covered', () =>
   assert.equal(decideLane(sig({ explicit: true, hitCount: 0, maxRank: 0, beat: 'unrelated' })), 'covered'));
 
-check('decideLane: strong hits (>=6, rank >=0.08) is covered', () =>
-  assert.equal(decideLane(sig({ hitCount: 8, maxRank: 0.2 })), 'covered'));
+check('decideLane: rank at or above STRONG_RANK is covered whatever the beat', () => {
+  assert.equal(decideLane(sig({ hitCount: 8, maxRank: 0.2 })), 'covered');
+  assert.equal(decideLane(sig({ hitCount: 1, maxRank: STRONG_RANK, beat: 'adjacent' })), 'covered');
+  // An off-beat opening turn at the strong bar is covered by rank (the old
+  // trailing "unrelated && !followUp" branch was unreachable for this reason).
+  assert.equal(decideLane(sig({ hitCount: 0, maxRank: STRONG_RANK, beat: 'unrelated', followUp: false })), 'covered');
+});
 
 check('decideLane: weak hits (some, but under the strong bar) is thin', () => {
   assert.equal(decideLane(sig({ hitCount: 1, maxRank: 0.025 })), 'thin');
@@ -40,6 +47,9 @@ check('decideLane: weak hits (some, but under the strong bar) is thin', () => {
   assert.equal(decideLane(sig({ hitCount: 62, maxRank: 0.037, beat: 'adjacent' })), 'thin');
   assert.equal(decideLane(sig({ hitCount: 48, maxRank: 0.028, beat: 'atlas' })), 'thin');
   assert.equal(decideLane(sig({ hitCount: 65, maxRank: 0.034, beat: 'atlas' })), 'covered');
+  // The MID bar itself: covered on the beat, thin off it.
+  assert.equal(decideLane(sig({ hitCount: 5, maxRank: MID_RANK, beat: 'atlas' })), 'covered');
+  assert.equal(decideLane(sig({ hitCount: 5, maxRank: MID_RANK, beat: 'adjacent' })), 'thin');
   // Below the noise floor, hits do not rescue an off-beat question.
   assert.equal(decideLane(sig({ hitCount: 24, maxRank: 0.015, beat: 'unrelated' })), 'unrelated');
   assert.equal(decideLane(sig({ hitCount: 24, maxRank: 0.015, beat: 'adjacent' })), 'adjacent');
@@ -51,11 +61,13 @@ check('decideLane: no hits + adjacent beat is adjacent', () =>
 check('decideLane: no hits + unrelated beat on the opening turn is unrelated', () =>
   assert.equal(decideLane(sig({ hitCount: 0, beat: 'unrelated', followUp: false })), 'unrelated'));
 
-check('decideLane: no hits + unrelated beat on a follow-up floors at adjacent', () =>
-  assert.equal(decideLane(sig({ hitCount: 20, maxRank: 0.03, beat: 'unrelated', followUp: true })), 'thin'));
+check('decideLane: an off-beat follow-up at MID_RANK is thin, not a decline', () =>
+  assert.equal(decideLane(sig({ hitCount: 20, maxRank: MID_RANK, beat: 'unrelated', followUp: true })), 'thin'));
 check('decideLane: an off-beat follow-up with only noise-level matches still declines', () => {
   assert.equal(decideLane(sig({ hitCount: 24, maxRank: 0.015, beat: 'unrelated', followUp: true })), 'unrelated');
-  assert.equal(decideLane(sig({ hitCount: 65, maxRank: 0.025, beat: 'unrelated', followUp: true })), 'unrelated');
+  // Below MID_RANK, the follow-up floor (0.025 was the measured pasta-after-export-controls rank).
+  assert.equal(decideLane(sig({ hitCount: 65, maxRank: MID_RANK - 0.005, beat: 'unrelated', followUp: true })), 'unrelated');
+  assert.ok(WEAK_RANK < MID_RANK && MID_RANK < STRONG_RANK);
 });
 check('priorUserTurn: the previous user turn, or undefined on the first', () => {
   assert.equal(priorUserTurn([{ role: 'user', content: 'a' }]), undefined);
@@ -70,6 +82,49 @@ check('decideLane: every lane has a label', () => {
     assert.equal(typeof LANE_LABEL[lane], 'string');
     assert.ok(LANE_LABEL[lane].length > 0);
   }
+});
+
+// ---- parseLane ------------------------------------------------------------------
+check('parseLane: known lanes round-trip, junk and null are undefined', () => {
+  assert.equal(parseLane('thin'), 'thin');
+  assert.equal(parseLane('bogus'), undefined);
+  assert.equal(parseLane(null), undefined);
+  assert.equal(parseLane(undefined), undefined);
+  for (const lane of Object.keys(LANE_LABEL)) assert.equal(parseLane(lane), lane);
+});
+
+// ---- looksFresh -----------------------------------------------------------------
+check('looksFresh: recency cues fire, evergreen phrasing does not', () => {
+  assert.equal(looksFresh('what did Nvidia announce this week'), true);
+  assert.equal(looksFresh('chip export controls'), false);
+  assert.equal(looksFresh('latest OpenAI model'), true);
+});
+
+// ---- cleanTopic -----------------------------------------------------------------
+check('cleanTopic: dashes become commas, clamped to 40, non-strings empty', () => {
+  const t = cleanTopic('a \u2014 b \u2013 c');
+  assert.ok(!/[\u2013\u2014]/.test(t), 'no dash chars remain');
+  assert.ok(t.includes(','), 'commas present');
+  assert.equal(cleanTopic('x'.repeat(60)).length, 40);
+  assert.equal(cleanTopic(undefined), '');
+});
+
+// ---- beatDescriptionFrom / questionLinksFrom --------------------------------------
+check('questionLinksFrom + beatDescriptionFrom: parse the skeleton question lines', () => {
+  const skeleton = '[Q unit-economics] Q1: Does the unit economics close?\n[Q labor] Q2: Who loses work?';
+  assert.deepEqual(questionLinksFrom({ skeleton }), [
+    { title: 'Does the unit economics close?', href: '/q/unit-economics' },
+    { title: 'Who loses work?', href: '/q/labor' },
+  ]);
+  const beat = beatDescriptionFrom({ skeleton });
+  assert.ok(beat.includes('- Does the unit economics close?'));
+  assert.ok(beat.includes('- Who loses work?'));
+  assert.ok(!beat.includes('\u2014'));
+});
+check('questionLinksFrom + beatDescriptionFrom: empty skeleton and non-question lines', () => {
+  assert.ok(beatDescriptionFrom({ skeleton: '' }).includes('- (no questions loaded)'));
+  assert.deepEqual(questionLinksFrom({ skeleton: '' }), []);
+  assert.deepEqual(questionLinksFrom({ skeleton: '[Q labor] Who loses work?' }), []);
 });
 
 // ---- splitBeyond ----------------------------------------------------------------

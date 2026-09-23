@@ -62,6 +62,17 @@ check('toSheetCard: edition reads on the blotter, subject is the day', () => {
   }));
   assert.equal(card.href, '/blotter/2026-09-23');
   assert.equal(card.subject, 'Sep 23, 2026');
+  assert.equal(card.pdfHref, '/reports/sheet/ed-1/pdf');
+  assert.ok(REPORT_KIND_FILTERS.find((f) => f.key === 'edition').match(card));
+  assert.ok(!REPORT_KIND_FILTERS.find((f) => f.key === 'tooling').match(card));
+});
+
+check('toSheetCard: an edition row with no scope_to falls back to the sheet view and a "Today" subject', () => {
+  const card = toSheetCard(makeClaimMeta({
+    id: 'ed-2', kind: 'edition', subject: null, scope_from: null, scope_to: null, title: 'Daily edition',
+  }));
+  assert.equal(card.href, '/reports/sheet/ed-2');
+  assert.equal(card.subject, 'Today');
 });
 
 check('toSheetCard: scope line reflects a bounded window', () => {

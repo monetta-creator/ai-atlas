@@ -1,8 +1,6 @@
-import { looksFresh } from './lanes';
+import { looksFresh, cleanTopic, type Beat } from './lanes';
 import { routedStructured } from '@/lib/model-route';
 import { DEFAULT_UTILITY_MODEL } from '@/lib/pipeline/config';
-import type { AskNamespace } from '@/lib/ask/retrieve';
-import type { Beat } from '@/lib/ask/lanes';
 
 // The lane classifier (2026-09-23): one cheap, parallel call that reads the
 // question and says whether it sits on the Atlas's own beat, near it, or off
@@ -56,12 +54,6 @@ Also write "topic": a two or three word label naming the question's subject, pla
 Never use an em dash in any text you write; use a comma or a period instead.`;
 }
 
-function cleanTopic(raw: unknown): string {
-  const s = typeof raw === 'string' ? raw : '';
-  const dedashed = s.replace(/[–—]/g, ',').trim();
-  return dedashed.slice(0, 40);
-}
-
 // `prior` is the previous user turn, when there is one: a bare follow-up
 // ("what about Europe?") reads as unrelated on its own and as on-beat next to
 // the question it continues. The classifier sees both; the lane rule then
@@ -94,30 +86,4 @@ export async function classifyQuestion(
   } catch {
     return FAIL_OPEN;
   }
-}
-
-const QUESTION_LINE_RE = /^\[Q ([^\]]+)\] Q\d+: (.+)$/gm;
-
-// The Atlas's beat, rendered from the live namespace: every question title
-// (parsed from the skeleton, which is already the source of truth for the
-// namespace), the six signal lenses, and one sentence naming the portals a
-// question might really be asking about.
-export function beatDescriptionFrom(ns: AskNamespace): string {
-  const titles = [...ns.skeleton.matchAll(QUESTION_LINE_RE)].map((m) => m[2]);
-  const questionLines = titles.length ? titles.map((t) => `- ${t}`).join('\n') : '- (no questions loaded)';
-  return `The Atlas's open questions:
-${questionLines}
-
-The six audience lenses it tracks developments through: market and valuation, labor and knowledge work, geopolitics and security, regulatory and legal, technical capability, societal and cultural.
-
-It also tracks the AI tools market, AI-adjacent startups, and recent AI research papers.`;
-}
-
-// The seven questions as decline-card links (slug + title, both already the
-// skeleton's citation token, so no extra query): feeds composeDecline.
-export function questionLinksFrom(ns: AskNamespace): { title: string; href: string }[] {
-  return [...ns.skeleton.matchAll(QUESTION_LINE_RE)].map((m) => ({
-    title: m[2],
-    href: `/q/${m[1]}`,
-  }));
 }

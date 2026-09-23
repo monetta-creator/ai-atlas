@@ -35,8 +35,7 @@ export interface LaneSignals {
 // Records win over the classifier: if the Atlas has anything on it, we
 // orient from the records. The classifier only decides between "adjacent"
 // (on our beat or near it, nothing tracked) and "unrelated" when retrieval
-// found nothing. A follow-up turn never declines: the conversation already
-// established relevance, so the floor is adjacent.
+// found nothing.
 // Thresholds on Postgres ts_rank with length normalization 1 (the FTS legs
 // use ts_rank(..., 1)); the OR-query matches many records on generic tokens,
 // so hitCount alone is noise (a pasta question matched 24 records in the
@@ -47,9 +46,9 @@ export interface LaneSignals {
 // and local water") at 0.037; a fresh news question ("what did Nvidia
 // announce this week") at 0.028, "how is the Fed thinking about AI" at
 // 0.029; an unrelated one ("best pasta recipe") still matched 24 blocks at
-// 0.015. Hit counts are noise, rank is the signal. STRONG covers on rank alone; MID covers when
-// the classifier also places the question on the Atlas's beat; WEAK is the
-// floor below which hits are treated as noise.
+// 0.015. Hit counts are noise, rank is the signal. STRONG covers on rank
+// alone; MID covers when the classifier also places the question on the
+// Atlas's beat; WEAK is the floor below which hits are treated as noise.
 export const STRONG_RANK = 0.06;
 export const MID_RANK = 0.03;
 export const WEAK_RANK = 0.02;
@@ -67,8 +66,13 @@ export function decideLane(s: LaneSignals): Lane {
   if (s.maxRank >= STRONG_RANK) return 'covered';
   if (s.beat === 'atlas' && s.maxRank >= MID_RANK) return 'covered';
   if (s.hitCount >= 1 && s.maxRank >= WEAK_RANK) return 'thin';
-  if (s.beat === 'unrelated' && !s.followUp) return 'unrelated';
   return 'adjacent';
+}
+
+const LANES = new Set<Lane>(Object.keys(LANE_LABEL) as Lane[]);
+// A lane read off the wire (the X-Ask-Lane header or the NDJSON lane event).
+export function parseLane(v: string | null | undefined): Lane | undefined {
+  return v && LANES.has(v as Lane) ? (v as Lane) : undefined;
 }
 
 // A code-side recency cue, OR'd with the classifier's judgment: the cheap
@@ -158,4 +162,38 @@ export const SCOPE_WITH_BEYOND = `Above the ${BEYOND_MARKER} line you answer ONL
 export function priorUserTurn(msgs: { role: string; content: string }[]): string | undefined {
   const users = msgs.filter((m) => m.role === 'user');
   return users.length > 1 ? users[users.length - 2]?.content : undefined;
+}
+
+// The classifier's topic label is untrusted model output: clamp it and drop
+// dashes (en dash too; this is the label for a decline line, not prose).
+export function cleanTopic(raw: unknown): string {
+  const s = typeof raw === 'string' ? raw : '';
+  const dedashed = s.replace(/[–—]/g, ',').trim();
+  return dedashed.slice(0, 40);
+}
+
+export const QUESTION_LINE_RE = /^\[Q ([^\]]+)\] Q\d+: (.+)$/gm;
+
+// The Atlas's beat, rendered from the live namespace: every question title
+// (parsed from the skeleton, which is already the source of truth for the
+// namespace), the six signal lenses, and one sentence naming the portals a
+// question might really be asking about.
+export function beatDescriptionFrom(ns: { skeleton: string }): string {
+  const titles = [...ns.skeleton.matchAll(QUESTION_LINE_RE)].map((m) => m[2]);
+  const questionLines = titles.length ? titles.map((t) => `- ${t}`).join('\n') : '- (no questions loaded)';
+  return `The Atlas's open questions:
+${questionLines}
+
+The six audience lenses it tracks developments through: market and valuation, labor and knowledge work, geopolitics and security, regulatory and legal, technical capability, societal and cultural.
+
+It also tracks the AI tools market, AI-adjacent startups, and recent AI research papers.`;
+}
+
+// The seven questions as decline-card links (slug + title, both already the
+// skeleton's citation token, so no extra query): feeds composeDecline.
+export function questionLinksFrom(ns: { skeleton: string }): { title: string; href: string }[] {
+  return [...ns.skeleton.matchAll(QUESTION_LINE_RE)].map((m) => ({
+    title: m[2],
+    href: `/q/${m[1]}`,
+  }));
 }

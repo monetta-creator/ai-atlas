@@ -1,14 +1,14 @@
 import { routedStructured } from '../model-route';
 import {
-  getAgentPrefs, listFindings, listAgentActions, getBriefForDay, getAgentSpendToday, getDailyJobStatus,
+  getAgentPrefs, listFindings, listAgentActions, getBriefForDay, getDailyJobStatus,
 } from '../data';
 import type { DailyJobStatus } from '../data/readiness';
 import { saveBrief, markBriefEmailed } from '../mutations';
 import { checkAgentBudget } from './budget';
 import { AGENT_PERSONA, STANDING_RULES, briefInstructions } from './prompt';
-import { scrubDashes, validateMemo } from './brief-core';
+import { scrubDashes, validateMemo, buildDeterministicMemo } from './brief-core';
 import { isEmailConfigured, renderBriefHtml, sendBriefEmail, briefSubject } from './email';
-import type { AgentAction, AgentFinding, BriefMemo, Severity } from './types';
+import type { AgentAction, AgentFinding, BriefMemo } from './types';
 
 // The morning memo: one bounded model call over the open findings and
 // yesterday's actions, saved to agent_briefs and (when Resend is configured)
@@ -79,28 +79,6 @@ function actionLines(actions: AgentAction[]): string[] {
   return actions.slice(0, 30).map((a) => `- ${a.actor} ran ${a.remedy_key} (${a.tier}): ${a.ok ? 'ok' : `failed, ${a.error ?? 'no detail'}`}, cost $${a.cost_usd.toFixed(3)}`);
 }
 
-function buildDeterministicMemo(findings: AgentFinding[], reason: 'budget' | 'model_failed'): BriefMemo {
-  const lead = reason === 'budget' ? 'Budget spent' : 'The model call failed';
-  const bySeverity: Record<Severity, AgentFinding[]> = { high: [], warn: [], info: [] };
-  for (const f of findings) bySeverity[f.severity]?.push(f);
-  const sectionFor = (sev: Severity, label: string) => {
-    const list = bySeverity[sev];
-    if (!list.length) return null;
-    return { title: label, body: list.map((f) => `${f.title} (${f.key}).`).join(' ') };
-  };
-  const sections = [sectionFor('high', 'High'), sectionFor('warn', 'Needs attention'), sectionFor('info', 'For the record')].filter(
-    (s): s is { title: string; body: string } => s !== null
-  );
-  return {
-    headline: findings.length
-      ? `${lead}; here is the raw list (${findings.length} open)`
-      : `${lead}; nothing open right now`,
-    sections: sections.length ? sections : [{ title: 'Nothing open', body: 'No open findings right now.' }],
-    proposals: findings.filter((f) => f.remedy?.tier === 'propose').map((f) => ({ findingKey: f.key, text: f.remedy!.label })),
-    willDo: findings.filter((f) => f.remedy?.tier === 'auto').map((f) => ({ findingKey: f.key, text: f.remedy!.label })),
-  };
-}
-
 export async function runDailyBrief(now: Date = new Date()): Promise<{ id: string; day: string; emailed: boolean; skipped?: string }> {
   const day = now.toISOString().slice(0, 10);
 
@@ -125,9 +103,6 @@ export async function runDailyBrief(now: Date = new Date()): Promise<{ id: strin
     memo = buildDeterministicMemo(findings, 'budget');
     model = 'none';
   } else {
-    const spendToday = await getAgentSpendToday()
-      .then((s) => s.usd)
-      .catch(() => 0);
     const system = [AGENT_PERSONA, STANDING_RULES, prefs.steering ? `Kevin's standing note:\n${prefs.steering}` : null]
       .filter(Boolean)
       .join('\n\n');
@@ -143,7 +118,7 @@ export async function runDailyBrief(now: Date = new Date()): Promise<{ id: strin
       'DAILY JOBS:',
       ...jobStatusLines(jobStatus),
       '',
-      `Agent spend today: $${spendToday.toFixed(3)} of the daily budget.`,
+      `Agent spend today: $${budget.spentUsd.toFixed(3)} of the daily budget.`,
     ].join('\n');
 
     try {

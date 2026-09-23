@@ -6,6 +6,7 @@ import { sanitizeText } from '../pipeline/web';
 import type { RawCandidate } from '../pipeline/web';
 import { PIPELINE_DAY_START_SQL } from '../pipeline/config';
 import { foldRunNotes } from '../run-notes';
+import { TAVILY_QUOTA_NOTE_RE } from '../scan/tavily-breaker';
 
 // ---- Discovery pipeline ----------------------------------------------------
 
@@ -168,8 +169,6 @@ export async function setAnalysisStatus(
 
 // ---- Pipeline 2.0: the cron engine's checkpoint + lease + prefs (0042) ------
 
-// Mark one discovery unit done ('market:0', 'sweep'). Append-if-absent, so a
-// retried unit never double-records.
 // Re-run discovery on a completed run (the scan's reopenScanRunForSearch
 // twin): clears the discovered_units checkpoint and reopens at 'discovery';
 // triage then sees the new candidates alongside any earlier ones, analysis
@@ -179,17 +178,19 @@ export async function reopenPipelineRunForDiscovery(runId: string): Promise<bool
   const row = await one<{ id: string }>(
     `update pipeline_runs
         set status = 'running', step = 'discovery', discovered_units = '{}', lease_until = null,
-            notes = coalesce((select array_agg(n) from unnest(notes) as n where n !~* 'Tavily 432|Tavily quota exhausted'), '{}'),
+            notes = coalesce((select array_agg(n) from unnest(notes) as n where n !~* $2), '{}'),
             error = null, updated_at = now()
       where id = $1
         and status = 'completed'
         and (lease_until is null or lease_until < now())
       returning id::text as id`,
-    [runId]
+    [runId, TAVILY_QUOTA_NOTE_RE.source]
   );
   return Boolean(row);
 }
 
+// Mark one discovery unit done ('market:0', 'sweep'). Append-if-absent, so a
+// retried unit never double-records.
 export async function markDiscoveryUnitDone(runId: string, unit: string): Promise<void> {
   await exec(
     `update pipeline_runs

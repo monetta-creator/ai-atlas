@@ -235,3 +235,87 @@ export function collectWebSources(msg: {
   }
   return out.slice(0, 8);
 }
+
+// ---- Web-source collector ----------------------------------------------------
+// One accumulator for the three places a route can see a web source: raw
+// stream events (the pinned SDK's accumulator predates server-tool blocks and
+// drops both the tool results and the citations, so the routes read the wire),
+// non-streamed message content (the deep loop's rounds), and a finished
+// message's citations (belt and braces for a future SDK). `fromX` returns
+// EVERY result it saw with a url (pre-dedupe, capped per result block) so a
+// caller can feed them to its own corpus; `list()` is the deduped, clamped,
+// title-defaulted list in first-seen order. Structural types only, no SDK.
+
+export interface SeenResult {
+  url: string;
+  title: string | null;
+}
+
+type CitationLike = { type?: string; url?: string; title?: string | null };
+type ResultLike = { type?: string; url?: string; title?: string | null };
+type BlockLike = { type?: string; content?: unknown; citations?: CitationLike[] | null };
+
+export function createWebSourceCollector(perResultCap: number): {
+  fromStreamEvent(ev: unknown): SeenResult[];
+  fromContentBlocks(content: unknown[]): SeenResult[];
+  fromMessage(msg: { content: BlockLike[] }): void;
+  list(): AskWebSource[];
+} {
+  const out: AskWebSource[] = [];
+  const seen = new Set<string>();
+  const add = (url: string, title: string | null | undefined) => {
+    if (seen.has(url)) return;
+    seen.add(url);
+    out.push({ url: url.slice(0, 600), title: String(title ?? '').slice(0, 200) || url });
+  };
+  const fromResultBlock = (content: unknown): SeenResult[] => {
+    if (!Array.isArray(content)) return [];
+    const found: SeenResult[] = [];
+    for (const r of (content as ResultLike[]).slice(0, perResultCap)) {
+      if (r?.type === 'web_search_result' && r.url) {
+        add(r.url, r.title);
+        found.push({ url: r.url, title: r.title ?? null });
+      }
+    }
+    return found;
+  };
+  return {
+    fromStreamEvent(ev) {
+      const e = ev as {
+        type?: string;
+        content_block?: BlockLike;
+        delta?: { type?: string; citation?: CitationLike };
+      };
+      // Explicit citations when the model quotes (rare on Haiku)...
+      if (e.type === 'content_block_delta' && e.delta?.type === 'citations_delta') {
+        const c = e.delta.citation;
+        if (c?.type === 'web_search_result_location' && c.url) {
+          add(c.url, c.title);
+          return [{ url: c.url, title: c.title ?? null }];
+        }
+        return [];
+      }
+      // ...and the search results themselves as the reliable fallback: the
+      // web_search_tool_result block arrives whole at block start.
+      if (e.type === 'content_block_start' && e.content_block?.type === 'web_search_tool_result') {
+        return fromResultBlock(e.content_block.content);
+      }
+      return [];
+    },
+    fromContentBlocks(content) {
+      const found: SeenResult[] = [];
+      for (const blk of content) {
+        const cb = blk as BlockLike;
+        if (cb.type !== 'web_search_tool_result') continue;
+        found.push(...fromResultBlock(cb.content));
+      }
+      return found;
+    },
+    fromMessage(msg) {
+      for (const s of collectWebSources(msg)) add(s.url, s.title);
+    },
+    list() {
+      return out.slice();
+    },
+  };
+}

@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { NAV_ICONS } from '@/components/portal-icons';
+import { usePathnameChange } from '@/lib/use-route-change';
+import { refreshChromeOnce, sessionLost, chromeSessionAlive } from '@/lib/chrome-session-client';
 import type { AgentPulse } from '@/lib/agent/types';
 import AgentDrawer from '@/components/agent/AgentDrawer';
 import AgentToasts from '@/components/agent/AgentToasts';
@@ -12,23 +14,17 @@ const POLL_MS = 60_000;
 // The Atlas Agent entry point: a rail icon (desktop) or a menu row (the
 // mobile sheet), each owning the same drawer. Polls GET /api/agent/pulse
 // every 60s so the badge and the toast stack stay current without the drawer
-// open; paused when the tab is hidden. The derived-state recipe (AskPeek):
-// the fetch result carries the tick it answers, so a stale response never
-// clobbers a newer one, and no setState runs synchronously in an effect body.
+// open; paused when the tab is hidden. The poll effect's `live` flag drops
+// an out-of-order response, so the last successful poll wins, and no
+// setState runs synchronously in an effect body.
 export default function AgentOrb({
   variant, initialPulse,
 }: { variant: 'rail' | 'menu'; initialPulse: AgentPulse | null }) {
   const [open, setOpen] = useState(false);
-  // The orb persists across navigation (root layout): close the drawer when
-  // the page changes, which the old per-page remount did implicitly.
-  const path = usePathname();
-  const [seenPath, setSeenPath] = useState(path);
-  if (path !== seenPath) {
-    setSeenPath(path);
-    setOpen(false);
-  }
+  // Close the drawer when the page changes (lib/use-route-change.ts).
+  usePathnameChange(() => setOpen(false));
   const [tick, setTick] = useState(0);
-  const [polled, setPolled] = useState<{ key: number; data: AgentPulse } | null>(null);
+  const [polled, setPolled] = useState<AgentPulse | null>(null);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -45,18 +41,19 @@ export default function AgentOrb({
     fetch('/api/agent/pulse', { cache: 'no-store' })
       .then((r) => {
         // The session ended under the persistent chrome: re-render it.
-        if (r.status === 401 || r.redirected) { if (live) router.refresh(); return Promise.reject(new Error('session')); }
+        // (Once per pathname, read at response time so a navigation does not
+        // re-run this effect.)
+        if (sessionLost(r)) { if (live) refreshChromeOnce(router, window.location.pathname); return Promise.reject(new Error('session')); }
         return r.ok ? r.json() : Promise.reject(new Error(String(r.status)));
       })
-      .then((data: AgentPulse) => { if (live) setPolled({ key: tick, data }); })
+      .then((data: AgentPulse) => { chromeSessionAlive(); if (live) setPolled(data); })
       .catch(() => { /* keep the last known pulse */ });
     return () => { live = false; };
   }, [tick, router]);
 
-  // The last successful poll wins (the effect's live flag already drops
-  // out-of-order responses). The chrome persists across navigation now, so
-  // initialPulse can be hours old: never fall back to it between polls.
-  const pulse = polled?.data ?? initialPulse;
+  // The chrome persists across navigation now, so initialPulse can be hours
+  // old: it covers first paint only, then the last successful poll wins.
+  const pulse = polled ?? initialPulse;
   const unread = pulse?.unread ?? 0;
   const high = pulse?.high ?? 0;
 

@@ -1,15 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { isPortal } from '@/lib/auth';
-import { priceUsage, recordApiCall } from '@/lib/cost';
-import { buildAskContext, loadNamespace } from '@/lib/ask/retrieve';
 import { askSystem, conversationMessages } from '@/lib/ask/prompt';
-import { classifyQuestion, beatDescriptionFrom, questionLinksFrom } from '@/lib/ask/classify';
-import { decideLane, composeDecline, encodeDecline, priorUserTurn } from '@/lib/ask/lanes';
-import { EXAMPLE_QUESTIONS } from '@/components/ask/starters';
-import {
-  clampHistory, clampSignalOffset, parseAskBody, retrievalQuery,
-  collectWebSources, encodeCostReport, encodeWebSources,
-} from '@/lib/ask/history';
+import { encodeDecline } from '@/lib/ask/lanes';
+import { laneHeaders, resolveLane } from '@/lib/ask/resolve-lane';
+import { streamQuickAnswer } from '@/lib/ask/quick-stream';
+import { clampHistory, clampSignalOffset, parseAskBody } from '@/lib/ask/history';
 import { checkPortalBudget, PORTAL_CLASSIFY_FEATURE, PORTAL_FEATURE } from '@/lib/portal/budget';
 
 // The team Ask endpoint: /api/ask's envelope with four diffs.
@@ -59,109 +54,24 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const ns = await loadNamespace();
-  const latest = msgs[msgs.length - 1].content;
-  const [ctx, cls] = await Promise.all([
-    buildAskContext(retrievalQuery(msgs), { mode: 'portal', tagStart, ns }),
-    classifyQuestion(latest, beatDescriptionFrom(ns), priorUserTurn(msgs), PORTAL_CLASSIFY_FEATURE),
-  ]);
-  const lane = decideLane({
-    hitCount: ctx.hitCount, maxRank: ctx.maxRank, explicit: ctx.explicit,
-    beat: cls.beat, followUp: msgs.length > 1,
+  const { ctx, cls, lane, autoWeb, decline } = await resolveLane(msgs, {
+    mode: 'portal', tagStart, classifyFeature: PORTAL_CLASSIFY_FEATURE,
   });
-  // Auto web: a thin/adjacent question that hinges on recent events searches
-  // even with the composer's toggle off; portal keyholders may use web already.
-  const useWeb = webOn || (cls.fresh && lane !== 'covered');
+  const useWeb = webOn || autoWeb;
+  const headers = { ...TEXT_HEADERS, ...laneHeaders(lane, ctx.signalRefs) };
 
-  const enc = new TextEncoder();
-  const headers = {
-    ...TEXT_HEADERS,
-    'X-Ask-Lane': lane,
-    'X-Ask-Signals': JSON.stringify(Object.fromEntries(ctx.signalRefs.map((r) => [r.tag, r.id]))),
-  };
-
-  if (lane === 'unrelated') {
-    const decline = composeDecline(cls.topic, questionLinksFrom(ns), EXAMPLE_QUESTIONS.slice(0, 3));
-    return new Response(encodeDecline(decline), { headers });
-  }
+  if (decline) return new Response(encodeDecline(decline), { headers });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return new Response('AI is not configured.', { status: 500 });
   const client = new Anthropic({ apiKey, timeout: 55_000, maxRetries: 0 });
 
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const t0 = Date.now();
-      try {
-        const params = {
-          model: MODEL,
-          max_tokens: 1500,
-          system: [{ type: 'text', text: askSystem(useWeb, lane, cls.fresh), cache_control: { type: 'ephemeral' } }],
-          messages: conversationMessages(msgs, ctx, { web: useWeb, lane }),
-          ...(useWeb
-            ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] }
-            : {}),
-        };
-        const ms = client.messages.stream(
-          params as unknown as Parameters<typeof client.messages.stream>[0]
-        );
-        // Web sources come from the RAW stream's citations_delta events; the
-        // pinned SDK's accumulator drops server-tool blocks (see /api/ask).
-        const webSources: { url: string; title: string }[] = [];
-        const seenSrc = new Set<string>();
-        const addSource = (c?: { type?: string; url?: string; title?: string | null }) => {
-          if (!c || c.type !== 'web_search_result_location' || !c.url || seenSrc.has(c.url)) return;
-          seenSrc.add(c.url);
-          webSources.push({ url: c.url.slice(0, 600), title: String(c.title ?? '').slice(0, 200) || c.url });
-        };
-        if (useWeb) {
-          ms.on('streamEvent', (ev) => {
-            const e = ev as {
-              type?: string;
-              content_block?: { type?: string; content?: { type?: string; url?: string; title?: string | null }[] };
-              delta?: { type?: string; citation?: { type?: string; url?: string; title?: string | null } };
-            };
-            if (e.type === 'content_block_delta' && e.delta?.type === 'citations_delta') addSource(e.delta.citation);
-            if (e.type === 'content_block_start' && e.content_block?.type === 'web_search_tool_result'
-                && Array.isArray(e.content_block.content)) {
-              for (const r of e.content_block.content.slice(0, 3)) {
-                if (r?.type === 'web_search_result') addSource({ type: 'web_search_result_location', url: r.url, title: r.title });
-              }
-            }
-          });
-        }
-        ms.on('text', (delta) => controller.enqueue(enc.encode(delta.replace(/\s*—\s*/g, ', '))));
-        const final = await ms.finalMessage();
-        // Cost sentinel first, web-sources sentinel last (extractWebSources
-        // parses to end of string); the client strips both.
-        const usage = final.usage as {
-          input_tokens?: number | null; output_tokens?: number | null;
-          cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null;
-          server_tool_use?: { web_search_requests?: number | null } | null;
-        };
-        const costUsd = await priceUsage(MODEL, final.usage);
-        controller.enqueue(enc.encode(encodeCostReport({
-          cost_usd: costUsd,
-          input_tokens:
-            (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0),
-          output_tokens: usage.output_tokens ?? 0,
-          cache_read_tokens: usage.cache_read_input_tokens ?? 0,
-          searches: Math.max(usage.server_tool_use?.web_search_requests ?? 0, 0),
-          rounds: 1,
-          model: MODEL,
-        })));
-        if (useWeb) {
-          for (const s of collectWebSources(final)) addSource({ type: 'web_search_result_location', ...s });
-          if (webSources.length) controller.enqueue(enc.encode(encodeWebSources(webSources.slice(0, 8))));
-        }
-        await recordApiCall({ feature: PORTAL_FEATURE, model: MODEL, usage: final.usage, wallMs: Date.now() - t0 });
-      } catch {
-        controller.enqueue(enc.encode('\n\nThe answer could not be completed. Please try again.'));
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, { headers });
+  return new Response(streamQuickAnswer({
+    client,
+    model: MODEL,
+    system: askSystem(useWeb, lane, cls.fresh),
+    messages: conversationMessages(msgs, ctx, { web: useWeb, lane }),
+    useWeb,
+    feature: PORTAL_FEATURE,
+  }), { headers });
 }

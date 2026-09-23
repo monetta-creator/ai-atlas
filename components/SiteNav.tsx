@@ -15,6 +15,7 @@ import ShareLinkButton from './ShareLinkButton';
 import FeedbackButtons from './feedback/FeedbackButtons';
 import AgentOrb from './agent/AgentOrb';
 import { useLiveNavCounts } from '@/lib/nav-counts-client';
+import { useValueChange } from '@/lib/use-route-change';
 
 export type { NavCounts };
 
@@ -113,13 +114,8 @@ export default function SiteNav({
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const viewer: NavViewer = { admin: showAdmin, portal: !!portal };
-  // The bar persists across navigation (root layout): close the mobile sheet
-  // when the page changes, which the old per-page remount did implicitly.
-  const [seenPath, setSeenPath] = useState(path);
-  if (path !== seenPath) {
-    setSeenPath(path);
-    setMobileOpen(false);
-  }
+  // Close the mobile sheet when the page changes (lib/use-route-change.ts).
+  useValueChange(path, () => setMobileOpen(false));
   const liveCounts = useLiveNavCounts(counts, showAdmin);
 
   function badgeEl(leaf: NavLeaf) {

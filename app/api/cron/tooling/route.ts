@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { cronGate, pingDeadman } from '@/lib/cron/shared';
 import { getOrCreateToolingRun, claimToolingRun, advanceToolingRun } from '@/lib/tooling/engine';
 import { getToolingRun, getToolingPrefs, getLatestPullRun } from '@/lib/data/tooling';
 import { failToolingRun } from '@/lib/mutations/tooling';
@@ -17,20 +18,9 @@ export const maxDuration = 800;
 
 const WORK_BUDGET_MS = 700_000;
 
-// Optional healthchecks.io-style dead-man ping, fired on every invocation
-// that ends with the WEEKLY run completed (fresh or alreadyComplete), never
-// on busy/error/paused, and never for the pull leg (it has no schedule to
-// miss).
-function pingDeadman(url: string | undefined): void {
-  if (url) fetch(url, { signal: AbortSignal.timeout(3000) }).catch(() => {});
-}
-
 export async function GET(req: NextRequest): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get('authorization');
-  if (!secret || auth !== `Bearer ${secret}`) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 });
-  }
+  const denied = cronGate(req);
+  if (denied) return denied;
 
   const deadlineAt = Date.now() + WORK_BUDGET_MS;
 
@@ -55,6 +45,9 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
   const { runId, day } = await getOrCreateToolingRun('weekly');
   const existing = await getToolingRun(runId);
+  // Dead-man ping: fired on every invocation that ends with the WEEKLY run
+  // completed (fresh or alreadyComplete), never on busy/error/paused, and
+  // never for the pull leg above (it has no schedule to miss).
   if (existing?.status === 'completed') {
     pingDeadman(process.env.HC_PING_URL_TOOLING);
     return Response.json({ day, done: true, alreadyComplete: true });

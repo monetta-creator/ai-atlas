@@ -21,6 +21,7 @@ const {
   extractQuotes, extractNumbers, runDeterministicChecks, parseVerifyOutput,
 } = deep;
 const { searchAtlas, searchArticles } = await import('../lib/ask/search.ts');
+const { deDash } = await import('../lib/voice.ts');
 
 let failures = 0;
 const check = (name, fn) => {
@@ -297,6 +298,12 @@ check('house style: no em dash in any model- or user-facing string', () => {
     ...DEEP_TOOLS.flatMap((t) => Object.values(t.input_schema.properties ?? {}).map((p) => p.description ?? '')),
   ];
   for (const s of strings) assert.equal(s.includes('—'), false, `em dash in: ${s.slice(0, 60)}`);
+});
+check('deDash (lib/voice.ts): em dashes collapse to a comma, en dashes survive', () => {
+  assert.equal(deDash('a \u2014 b'), 'a, b');
+  assert.equal(deDash('a\u2014b'), 'a, b');
+  assert.equal(deDash('a \u2013 b'), 'a \u2013 b');
+  assert.equal(deDash(''), '');
 });
 check('tools: names and required fields', () => {
   assert.deepEqual(DEEP_TOOLS.map((t) => t.name), ['search_atlas', 'fetch_record', 'search_articles']);

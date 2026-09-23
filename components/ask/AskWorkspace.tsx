@@ -10,7 +10,7 @@ import {
   maxSignalSuffix, mergedSignalMap, setMessageVerify, useAskConvos,
 } from '@/components/ask/store';
 import { extractCostReport, extractWebSources, parseCostReport, type AskCostReport, type AskWebSource } from '@/lib/ask/history';
-import { extractDecline, type DeclinePayload, type Lane } from '@/lib/ask/lanes';
+import { extractDecline, parseLane, type DeclinePayload, type Lane } from '@/lib/ask/lanes';
 import AskRail from '@/components/ask/AskRail';
 import AskThread from '@/components/ask/AskThread';
 import AskComposer from '@/components/ask/AskComposer';
@@ -21,10 +21,6 @@ import PortalUnlock from '@/components/datasets/PortalUnlock';
 export type AskMode = 'admin' | 'portal' | 'locked';
 
 const DATASET_TOKEN = /\[dataset\s+([a-z0-9-]+)\]/gi;
-const LANES = new Set<Lane>(['covered', 'thin', 'adjacent', 'unrelated']);
-function parseLane(v: string | null | undefined): Lane | undefined {
-  return v && LANES.has(v as Lane) ? (v as Lane) : undefined;
-}
 
 // The Ask workspace: the app's one viewport-height shell. Owns the active
 // conversation, the streaming turn, and the mobile history sheet. Conversations

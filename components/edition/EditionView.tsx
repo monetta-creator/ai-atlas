@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import type { SavedEdition } from '@/lib/edition/types';
-import { allowlistForEdition } from '@/lib/edition/pack';
+import { allowlistForEdition } from '@/lib/edition/pure';
 import { fmtChange } from '@/lib/edition/markets';
 import { enforceCitations } from '@/lib/citations';
 import { dateLabel } from '@/lib/format';
@@ -62,7 +62,7 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
     { n: pack.numbers.itemsRead, l: 'Items read' },
     { n: pack.numbers.outlets, l: 'Outlets' },
     { n: pack.numbers.signalsPublished, l: 'Signals published' },
-    { n: pack.numbers.papersKept, l: 'Papers kept' },
+    { n: pack.numbers.papersKept, l: 'Papers analyzed' },
     ...(pack.numbers.newTools > 0 ? [{ n: pack.numbers.newTools, l: 'New tools' }] : []),
     { n: pack.numbers.clusters, l: 'Stories' },
   ];

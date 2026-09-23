@@ -110,7 +110,7 @@ export async function advanceIntelRun(runId: string, deadlineAt: number): Promis
           await setIntelStep(runId, 'filings');
           continue;
         }
-        // Tavily's quota breaker (lib/scan/search-tavily.ts): one 432 means
+        // Tavily's quota breaker (lib/scan/tavily-breaker.ts): one 432 means
         // every remaining company would fail the same way; skip the leg with
         // one note (feeds and filings still ran) and let tomorrow retry.
         if (!tavilyAvailable()) {

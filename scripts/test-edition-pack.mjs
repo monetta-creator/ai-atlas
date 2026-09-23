@@ -1,15 +1,14 @@
-// Pure tests for the daily edition's pack-side helpers (lib/edition/pack.ts):
+// Pure tests for the daily edition's DB-free helpers (lib/edition/pure.ts):
 // the citation allowlist, the front-item validator, the window computation,
-// and the em-dash backstop. READ-ONLY, no DB: pack.ts's DB-touching read
-// (buildEditionPack) is never called here, and its one DB import (lib/db.ts)
-// is side-effect-free at module load (the pg.Pool is built lazily, inside
-// q()/one(), not at import time) — see the file header comment in pack.ts
-// for the full plain-Node-loadability discipline.
+// the things-happen projection and the em-dash backstop. No DB: pure.ts
+// never imports lib/db, so this loads under plain Node.
 // Run: node scripts/test-edition-pack.mjs
 
 import assert from 'node:assert/strict';
-import { windowFor, allowlistForEdition, deDash, validateFrontItems, goDeeperLabel } from '../lib/edition/pack.ts';
-import { clusterStories } from '../lib/edition/cluster.ts';
+import {
+  windowFor, allowlistForEdition, deDash, validateFrontItems, goDeeperLabel, thingsHappenFor, deterministicFront,
+} from '../lib/edition/pure.ts';
+import { clusterStories, coverageLine } from '../lib/edition/cluster.ts';
 
 let pass = 0; let fail = 0;
 function check(name, fn) { try { fn(); pass += 1; console.log(`  ok  ${name}`); } catch (e) { fail += 1; console.error(`FAIL  ${name}\n      ${e.message}`); } }
@@ -29,7 +28,6 @@ check('windowFor: a weekday closes at press time and opens at the previous press
   const w = windowFor('2026-09-23');
   assert.equal(w.to, '2026-09-23T16:45:00.000Z');
   assert.equal(w.from, '2026-09-22T16:45:00.000Z');
-  assert.equal(w.fromDay, '2026-09-22');
 });
 
 check('windowFor: Monday reaches back to Friday press time (covers the weekend)', () => {
@@ -138,10 +136,96 @@ check('validateFrontItems: clamps to n even when the model returns more', () => 
   assert.equal(out.length, 1);
 });
 
+check('validateFrontItems: an empty or non-string headline falls back to the lead headline; non-string fields are ignored', () => {
+  const pack = fixturePack();
+  const lead = pack.clusters[0];
+  const out = validateFrontItems(pack.clusters, [
+    { clusterId: lead.id, headline: '', why: 42, numbers: ['not', 'a', 'string'], goDeeperHref: 7 },
+  ], 6);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].headline, lead.lead.headline);
+  assert.equal(out[0].why, '');
+  assert.equal(out[0].numbers, null);
+  assert.equal(out[0].goDeeperHref, lead.lead.href ?? lead.lead.url);
+  assert.equal(out[0].coverage, coverageLine(lead));
+});
+
 check('goDeeperLabel: labels an in-app href by its kind', () => {
   assert.equal(goDeeperLabel('/signals/abc'), 'Read the signal');
   assert.equal(goDeeperLabel('/research/abc'), 'Read the paper');
+  assert.equal(goDeeperLabel('/tooling/abc'), 'Read the product page');
   assert.equal(goDeeperLabel('https://outlet.com/story'), 'Read the source');
+});
+
+// ---------------------------------------------------------------- deterministicFront
+
+check('deterministicFront: the top n clusters in rank order, why = the lead summary first sentence, numbers never invented', () => {
+  const pack = fixturePack();
+  pack.clusters[0].lead.summary = 'First sentence here. Second sentence follows! Third?';
+  pack.clusters[1].lead.summary = null;
+  const out = deterministicFront(pack, 2);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].clusterId, pack.clusters[0].id);
+  assert.equal(out[0].headline, pack.clusters[0].lead.headline);
+  assert.equal(out[0].why, 'First sentence here.');
+  assert.equal(out[0].numbers, null);
+  assert.equal(out[0].goDeeperHref, pack.clusters[0].lead.href ?? pack.clusters[0].lead.url);
+  assert.equal(out[0].goDeeperLabel, goDeeperLabel(out[0].goDeeperHref));
+  assert.equal(out[0].coverage, coverageLine(pack.clusters[0]));
+  assert.equal(out[1].clusterId, pack.clusters[1].id);
+  assert.equal(out[1].why, '');
+});
+
+check('deterministicFront: n is clamped to the cluster count, zero and negative give an empty front', () => {
+  const pack = fixturePack();
+  assert.equal(deterministicFront(pack, 50).length, pack.clusters.length);
+  assert.deepEqual(deterministicFront(pack, 0), []);
+  assert.deepEqual(deterministicFront(pack, -3), []);
+});
+
+check('deterministicFront: every goDeeperHref is inside the edition allowlist (the citation gate accepts the fallback front)', () => {
+  const pack = fixturePack();
+  const allow = allowlistForEdition(pack);
+  for (const f of deterministicFront(pack, 7)) assert.ok(allow.hrefs.has(f.goDeeperHref), f.goDeeperHref);
+});
+
+// ---------------------------------------------------------------- thingsHappenFor
+
+const TOPICS = [
+  'Nvidia reports record data center revenue', 'EU delays AI Act enforcement', 'OpenAI raises new funding round',
+  'Anthropic ships new model', 'Google expands Gemini to workspace', 'Microsoft cuts Azure prices',
+  'Meta open-sources vision model', 'Apple delays Siri overhaul', 'Amazon builds new chip fab',
+  'Fed governor warns on AI credit risk', 'UK regulator opens cloud probe', 'Tesla robotaxi pilot expands',
+  'Salesforce agent platform launch', 'Oracle signs sovereign cloud deal', 'Intel foundry lands customer',
+  'AMD guides above consensus', 'TSMC raises capex outlook', 'SoftBank plans chip venture',
+  'Mistral partners with telecom', 'Cohere wins bank contract', 'Databricks acquires startup',
+  'Snowflake reports slower growth', 'Palantir extends defense deal', 'Stripe adds agent payments',
+  'Visa pilots agent commerce', 'Mastercard tokenizes agent flows', 'JPMorgan expands AI rollout',
+  'Goldman automates filings', 'Citi retrains staff on AI', 'HSBC trims branch network',
+];
+const bigClusters = clusterStories(TOPICS.map((h, i) => it(`t${i}`, h)));
+
+check('thingsHappenFor: excludes a named cluster and keeps the rest', () => {
+  assert.ok(bigClusters.length >= 12, `fixture needs at least 12 clusters, got ${bigClusters.length}`);
+  const skip = bigClusters[9];
+  const out = thingsHappenFor(bigClusters, new Set([skip.id]));
+  assert.equal(out.length, Math.min(23, bigClusters.length - 1));
+  assert.ok(!out.some((t) => t.url === skip.lead.url));
+});
+
+check('thingsHappenFor: clamps to 23 in rank order with an empty exclude', () => {
+  assert.equal(bigClusters.length, 30, `fixture expects 30 distinct clusters, got ${bigClusters.length}`);
+  const out = thingsHappenFor(bigClusters, new Set());
+  assert.equal(out.length, 23);
+  for (let i = 0; i < 3; i++) assert.equal(out[i].url, bigClusters[i].lead.url);
+});
+
+check('thingsHappenFor: excluding the first 7 equals the slice(7, 30) projection', () => {
+  const out = thingsHappenFor(bigClusters, new Set(bigClusters.slice(0, 7).map((c) => c.id)));
+  const expected = bigClusters.slice(7, 30).map((c) => ({
+    headline: c.lead.headline, url: c.lead.url, domain: c.lead.domain, tier: c.lead.tier, href: c.lead.href,
+  }));
+  assert.deepEqual(out, expected);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

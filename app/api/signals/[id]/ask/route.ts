@@ -1,7 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { isAdmin } from '@/lib/auth';
-import { priceUsage, recordApiCall } from '@/lib/cost';
-import { encodeCostReport } from '@/lib/ask/history';
+import { streamQuickAnswer } from '@/lib/ask/quick-stream';
 import { buildSignalAskContext } from '@/lib/signal-ask';
 
 // "Ask this signal" streaming endpoint, scoped to one signal. Node runtime (default) is
@@ -40,44 +39,16 @@ export async function POST(
   if (!apiKey) return new Response('AI is not configured.', { status: 500 });
   // Tight timeout, no in-call retries: stay well under the 60s function cap.
   const client = new Anthropic({ apiKey, timeout: 55_000, maxRetries: 0 });
-  const enc = new TextEncoder();
 
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const t0 = Date.now();
-      try {
-        const ms = client.messages.stream({
-          model: MODEL,
-          max_tokens: 1200,
-          system: [{ type: 'text', text: ctxData.system, cache_control: { type: 'ephemeral' } }],
-          messages: [{ role: 'user', content: ctxData.user }],
-        });
-        // Enforce the house no-em-dash rule on live output (Haiku occasionally slips one in).
-        ms.on('text', (delta) => controller.enqueue(enc.encode(delta.replace(/\s*—\s*/g, ', '))));
-        const final = await ms.finalMessage();
-        // The per-turn cost line rides a trailing sentinel; AskAtlas strips it.
-        const u = final.usage;
-        controller.enqueue(enc.encode(encodeCostReport({
-          cost_usd: await priceUsage(MODEL, final.usage),
-          input_tokens:
-            (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0),
-          output_tokens: u.output_tokens ?? 0,
-          cache_read_tokens: u.cache_read_input_tokens ?? 0,
-          searches: 0,
-          rounds: 1,
-          model: MODEL,
-        })));
-        await recordApiCall({
-          feature: 'signal_ask', model: MODEL, usage: final.usage, wallMs: Date.now() - t0,
-          metadata: { signal_id: id },
-        });
-      } catch {
-        controller.enqueue(enc.encode('\n\nThe answer could not be completed. Please try again.'));
-      } finally {
-        controller.close();
-      }
-    },
-  });
-
-  return new Response(stream, { headers: TEXT_HEADERS });
+  // No web leg here; the per-turn cost line still rides its trailing sentinel (AskAtlas strips it).
+  return new Response(streamQuickAnswer({
+    client,
+    model: MODEL,
+    system: ctxData.system,
+    messages: [{ role: 'user', content: ctxData.user }],
+    useWeb: false,
+    feature: 'signal_ask',
+    maxTokens: 1200,
+    metadata: { signal_id: id },
+  }), { headers: TEXT_HEADERS });
 }

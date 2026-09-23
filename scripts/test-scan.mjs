@@ -17,7 +17,9 @@ import {
 } from '../lib/scan/handoff.ts';
 import { getDataset } from '../lib/datasets/registry.ts';
 import { isGdeltTransportError, gdeltAvailable, markGdeltDown } from '../lib/scan/search-gdelt.ts';
-import { tavilyAvailable, markTavilyQuotaExhausted, resetTavilyBreaker, isTavilyQuotaError } from '../lib/scan/tavily-breaker.ts';
+import {
+  tavilyAvailable, markTavilyQuotaExhausted, resetTavilyBreaker, tavilyQuotaWarning, TAVILY_QUOTA_NOTE, TAVILY_QUOTA_NOTE_RE,
+} from '../lib/scan/tavily-breaker.ts';
 import {
   rateDomainByRule, priorityOf, normalizeDomain, KIND_TIER, curatedDomainCount, isContentKind,
 } from '../lib/scan/source-tiers.ts';
@@ -207,8 +209,26 @@ check('tavily quota breaker: available by default, down after a 432, reset resto
   assert.equal(tavilyAvailable(), false);
   resetTavilyBreaker();
   assert.equal(tavilyAvailable(), true);
-  assert.equal(isTavilyQuotaError(new Error('Tavily 432: {"detail":...}')), true);
-  assert.equal(isTavilyQuotaError(new Error('Tavily 500: boom')), false);
+  assert.equal(tavilyQuotaWarning('search skipped (12 topics): Tavily quota exhausted (432)'), 'search legs skipped: Tavily quota');
+  assert.equal(tavilyQuotaWarning('market:0 failed: Tavily 432: {"detail":...}'), 'search legs skipped: Tavily quota');
+  assert.equal(tavilyQuotaWarning('Tavily 500: boom'), null);
+  assert.equal(tavilyQuotaWarning(null), null);
+});
+
+// The reopen* mutations bind TAVILY_QUOTA_NOTE_RE.source as a Postgres `!~*`
+// pattern, so the JS regex must stay plain alternation: no lookarounds, no
+// \b/\d classes, no named groups, no flags other than i. It must also match
+// the note the engines write today and the pre-09-23 `Tavily 432` spelling.
+check('TAVILY_QUOTA_NOTE_RE: Postgres-safe source that matches both note spellings', () => {
+  const src = TAVILY_QUOTA_NOTE_RE.source;
+  assert.equal(TAVILY_QUOTA_NOTE_RE.flags, 'i');
+  assert.ok(!/\\[bBdDwWsS]|\(\?|\[|\{|\$|\^/.test(src), `JS-only or anchored syntax in ${src}`);
+  assert.ok(src.split('|').every((alt) => /^[A-Za-z0-9 ]+$/.test(alt)), `alternation branches must be plain words: ${src}`);
+  assert.ok(TAVILY_QUOTA_NOTE_RE.test(`search skipped (12 topics): ${TAVILY_QUOTA_NOTE}`));
+  assert.ok(TAVILY_QUOTA_NOTE_RE.test('market:0 failed: Tavily 432: {"detail":"quota"}'));
+  assert.ok(TAVILY_QUOTA_NOTE_RE.test('TAVILY QUOTA EXHAUSTED'));
+  assert.ok(!TAVILY_QUOTA_NOTE_RE.test('Tavily 429: rate limited'));
+  assert.ok(!TAVILY_QUOTA_NOTE_RE.test('late feed sweep: nothing new'));
 });
 
 await checkAsync('gdelt circuit breaker: available by default, unavailable after markGdeltDown, available again after its window', async () => {

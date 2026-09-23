@@ -5,6 +5,7 @@ import { mergeDossier } from '../scout/core';
 import type { ScoutDossier } from '../scout/core';
 import type { IntelStep, IntelDocType, IntelMetricSource } from '../types';
 import { foldRunNotes } from '../run-notes';
+import { TAVILY_QUOTA_NOTE_RE } from '../scan/tavily-breaker';
 
 // ---- Intel Desk (migration 0043) --------------------------------------------
 // Writers for the daily company-intelligence sweep. intel_runs IS the
@@ -74,14 +75,14 @@ export async function reopenIntelRunForSearch(runId: string): Promise<boolean> {
   const row = await one<{ id: string }>(
     `update intel_runs
         set status = 'running', step = 'search', lease_until = null, error = null, updated_at = now(),
-            notes = coalesce((select array_agg(n) from unnest(notes) as n where n !~* 'Tavily 432|Tavily quota exhausted'), '{}'),
+            notes = coalesce((select array_agg(n) from unnest(notes) as n where n !~* $2), '{}'),
             swept_units = coalesce(
               (select array_agg(u) from unnest(swept_units) as u where u not like 'search:%'), '{}')
       where id = $1
         and status = 'completed'
         and (lease_until is null or lease_until < now())
       returning id::text as id`,
-    [runId]
+    [runId, TAVILY_QUOTA_NOTE_RE.source]
   );
   return Boolean(row);
 }

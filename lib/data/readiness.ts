@@ -4,6 +4,7 @@ import { getPipelinePrefs } from './pipeline';
 import { getIntelPrefs } from './intel';
 import { getResearchPrefs } from './research';
 import { PIPELINE_DAY_START_SQL } from '../pipeline/config';
+import { tavilyQuotaWarning } from '../scan/tavily-breaker';
 
 // ---- Daily job readiness (the /page.tsx "cron-tracker" widget) -------------
 // A single read over the four cron subsystems (scan, pipeline, intel,
@@ -76,16 +77,6 @@ const RUN_TIME_COLUMNS = `
   to_char(updated_at at time zone 'America/New_York', 'FMHH12:MI AM') as finished_et,
   extract(epoch from updated_at) as finished_epoch,
   array_to_string(coalesce(notes, '{}'), E'\n') as notes_text`;
-
-// What a completed run's notes say went missing. Tavily's 432 (monthly
-// credits spent) is the one known case: the engines note it once per run
-// since 2026-09-23 ("search skipped ...: Tavily quota exhausted (432)") and
-// noted every failed unit before that. Both spellings match.
-function warningFromNotes(notes: string | null): string | null {
-  if (!notes) return null;
-  if (/Tavily 432|Tavily quota exhausted/i.test(notes)) return 'search legs skipped: Tavily quota';
-  return null;
-}
 
 function getScanRunToday(): Promise<ScanRunRow | null> {
   return one<ScanRunRow>(
@@ -190,7 +181,7 @@ function resolveJob(
     if (row.status === 'completed') {
       return {
         key, label, console: consoleHref, state: 'done', step: null, detail,
-        finishedAtET: row.finished_et, error: null, yesterdayIncomplete, warning: warningFromNotes(row.notes_text),
+        finishedAtET: row.finished_et, error: null, yesterdayIncomplete, warning: tavilyQuotaWarning(row.notes_text),
       };
     }
     if (row.status === 'failed') {

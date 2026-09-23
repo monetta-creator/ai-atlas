@@ -4,21 +4,14 @@ import { notFound } from 'next/navigation';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getEditionForDay, listEditions } from '@/lib/data';
 import { dateLabel } from '@/lib/format';
+import { isRealDay } from '@/lib/route-shapes';
 import PageTop from '@/components/PageTop';
 import EditionView from '@/components/edition/EditionView';
 import EditionPdfButton from '@/components/edition/EditionPdfButton';
 
 export const dynamic = 'force-dynamic';
 
-const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-// Shape AND calendar: '2026-02-30' passes the regex but Postgres throws on
-// the ::date cast, which would 500 instead of 404.
-function isRealDay(s: string): boolean {
-  if (!DAY_RE.test(s)) return false;
-  const d = new Date(`${s}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
-}
+// Shared with proxy.ts, which already 404s a malformed /blotter/<day> before this renders; kept here as the in-page guard so the ::date cast never sees a bad day.
 
 // Cheap and never throws: a bad or missing day just falls back to the
 // generic title, the page body 404s on its own read.

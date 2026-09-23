@@ -199,5 +199,38 @@ check('reconcileFindings: mixed batch buckets correctly', () => {
   assert.deepEqual(plan.resolveKeys, ['c']);
 });
 
+// failedChecks (2026-09-23): a check that threw this run produced no inputs,
+// which is not evidence its findings went away. Its active findings stay put;
+// a different check's silent finding still resolves as before.
+check('reconcileFindings: findings of a check that threw are neither resolved nor touched', () => {
+  const existing = [
+    { key: 'drafts.backlog', check_key: 'drafts.backlog', state: 'open', snoozed_until: null },
+    { key: 'drafts.backlog:sub', check_key: 'drafts.backlog', state: 'snoozed', snoozed_until: '2026-09-20T00:00:00Z' },
+    { key: 'engines.paused', check_key: 'engines.paused', state: 'acked', snoozed_until: null },
+  ];
+  const plan = reconcileFindings(existing, [], NOW, new Set(['drafts.backlog']));
+  assert.deepEqual(plan.resolveKeys, ['engines.paused']);
+  assert.equal(plan.insert.length, 0);
+  assert.equal(plan.reopen.length, 0);
+  assert.equal(plan.update.length, 0);
+});
+
+check('reconcileFindings: a failed check still lets its resolved findings stay resolved and other checks fire normally', () => {
+  const existing = [
+    { key: 'drafts.backlog', check_key: 'drafts.backlog', state: 'resolved', snoozed_until: null },
+    { key: 'engines.paused', check_key: 'engines.paused', state: 'open', snoozed_until: null },
+  ];
+  const plan = reconcileFindings(existing, [input('engines.paused')], NOW, new Set(['drafts.backlog']));
+  assert.deepEqual(plan.resolveKeys, []);
+  assert.equal(plan.update.length, 1);
+  assert.equal(plan.update[0].input.key, 'engines.paused');
+  assert.equal(plan.reopen.length, 0);
+});
+
+check('reconcileFindings: failedChecks defaults to none, so the three-argument call resolves as before', () => {
+  const existing = [{ key: 'x', check_key: 'x', state: 'open', snoozed_until: null }];
+  assert.deepEqual(reconcileFindings(existing, [], NOW).resolveKeys, ['x']);
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

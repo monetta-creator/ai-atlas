@@ -8,31 +8,29 @@ import { publicParentFor } from '@/lib/nav';
 export default function AdminOnly({ pathname, title }: { pathname: string; title: string }) {
   const parent = publicParentFor(pathname);
   return (
-    <>
-      <div className="wrap" style={{ maxWidth: 720, paddingTop: 64, paddingBottom: 80 }}>
-        <div className="plate">
-          <p
-            style={{
-              fontFamily: 'var(--font-mono, var(--font-body))',
-              fontSize: 11,
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              color: 'var(--faint-ink)',
-              margin: '0 0 10px',
-            }}
-          >
-            Admin only
-          </p>
-          <h2 style={{ margin: '0 0 12px' }}>{title}</h2>
-          <p style={{ color: 'var(--dim)', fontSize: 14.5, lineHeight: 1.6, margin: '0 0 22px', maxWidth: '56ch' }}>
-            This page is part of the maintainer&apos;s desk and needs an admin session.
-          </p>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <Link href={parent.href} className="btn btn--primary">Back to {parent.label}</Link>
-            <Link href="/login" className="btn btn--quiet">Admin login</Link>
-          </div>
+    <div className="wrap" style={{ maxWidth: 720, paddingTop: 64, paddingBottom: 80 }}>
+      <div className="plate">
+        <p
+          style={{
+            fontFamily: 'var(--font-mono, var(--font-body))',
+            fontSize: 11,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            color: 'var(--faint-ink)',
+            margin: '0 0 10px',
+          }}
+        >
+          Admin only
+        </p>
+        <h2 style={{ margin: '0 0 12px' }}>{title}</h2>
+        <p style={{ color: 'var(--dim)', fontSize: 14.5, lineHeight: 1.6, margin: '0 0 22px', maxWidth: '56ch' }}>
+          This page is part of the maintainer&apos;s desk and needs an admin session.
+        </p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Link href={parent.href} className="btn btn--primary">Back to {parent.label}</Link>
+          <Link href="/login" className="btn btn--quiet">Admin login</Link>
         </div>
       </div>
-    </>
+    </div>
   );
 }

@@ -17,7 +17,8 @@ export function proxy(req: NextRequest) {
   // A detail URL whose id cannot exist (not a UUID, an impossible date) gets a
   // real 404 here, before the page streams behind loading.tsx and the status
   // is locked at 200 (lib/route-shapes.ts). Rewriting to a path with no route
-  // renders the app's not-found page with a 404 status.
+  // falls through to Next's default not-found page with a 404 status (there
+  // is no app/not-found.tsx).
   if (isMalformedDetailPath(req.nextUrl.pathname)) {
     const url = req.nextUrl.clone();
     url.pathname = '/_not-found-malformed';

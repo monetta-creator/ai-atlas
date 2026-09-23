@@ -7,6 +7,7 @@ import {
 } from '../scan/source-tiers';
 import { summarizeVotes, type RelevanceVotes, type VoteSummary } from '../scan/ensemble';
 import { foldRunNotes } from '../run-notes';
+import { TAVILY_QUOTA_NOTE_RE } from '../scan/tavily-breaker';
 
 // ---- External Scan (migration 0038) -----------------------------------------
 // Writers for the daily scan. scan_runs IS the checkpoint state: the cron
@@ -76,13 +77,13 @@ export async function reopenScanRunForSearch(runId: string): Promise<boolean> {
   const row = await one<{ id: string }>(
     `update scan_runs
         set status = 'running', step = 'search', searched_topics = '{}', lease_until = null,
-            notes = coalesce((select array_agg(n) from unnest(notes) as n where n !~* 'Tavily 432|Tavily quota exhausted'), '{}'),
+            notes = coalesce((select array_agg(n) from unnest(notes) as n where n !~* $2), '{}'),
             error = null, updated_at = now()
       where id = $1
         and status = 'completed'
         and (lease_until is null or lease_until < now())
       returning id::text as id`,
-    [runId]
+    [runId, TAVILY_QUOTA_NOTE_RE.source]
   );
   return Boolean(row);
 }

@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict';
 import { renderTranscript, parseStep, buildToolCatalog } from '../lib/agent/chat-core.ts';
-import { scrubDashes, validateMemo } from '../lib/agent/brief-core.ts';
+import { scrubDashes, validateMemo, buildDeterministicMemo } from '../lib/agent/brief-core.ts';
 import { renderBriefHtml } from '../lib/agent/email.ts';
 
 let pass = 0;
@@ -134,6 +134,52 @@ check('validateMemo: scrubs em dashes out of the headline', () => {
   const out = validateMemo(memo, openKeys);
   assert.ok(!out.headline.includes('—'));
   assert.equal(out.headline, 'scan failed, pipeline ok');
+});
+
+// ---------------------------------------------------------------- buildDeterministicMemo
+
+const detFindings = [
+  { key: 'engine.failed:scan', severity: 'high', title: 'The scan run failed', remedy: { tier: 'propose', label: 'Resume the scan run' } },
+  { key: 'drafts.backlog', severity: 'warn', title: 'Draft backlog is aging', remedy: { tier: 'auto', label: 'Archive no-touch drafts' } },
+];
+
+check('buildDeterministicMemo: budget reason leads the headline with the open count', () => {
+  const out = buildDeterministicMemo(detFindings, 'budget');
+  assert.ok(out.headline.startsWith('Budget spent'));
+  assert.ok(out.headline.includes('(2 open)'));
+});
+
+check('buildDeterministicMemo: model_failed reason leads the headline', () => {
+  const out = buildDeterministicMemo(detFindings, 'model_failed');
+  assert.ok(out.headline.startsWith('The model call failed'));
+});
+
+check('buildDeterministicMemo: proposals are propose-tier, willDo auto-tier, no remedy in neither', () => {
+  const withNone = [...detFindings, { key: 'editorial.one_sided', severity: 'info', title: 'One-sided claims', remedy: null }];
+  const out = buildDeterministicMemo(withNone, 'budget');
+  assert.deepEqual(out.proposals, [{ findingKey: 'engine.failed:scan', text: 'Resume the scan run' }]);
+  assert.deepEqual(out.willDo, [{ findingKey: 'drafts.backlog', text: 'Archive no-touch drafts' }]);
+  assert.ok(!out.proposals.some((p) => p.findingKey === 'editorial.one_sided'));
+  assert.ok(!out.willDo.some((p) => p.findingKey === 'editorial.one_sided'));
+});
+
+check('buildDeterministicMemo: sections bucket by severity, empty buckets produce no section', () => {
+  const withInfo = [...detFindings, { key: 'editorial.one_sided', severity: 'info', title: 'One-sided claims', remedy: null }];
+  const out = buildDeterministicMemo(withInfo, 'budget');
+  assert.deepEqual(out.sections.map((s) => s.title), ['High', 'Needs attention', 'For the record']);
+  assert.ok(out.sections[0].body.includes('The scan run failed (engine.failed:scan).'));
+  assert.ok(out.sections[1].body.includes('Draft backlog is aging (drafts.backlog).'));
+  assert.ok(out.sections[2].body.includes('One-sided claims (editorial.one_sided).'));
+  const highOnly = buildDeterministicMemo([detFindings[0]], 'budget');
+  assert.deepEqual(highOnly.sections.map((s) => s.title), ['High']);
+});
+
+check('buildDeterministicMemo: empty findings yield the nothing-open memo', () => {
+  const out = buildDeterministicMemo([], 'model_failed');
+  assert.equal(out.headline, 'The model call failed; nothing open right now');
+  assert.deepEqual(out.sections, [{ title: 'Nothing open', body: 'No open findings right now.' }]);
+  assert.deepEqual(out.proposals, []);
+  assert.deepEqual(out.willDo, []);
 });
 
 // ---------------------------------------------------------------- renderBriefHtml

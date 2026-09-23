@@ -3,8 +3,8 @@ import { routedStructured } from '../model-route';
 import { enforceCitations } from '../citations';
 import { coverageLine } from './cluster';
 import type { StoryCluster } from './cluster';
-import { allowlistForEdition, deDash, validateFrontItems } from './pack';
-import type { RawFrontItem } from './pack';
+import { allowlistForEdition, deDash, validateFrontItems } from './pure';
+import type { RawFrontItem } from './pure';
 import type { EditionPack, EditionFrontItem } from './types';
 
 // The daily edition's two model legs (the roundup template, lib/research/
@@ -13,7 +13,7 @@ import type { EditionPack, EditionFrontItem } from './types';
 // connects today's stories to the claims they touch. Both run on the cheap
 // provider (edition_prefs.model, default GLM) via routedStructured, which
 // dispatches Anthropic ids through runStructured and OpenRouter ids through
-// the scan's JSON-object path. deterministicFront (lib/edition/pack.ts) is
+// the scan's JSON-object path. deterministicFront (lib/edition/pure.ts) is
 // the no-model fallback lib/edition/run.ts reaches for when the daily budget
 // is spent.
 

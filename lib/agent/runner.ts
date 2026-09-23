@@ -1,15 +1,16 @@
 import { AGENT_CHECKS } from './checks';
+import { runDailyBrief } from './brief';
 import { executeRemedy } from './remedies';
 import { isWeekdayUtc, hoursSince } from './time';
 import { upsertFindings } from '../mutations/agent';
 import { getAgentPrefs, listFindings } from '../data/agent';
 import type { CheckContext, FindingInput } from './types';
 
-// The hourly sensor sweep: run every check (each logs and rethrows its own
-// errors; this loop catches them so one failing check can't take the run
-// down, and records the failed check keys so the reconciler leaves their
-// findings alone instead of resolving them), collect every finding, and
-// reconcile the whole set in one transaction.
+// The hourly sensor sweep: run every check (this loop catches and logs a
+// check that throws, so one failing check can't take the run down, and
+// records the failed check keys so the reconciler leaves their findings
+// alone instead of resolving them), collect every finding, and reconcile
+// the whole set in one transaction.
 export async function runChecks(now: Date = new Date()): Promise<{
   opened: number;
   reopened: number;
@@ -64,31 +65,24 @@ export async function runAutoRemedies(now: Date = new Date()): Promise<{
   return { attempted, ok, failed };
 }
 
-// The cron entry point: checks, then auto remedies, then (once a day) the
-// brief. The brief step is a dynamic import so this file works before WP2
-// lands ./brief.ts; a missing/throwing brief module never fails the tick.
+// The cron entry point: checks, then auto remedies, then (once a day, when
+// the 12:30 UTC route asks for it) the brief. A throwing brief never fails
+// the tick: the checks and remedies above have already landed.
 export async function runAgentTick(opts: { brief: boolean; now?: Date }): Promise<{
   checks: Awaited<ReturnType<typeof runChecks>>;
   remedies: Awaited<ReturnType<typeof runAutoRemedies>>;
-  brief: unknown;
+  brief: Awaited<ReturnType<typeof runDailyBrief>> | null;
 }> {
   const now = opts.now ?? new Date();
   const checks = await runChecks(now);
   const remedies = await runAutoRemedies(now);
 
-  let brief: unknown = null;
+  let brief: Awaited<ReturnType<typeof runDailyBrief>> | null = null;
   if (opts.brief) {
     try {
-      // A non-literal specifier keeps this from being statically resolved:
-      // lib/agent/brief.ts is a later work package's deliverable (WP2), so
-      // this file must type-check and run before it lands. Once it exists,
-      // this dynamically loads and calls it; until then the tick just skips
-      // the brief step.
-      const briefModulePath = './brief';
-      const mod: { runDailyBrief?: (now: Date) => Promise<unknown> } = await import(briefModulePath);
-      if (typeof mod.runDailyBrief === 'function') brief = await mod.runDailyBrief(now);
+      brief = await runDailyBrief(now);
     } catch (e) {
-      console.error('[agent] brief step unavailable or failed', e);
+      console.error('[agent] brief step failed', e);
     }
   }
 

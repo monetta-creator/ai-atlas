@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { cronGate, pingDeadman } from '@/lib/cron/shared';
 import { getOrCreateTodayResearchRun, claimResearchRun, advanceResearchRun } from '@/lib/research/engine';
 import { getResearchRun, getResearchPrefs } from '@/lib/data/research';
 import { failResearchRun } from '@/lib/mutations/research';
@@ -14,19 +15,9 @@ export const maxDuration = 800;
 
 const WORK_BUDGET_MS = 700_000;
 
-// Optional healthchecks.io-style dead-man ping, fired on every invocation
-// that ends with the run COMPLETED (fresh or alreadyComplete), never on
-// busy/error/paused. Fire-and-forget: never await-blocks the response.
-function pingDeadman(url: string | undefined): void {
-  if (url) fetch(url, { signal: AbortSignal.timeout(3000) }).catch(() => {});
-}
-
 export async function GET(req: NextRequest): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get('authorization');
-  if (!secret || auth !== `Bearer ${secret}`) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 });
-  }
+  const denied = cronGate(req);
+  if (denied) return denied;
 
   if (!(await getResearchPrefs()).enabled) {
     return Response.json({ done: true, skipped: 'research paused (the /research/console toggle re-enables it)' });
@@ -34,6 +25,8 @@ export async function GET(req: NextRequest): Promise<Response> {
   const deadlineAt = Date.now() + WORK_BUDGET_MS;
   const { runId, day } = await getOrCreateTodayResearchRun();
   const existing = await getResearchRun(runId);
+  // Dead-man ping: fired on every invocation that ends with the run
+  // COMPLETED (fresh or alreadyComplete), never on busy/error/paused.
   if (existing?.status === 'completed') {
     pingDeadman(process.env.HC_PING_URL_RESEARCH);
     return Response.json({ day, done: true, alreadyComplete: true });

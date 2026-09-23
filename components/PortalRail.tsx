@@ -7,6 +7,7 @@ import { NAV_ICONS, PORTAL_ICONS } from '@/components/portal-icons';
 import FeedbackButtons from '@/components/feedback/FeedbackButtons';
 import AgentOrb from '@/components/agent/AgentOrb';
 import { useLiveNavCounts } from '@/lib/nav-counts-client';
+import { useValueChange } from '@/lib/use-route-change';
 import type { AgentPulse } from '@/lib/agent/types';
 import {
   NAV_ISLAND, NAV_TREE, canSee, groupFor, isActiveGroup, leafFor,
@@ -36,16 +37,11 @@ export default function PortalRail({
   const [hovered, setHovered] = useState(false);
   const [openKey, setOpenKey] = useState<string | null>(activeGroup?.key ?? null);
   const railRef = useRef<HTMLElement>(null);
-  // The rail persists across navigation (root layout), so its accordion no
-  // longer resets to the current page's group on its own: when the page moves
-  // into a different group, open that one (React's derived-state recipe;
-  // moving within a group leaves a manually opened accordion alone).
+  // When the page moves into a different group, open that accordion; moving
+  // within a group leaves a manually opened accordion alone
+  // (lib/use-route-change.ts).
   const activeKey = activeGroup?.key ?? null;
-  const [seenActiveKey, setSeenActiveKey] = useState(activeKey);
-  if (activeKey !== seenActiveKey) {
-    setSeenActiveKey(activeKey);
-    if (activeKey) setOpenKey(activeKey);
-  }
+  useValueChange(activeKey, (k) => { if (k) setOpenKey(k); });
   // Hover/focus expansion must not carry over to the next page when the
   // pointer has left (the old per-page remount reset it): after a keyboard
   // Enter or a touch tap the rail would stay open over the new page. A rail

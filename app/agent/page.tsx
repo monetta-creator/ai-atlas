@@ -1,6 +1,7 @@
 import { adminGate } from '@/lib/admin-gate';
 import { getAgentSpendToday, listBriefs, getNavCounts } from '@/lib/data';
 import { AGENT_CHECKS } from '@/lib/agent/checks';
+import { agentCapUsd } from '@/lib/agent/budget';
 import type { CheckDomain } from '@/lib/agent/types';
 import PageTop from '@/components/PageTop';
 import { AgentPanel } from '@/components/agent/AgentDrawer';
@@ -18,15 +19,11 @@ function fmtDay(iso: string): string {
   });
 }
 
-// Mirrors the cap formula in lib/agent/budget.ts checkAgentBudget: read
-// separately here since that function also re-sums today's spend and this
-// page already has it from getAgentSpendToday.
-const AGENT_DAILY_BUDGET_USD = Math.max(0.05, Number(process.env.AGENT_DAILY_BUDGET_USD || 0.25));
-
 export default async function AgentPage() {
   const gate = await adminGate('/agent', 'Atlas Agent');
   if (gate) return gate;
   const admin = true as const;
+  const capUsd = agentCapUsd();
   const [spend, briefs, counts] = await Promise.all([
     getAgentSpendToday(), listBriefs(30), getNavCounts().catch(() => null),
   ]);
@@ -47,7 +44,7 @@ export default async function AgentPage() {
           viewer={{ admin, portal: admin }}
           counts={counts}
         >
-          ${spend.usd.toFixed(4)} spent today of ${AGENT_DAILY_BUDGET_USD.toFixed(2)}
+          ${spend.usd.toFixed(4)} spent today of ${capUsd.toFixed(2)}
         </PageTop>
 
         <div className="ag-page">
@@ -59,7 +56,7 @@ export default async function AgentPage() {
             <div className="ag-side-block">
               <h3>Spend today</h3>
               <p className="ag-side-spend">
-                ${spend.usd.toFixed(4)} <span className="ag-side-spend-cap">of ${AGENT_DAILY_BUDGET_USD.toFixed(2)}</span>
+                ${spend.usd.toFixed(4)} <span className="ag-side-spend-cap">of ${capUsd.toFixed(2)}</span>
               </p>
             </div>
 

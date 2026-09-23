@@ -2,7 +2,7 @@
 // dependency chain, so scripts/test-agent-brain.mjs can load it directly
 // under plain-Node type stripping (the lib/pack-shared.ts discipline).
 
-import type { BriefMemo } from './types';
+import type { AgentFinding, BriefMemo, Severity } from './types';
 
 // House style: never an em dash (U+2014) in anything the agent writes. A
 // bare one collapses to a comma so the sentence still reads; the common
@@ -47,5 +47,30 @@ export function validateMemo(memo: BriefMemo, openKeys: string[] | Set<string>):
     // at most six things the agent says it will do.
     proposals: scrubList(memo?.proposals, keys).slice(0, 8),
     willDo: scrubList(memo?.willDo, keys).slice(0, 6),
+  };
+}
+
+// The no-model fallback memo (budget spent, or the model call failed): the
+// open findings bucketed by severity, proposals from the propose-tier
+// remedies, willDo from the auto-tier ones.
+export function buildDeterministicMemo(findings: AgentFinding[], reason: 'budget' | 'model_failed'): BriefMemo {
+  const lead = reason === 'budget' ? 'Budget spent' : 'The model call failed';
+  const bySeverity: Record<Severity, AgentFinding[]> = { high: [], warn: [], info: [] };
+  for (const f of findings) bySeverity[f.severity]?.push(f);
+  const sectionFor = (sev: Severity, label: string) => {
+    const list = bySeverity[sev];
+    if (!list.length) return null;
+    return { title: label, body: list.map((f) => `${f.title} (${f.key}).`).join(' ') };
+  };
+  const sections = [sectionFor('high', 'High'), sectionFor('warn', 'Needs attention'), sectionFor('info', 'For the record')].filter(
+    (s): s is { title: string; body: string } => s !== null
+  );
+  return {
+    headline: findings.length
+      ? `${lead}; here is the raw list (${findings.length} open)`
+      : `${lead}; nothing open right now`,
+    sections: sections.length ? sections : [{ title: 'Nothing open', body: 'No open findings right now.' }],
+    proposals: findings.filter((f) => f.remedy?.tier === 'propose').map((f) => ({ findingKey: f.key, text: f.remedy!.label })),
+    willDo: findings.filter((f) => f.remedy?.tier === 'auto').map((f) => ({ findingKey: f.key, text: f.remedy!.label })),
   };
 }

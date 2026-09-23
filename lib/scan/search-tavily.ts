@@ -21,7 +21,7 @@ const TAVILY_URL = 'https://api.tavily.com/search';
 // scripts/test-scan.mjs can load it); re-exported here for the engines.
 export {
   TAVILY_QUOTA_STATUS, TAVILY_QUOTA_NOTE, tavilyAvailable, markTavilyQuotaExhausted,
-  resetTavilyBreaker, isTavilyQuotaError,
+  resetTavilyBreaker, TAVILY_QUOTA_NOTE_RE,
 } from './tavily-breaker';
 import { TAVILY_QUOTA_STATUS, markTavilyQuotaExhausted } from './tavily-breaker';
 

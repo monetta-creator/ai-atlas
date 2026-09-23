@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { cronGate, pingDeadman } from '@/lib/cron/shared';
 import { runDailyEdition } from '@/lib/edition/run';
 
 // The daily edition's cron driver: weekdays 16:45 UTC (vercel.json), after
@@ -10,25 +11,16 @@ import { runDailyEdition } from '@/lib/edition/run';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-// Optional healthchecks.io-style dead-man ping (the scan/pipeline/intel/
-// research convention, e.g. app/api/cron/scan/route.ts's pingDeadman):
-// fire-and-forget, fired only when the run actually finished, never on error.
-function pingDeadman(url: string | undefined): void {
-  if (url) fetch(url, { signal: AbortSignal.timeout(3000) }).catch(() => {});
-}
-
 export async function GET(req: NextRequest): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get('authorization');
-  if (!secret || auth !== `Bearer ${secret}`) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 });
-  }
+  const denied = cronGate(req);
+  if (denied) return denied;
   // ?day=YYYY-MM-DD writes (or re-checks) a specific edition: backfills and
   // the maintainer's manual runs. Same idempotency as the daily call.
   const rawDay = req.nextUrl.searchParams.get('day');
   const dayParam = rawDay && /^\d{4}-\d{2}-\d{2}$/.test(rawDay) ? rawDay : undefined;
   try {
     const result = await runDailyEdition(dayParam);
+    // Dead-man ping: only when the run actually finished, never on error.
     pingDeadman(process.env.HC_PING_URL_EDITION);
     return Response.json(result);
   } catch (e) {

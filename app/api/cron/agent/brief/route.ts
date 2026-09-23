@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { cronGate, pingDeadman } from '@/lib/cron/shared';
 import { getAgentPrefs } from '@/lib/data/agent';
 import { runAgentTick } from '@/lib/agent/runner';
 
@@ -10,16 +11,9 @@ import { runAgentTick } from '@/lib/agent/runner';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-function pingDeadman(url: string | undefined): void {
-  if (url) fetch(url, { signal: AbortSignal.timeout(3000) }).catch(() => {});
-}
-
 export async function GET(req: NextRequest): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get('authorization');
-  if (!secret || auth !== `Bearer ${secret}`) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 });
-  }
+  const denied = cronGate(req);
+  if (denied) return denied;
 
   const prefs = await getAgentPrefs();
   if (!prefs.enabled) {

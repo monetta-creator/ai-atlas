@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { cronGate, pingDeadman } from '@/lib/cron/shared';
 import { getOrCreateDailyRun, advancePipelineRun } from '@/lib/pipeline/engine';
 import { getRun, getPipelinePrefs } from '@/lib/data';
 import { claimPipelineRun, updateRun, reopenPipelineRunForDiscovery } from '@/lib/mutations/pipeline';
@@ -16,19 +17,9 @@ export const maxDuration = 800;
 
 const WORK_BUDGET_MS = 700_000;
 
-// Optional healthchecks.io-style dead-man ping, fired on every invocation
-// that ends with the run COMPLETED (fresh or alreadyComplete), never on
-// busy/error/paused. Fire-and-forget: never await-blocks the response.
-function pingDeadman(url: string | undefined): void {
-  if (url) fetch(url, { signal: AbortSignal.timeout(3000) }).catch(() => {});
-}
-
 export async function GET(req: NextRequest): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get('authorization');
-  if (!secret || auth !== `Bearer ${secret}`) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 });
-  }
+  const denied = cronGate(req);
+  if (denied) return denied;
 
   const prefs = await getPipelinePrefs();
 
@@ -58,6 +49,8 @@ export async function GET(req: NextRequest): Promise<Response> {
     resetTavilyBreaker(); // a warm instance may still hold a stale trip
     if (await reopenPipelineRunForDiscovery(runId)) run = await getRun(runId);
   }
+  // Dead-man ping: fired on every invocation that ends with the run
+  // COMPLETED (fresh or alreadyComplete), never on busy/error/paused.
   if (run?.status === 'completed') {
     pingDeadman(process.env.HC_PING_URL_PIPELINE);
     return Response.json({ runId, done: true, alreadyComplete: true, promoted });

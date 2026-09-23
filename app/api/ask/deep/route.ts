@@ -2,12 +2,11 @@ import Anthropic from '@anthropic-ai/sdk';
 import { isAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { priceUsage, recordApiCall, type ApiUsage } from '@/lib/cost';
-import { buildAskContext, loadNamespace } from '@/lib/ask/retrieve';
+import { deDash } from '@/lib/voice';
 import { askSystem, laneReminder, deepConversationMessages } from '@/lib/ask/prompt';
-import { classifyQuestion, beatDescriptionFrom, questionLinksFrom } from '@/lib/ask/classify';
-import { decideLane, composeDecline, splitBeyond, priorUserTurn } from '@/lib/ask/lanes';
-import { EXAMPLE_QUESTIONS } from '@/components/ask/starters';
-import { clampHistory, clampSignalOffset, parseAskBody, retrievalQuery, type AskWebSource } from '@/lib/ask/history';
+import { splitBeyond } from '@/lib/ask/lanes';
+import { resolveLane } from '@/lib/ask/resolve-lane';
+import { clampHistory, clampSignalOffset, createWebSourceCollector, parseAskBody } from '@/lib/ask/history';
 import { fetchRecord, searchArticles, searchAtlas } from '@/lib/ask/search';
 import {
   DEEP_ADDENDUM, DEEP_TOOLS, DEEP_WEB_ADDENDUM, INPUT_TOKEN_CAP, MAX_CALLS_PER_ROUND, MAX_ROUNDS,
@@ -42,8 +41,6 @@ const DEADLINE_MS = 280_000; // total research + answer budget inside maxDuratio
 const FINAL_RESERVE_MS = 60_000; // stop researching when less than this remains
 const NDJSON_HEADERS = { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' };
 
-const scrub = (s: string): string => s.replace(/\s*—\s*/g, ', ');
-
 export async function POST(req: Request): Promise<Response> {
   if (!(await isAdmin())) return new Response('Unauthorized', { status: 401 });
 
@@ -64,22 +61,12 @@ export async function POST(req: Request): Promise<Response> {
   if (!apiKey) return new Response('AI is not configured.', { status: 500 });
   const client = new Anthropic({ apiKey, timeout: 45_000, maxRetries: 1 });
 
-  const ns = await loadNamespace();
-  const latest = msgs[msgs.length - 1].content;
-  // Classify in parallel with a cheap context build used ONLY for its lane
-  // signals (hitCount/maxRank/explicit); the loop below still does its own
-  // digging with the search_atlas/fetch_record tools.
-  const [cls, laneCtx] = await Promise.all([
-    classifyQuestion(latest, beatDescriptionFrom(ns), priorUserTurn(msgs)),
-    buildAskContext(retrievalQuery(msgs), { mode: 'admin', ns }),
-  ]);
-  const lane = decideLane({
-    hitCount: laneCtx.hitCount, maxRank: laneCtx.maxRank, explicit: laneCtx.explicit,
-    beat: cls.beat, followUp: msgs.length > 1,
-  });
-  // Auto web: a thin/adjacent question that hinges on recent events searches
-  // even with the composer's toggle off.
-  const autoWeb = cls.fresh && lane !== 'covered';
+  // Classify in parallel with the full buildAskContext retrieval; only its
+  // lane signals (hitCount/maxRank/explicit) are used here and its assembled
+  // detail is discarded, since the loop below does its own digging with the
+  // search_atlas/fetch_record tools. Trimming that retrieval to a signals-only
+  // pass is a separate decision.
+  const { ns, ctx, cls, lane, autoWeb, decline } = await resolveLane(msgs, { mode: 'admin' });
   const useWeb = webOn || autoWeb;
 
   const system: Anthropic.TextBlockParam[] = [
@@ -114,9 +101,8 @@ export async function POST(req: Request): Promise<Response> {
         }
       };
 
-      emit(ndLane(lane, `beat ${cls.beat}${cls.fresh ? ', recent-events question' : ''}, ${laneCtx.hitCount} record${laneCtx.hitCount === 1 ? '' : 's'} matched, best rank ${laneCtx.maxRank.toFixed(3)}`));
-      if (lane === 'unrelated') {
-        const decline = composeDecline(cls.topic, questionLinksFrom(ns), EXAMPLE_QUESTIONS.slice(0, 3));
+      emit(ndLane(lane, `beat ${cls.beat}${cls.fresh ? ', recent-events question' : ''}, ${ctx.hitCount} record${ctx.hitCount === 1 ? '' : 's'} matched, best rank ${ctx.maxRank.toFixed(3)}`));
+      if (decline) {
         emit(ndDecline(decline));
         emit(ndDone(Object.fromEntries(tagger.refs().map((r) => [r.tag, r.id]))));
         try {
@@ -137,7 +123,7 @@ export async function POST(req: Request): Promise<Response> {
             kinds: p.kinds, limit: p.limit, admin: true,
             tagFor: tagger.tagFor, paperTagFor: tagger.paperTagFor,
           });
-          emit(ndStatus(scrub(statusSearch(p.query, hits.length))));
+          emit(ndStatus(deDash(statusSearch(p.query, hits.length))));
           return { text: renderSearchHits(hits) };
         }
         if (name === 'fetch_record') {
@@ -160,7 +146,7 @@ export async function POST(req: Request): Promise<Response> {
           const p = parseSearchArticlesInput(input);
           if (typeof p === 'string') return { text: p, isError: true };
           const hits = await searchArticles(q, p.query, { tagFor: tagger.tagFor });
-          emit(ndStatus(scrub(statusArticles(p.query, hits.length))));
+          emit(ndStatus(deDash(statusArticles(p.query, hits.length))));
           return { text: renderArticleHits(hits) };
         }
         return { text: `Unknown tool ${name}.`, isError: true };
@@ -204,29 +190,8 @@ export async function POST(req: Request): Promise<Response> {
       // Cited web sources, from server-tool result blocks (non-streamed loop
       // rounds) and raw stream events (the final leg): the pinned SDK's stream
       // accumulator predates server-tool blocks, so nothing here relies on it.
-      const webSources: AskWebSource[] = [];
-      const seenSrc = new Set<string>();
-      const addSource = (url?: string, title?: string | null) => {
-        if (!url || seenSrc.has(url)) return;
-        seenSrc.add(url);
-        webSources.push({ url: url.slice(0, 600), title: String(title ?? '').slice(0, 200) || url });
-      };
-      const captureServerBlocks = (content: unknown[]): boolean => {
-        let found = false;
-        for (const blk of content) {
-          const cb = blk as { type?: string; content?: unknown };
-          if (cb.type !== 'web_search_tool_result' || !Array.isArray(cb.content)) continue;
-          for (const r of cb.content.slice(0, 5)) {
-            const rr = r as { type?: string; url?: string; title?: string | null };
-            if (rr?.type === 'web_search_result' && rr.url) {
-              found = true;
-              addSource(rr.url, rr.title);
-              corpus.push(`${String(rr.title ?? '')} ${rr.url}`);
-            }
-          }
-        }
-        return found;
-      };
+      // Every result seen also joins the corpus (title + url) for the checks.
+      const collector = createWebSourceCollector(5);
 
       try {
         emit(ndStatus(STATUS_START));
@@ -252,8 +217,10 @@ export async function POST(req: Request): Promise<Response> {
           await recordApiCall({
             feature: FEATURE, model: MODEL, usage: res.usage, wallMs: Date.now() - t, metadata: { round },
           });
-          if (useWeb && captureServerBlocks(res.content as unknown[])) {
-            emit(ndStatus('Searched the web'));
+          if (useWeb) {
+            const seen = collector.fromContentBlocks(res.content as unknown[]);
+            for (const r of seen) corpus.push(`${String(r.title ?? '')} ${r.url}`);
+            if (seen.length > 0) emit(ndStatus('Searched the web'));
           }
 
           const toolUses = res.content.filter((c): c is Anthropic.ToolUseBlock => c.type === 'tool_use');
@@ -301,7 +268,7 @@ export async function POST(req: Request): Promise<Response> {
             }
             // The model answered without (more) research; its text is the answer.
             if (answerText.trim()) {
-              emit(ndDelta(scrub(answerText)));
+              emit(ndDelta(deDash(answerText)));
               streamedAny = true;
             }
             answered = true;
@@ -374,29 +341,17 @@ export async function POST(req: Request): Promise<Response> {
             // Raw wire events, never the accumulator: citations when the model
             // quotes, plus the result blocks themselves as the fallback.
             ms.on('streamEvent', (ev) => {
-              const e = ev as {
-                type?: string;
-                content_block?: { type?: string; content?: { type?: string; url?: string; title?: string | null }[] };
-                delta?: { type?: string; citation?: { type?: string; url?: string; title?: string | null } };
-              };
-              if (e.type === 'content_block_delta' && e.delta?.type === 'citations_delta'
-                  && e.delta.citation?.type === 'web_search_result_location') {
-                addSource(e.delta.citation.url, e.delta.citation.title);
-              }
-              if (e.type === 'content_block_start' && e.content_block?.type === 'web_search_tool_result'
-                  && Array.isArray(e.content_block.content)) {
-                for (const r of e.content_block.content.slice(0, 5)) {
-                  if (r?.type === 'web_search_result' && r.url) {
-                    addSource(r.url, r.title);
-                    corpus.push(`${String(r.title ?? '')} ${r.url}`);
-                  }
-                }
-              }
+              const seen = collector.fromStreamEvent(ev);
+              // Only result blocks feed the verify corpus (the pre-refactor rule):
+              // a citation names a result the model chose to quote, and letting
+              // its title into the haystack would loosen the figure check.
+              if ((ev as { type?: string }).type !== 'content_block_start') return;
+              for (const r of seen) corpus.push(`${String(r.title ?? '')} ${r.url}`);
             });
           }
           ms.on('text', (delta) => {
             streamedAny = true;
-            emit(ndDelta(scrub(delta)));
+            emit(ndDelta(deDash(delta)));
           });
           const final = await ms.finalMessage();
           answerText = final.content
@@ -411,6 +366,7 @@ export async function POST(req: Request): Promise<Response> {
           });
         }
 
+        const webSources = collector.list();
         if (webSources.length && !req.signal.aborted) {
           emit(ndWebSources(webSources.slice(0, 8)));
         }

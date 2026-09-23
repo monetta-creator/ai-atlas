@@ -85,11 +85,11 @@ export async function advancePipelineRun(runId: string, deadlineAt: number): Pro
           await m.updateRun(runId, { step: 'triage', status: 'running', error: null });
           continue;
         }
-        // Tavily's quota breaker (lib/scan/search-tavily.ts): the lens batches
+        // Tavily's quota breaker (lib/scan/tavily-breaker.ts): the lens batches
         // and the breaking sweep are Tavily legs; after one 432 the rest would
         // fail identically, so they are checkpointed as done under one note.
         // CourtListener is its own API and still runs.
-        if (process.env.TAVILY_API_KEY && !tavilyAvailable()) {
+        if (!tavilyAvailable()) {
           const skipped = units.filter((u) => !done.has(u) && u !== 'courtlistener');
           if (skipped.length) {
             notes.push(`discovery skipped (${skipped.length} units): ${TAVILY_QUOTA_NOTE}`);
@@ -147,7 +147,7 @@ export async function advancePipelineRun(runId: string, deadlineAt: number): Pro
           const restingErrors = approved.filter((c) => !c.signal_id).length;
           if (restingErrors > 0) notes.push(`analysis: completing with ${restingErrors} errored candidate(s) resting`);
           // Coverage (advisory, never fatal), then complete.
-          if (process.env.TAVILY_API_KEY && !tavilyAvailable()) {
+          if (!tavilyAvailable()) {
             notes.push(`coverage check skipped: ${TAVILY_QUOTA_NOTE}`);
           } else {
             try {

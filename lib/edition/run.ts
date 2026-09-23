@@ -1,4 +1,5 @@
-import { buildEditionPack, deterministicFront } from './pack';
+import { buildEditionPack } from './pack';
+import { deterministicFront, thingsHappenFor } from './pure';
 import { generateFront, generateColumn } from './generate';
 import { checkEditionBudget } from './budget';
 import { getEditionForDay, getEditionPrefs } from '../data/editions';
@@ -64,16 +65,10 @@ export async function runDailyEdition(
 
   const narrative: EditionNarrative = { front, column, citedTags, dropped, model };
 
-  const day1 = new Date(`${pack.day}T00:00:00Z`);
-  day1.setUTCDate(day1.getUTCDate() + 1);
-
   // Things happen = every ranked cluster the front did not take, so a story
   // the model picked from past the default tail start never renders twice.
   const frontIds = new Set(front.map((f) => f.clusterId));
-  pack.thingsHappen = pack.clusters
-    .filter((c) => !frontIds.has(c.id))
-    .slice(0, 23)
-    .map((c) => ({ headline: c.lead.headline, url: c.lead.url, domain: c.lead.domain, tier: c.lead.tier, href: c.lead.href }));
+  pack.thingsHappen = thingsHappenFor(pack.clusters, frontIds);
 
   let reportId: string;
   try {

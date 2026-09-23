@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server';
+import { cronGate } from '@/lib/cron/shared';
 import { checkResearchBudget } from '@/lib/research/budget';
 import { runWeeklyRoundup } from '@/lib/research/roundup';
 
@@ -11,11 +12,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 export async function GET(req: NextRequest): Promise<Response> {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get('authorization');
-  if (!secret || auth !== `Bearer ${secret}`) {
-    return Response.json({ error: 'unauthorized' }, { status: 401 });
-  }
+  const denied = cronGate(req);
+  if (denied) return denied;
   try {
     const budget = await checkResearchBudget();
     if (!budget.ok) return Response.json({ skipped: 'research budget reached' });
