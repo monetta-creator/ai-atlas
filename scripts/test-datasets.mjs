@@ -24,7 +24,7 @@ import pg from 'pg';
 import { DATASETS, getDataset } from '../lib/datasets/registry.ts';
 import { isSignalLens, SIGNAL_LENSES } from '../lib/datasets/core.ts';
 import { datasetFileName, datasetToCSV } from '../lib/datasets/serialize.ts';
-import { buildRowJsonSchema } from '../lib/datasets/handoff-shared.ts';
+import { buildRowJsonSchema, fieldEnumValues } from '../lib/datasets/handoff-shared.ts';
 
 const client = process.env.DATABASE_URL
   ? new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
@@ -87,6 +87,14 @@ const KEY_GATED_ALLOWED = new Set([
   'rigor_prior',
   'priority',
 ]);
+// Admin/internal-shaped keys that are fine behind the access-key boundary
+// (key-gated datasets) but must never appear as a column on a PUBLIC dataset.
+// Matched against column KEYS, not values; a key-gated dataset is exempt
+// because the key itself is the gate.
+const PUBLIC_ONLY_BANNED_PATTERNS = [
+  /^agent_/, /^raw_content$/, /^full_text$/, /^drafted_by$/, /archived/,
+  /^review_/, /^deep_dive/, /^touch_details$/, /^dossier/,
+];
 const EM_DASH = '—';
 
 // Quote-aware CSV parse (RFC-4180-ish, CRLF records) for the round-trip check.
@@ -168,7 +176,49 @@ check('helpers: isSignalLens + datasetFileName', () => {
   assert.equal(datasetFileName(sig, 'json', 'labor'), `atlas-signals-labor-${today}.json`);
   assert.equal(datasetFileName(sig, 'json', undefined, '2026-09-01'), 'atlas-signals-2026-09-01.json');
   assert.equal(datasetFileName(sig, 'json', undefined, undefined, '2026-08-25'), 'atlas-signals-2026-08-25.json');
+  // The filter grammar's '-filtered' suffix (route.ts passes isNarrowed(spec)
+  // as the 6th arg); omitted or false is unchanged from the checks above.
+  assert.equal(datasetFileName(sig, 'csv', undefined, undefined, undefined, true), `atlas-signals-${today}-filtered.csv`);
+  assert.equal(datasetFileName(sig, 'csv', undefined, undefined, undefined, false), `atlas-signals-${today}.csv`);
 });
+
+// ---- the company pushdown (the filter grammar's one new SQL param) --------
+// Registry-only and SQL-shape checks, no DB: mirrors scripts/test-intel-datasets.mjs's
+// captureQ mock, which drives a builder directly and records the SQL/params it
+// was called with.
+check('registry: filters.company is declared only on the three intel defs', () => {
+  const withCompany = DATASETS.filter((d) => d.filters?.company).map((d) => d.slug).sort();
+  assert.deepEqual(withCompany, ['intel-facts', 'intel-items', 'intel-metrics']);
+});
+{
+  let capturedSql = '';
+  let capturedParams = [];
+  const captureQ = async (sql, params) => {
+    capturedSql = sql;
+    capturedParams = params ?? [];
+    return [];
+  };
+  for (const slug of ['intel-items', 'intel-facts', 'intel-metrics']) {
+    const def = getDataset(slug);
+    await def.build(captureQ, { company: 'example-bank' });
+    check(`${slug}: company= reaches the SQL as a parameter, not inlined`, () => {
+      assert.ok(capturedParams.includes('example-bank'), `${slug}: 'example-bank' not found in params`);
+      assert.ok(!capturedSql.includes("'example-bank'"), `${slug}: company value should never be inlined into the SQL text`);
+    });
+  }
+  await getDataset('intel-items').build(captureQ, { company: 'example-bank' });
+  check('intel-items: company= filters on company_slugs (the array), not the primary company_slug', () => {
+    assert.ok(capturedSql.includes('any(i.company_slugs)'), capturedSql);
+  });
+  await getDataset('intel-facts').build(captureQ, { company: 'example-bank' });
+  check('intel-facts: company= filters on f.company_slug', () => {
+    assert.ok(capturedSql.includes('f.company_slug ='), capturedSql);
+  });
+  await getDataset('intel-metrics').build(captureQ, { company: 'example-bank' });
+  check('intel-metrics: company= filters on m.company_slug', () => {
+    assert.ok(capturedSql.includes('m.company_slug ='), capturedSql);
+  });
+}
 
 // ---- per-dataset build checks ------------------------------------------------
 const publishedCount = Number(
@@ -214,12 +264,44 @@ for (const d of DATASETS) {
     }
   });
 
+  check(`${d.slug}: public-only ban, no admin/internal key on a non-key-gated dataset`, () => {
+    if (d.keyGated) return;
+    for (const k of colKeys) {
+      for (const pat of PUBLIC_ONLY_BANNED_PATTERNS) {
+        assert.ok(!pat.test(k), `dataset '${d.slug}' is public but carries key '${k}', matching banned pattern ${pat}`);
+      }
+    }
+  });
+
   check(`${d.slug}: CSV round-trip`, () => {
     const csv = datasetToCSV(d, rows1.slice(0, 50));
     const parsed = parseCSV(csv);
     assert.deepEqual(parsed[0], colKeys, 'header is the column keys');
     assert.equal(parsed.length, Math.min(rows1.length, 50) + 1, 'record count');
     for (const rec of parsed) assert.equal(rec.length, colKeys.length, 'field count');
+  });
+
+  // The filter grammar's where/eq/ne/in validation rejects a value outside an
+  // enum column's resolved value set (col.values, when the registry declares
+  // one to override a FIELD_FACTS collision on the same key from another
+  // domain, else fieldEnumValues(key)). If a builder ever emits a live value
+  // outside that set, the grammar would 400 a legitimate filter in prod; this
+  // recount catches the drift here instead (the regression guard for the
+  // concepts.status vs tooling_products.status collision).
+  check(`${d.slug}: enum column values fall within the filter grammar's resolved set`, () => {
+    for (const c of d.columns) {
+      if (c.type !== 'enum') continue;
+      const enumValues = c.values ?? fieldEnumValues(c.key);
+      if (!enumValues) continue;
+      for (const r of rows1) {
+        const v = r[c.key];
+        if (v === null) continue;
+        assert.ok(
+          enumValues.includes(String(v)),
+          `${d.slug}.${c.key}: value '${v}' not in [${enumValues.join(', ')}]`
+        );
+      }
+    }
   });
 }
 
@@ -266,6 +348,20 @@ async function countUnpublished(signalIds) {
     const bad = await countUnpublished(ids);
     check(`${slug}: every signal reference is published (${ids.length} distinct)`, () =>
       assert.equal(bad, 0, `${bad} unpublished signal(s) leaked`));
+  }
+
+  // evidence-ledger: signal-anchored rows must never carry an excerpt (that
+  // cell is the model's per-touch reason, admin-only on the signal page and
+  // key-gated-only in signals-export; the 2026-09-24 gating audit found it
+  // leaking here). Source-anchored rows keep their quoted excerpt.
+  {
+    const evidenceLedger = await getDataset('evidence-ledger').build(q);
+    const signalAnchored = evidenceLedger.filter((r) => r.signal_id !== null);
+    check(`evidence-ledger: signal-anchored rows never carry an excerpt (${signalAnchored.length} of ${evidenceLedger.length})`, () => {
+      for (const r of signalAnchored) {
+        assert.equal(r.excerpt, null, `evidence_id ${r.evidence_id} (signal ${r.signal_id}) leaked an excerpt`);
+      }
+    });
   }
 
   const articles = await getDataset('articles-full-text').build(q);

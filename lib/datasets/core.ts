@@ -24,7 +24,7 @@
 
 export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 
-type DatasetCell = string | number | null;
+export type DatasetCell = string | number | null;
 export type DatasetRow = Record<string, DatasetCell>;
 
 type DatasetCategory =
@@ -48,6 +48,14 @@ export interface DatasetColumn {
   label: string;          // display name for the schema table
   def: string;            // one-line gloss, rendered on the page and in the catalog dataset
   type: DatasetColumnType;
+  // The closed value set for an 'enum' column, when it differs from (or is
+  // absent from) handoff-shared.ts's FIELD_FACTS map. FIELD_FACTS is keyed by
+  // column NAME across every domain, so two unrelated domains that happen to
+  // share a column key (e.g. concepts.status vs tooling_products.status) would
+  // otherwise collide on one shared enum. Set this to override that lookup for
+  // this column specifically; the filter grammar and the JSON Schema generator
+  // both prefer it over FIELD_FACTS when present.
+  values?: string[];
 }
 
 export interface DatasetOpts {
@@ -55,6 +63,7 @@ export interface DatasetOpts {
   day?: string;           // validated as YYYY-MM-DD in the route before it reaches a builder
   since?: string;         // validated as YYYY-MM-DD in the route before it reaches a builder; an incremental lower bound on fetched_at
   source?: string;        // validated against /^[a-z0-9_]{1,32}$/ in the route before it reaches a builder; a single source code
+  company?: string;       // validated against /^[a-z0-9-]{1,64}$/ in the route before it reaches a builder; a single company slug (the three intel datasets only)
   host?: string;          // request origin (https://host), for builders that mint absolute Atlas links
   limit?: number;         // preview row cap; clamped to 1..100 in the route before it reaches a builder
 }
@@ -69,7 +78,7 @@ export interface DatasetDef {
   formats: ('csv' | 'json')[];
   heavy?: boolean;        // no explorer, truncated preview, download-only posture
   keyGated?: boolean;     // requires the portal key (bulk third-party article text)
-  filters?: { lens?: boolean; day?: boolean; since?: boolean; source?: boolean };  // declares supported download query params
+  filters?: { lens?: boolean; day?: boolean; since?: boolean; source?: boolean; company?: boolean };  // declares supported download query params
   build: (q: Q, opts?: DatasetOpts) => Promise<DatasetRow[]>;
 }
 

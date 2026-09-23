@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { isMalformedDetailPath } from './lib/route-shapes';
+import { isMalformedDetailPath, isPublicApiPath } from './lib/route-shapes';
 
 // Open by default (2026-09-23). Every PAGE renders sessionless now: admin
 // pages gate themselves with adminGate() (lib/admin-gate.tsx) and render an
@@ -27,18 +27,7 @@ export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const entered =
     req.cookies.has('atlas_admin') || req.cookies.has('atlas_guest');
-  const isPublic =
-    !pathname.startsWith('/api/') ||
-    pathname === '/api/traceroute/tokenize' ||
-    pathname.startsWith('/api/datasets/') ||
-    pathname === '/api/portal/ask' ||
-    pathname === '/api/ask/peek' ||
-    pathname === '/api/ask/doc' ||
-    pathname === '/api/tooling/events' ||
-    pathname === '/api/nav/viewer' ||
-    pathname === '/api/tickets' ||
-    pathname === '/api/access/request' ||
-    pathname.startsWith('/api/cron/');
+  const isPublic = !pathname.startsWith('/api/') || isPublicApiPath(pathname);
 
   if (!entered && !isPublic) {
     const url = req.nextUrl.clone();

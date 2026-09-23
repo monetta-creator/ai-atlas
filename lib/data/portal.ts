@@ -136,6 +136,199 @@ export async function getKeySpendToday(keyId: string): Promise<{ usd: number; ca
   return { usd: row?.usd ?? 0, calls: row?.n ?? 0 };
 }
 
+// ---- Per-key usage analytics (/access, /costs; P5-B) -----------------------
+// One row per key (plus a synthetic 'legacy' row for the shared team key)
+// over a trailing window: usage counts by kind, spend (the same
+// metadata.portal_key_id sum getKeySpendToday uses, just not clamped to
+// today), and the key's top 3 pulled datasets. Two statements total, no
+// N+1: the main aggregate joins portal_keys against one grouped read of
+// portal_usage and one grouped read of ai_cost_log; the dataset breakdown
+// is a second grouped read, folded into per-key top-3 lists in JS (rows
+// arrive ordered by key then count desc, so the first three per key are
+// the top three). Admin-only, like the rest of this module.
+export interface KeyUsageSummaryRow {
+  keyId: string; // a portal_keys uuid, or the literal 'legacy'
+  name: string;
+  pulls: number;
+  schemaReads: number;
+  askTurns: number;
+  nlQueries: number;
+  viewsSaved: number;
+  deckViews: number;
+  lastUsedAt: string | null;
+  spendUsd: number;
+  topDatasets: { slug: string; n: number }[];
+}
+
+export interface KeyUsageTotals {
+  pulls: number;
+  schemaReads: number;
+  askTurns: number;
+  nlQueries: number;
+  viewsSaved: number;
+  deckViews: number;
+  spendUsd: number;
+}
+
+export interface KeyUsageSummary {
+  keys: KeyUsageSummaryRow[];
+  totals: KeyUsageTotals;
+}
+
+interface RawUsageSummaryRow {
+  key_id: string;
+  name: string;
+  pulls: number;
+  schemaReads: number;
+  askTurns: number;
+  nlQueries: number;
+  viewsSaved: number;
+  deckViews: number;
+  lastUsedAt: string | null;
+  spendUsd: number;
+}
+
+interface RawTopDatasetRow {
+  key_id: string;
+  dataset_slug: string;
+  n: number;
+}
+
+export async function getKeyUsageSummary(days = 30): Promise<KeyUsageSummary> {
+  const [rows, datasetRows] = await Promise.all([
+    q<RawUsageSummaryRow>(
+      `select coalesce(k.id::text, 'legacy') as key_id,
+              coalesce(k.name, 'Legacy shared key') as name,
+              coalesce(u.pulls, 0)::int as "pulls",
+              coalesce(u.schema_reads, 0)::int as "schemaReads",
+              coalesce(u.ask_turns, 0)::int as "askTurns",
+              coalesce(u.nl_queries, 0)::int as "nlQueries",
+              coalesce(u.views_saved, 0)::int as "viewsSaved",
+              coalesce(u.deck_views, 0)::int as "deckViews",
+              u.last_used_at::text as "lastUsedAt",
+              coalesce(s.usd, 0)::numeric as "spendUsd"
+         from (
+           select id, name from portal_keys
+           union all
+           select null::uuid as id, 'Legacy shared key' as name
+         ) k
+         left join (
+           select key_id,
+                  count(*) filter (where kind = 'dataset')   as pulls,
+                  count(*) filter (where kind = 'schema')    as schema_reads,
+                  count(*) filter (where kind = 'ask')       as ask_turns,
+                  count(*) filter (where kind = 'nl_query')  as nl_queries,
+                  count(*) filter (where kind = 'view_save') as views_saved,
+                  count(*) filter (where kind = 'deck')      as deck_views,
+                  max(created_at) as last_used_at
+             from portal_usage
+            where created_at >= current_date - ($1::int - 1) * interval '1 day'
+              and (key_id is not null or identity = 'legacy')
+            group by key_id
+         ) u on u.key_id is not distinct from k.id
+         left join (
+           select metadata->>'portal_key_id' as key_id, sum(cost_usd) as usd
+             from ai_cost_log
+            where metadata ? 'portal_key_id'
+              and created_at >= current_date - ($1::int - 1) * interval '1 day'
+            group by 1
+         ) s on s.key_id = k.id::text
+        order by "spendUsd" desc, "pulls" desc, name asc`,
+      [days]
+    ),
+    q<RawTopDatasetRow>(
+      `select coalesce(key_id::text, 'legacy') as key_id, dataset_slug, count(*)::int as n
+         from portal_usage
+        where kind = 'dataset'
+          and dataset_slug is not null
+          and created_at >= current_date - ($1::int - 1) * interval '1 day'
+          and (key_id is not null or identity = 'legacy')
+        group by coalesce(key_id::text, 'legacy'), dataset_slug
+        order by coalesce(key_id::text, 'legacy'), n desc`,
+      [days]
+    ),
+  ]);
+
+  const topByKey = new Map<string, { slug: string; n: number }[]>();
+  for (const r of datasetRows) {
+    const list = topByKey.get(r.key_id) ?? [];
+    if (list.length < 3) list.push({ slug: r.dataset_slug, n: r.n });
+    topByKey.set(r.key_id, list);
+  }
+
+  const keys: KeyUsageSummaryRow[] = rows.map((r) => ({
+    keyId: r.key_id,
+    name: r.name,
+    pulls: r.pulls,
+    schemaReads: r.schemaReads,
+    askTurns: r.askTurns,
+    nlQueries: r.nlQueries,
+    viewsSaved: r.viewsSaved,
+    deckViews: r.deckViews,
+    lastUsedAt: r.lastUsedAt,
+    spendUsd: r.spendUsd,
+    topDatasets: topByKey.get(r.key_id) ?? [],
+  }));
+
+  const totals = keys.reduce<KeyUsageTotals>(
+    (acc, k) => ({
+      pulls: acc.pulls + k.pulls,
+      schemaReads: acc.schemaReads + k.schemaReads,
+      askTurns: acc.askTurns + k.askTurns,
+      nlQueries: acc.nlQueries + k.nlQueries,
+      viewsSaved: acc.viewsSaved + k.viewsSaved,
+      deckViews: acc.deckViews + k.deckViews,
+      spendUsd: acc.spendUsd + k.spendUsd,
+    }),
+    { pulls: 0, schemaReads: 0, askTurns: 0, nlQueries: 0, viewsSaved: 0, deckViews: 0, spendUsd: 0 }
+  );
+
+  return { keys, totals };
+}
+
+export interface PortalUsageDayRow {
+  day: string;
+  pulls: number;
+  askTurns: number;
+  spendUsd: number;
+}
+
+// Per-day totals across every key (a small table, not a chart) over a
+// trailing window: dataset pulls, Ask turns, and per-key-metered spend,
+// zero-filled so a quiet day still gets a row.
+export async function getPortalUsageByDay(days = 30): Promise<PortalUsageDayRow[]> {
+  return q<PortalUsageDayRow>(
+    `with days as (
+       select generate_series(current_date - ($1::int - 1) * interval '1 day', current_date, interval '1 day')::date as day
+     ),
+     usage_agg as (
+       select created_at::date as day,
+              count(*) filter (where kind = 'dataset') as pulls,
+              count(*) filter (where kind = 'ask')      as ask_turns
+         from portal_usage
+        where created_at >= current_date - ($1::int - 1) * interval '1 day'
+          and (key_id is not null or identity = 'legacy')
+        group by created_at::date
+     ),
+     spend_agg as (
+       select created_at::date as day, sum(cost_usd) as usd
+         from ai_cost_log
+        where metadata ? 'portal_key_id'
+          and created_at >= current_date - ($1::int - 1) * interval '1 day'
+        group by created_at::date
+     )
+     select to_char(d.day, 'YYYY-MM-DD') as day,
+            coalesce(u.pulls, 0)::int as "pulls",
+            coalesce(u.ask_turns, 0)::int as "askTurns",
+            coalesce(s.usd, 0)::numeric as "spendUsd"
+       from days d
+       left join usage_agg u on u.day = d.day
+       left join spend_agg s on s.day = d.day
+      order by d.day`,
+    [days]
+  );
+}
+
 // Keys expiring within `days` (active only), for the agent's info check.
 export async function listKeysExpiringWithin(days: number): Promise<Pick<PortalKeyRow, 'id' | 'name' | 'expires_at'>[]> {
   return q<Pick<PortalKeyRow, 'id' | 'name' | 'expires_at'>>(

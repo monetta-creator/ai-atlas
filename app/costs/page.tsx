@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
 import { getCostDashboard, getMonthlyBill, FIXED_MONTHLY, getNavCounts } from '@/lib/data';
+import { getKeyUsageSummary } from '@/lib/data/portal';
 import { getEditContext } from '@/lib/content';
 import { cronLabel } from '@/lib/scan/handoff';
 import vercelConfig from '@/vercel.json';
@@ -35,7 +36,9 @@ export default async function CostsPage() {
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
-  const [data, bill, counts] = await Promise.all([getCostDashboard(), getMonthlyBill(), getNavCounts().catch(() => null)]);
+  const [data, bill, counts, portalUsage] = await Promise.all([
+    getCostDashboard(), getMonthlyBill(), getNavCounts().catch(() => null), getKeyUsageSummary(30),
+  ]);
 
   const fixedTotal = FIXED_MONTHLY.reduce((s, f) => s + f.usd, 0);
   const runningCost = Math.round(fixedTotal + bill.projectedUsd);
@@ -200,6 +203,38 @@ export default async function CostsPage() {
         </section>
 
         <SpendForecast daily={data.daily} fixedMonthly={fixedTotal} />
+
+        <div className="ls-card" style={{ marginTop: 'var(--gap)' }}>
+          <div className="section-label" style={{ marginTop: 0 }}>Portal by key · last 30 days</div>
+          {portalUsage.keys.every((k) => k.askTurns === 0 && k.nlQueries === 0 && k.spendUsd === 0) ? (
+            <p className="ls-empty">No portal spend in the last 30 days.</p>
+          ) : (
+            <div style={{ overflowX: 'auto', marginTop: 8 }}>
+              <table className="viewdata-table">
+                <thead>
+                  <tr><th>Key</th><th>Ask turns</th><th>NL queries</th><th>Spend</th></tr>
+                </thead>
+                <tbody>
+                  {portalUsage.keys
+                    .filter((k) => k.askTurns > 0 || k.nlQueries > 0 || k.spendUsd > 0)
+                    .map((k) => (
+                      <tr key={k.keyId}>
+                        <td className="vd-label">{k.name}</td>
+                        <td className="vd-num">{k.askTurns}</td>
+                        <td className="vd-num">{k.nlQueries}</td>
+                        <td className="vd-num">{usd2(k.spendUsd)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 10 }}>
+            Spend sums ai_cost_log by metadata.portal_key_id; the legacy shared key stamps no
+            key id, so its Ask spend counts under Team Portal above, not here. Full breakdown on{' '}
+            <Link href="/access" style={{ color: 'var(--accent)' }}>the Access desk</Link>.
+          </p>
+        </div>
 
         <CostsDashboard data={data} />
       </section>

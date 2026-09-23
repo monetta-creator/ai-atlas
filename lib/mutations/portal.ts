@@ -121,7 +121,7 @@ export async function declineAccessRequest(id: string): Promise<void> {
 export function logPortalUsage(input: {
   keyId: string | null;
   identity: 'key' | 'legacy' | 'admin';
-  kind: 'enter' | 'dataset' | 'schema' | 'nl_query' | 'ask' | 'deck' | 'view_save';
+  kind: 'enter' | 'dataset' | 'schema' | 'nl_query' | 'ask' | 'deck' | 'view_save' | 'view_use' | 'view_delete';
   datasetSlug?: string | null;
   spec?: unknown;
   rows?: number | null;

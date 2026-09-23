@@ -1,0 +1,235 @@
+/* ============================================================
+   DATA PORTAL (.dp-*) — /datasets hub.
+   The filter plate reuses .tl-filters/.tl-toolbar/.tl-search/
+   .tl-select/.tl-clear from tooling.css verbatim (those classes
+   are not scoped to .tl, so nothing here redefines them). This
+   sheet holds only the card grid and its parts.
+   ============================================================ */
+
+.dp-count {
+  font-family: var(--font-mono); font-size: 12px; color: var(--faint-ink);
+  margin: 4px 0 22px;
+}
+
+.dp-empty {
+  font-size: 13.5px; color: var(--faint-ink); margin: 0 0 22px;
+}
+
+.dp-group { margin-bottom: 34px; }
+
+.dp-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gap);
+}
+@media (min-width: 1024px) {
+  .dp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.dp-card { display: flex; flex-direction: column; gap: 10px; }
+
+.dp-card-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.dp-card-head .badge { flex: none; white-space: nowrap; }
+
+.dp-kicker {
+  font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--faint-ink); margin-bottom: 4px;
+}
+
+.dp-desc {
+  font-size: 13.5px; line-height: 1.6; color: var(--dim); margin: 0;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+
+.dp-meta {
+  font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink);
+}
+
+.dp-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+
+.dp-lens { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.dp-lens-label {
+  font-family: var(--font-mono); font-size: 9.5px; text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--faint-ink);
+}
+
+/* ============================================================
+   QUERY BUILDER (.dp-qb-*) — the filter/sort/column builder on
+   every /datasets/<slug> page (components/datasets/QueryBuilder).
+   Reuses .plate/.input/.btn/.section-label; only the builder's
+   own row and field layout lives here. Every rule wraps at
+   375px width (rows are flex-wrap, no fixed widths), so nothing
+   here forces horizontal page scroll on a phone.
+   ============================================================ */
+
+.dp-qb {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.dp-qb-head { display: flex; flex-direction: column; gap: 6px; }
+
+.dp-qb-desc {
+  font-family: var(--font-mono); font-size: 12px; color: var(--faint-ink); margin: 0;
+}
+
+.dp-qb-section {
+  display: flex; flex-direction: column; gap: 8px;
+}
+/* Adjacency, not :first-of-type: .dp-qb-head is the first section's actual
+   preceding sibling (and the heavy hint <p> sits between them on a heavy
+   dataset), so :first-of-type never matched the real first section. A
+   divider now draws only when one section directly follows another. */
+.dp-qb-section + .dp-qb-section {
+  padding-top: 14px; border-top: 1px solid var(--line);
+}
+.dp-qb-section > .btn { align-self: flex-start; }
+
+.dp-qb-label {
+  font-family: var(--font-mono); font-size: 10.5px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--faint-ink);
+}
+
+.dp-qb-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dp-qb-row .input { min-width: 0; }
+.dp-qb-col { flex: 1 1 160px; min-width: 140px; }
+.dp-qb-op { flex: 1 1 140px; min-width: 120px; }
+.dp-qb-value { flex: 2 1 200px; min-width: 140px; }
+.dp-qb-remove { flex: 0 0 auto; }
+
+.dp-qb-pushdowns { display: flex; flex-wrap: wrap; gap: 12px; }
+
+.dp-qb-field { display: flex; flex-direction: column; gap: 4px; flex: 0 1 auto; min-width: 0; }
+.dp-qb-field span {
+  font-size: 11px; color: var(--faint-ink); font-family: var(--font-mono);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.dp-qb-field input, .dp-qb-field select { min-width: 0; }
+.dp-qb-field--grow { flex: 1 1 240px; }
+
+.dp-qb-inline { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+
+.dp-qb-cols { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.dp-qb-colchip {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--dim);
+}
+
+.dp-qb-warn {
+  font-size: 12.5px; color: var(--accent); margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--line));
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
+}
+
+.dp-qb-hint { font-size: 12px; color: var(--faint-ink); margin: 0; }
+.dp-qb-hint--error { color: var(--accent); }
+
+.dp-qb-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.dp-qb-viewline {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: 12px; color: var(--dim);
+}
+
+/* ============================================================
+   SAVED VIEWS (.dp-views-*) — components/datasets/SavedViews,
+   mounted inside the query builder's own .dp-qb-section flow (it
+   reuses .dp-qb-label/.dp-qb-hint for its heading and status text).
+   ============================================================ */
+
+.dp-views-save { display: flex; flex-direction: column; gap: 10px; }
+/* .dp-qb-section > .btn's align-self doesn't reach a nested child, so the
+   Save view button otherwise stretches to the column's full width. */
+.dp-views-save > .btn { align-self: flex-start; }
+
+.dp-views-form { display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
+
+.dp-views-share {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--dim);
+}
+
+.dp-views-formactions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.dp-views-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+.dp-views-row {
+  padding: 12px; border: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 6px;
+}
+
+.dp-views-name {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 13.5px; color: var(--ink); font-weight: 500;
+}
+
+.dp-views-badge { font-size: 10px; }
+
+.dp-views-desc {
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--faint-ink);
+  margin: 0; line-height: 1.5;
+}
+
+.dp-views-meta {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink);
+}
+
+.dp-views-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.dp-views-danger { color: var(--accent); }
+
+.dp-views-rename { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dp-views-rename .input { flex: 1 1 200px; min-width: 140px; }
+
+/* ============================================================
+   ASK FOR DATA (.dp-ask-*) — components/datasets/AskForData, the
+   hub's natural-language query builder plate (mounted by
+   DatasetCatalog above the count line/grid). Reuses .plate for its
+   padding/border and .dp-qb-field/.dp-qb-desc/.dp-qb-hint/
+   .dp-qb-actions for shared field, description, and button-row look.
+   ============================================================ */
+
+.dp-ask { display: flex; flex-direction: column; gap: 14px; margin-bottom: 22px; }
+
+/* Base's .section-label margin (44px 0 18px) is meant for a section that
+   follows other page content; inside these plates it leaves dead space
+   above the heading. The .tl-strip-head idiom (tooling.css). */
+.dp-ask > .section-label, .dp-qb-head .section-label { margin: 0; }
+
+.dp-ask-locked { font-size: 13px; color: var(--dim); line-height: 1.6; margin: 0; }
+.dp-ask-locked a { color: var(--accent); }
+.dp-ask-locked a:hover { text-decoration: underline; }
+
+.dp-ask-form { display: flex; flex-direction: column; gap: 10px; }
+
+.dp-ask-textarea { resize: vertical; min-height: 44px; font-family: inherit; width: 100%; }
+
+.dp-ask-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.dp-ask-counter {
+  font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink); margin-left: auto;
+}
+
+.dp-ask-result {
+  display: flex; flex-direction: column; gap: 8px;
+  padding-top: 14px; border-top: 1px solid var(--line);
+}
+
+.dp-ask-resulthead {
+  font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--faint-ink);
+}
+
+.dp-ask-explain { font-size: 13px; color: var(--dim); line-height: 1.6; margin: 0; }
+
+.dp-ask-dropped {
+  list-style: none; margin: 0; padding: 0;
+  font-size: 12px; color: var(--faint-ink); display: flex; flex-direction: column; gap: 4px;
+}

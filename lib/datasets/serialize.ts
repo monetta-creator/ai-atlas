@@ -1,4 +1,5 @@
-import type { DatasetDef, DatasetRow } from './core';
+import type { DatasetColumn, DatasetDef, DatasetRow } from './core';
+import type { FilterSpec } from './filter';
 
 // Server-side dataset serializers. A superset of lib/viewdata.ts's rules
 // (RFC-4180-ish quoting, CRLF rows) that additionally admits null cells
@@ -13,19 +14,31 @@ function csvField(v: string | number | null): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export function datasetToCSV(def: DatasetDef, rows: DatasetRow[]): string {
-  const head = def.columns.map((c) => csvField(c.key)).join(',');
+// `opts.columns`, when given, is the filter grammar's projected column list
+// (lib/datasets/filter.ts projectColumns): a subset of def.columns, in the
+// requested order. Defaults to every column, unchanged from before the
+// filter grammar existed.
+export function datasetToCSV(
+  def: DatasetDef, rows: DatasetRow[], opts: { columns?: DatasetColumn[] } = {}
+): string {
+  const columns = opts.columns ?? def.columns;
+  const head = columns.map((c) => csvField(c.key)).join(',');
   const body = rows.map((r) =>
-    def.columns.map((c) => csvField(r[c.key] ?? null)).join(',')
+    columns.map((c) => csvField(r[c.key] ?? null)).join(',')
   );
   return [head, ...body].join('\r\n');
 }
 
 // The JSON envelope carries the schema alongside the rows so a consumer never
-// needs a second request to interpret a download.
+// needs a second request to interpret a download. `columns` reflects a
+// requested projection; `filter` is the normalized filter spec (null when
+// nothing in the grammar was requested).
 export function datasetToJSON(
   def: DatasetDef, rows: DatasetRow[],
-  opts: { lens?: string; day?: string; since?: string; source?: string; preview?: boolean } = {}
+  opts: {
+    lens?: string; day?: string; since?: string; source?: string; preview?: boolean;
+    columns?: DatasetColumn[]; filter?: FilterSpec | null;
+  } = {}
 ): string {
   return JSON.stringify({
     dataset: {
@@ -39,7 +52,8 @@ export function datasetToJSON(
       since: opts.since ?? null,
       source: opts.source ?? null,
       row_count: rows.length,
-      columns: def.columns,
+      columns: opts.columns ?? def.columns,
+      filter: opts.filter ?? null,
       ...(opts.preview ? { preview: true } : {}),
     },
     rows,
@@ -52,9 +66,10 @@ export function datasetToJSON(
 // date for incremental pulls, and otherwise the UTC date the file was
 // generated (signals-export, intel-facts, and the other whole-corpus sets).
 export function datasetFileName(
-  def: DatasetDef, format: 'csv' | 'json', lens?: string, day?: string, since?: string
+  def: DatasetDef, format: 'csv' | 'json', lens?: string, day?: string, since?: string,
+  filtered?: boolean
 ): string {
   const date = day || since || new Date().toISOString().slice(0, 10);
   const stem = ['atlas', def.slug, lens, date].filter(Boolean).join('-');
-  return `${stem}.${format}`;
+  return `${stem}${filtered ? '-filtered' : ''}.${format}`;
 }

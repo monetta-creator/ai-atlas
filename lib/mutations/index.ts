@@ -19,3 +19,4 @@ export * from './tooling';
 export * from './agent';
 export * from './editions';
 export * from './portal';
+export * from './portal-views';

@@ -321,9 +321,19 @@ const GENERIC_PRODUCT_ERROR = 'Unknown product.';
 
 // Manual add (portal + admin): lands as a candidate, deduped against the
 // whole catalog by url_key/name_key (createProductManual's matchExisting),
-// so adding a product discovery already found routes to the existing row.
+// so adding a product discovery already found routes to the existing row. A
+// non-admin caller's redirect never distinguishes a fresh add from a match
+// on any status: every outcome lands on /tooling?added=1. Admin keeps the
+// direct /tooling/<slug> landing. This closes only the REDIRECT channel: the
+// slug hint is gone, but existence isn't. uniqueSlug tries slugify(name)
+// first and allowedStatuses(portal) in lib/data/tooling.ts includes
+// 'candidate', so a keyholder can still visit /tooling/<slugify(name)>
+// afterward and get 200 on a fresh add vs 404 on a dismissed match. Fully
+// closing that means removing 'candidate' from the portal allow-list, which
+// is a product call, not made here.
 export async function addProductAction(formData: FormData): Promise<void> {
-  await requirePortal();
+  const viewer = await requirePortal();
+  const admin = viewer.tier === 'admin';
   const name = str(formData, 'name');
   if (name.length < 2 || name.length > 200) throw new Error('A product name (2-200 characters) is required.');
   const url = str(formData, 'url');
@@ -342,6 +352,7 @@ export async function addProductAction(formData: FormData): Promise<void> {
     one_liner: oneLiner || null,
   });
   revalidatePath('/tooling');
+  if (!admin) redirect('/tooling?added=1');
   redirect(`/tooling/${slug}`);
 }
 

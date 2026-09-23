@@ -36,6 +36,7 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
   if (!UUID_RE.test(id)) notFound();
   const paper = await getPaper(id);
   if (!paper) notFound();
+  if (!personal && (paper.triage_status !== 'kept' || paper.review_status === 'dismissed')) notFound();
 
   const [concepts, threads, conceptDigest, threadDigest, targets] = await Promise.all([
     getPaperConcepts(id), getPaperThreads(id), getConceptDigest(), getThreadDigest(), getTargets(),

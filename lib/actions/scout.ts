@@ -36,9 +36,17 @@ function parseFoundedYear(raw: string): number | null {
 
 // "Add a target": enters the funnel as queued, like any discovery. Open to the
 // admin AND portal keyholders (their adds await editorial review). Dedup on
-// domain / normalized name routes to the existing profile instead; when a
-// portal keyholder hits a dismissed/archived match, redirect to /scout without
-// disclosing it.
+// domain / normalized name routes to the existing profile instead. A non-admin
+// caller's outcome (fresh add, or a match on any status) never distinguishes
+// in the redirect: every case lands on /scout?added=1, so a keyholder cannot
+// tell a hidden company's status apart from a brand-new one by watching where
+// the redirect lands. Residual: this closes only the REDIRECT channel. The
+// review-queue strip (getQueuedCompaniesPublic, rendered on /scout for
+// keyholders) still shows a fresh add and hides a dismissed/archived match,
+// so a keyholder who checks the strip after adding can still infer a hidden
+// company's existence. Closing that too means dropping the queue strip (or
+// the 'queued' status) from what a keyholder can see of their own add, which
+// is a product call, not made here.
 export async function addTargetAction(formData: FormData) {
   await requirePortal();
   const admin = await isAdmin();
@@ -50,7 +58,7 @@ export async function addTargetAction(formData: FormData) {
   if (url && !/^https?:\/\//i.test(url)) throw new Error('The URL must be http(s).');
   if (!VERTICAL_SLUG_RE.test(vertical)) throw new Error('Bad vertical.');
   if (!(COMPANY_STAGES as string[]).includes(stage)) throw new Error('Bad stage.');
-  const { id, existed } = await m.createCompany({
+  const { id } = await m.createCompany({
     name,
     url: url || null,
     vertical,
@@ -63,10 +71,7 @@ export async function addTargetAction(formData: FormData) {
     origin: 'manual',
   });
   revalidatePath('/scout');
-  if (existed && !admin) {
-    const visible = await getCompany(id, { admin: false, portal: true });
-    if (!visible) redirect('/scout');
-  }
+  if (!admin) redirect('/scout?added=1');
   redirect(`/scout/${id}`);
 }
 

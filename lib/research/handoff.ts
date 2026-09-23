@@ -3,7 +3,8 @@ import type { DatasetDef } from '../datasets/core';
 // scripts/test-datasets.mjs (type stripping), which resolves no extensionless
 // specifiers for real (non-type-only) imports.
 import {
-  buildRowJsonSchema, cronLabel, describeFieldType, envelopeJsonSchema,
+  authForScriptsParagraph, buildRowJsonSchema, cronLabel, describeFieldType,
+  envelopeJsonSchema, queryGrammarParagraphs, savedViewsParagraph, schemaHintLine,
 } from '../datasets/handoff-shared.ts';
 import type { CronEntry } from '../datasets/handoff-shared.ts';
 
@@ -105,7 +106,7 @@ Additional guarantees:
 - review_note, the human reviewer's private why for the track/note decision,
   is EXCLUDED from this file and every other Atlas dataset. rigor_prior (the
   reviewer's own methodological-rigor number) rides only because this file
-  requires the team portal key.
+  requires an access key.
 
 ## 4. Status semantics
 
@@ -144,7 +145,7 @@ structured export of the research library. Scheduled activity: ${schedule}.
 
 ## 7. Transport (the least stable section; mechanics may change)
 
-1. Unlock once per browser: ${host}/datasets/enter?k=<PORTAL_KEY> (sets a
+1. Unlock once per browser: ${host}/datasets/enter?k=<access key> (sets a
    30-day cookie; the key comes from the research operator, never this doc).
 2. Download the full corpus:
    ${host}/api/datasets/research-export?format=json&download=1
@@ -152,5 +153,13 @@ structured export of the research library. Scheduled activity: ${schedule}.
    (download=1 forces a saved file; scripted fetches can drop it.)
 3. Re-download whenever you want the current reviewed shelf; there is no
    day-by-day archive for this file, unlike the daily scan.
+
+${authForScriptsParagraph()}
+
+${queryGrammarParagraphs([def])}
+
+${savedViewsParagraph()}
+
+${schemaHintLine()}
 `;
 }

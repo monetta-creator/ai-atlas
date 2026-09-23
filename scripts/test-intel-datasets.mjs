@@ -110,17 +110,26 @@ check('every intel-* dataset is key-gated and heavy: nothing intel-shaped ships 
   }
 });
 
-// ---- (e) intel-metrics: since/source incremental-pull filters -------------
+// ---- (e) intel-metrics: since/source/company incremental-pull filters -----
 
-check('intel-metrics: registry declares the since/source filters', () => {
-  assert.deepEqual(metricsDef.filters, { since: true, source: true });
+check('intel-metrics: registry declares the since/source/company filters', () => {
+  assert.deepEqual(metricsDef.filters, { since: true, source: true, company: true });
 });
 
-// A mock Q that never touches a DB: it just records the SQL text passed to it
-// and returns no rows, so buildIntelMetrics can be driven directly.
+check('intel-items and intel-facts declare the company filter too; company is intel-only', () => {
+  assert.equal(itemsDef.filters?.company, true);
+  assert.equal(factsDef.filters?.company, true);
+  assert.equal(companiesDef.filters?.company, undefined, 'intel-companies has no company= filter (it IS the company list)');
+  assert.equal(scanDef.filters?.company, undefined, 'external-scan has no company filter');
+});
+
+// A mock Q that never touches a DB: it just records the SQL text and params
+// passed to it and returns no rows, so a builder can be driven directly.
 let capturedSql = '';
-const captureQ = async (sql) => {
+let capturedParams = [];
+const captureQ = async (sql, params) => {
   capturedSql = sql;
+  capturedParams = params ?? [];
   return [];
 };
 
@@ -154,6 +163,52 @@ const bothSql = capturedSql;
 check('buildIntelMetrics: since+source combine in one where clause', () => {
   assert.ok(bothSql.includes('m.fetched_at >= $1::date'), 'combined filters should include the since predicate');
   assert.ok(bothSql.includes('m.source = $2'), 'combined filters should include the source predicate, second param');
+});
+
+// ---- (f) the company pushdown (the filter grammar's one new SQL param) ----
+// Additive-only: no company= means byte-identical SQL to before it existed.
+
+await metricsDef.build(captureQ, {});
+check('buildIntelMetrics: no company= carries no company predicate', () => {
+  assert.ok(!capturedSql.includes('company_slug ='), 'unfiltered SQL should not carry the company predicate');
+});
+
+await metricsDef.build(captureQ, { company: 'example-bank' });
+check('buildIntelMetrics: company= adds the company_slug predicate and its param', () => {
+  assert.ok(capturedSql.includes('m.company_slug = $1'), 'company filter should add the company_slug predicate');
+  assert.deepEqual(capturedParams, ['example-bank']);
+});
+
+await metricsDef.build(captureQ, { since: '2026-08-01', source: 'edgar_xbrl', company: 'example-bank' });
+check('buildIntelMetrics: since+source+company combine, company last, third param', () => {
+  assert.ok(capturedSql.includes('m.fetched_at >= $1::date'));
+  assert.ok(capturedSql.includes('m.source = $2'));
+  assert.ok(capturedSql.includes('m.company_slug = $3'));
+  assert.deepEqual(capturedParams, ['2026-08-01', 'edgar_xbrl', 'example-bank']);
+});
+
+await itemsDef.build(captureQ, {});
+const itemsUnfilteredSql = capturedSql;
+check('buildIntelItems: no company= carries no company_slugs predicate', () => {
+  assert.ok(!itemsUnfilteredSql.includes('company_slugs)'), 'unfiltered SQL should not carry the company predicate');
+});
+
+await itemsDef.build(captureQ, { company: 'example-bank' });
+check('buildIntelItems: company= adds the any(company_slugs) predicate and its param', () => {
+  assert.ok(capturedSql.includes('= any(i.company_slugs)'), 'company filter should add the company_slugs predicate');
+  assert.ok(capturedParams.includes('example-bank'));
+});
+
+await factsDef.build(captureQ, {});
+const factsUnfilteredSql = capturedSql;
+check('buildIntelFacts: no company= carries no where clause at all', () => {
+  assert.ok(!factsUnfilteredSql.includes('where'), 'unfiltered SQL should carry no where clause');
+});
+
+await factsDef.build(captureQ, { company: 'example-bank' });
+check('buildIntelFacts: company= adds a where f.company_slug predicate and its param', () => {
+  assert.ok(capturedSql.includes('where f.company_slug = $1'), 'company filter should add the company_slug predicate');
+  assert.deepEqual(capturedParams, ['example-bank']);
 });
 
 console.log(`\n${pass} passed · ${fail} failed`);

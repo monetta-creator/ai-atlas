@@ -1,7 +1,8 @@
 import { NextResponse, after } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { checkPortalKey, setPortalSession } from '@/lib/auth';
-import { identityFromKey, touchKey } from '@/lib/portal/identity';
+import { identityFromKey, legacyKeyLimiter, legacyLimiterKey, touchKey } from '@/lib/portal/identity';
+import { parseKey } from '@/lib/portal/keys';
 import { logPortalUsage } from '@/lib/mutations/portal';
 
 export const dynamic = 'force-dynamic';
@@ -15,14 +16,29 @@ export const dynamic = 'force-dynamic';
 // panel (never a /login redirect, which corporate networks flag). Mirrors
 // app/share/route.ts. The key rides in the query string exactly as the share
 // token does; same accepted tradeoff, per-person keys are revocable.
+//
+// This GET is already a yes/no oracle by shape (success redirects to /ask,
+// failure does too, but only success sets the cookie), so the legacy compare
+// is throttled the same way as the other two sessionless legacy-key entry
+// points (legacyKeyLimiter): a limited client's compare is skipped, with no
+// separate response for "limited" (that would add a second, more precise
+// oracle on top of the one that already exists). Only a non-atlas_-shaped
+// guess counts as a legacy attempt; a per-person key always tries
+// identityFromKey below regardless of the legacy limiter's state.
 export async function GET(req: NextRequest) {
   const k = req.nextUrl.searchParams.get('k')?.trim() ?? '';
   const ua = (req.headers.get('user-agent') ?? '').slice(0, 300) || null;
 
-  if (k && checkPortalKey(k)) {
-    await setPortalSession();
-    after(() => logPortalUsage({ keyId: null, identity: 'legacy', kind: 'enter', ua }));
-    return NextResponse.redirect(new URL('/ask', req.url));
+  if (k && !parseKey(k)) {
+    const clientKey = legacyLimiterKey((name) => req.headers.get(name), 'form');
+    const allowed = legacyKeyLimiter.allow(clientKey);
+    if (allowed && checkPortalKey(k)) {
+      legacyKeyLimiter.reset(clientKey);
+      await setPortalSession();
+      after(() => logPortalUsage({ keyId: null, identity: 'legacy', kind: 'enter', ua }));
+      return NextResponse.redirect(new URL('/ask', req.url));
+    }
+    if (allowed) legacyKeyLimiter.fail(clientKey);
   }
 
   if (k.startsWith('atlas_')) {

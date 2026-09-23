@@ -196,7 +196,7 @@ export async function fetchRecord(
               extraction->>'counterpoint' as counterpoint,
               extraction->>'econ_implication' as econ,
               triage_summary as summary
-         from papers where id = $1::uuid and triage_status = 'kept'`,
+         from papers where id = $1::uuid and triage_status = 'kept' and review_status <> 'dismissed'`,
       [id]
     );
     const r = rows[0];

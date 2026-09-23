@@ -50,7 +50,16 @@ export async function getEvidenceFor(
       order by ev.created_at desc`,
     [targetType, targetId]
   );
-  return personal ? rows : rows.map((r) => ({ ...r, reliability_prior: null, note: null }));
+  // Signal-anchored evidence carries the model's per-touch REASON as its
+  // excerpt (syncSignalEvidence copies touch_details[code].reason there on
+  // publish). The signal page shows that reason to admins only, and the
+  // key-gated signals-export is documented as the reason's boundary, so the
+  // claim page must not hand it to guests either (the 2026-09-24 gating audit
+  // found it leaking here and through the public evidence-ledger dataset).
+  // Source-anchored excerpts are quoted passages from the source and stay public.
+  return personal
+    ? rows
+    : rows.map((r) => ({ ...r, reliability_prior: null, note: null, excerpt: r.signal_id ? null : r.excerpt }));
 }
 
 export async function getRationales(

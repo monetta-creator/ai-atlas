@@ -16,8 +16,8 @@ import {
 // page and exported by the `catalog` dataset).
 
 const col = (
-  key: string, label: string, type: DatasetColumn['type'], def: string
-): DatasetColumn => ({ key, label, type, def });
+  key: string, label: string, type: DatasetColumn['type'], def: string, values?: string[]
+): DatasetColumn => ({ key, label, type, def, ...(values ? { values } : {}) });
 
 const PUBLISHED_NOTE =
   'Only published signals are included. Draft and archived work never enters a dataset.';
@@ -103,7 +103,7 @@ const BASE: DatasetDef[] = [
     description:
       'Every public evidence row: which source or signal bears on which claim, in which direction, at what weight, with the quoted excerpt.',
     methodology:
-      `One row per evidence record targeting a claim or bridge claim. Provenance is a source (manual ingest), a published signal (materialized on publish), or both. ${PUBLISHED_NOTE} The admin\'s private note and source reliability priors never enter this dataset.`,
+      `One row per evidence record targeting a claim or bridge claim. Provenance is a source (manual ingest), a published signal (materialized on publish), or both. ${PUBLISHED_NOTE} The admin\'s private note and source reliability priors never enter this dataset. Excerpt is null on signal-anchored rows: that excerpt is the model's per-touch reason, which stays admin-only on the signal page and ships only in the key-gated signals-export.`,
     category: 'evidence',
     formats: ['csv', 'json'],
     columns: [
@@ -113,7 +113,7 @@ const BASE: DatasetDef[] = [
       col('target_statement', 'Target statement', 'longtext', 'Statement of the targeted node.'),
       col('direction', 'Direction', 'enum', 'supports, contradicts, or neutral.'),
       col('weight', 'Weight', 'enum', 'high, medium, or low.'),
-      col('excerpt', 'Excerpt', 'longtext', 'The quoted passage that carries the finding.'),
+      col('excerpt', 'Excerpt', 'longtext', 'The quoted passage that carries the finding; null on signal-anchored rows, whose excerpt is the model\'s per-touch reason and ships only in the key-gated signals-export.'),
       col('lens', 'Lens', 'enum', 'Audience lens the finding speaks to, when tagged.'),
       col('signal_id', 'Signal ID', 'text', 'Publishing signal, when signal-anchored.'),
       col('signal_title', 'Signal title', 'text', 'Title of the publishing signal.'),
@@ -186,7 +186,10 @@ const BASE: DatasetDef[] = [
       col('name', 'Name', 'text', 'Display name of the concept.'),
       col('short_definition', 'Short definition', 'text', 'One-sentence definition.'),
       col('explanation', 'Explanation', 'longtext', 'The full explainer prose.'),
-      col('status', 'Status', 'enum', 'settled (broad agreement) or contested (live disagreement).'),
+      // Own value set: FIELD_FACTS's 'status' entry belongs to the Tooling
+      // Monitor's candidate/cataloged/parked/dismissed status, a different
+      // column that happens to share this key. See DatasetColumn.values.
+      col('status', 'Status', 'enum', 'settled (broad agreement) or contested (live disagreement).', ['settled', 'contested']),
       col('prerequisites', 'Prerequisites', 'text', 'Concept slugs to understand first, joined with a semicolon.'),
       col('linked_claims', 'Linked claims', 'text', 'Argument-map claim codes this concept underpins, joined with a semicolon.'),
     ],
@@ -448,12 +451,12 @@ const BASE: DatasetDef[] = [
     description:
       'One day of the Intel Desk collection engine: documents discovered about tracked companies from public press feeds, web search, and SEC filings, with full text, extracted facts, and a model summary.',
     methodology:
-      'One row per item in one day\'s intel run; the latest completed day by default, or add ?day=YYYY-MM-DD for a specific day. The leading columns mirror the external-scan contract key for key so the same firewall intake ingests both files: topic_slug carries the item\'s primary company_slug, tags carries its dimension tags, relevance carries its significance score, topic_code is always null (no company-level taxonomy code exists). full_text is a composed document: headline, summary, extracted facts, then the raw article text, capped at 24,000 characters. This is a working corpus, not a redistribution channel. Downloading requires an access key.',
+      'One row per item in one day\'s intel run; the latest completed day by default, or add ?day=YYYY-MM-DD for a specific day. The leading columns mirror the external-scan contract key for key so the same firewall intake ingests both files: topic_slug carries the item\'s primary company_slug, tags carries its dimension tags, relevance carries its significance score, topic_code is always null (no company-level taxonomy code exists). full_text is a composed document: headline, summary, extracted facts, then the raw article text, capped at 24,000 characters. Add ?company=<slug> to narrow to one registry company (matches any linked company, not only the primary one). This is a working corpus, not a redistribution channel. Downloading requires an access key.',
     category: 'intel',
     formats: ['csv', 'json'],
     heavy: true,
     keyGated: true,
-    filters: { day: true },
+    filters: { day: true, company: true },
     columns: [
       col('item_id', 'Item ID', 'text', 'Stable UUID of the collected item.'),
       col('run_day', 'Run day', 'date', 'The collection day (YYYY-MM-DD, UTC).'),
@@ -524,11 +527,12 @@ const BASE: DatasetDef[] = [
     description:
       'Structured, provenance-carrying facts about tracked companies, extracted by enrichment from collected items: one fact per row, with its dimension, value, and as-of date.',
     methodology:
-      'One row per extracted fact. Deduped per company at write time, so a fact is added once and kept. source_url resolves through the originating item and is null on the rare fact ingested without one. This is a working corpus, not a redistribution channel. Downloading requires an access key.',
+      'One row per extracted fact. Deduped per company at write time, so a fact is added once and kept. source_url resolves through the originating item and is null on the rare fact ingested without one. Add ?company=<slug> to narrow to one registry company. This is a working corpus, not a redistribution channel. Downloading requires an access key.',
     category: 'intel',
     formats: ['csv', 'json'],
     heavy: true,
     keyGated: true,
+    filters: { company: true },
     columns: [
       col('fact_id', 'Fact ID', 'text', 'Stable UUID of the fact.'),
       col('company_slug', 'Company slug', 'text', 'The company the fact is about; joins intel-companies.'),
@@ -549,12 +553,12 @@ const BASE: DatasetDef[] = [
     description:
       'LLM-free structured series for tracked companies, about a decade deep: the full FDIC call-report field set per bank, FR Y-9C holding-company consolidated items, curated SEC EDGAR XBRL concepts, and CFPB complaint counts: one metric-period value per row.',
     methodology:
-      'One row per (company, metric, period, source). Metric codes name their origin: fdic_<mnemonic> (FDIC RIS dictionary), y9c_<mdrm> (Federal Reserve MDRM), curated concept names for edgar_xbrl, cfpb_complaints_month/_30d. No model ever touches this table; every value traces to a public structured source. Quarterly sources refresh on the Monday cron (Y-9C by a quarterly file ingest); re-fetches upsert idempotently, so a re-download reflects the latest pull for a period without duplicating it. This is a working corpus, not a redistribution channel. Downloading requires an access key. Incremental pulls: add ?since=YYYY-MM-DD (rows fetched on or after that date) and/or ?source=<code>; the Monday engine stamps fetched_at on every refreshed row, so a weekly ?since= pull is the intended intake.',
+      'One row per (company, metric, period, source). Metric codes name their origin: fdic_<mnemonic> (FDIC RIS dictionary), y9c_<mdrm> (Federal Reserve MDRM), curated concept names for edgar_xbrl, cfpb_complaints_month/_30d. No model ever touches this table; every value traces to a public structured source. Quarterly sources refresh on the Monday cron (Y-9C by a quarterly file ingest); re-fetches upsert idempotently, so a re-download reflects the latest pull for a period without duplicating it. This is a working corpus, not a redistribution channel. Downloading requires an access key. Incremental pulls: add ?since=YYYY-MM-DD (rows fetched on or after that date) and/or ?source=<code> and/or ?company=<slug>; the Monday engine stamps fetched_at on every refreshed row, so a weekly ?since= pull is the intended intake.',
     category: 'intel',
     formats: ['csv', 'json'],
     heavy: true,
     keyGated: true,
-    filters: { since: true, source: true },
+    filters: { since: true, source: true, company: true },
     columns: [
       col('company_slug', 'Company slug', 'text', 'The company the metric is about; joins intel-companies.'),
       col('company_name', 'Company', 'text', 'Company name, denormalized for convenience.'),

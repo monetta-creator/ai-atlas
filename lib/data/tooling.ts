@@ -3,6 +3,12 @@ import { DEFAULT_UTILITY_MODEL } from '../pipeline/config';
 import type {
   ToolingCategory, ToolingEvent, ToolingMaturity, ToolingPrefs, ToolingProduct, ToolingRun, ToolingRunKind, ToolingViewer,
 } from '../types';
+// The column lists live in the pure lib/data/tooling-columns.ts (no lib/db
+// import) so scripts/test-access-columns.mjs can load them directly; re-
+// exported below unchanged, so every other importer is unaffected.
+import { PRODUCT_PUBLIC_COLUMNS, PRODUCT_PORTAL_COLUMNS, PRODUCT_ADMIN_COLUMNS } from './tooling-columns';
+
+export { PRODUCT_PUBLIC_COLUMNS, PRODUCT_PORTAL_COLUMNS, PRODUCT_ADMIN_COLUMNS };
 
 // ---- AI Tooling Monitor (migration 0054) ------------------------------------
 // Reads for the discovery/catalog engine and the public/portal/admin surfaces.
@@ -11,28 +17,6 @@ import type {
 // they never leave the database for that request (not just hidden client-side).
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export const PRODUCT_PUBLIC_COLUMNS: string[] = [
-  'id', 'name', 'slug', 'vendor', 'vendor_domain', 'url', 'category', 'secondary_categories',
-  'one_liner', 'description', 'target_buyer', 'deployment', 'pricing_model', 'pricing_note',
-  'maturity', 'founded_year', 'hq', 'funding_note', 'notable_customers', 'integrations',
-  'compliance_claims', 'models_used', 'features', 'feed_url', 'changelog_url', 'github_repo',
-  'dossier', 'status', 'pinned',
-  "to_char(first_seen, 'YYYY-MM-DD') as first_seen", "to_char(last_seen, 'YYYY-MM-DD') as last_seen",
-  'created_at', 'updated_at',
-];
-
-export const PRODUCT_PORTAL_COLUMNS: string[] = [
-  ...PRODUCT_PUBLIC_COLUMNS, 'deep_dive', 'agent_fit', 'agent_scores', 'agent_reason',
-];
-
-export const PRODUCT_ADMIN_COLUMNS: string[] = [
-  ...PRODUCT_PORTAL_COLUMNS,
-  'review_note', 'reviewed_at', 'agent_model', 'agent_at',
-  'raw_content', 'fetched_via', 'fetched_at', 'fetch_error',
-  'enriched_at', 'enriched_by', 'deep_dived_at', 'feed_checked_at',
-  'origin', 'found_url', 'found_title', 'run_id',
-];
 
 function columnsFor(viewer: ToolingViewer): string[] {
   return viewer.admin ? PRODUCT_ADMIN_COLUMNS : viewer.portal ? PRODUCT_PORTAL_COLUMNS : PRODUCT_PUBLIC_COLUMNS;

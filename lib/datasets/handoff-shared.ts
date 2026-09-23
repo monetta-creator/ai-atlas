@@ -1,4 +1,10 @@
-import type { DatasetDef } from './core';
+import type { DatasetColumn, DatasetDef } from './core';
+// Explicit .ts extension: a real (non type-only) import of SIGNAL_LENSES, so
+// plain Node (scripts/test-dataset-handoff.mjs, type stripping) resolves it
+// the same way filter.ts and registry.ts already resolve their own runtime
+// imports from this module chain. core.ts itself imports nothing, so this
+// stays dependency-light.
+import { SIGNAL_LENSES } from './core.ts';
 
 // Shared machinery behind every importer handoff doc (lib/scan/handoff.ts's
 // buildScanHandoff/buildSignalsExportHandoff, lib/intel/handoff.ts's
@@ -245,6 +251,33 @@ export function describeFieldType(key: string, fallbackType: string): string {
   return `${f.type}${f.nullable ? ' or null' : ''}${f.enum ? ` (${f.enum.join(' | ')})` : ''}`;
 }
 
+// The closed value set behind an enum column, when FIELD_FACTS carries one.
+// Used by the filter grammar (lib/datasets/filter.ts) to reject an eq/ne/in
+// value outside the set; undefined means FIELD_FACTS has no enum for this
+// key, so the filter grammar validates it permissively (column-type only).
+// A caller that has the registry's own DatasetColumn should prefer its
+// `values` field first (it overrides a FIELD_FACTS collision on the same key
+// from another domain, e.g. concepts.status vs tooling_products.status) and
+// fall back to this lookup only when the column declares none.
+export function fieldEnumValues(key: string): string[] | undefined {
+  return FIELD_FACTS[key]?.enum;
+}
+
+// Same one-line type description as describeFieldType, but for a caller that
+// has the registry's own DatasetColumn in hand and so can do what that
+// function's own docstring says a caller should: prefer col.values over a
+// FIELD_FACTS collision on the same key (concepts.status vs
+// tooling_products.status is the one live example). Used by the generic
+// per-dataset handoff (lib/datasets/handoff-generic.ts), which renders every
+// registry column, including the ones the four hand-written domain handoffs
+// never touch.
+export function describeColumnType(col: DatasetColumn): string {
+  const f = FIELD_FACTS[col.key];
+  const enumValues = col.values ?? f?.enum;
+  if (!f) return enumValues ? `${col.type} (${enumValues.join(' | ')})` : col.type;
+  return `${f.type}${f.nullable ? ' or null' : ''}${enumValues ? ` (${enumValues.join(' | ')})` : ''}`;
+}
+
 // JSON Schema (draft 2020-12) for one row, generated from the live registry
 // columns in order. Exported for the test scripts' coverage checks.
 export function buildRowJsonSchema(def: DatasetDef): Record<string, unknown> {
@@ -252,8 +285,11 @@ export function buildRowJsonSchema(def: DatasetDef): Record<string, unknown> {
   const required: string[] = [];
   for (const c of def.columns) {
     const f = FIELD_FACTS[c.key];
+    const enumValues: string[] | undefined = c.values ?? f?.enum;
     if (!f) {
-      properties[c.key] = { type: ['string', 'number', 'null'], description: c.def };
+      const p: Record<string, unknown> = { type: ['string', 'number', 'null'], description: c.def };
+      if (enumValues) p.enum = [...enumValues, null]; // the permissive type already allows null
+      properties[c.key] = p;
       required.push(c.key);
       continue;
     }
@@ -261,7 +297,7 @@ export function buildRowJsonSchema(def: DatasetDef): Record<string, unknown> {
       type: f.nullable ? [f.type, 'null'] : f.type,
       description: c.def,
     };
-    if (f.enum) p.enum = f.nullable ? [...f.enum, null] : f.enum;
+    if (enumValues) p.enum = f.nullable ? [...enumValues, null] : enumValues;
     if (f.format) p.format = f.format;
     properties[c.key] = p;
     required.push(c.key); // every key is PRESENT on every row; nullability is in the type
@@ -314,4 +350,101 @@ export function envelopeJsonSchema(def: DatasetDef, rowSchema: Record<string, un
       rows: { type: 'array', items: rowSchema },
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Shared Transport-section prose (the 2026-09-23 per-person access key
+// migration, plus the query grammar and saved views that shipped the same
+// night). Five call sites render this identically, so it is written once
+// here rather than five times: the four hand-written domain handoffs
+// (lib/scan/handoff.ts's buildScanHandoff, lib/intel/handoff.ts's
+// buildIntelHandoff, lib/tooling/handoff.ts's buildToolingHandoff,
+// lib/research/handoff.ts's buildResearchHandoff) and the generic
+// per-dataset handoff (lib/datasets/handoff-generic.ts's
+// buildDatasetHandoff). Wording follows docs/data-portal.md's "Access
+// model" and "Query grammar" sections, the source of truth for how this is
+// described to a reader.
+
+// (a) Authentication for scripts: the access key also travels as a header,
+// not only the browser cookie the numbered "unlock once per browser" step
+// sets.
+export function authForScriptsParagraph(): string {
+  return `Authentication for scripts: send the access key as
+Authorization: Bearer atlas_... or X-Atlas-Key: atlas_... on every
+/api/datasets/* request (the legacy shared key still works the same way
+during the migration). The enter link above sets a cookie for a browser; a
+script should send the header instead. Keys expire after 90 days, and a
+401 response names why in its JSON body (key_required, key_expired, or
+key_revoked), except a format=csv request, which gets the message as plain
+text instead; the reason is always in the X-Atlas-Key-State response
+header, so a script should key off the header rather than assume a JSON
+body. An intake script should stop and alert on a 401 rather than retry.`;
+}
+
+// The SQL pushdowns a def declares, in prose, deriving the list from the
+// registry (def.filters) rather than a hand-written per-dataset sentence.
+// lens spells out its closed value set (SIGNAL_LENSES) since a script has no
+// other way to discover it short of reading lib/datasets/core.ts.
+export function pushdownsFor(def: DatasetDef): string {
+  const parts: string[] = [];
+  if (def.filters?.lens) parts.push(`lens=<one of ${SIGNAL_LENSES.join(', ')}>`);
+  if (def.filters?.day) parts.push('day=YYYY-MM-DD, defaults to the latest completed day');
+  if (def.filters?.since) parts.push('since=YYYY-MM-DD, an incremental lower bound on fetched_at');
+  if (def.filters?.source) parts.push('source=<a single source code>');
+  if (def.filters?.company) parts.push('company=<a single company slug>');
+  return parts.length ? parts.join('; ') : 'none; every download here is a full-corpus pull';
+}
+
+// (b) The query grammar table: where/cols/sort/limit/q/schema=1, the op
+// matrix per column type, and the caps. Fixed text (the grammar itself does
+// not vary by dataset; lib/datasets/filter.ts's OPS_BY_TYPE is its
+// authoritative twin), so this is a plain constant rather than a function.
+const QUERY_GRAMMAR_TABLE = `| Param | Meaning |
+| --- | --- |
+| where=<col>:<op>:<value> | Repeatable, max 8. Ops by column type: enum eq, ne, in, isnull, notnull; text and longtext add contains (case-insensitive); number eq, ne, gt, gte, lt, lte, in, isnull, notnull; date eq, ne, gt, gte, lt, lte, isnull, notnull (YYYY-MM-DD; an ISO timestamp compares on its first 10 characters). in takes a comma list, max 20 values; isnull and notnull take no value; every where value is capped at 200 characters. |
+| cols=a,b,c | Projection, in the given order; the CSV header and the JSON columns list both follow it. |
+| sort=<col>:asc\|desc[,<col>:asc\|desc] | One param, up to 2 comma-separated keys, most significant first; a repeated sort= param is ignored. A stable tiebreak on the file's first column is always appended, nulls last. |
+| limit=N | 1 to 50000, applied after where, q, and sort. |
+| q=<text> | Case-insensitive substring over every text, longtext, and enum column, max 200 characters. |
+| schema=1 | The JSON Schema of exactly this slice (the projected columns) plus the normalized spec; no rows, no download. |`;
+
+// defs is one file (most domains) or several (the Intel Desk, the Tooling
+// Monitor), so the pushdown line can either be inline or a per-file list.
+export function queryGrammarParagraphs(defs: DatasetDef[]): string {
+  const pushdownLines = defs.length === 1
+    ? `Pushdowns this file declares: ${pushdownsFor(defs[0])}.`
+    : defs.map((d) => `- ${d.slug}: ${pushdownsFor(d)}`).join('\n');
+  return `Query grammar: every download in this system accepts the same
+filter grammar, validated against the file's own column list before any
+other work runs (an unknown column or op answers 400 naming the bad
+token; an unknown enum value answers 400 too, but only for a column whose
+value set the Columns table actually lists, since a column shown with no
+value set accepts any value and matches zero rows instead of rejecting
+it).
+
+${QUERY_GRAMMAR_TABLE}
+
+A filtered download's filename ends in -filtered (a sort-only request does
+not count as filtering); the JSON envelope's dataset.filter field carries
+the normalized spec whenever the grammar was used, null otherwise. A
+where, in, sort, or q past its cap answers 400 with the reason in its
+error field; limit past 50000 is clamped to 50000, not rejected. A dataset
+whose built rows exceed 400,000 answers 413 to any where/cols/sort/limit/q
+request, so narrow with a pushdown first.
+
+${pushdownLines}`;
+}
+
+// (c) Saved views.
+export function savedViewsParagraph(): string {
+  return `Saved views: view=<uuid> applies a view saved from the dataset's
+page on the Atlas. Any param the request also passes explicitly overrides
+the same-named one stored in the view; the dataset's own access gate still
+runs first, so a view can never grant access a plain download would not
+already have.`;
+}
+
+// (d) The one-line schema=1 recommendation.
+export function schemaHintLine(): string {
+  return 'schema=1 returns the JSON Schema of exactly the requested slice; prefer it over a hand-maintained copy of the schema.';
 }

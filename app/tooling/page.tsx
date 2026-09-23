@@ -36,7 +36,9 @@ function clean(v: string | undefined, allowed?: Set<string>): string | undefined
 export default async function ToolingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category?: string; deployment?: string; maturity?: string; pricing?: string }>;
+  searchParams: Promise<{
+    q?: string; category?: string; deployment?: string; maturity?: string; pricing?: string; added?: string;
+  }>;
 }) {
   const [adminFlag, portalFlag, preview] = await Promise.all([isAdmin(), isPortal(), isPreview()]);
   const admin = adminFlag && !preview;
@@ -49,6 +51,7 @@ export default async function ToolingPage({
   const deployment = clean(sp.deployment, DEPLOYMENTS);
   const maturity = clean(sp.maturity, MATURITIES);
   const pricing = clean(sp.pricing, PRICINGS);
+  const justAdded = sp.added === '1';
 
   const [categories, products, reports, runs, total] = await Promise.all([
     getToolingCategories(false),
@@ -113,6 +116,12 @@ export default async function ToolingPage({
           viewer={viewer}
           reportHref={latestEntrantsReport ? `/reports/sheet/${latestEntrantsReport.id}` : null}
         />
+
+        {viewer.portal && !admin && justAdded && (
+          <p className="text-sm" style={{ color: 'var(--dim)', marginBottom: 16 }}>
+            Thanks, the product is in the review queue.
+          </p>
+        )}
 
         {viewer.portal && (
           <>

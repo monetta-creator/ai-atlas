@@ -9,6 +9,13 @@
 // exist still gets the streamed not-found page; checking existence here would
 // add a query to every detail-page click. Pure and dependency-free (the proxy
 // imports it; scripts/test-route-shapes.mjs tests it).
+//
+// Also holds the proxy's public-API allow-list (PUBLIC_API_PATHS/PREFIXES,
+// isPublicApiPath): every /api/* route with no in-route session check of its
+// own must be reachable without the atlas_admin/atlas_guest cookie via one of
+// these entries, and every route.ts under app/api NOT covered by one of them
+// must gate itself in-route (scripts/test-api-gates.mjs walks app/api and
+// checks both directions).
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -54,4 +61,34 @@ export function isMalformedDetailPath(pathname: string): boolean {
     return !isRealDay(seg);
   }
   return false;
+}
+
+// The proxy's public-API allow-list. EXACT pathname matches; a route whose
+// gate is "everything under this prefix" (datasets downloads, the cron
+// routes) goes in PUBLIC_API_PREFIXES instead. Every entry here still gates
+// ITSELF in-route (isPortal()/identityFromRequest()/cronGate()/full in-route
+// validation) — this list only controls whether the proxy's session-presence
+// check applies before the route is even reached.
+export const PUBLIC_API_PATHS: readonly string[] = [
+  '/api/traceroute/tokenize',
+  '/api/ask/peek',
+  '/api/ask/doc',
+  '/api/tooling/events',
+  '/api/nav/viewer',
+  '/api/tickets',
+  '/api/access/request',
+];
+
+// Prefix matches (pathname.startsWith(prefix)); each ends in '/' so a
+// same-named sibling route (there is none today) could never collide.
+export const PUBLIC_API_PREFIXES: readonly string[] = [
+  '/api/datasets/',
+  // The portal surface: ask, saved views, the natural-language query. Every
+  // route under it gates in-route on identityFromRequest (scripts/test-api-gates.mjs).
+  '/api/portal/',
+  '/api/cron/',
+];
+
+export function isPublicApiPath(pathname: string): boolean {
+  return PUBLIC_API_PATHS.includes(pathname) || PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p));
 }

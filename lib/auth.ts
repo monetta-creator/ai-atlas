@@ -3,7 +3,10 @@ import { redirect } from 'next/navigation';
 import crypto from 'node:crypto';
 import { cache } from 'react';
 import { one } from './db';
-import { parseCookieValue, portalCookieGrants, type PortalCookie } from './portal/keys';
+import {
+  cookieValue, legacyCookieGrants, legacyCookieValue, parseCookieValue, portalCookieGrants,
+  verifySigned, type PortalCookie,
+} from './portal/keys';
 
 // The Admin/Guest gate. Admin sessions are a signed HMAC cookie; the guest
 // cookie is a non-privileged UX flag. The security boundary (can a guest see
@@ -36,18 +39,11 @@ function sign(value: string): string {
   return `${value}.${hmac(value)}`;
 }
 
-// The signed value, or null when the signature does not verify.
+// The signed value, or null when the signature does not verify. The split
+// and constant-time compare live in lib/portal/keys.ts (verifySigned) so
+// they are pure and testable under plain Node; this just supplies the secret.
 function signedValue(token: string | undefined): string | null {
-  if (!token) return null;
-  const i = token.lastIndexOf('.');
-  if (i < 0) return null;
-  const value = token.slice(0, i);
-  const sig = token.slice(i + 1);
-  const want = hmac(value);
-  const a = Buffer.from(sig);
-  const b = Buffer.from(want);
-  if (a.length !== b.length) return null;
-  return crypto.timingSafeEqual(a, b) ? value : null;
+  return verifySigned(token, secret());
 }
 
 function verify(token: string | undefined, expected: 'admin' | 'portal'): boolean {
@@ -110,16 +106,21 @@ export async function isPortal(): Promise<boolean> {
   if (verify(store.get(ADMIN_COOKIE)?.value, 'admin')) return true;
   const c = parseCookieValue(signedValue(store.get(PORTAL_COOKIE)?.value) ?? '');
   if (!c) return false;
-  if (c.legacy) return true;
+  if (c.legacy) return legacyCookieGrants(c.fp, secret(), process.env.PORTAL_KEY);
   return portalCookieGrants(c, await portalKeyStateRow(c.keyId));
 }
 
-// No arguments = the legacy team-key session. With a key id and expiry, the
-// per-person session; the cookie itself still lives MAX_AGE, the embedded
-// expiry is what the cheap isPortalCookie() checks (isPortal() reads the row).
+// No arguments = the legacy team-key session, whose cookie value is minted
+// bound to the CURRENT PORTAL_KEY (legacyCookieValue in lib/portal/keys.ts;
+// see the kill-switch note on checkPortalKey below). With a key id and
+// expiry, the per-person session; the cookie itself still lives MAX_AGE, the
+// embedded expiry is what the cheap isPortalCookie() checks (isPortal() reads
+// the row).
 export async function setPortalSession(key?: { keyId: string; expiresAt: Date }): Promise<void> {
   const store = await cookies();
-  const value = key ? `portal:${key.keyId}:${Math.floor(key.expiresAt.getTime() / 1000)}` : 'portal';
+  const value = key
+    ? cookieValue(key.keyId, Math.floor(key.expiresAt.getTime() / 1000))
+    : legacyCookieValue(secret(), process.env.PORTAL_KEY ?? '');
   store.set(PORTAL_COOKIE, sign(value), baseCookie);
 }
 
@@ -130,9 +131,19 @@ export async function clearPortalSession(): Promise<void> {
 
 // Same shape as checkPassword: fail closed when PORTAL_KEY is unset (the portal
 // features are simply off), fixed-length HMAC digests so neither timing nor
-// length leaks. Rotating PORTAL_KEY stops NEW unlocks only; already-issued
-// portal cookies are signed by AUTH_SECRET and live out their 30 days unless
-// AUTH_SECRET itself is rotated (which also logs the admin out).
+// length leaks.
+//
+// Kill switch (the legacy cookie is fingerprinted to the key it was minted
+// under, legacyCookieGrants in lib/portal/keys.ts): unsetting PORTAL_KEY logs
+// every legacy holder out AT ONCE, not just new unlocks, because
+// legacyCookieGrants refuses every legacy cookie once there is no current key
+// to fingerprint against. Rotating PORTAL_KEY logs out every legacy cookie
+// minted after this change immediately (its fingerprint no longer matches
+// the new key); a bare cookie minted BEFORE this change carries no
+// fingerprint and keeps working until it ages out on its own within its
+// 30-day maxAge, since there is nothing on it to invalidate. AUTH_SECRET
+// rotation still kills every cookie outright (the signature itself stops
+// verifying, admin included).
 export function checkPortalKey(input: string): boolean {
   const expected = process.env.PORTAL_KEY;
   if (!expected) return false;

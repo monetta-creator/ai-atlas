@@ -28,6 +28,7 @@
 @import "./styles/education.css"; /* /education hub + guides (.edu) */
 @import "./styles/tooling.css"; /* /tooling hub + product pages (.tl-*) */
 @import "./styles/reports.css"; /* /reports cover grid (.rp-*) */
+@import "./styles/datasets.css"; /* /datasets hub filter plate + card grid (.dp-*) */
 
 /* Re-base the app's semantic Tailwind color/font utilities onto the design
    tokens so any utility usage (layout helpers, admin tooling, etc.) stays

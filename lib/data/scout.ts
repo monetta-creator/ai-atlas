@@ -3,6 +3,12 @@ import type {
   Company, CompanyEvent, CompanyEventWithCompany, ScoutVertical, ScoutRun, ScoutPrefs,
   CompanyDocument,
 } from '../types';
+// The column lists live in the pure lib/data/scout-columns.ts (no lib/db
+// import) so scripts/test-access-columns.mjs can load them directly; re-
+// exported below unchanged, so every other importer is unaffected.
+import { COMPANY_PUBLIC_COLUMNS, COMPANY_ADMIN_COLUMNS } from './scout-columns';
+
+export { COMPANY_PUBLIC_COLUMNS, COMPANY_ADMIN_COLUMNS };
 
 // ---- Startup Scout (migration 0034) -----------------------------------------
 // The acquisition-target funnel. Leak discipline (the research-portal pattern):
@@ -10,14 +16,6 @@ import type {
 // non-tracked company are admin-only, and the guest getters simply never SELECT
 // those columns, so nothing private reaches the RSC payload. A public "pursue"
 // chip on a named startup would disclose M&A intent.
-
-const COMPANY_PUBLIC_COLUMNS = `
-  id, name, domain, url, vertical, one_liner, ai_tech, founded_year, stage,
-  funding_note, hq, status, origin, created_at, updated_at`;
-const COMPANY_ADMIN_COLUMNS = `${COMPANY_PUBLIC_COLUMNS},
-  review_note, reviewed_at::text as reviewed_at,
-  agent_verdict, agent_reason, agent_confidence, agent_scores, agent_at::text as agent_at,
-  fetched_via, run_id, found_url`;
 
 // search_queries (the discovery templates) are admin-only: the public /scout
 // page only needs names + tracked counts, and the templates reveal what the

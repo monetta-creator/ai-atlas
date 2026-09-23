@@ -3,7 +3,11 @@ import { headers } from 'next/headers';
 import crypto from 'node:crypto';
 import { one, exec } from '../db';
 import { checkPortalKey, isAdmin, readPortalCookie } from '../auth';
-import { hashKey, hashesEqual, keyState, parseKey, type KeyState } from './keys';
+import { createLimiter } from '../rate-limit';
+import {
+  decideIdentity, hashKey, hashesEqual, headerKey as pureHeaderKey, keyState, LEGACY, legacyCookieGrants,
+  NONE, parseKey, type PortalIdentity, type PortalTier,
+} from './keys';
 
 // Who is calling a portal surface (migration 0060). isPortal() in lib/auth.ts
 // answers the yes/no question (and, like this module, resolves the per-person
@@ -13,22 +17,12 @@ import { hashKey, hashesEqual, keyState, parseKey, type KeyState } from './keys'
 // also accepts a key sent as a header (Authorization: Bearer atlas_... or
 // X-Atlas-Key) so intake scripts on the far side of a firewall need no cookie.
 // Cached per request with React cache().
-
-export type PortalTier = 'admin' | 'key' | 'legacy' | 'none';
-
-export interface PortalIdentity {
-  tier: PortalTier;
-  keyId: string | null;
-  name: string | null;
-  state: KeyState | 'none';
-  expiresAt: string | null;
-  // True when the caller may use the portal features right now.
-  active: boolean;
-}
-
-const NONE: PortalIdentity = { tier: 'none', keyId: null, name: null, state: 'none', expiresAt: null, active: false };
-const ADMIN: PortalIdentity = { tier: 'admin', keyId: null, name: null, state: 'active', expiresAt: null, active: true };
-const LEGACY: PortalIdentity = { tier: 'legacy', keyId: null, name: null, state: 'active', expiresAt: null, active: true };
+//
+// PortalIdentity/PortalTier and the NONE/ADMIN/LEGACY identities, plus the
+// pure decision helpers (headerKey, decideIdentity, legacyCookieGrants), now
+// live in ./keys.ts so scripts/test-portal-keys.mjs can run them under plain
+// Node; re-exported here so existing importers of this module are unaffected.
+export type { PortalIdentity, PortalTier };
 
 interface KeyRow { id: string; name: string; key_hash: string; expires_at: string; revoked_at: string | null }
 
@@ -67,11 +61,12 @@ export async function identityFromKey(input: string): Promise<PortalIdentity> {
   return fromRow(row);
 }
 
-async function fromCookies(): Promise<PortalIdentity> {
-  if (await isAdmin()) return ADMIN;
+// The cookie-only identity (no header involved, no admin check — resolve()
+// below supplies admin separately so it is checked exactly once per call).
+async function cookieIdentity(): Promise<PortalIdentity> {
   const c = await readPortalCookie();
   if (!c) return NONE;
-  if (c.legacy) return LEGACY;
+  if (c.legacy) return legacyCookieGrants(c.fp, process.env.AUTH_SECRET ?? '', process.env.PORTAL_KEY) ? LEGACY : NONE;
   return byId(c.keyId);
 }
 
@@ -79,35 +74,73 @@ async function fromCookies(): Promise<PortalIdentity> {
 // PORTAL_KEY, so an intake script written against the team key keeps working
 // once it moves from the enter link to a header.
 function headerKey(h: Headers): string | null {
-  const auth = h.get('authorization');
-  if (auth && /^bearer\s+\S/i.test(auth)) return auth.replace(/^bearer\s+/i, '').trim();
-  const x = h.get('x-atlas-key');
-  return x && x.trim() ? x.trim() : null;
+  return pureHeaderKey((name) => h.get(name));
 }
 
-// A header key wins when it is active. When it is invalid, expired or revoked
-// the admin cookie still passes (admin passes everywhere, so a stale key in a
-// script or extension header never locks the admin out); otherwise the lapsed
-// key's identity is returned so the 401 can say why, ahead of an anonymous
-// cookie's plain "key required".
-async function resolve(key: string | null): Promise<PortalIdentity> {
-  if (!key) return fromCookies();
-  const id = parseKey(key) ? await identityFromKey(key) : checkPortalKey(key) ? LEGACY : NONE;
-  if (id.active) return id;
-  if (await isAdmin()) return ADMIN;
-  return id;
+// Shared with the two other sessionless legacy-key entry points
+// (app/ask/actions.ts unlockPortalAction, app/datasets/enter/route.ts): counts
+// FAILURES of the legacy PORTAL_KEY compare per client. Per-person atlas_
+// keys are never throttled here (160-bit, prefix-looked-up; brute-forcing is
+// not a realistic threat the way a short admin-chosen team key is).
+export const legacyKeyLimiter = createLimiter({ max: 10, windowMs: 10 * 60_000 });
+
+// The client key the limiter buckets on: a hash of the caller's first
+// forwarded-for hop (hashIp below), never the address itself, namespaced by
+// entry point ('hdr' for the Authorization/X-Atlas-Key header path below,
+// 'form' for the two interactive unlock forms). Without the namespace all
+// three shared one bucket per IP: a stale intake script retrying a dead
+// legacy key from a corporate NAT's header would burn the same 10-per-10min
+// budget as a colleague typing the current key into the unlock form on that
+// same NAT, locking them out with no visible signal (NO_MATCH is
+// indistinguishable from a wrong key by design). `get` is a case-insensitive
+// header getter, so callers pass Headers#get directly (route handlers, this
+// module) or a closure over next/headers' headers() (server actions, which
+// have no Request to read).
+export function legacyLimiterKey(get: (name: string) => string | null, scope: 'hdr' | 'form'): string {
+  const ip = get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  return hashIp(`${scope}:${ip}`);
+}
+
+// A raw key from a header: a per-person atlas_ key resolves by row lookup
+// (identityFromKey, not throttled). Anything else is a legacy PORTAL_KEY
+// guess, throttled by legacyKeyLimiter: a limited client skips the compare
+// entirely and gets NONE, the same outcome as a wrong key, so the limiter is
+// never itself observable from the response (never a distinct "rate
+// limited" signal, which would turn the throttle into a second oracle).
+async function headerIdentity(key: string, h: Headers): Promise<PortalIdentity> {
+  if (parseKey(key)) return identityFromKey(key);
+  const clientKey = legacyLimiterKey((name) => h.get(name), 'hdr');
+  const allowed = legacyKeyLimiter.allow(clientKey);
+  const match = allowed && checkPortalKey(key);
+  if (match) legacyKeyLimiter.reset(clientKey);
+  else if (allowed) legacyKeyLimiter.fail(clientKey);
+  return match ? LEGACY : NONE;
+}
+
+// The identity-precedence decision (decideIdentity, lib/portal/keys.ts) applied
+// to a real request: an active header always wins; an inactive one still beats
+// the cookie but falls back to admin first (so a stale key in a script or
+// extension header never locks the admin out); no header at all defers to the
+// cookie. The cookie identity is resolved (a possible DB row lookup) only when
+// there is no header to prefer, same as the pre-decideIdentity code.
+async function resolve(h: Headers): Promise<PortalIdentity> {
+  const key = headerKey(h);
+  const header = key ? await headerIdentity(key, h) : null;
+  const admin = await isAdmin();
+  const cookie = header ? NONE : await cookieIdentity();
+  return decideIdentity({ header, admin, cookie });
 }
 
 // Cookie identity for pages and server actions (the request headers are
 // consulted too, so a script's header key works on API routes that call this).
 export const getPortalIdentity = cache(async (): Promise<PortalIdentity> => {
   const h = await headers();
-  return resolve(headerKey(h));
+  return resolve(h);
 });
 
 // Route-handler variant taking the Request (avoids next/headers in tests).
 export async function identityFromRequest(req: Request): Promise<PortalIdentity> {
-  return resolve(headerKey(req.headers));
+  return resolve(req.headers);
 }
 
 // Bookkeeping: last_used_at on the key. Never rejects; callers that must

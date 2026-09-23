@@ -29,13 +29,20 @@ Three public surfaces plus one gated feature:
 - Everything except Ask and the key-gated datasets is public, at the same trust level as the
   existing reader surface: guest-safe **by construction** (builders never SELECT personal
   columns; `scripts/test-datasets.mjs` enforces the ban against serialized output).
-- The **access key** (`PORTAL_KEY` env; one shared team key today, per-person keys planned)
-  unlocks Ask and the 11 key-gated datasets via a signed `atlas_portal` cookie (30 days).
-  Key-gated means the file carries retained article text, machine-extracted records including
-  unreviewed items, agent scores, `rigor_prior`, or dossier fields: material a guest should
-  not get by URL. Onboard a colleague with one link: `/datasets/enter?k=<key>`, or they paste
-  the key into the inline panel on `/ask`. Admins pass the gate implicitly. Unset
-  `PORTAL_KEY` = key-gated features off.
+- The **access key** unlocks Ask and the 11 key-gated datasets. Since 2026-09-23 keys are
+  **per person** (migration 0060): the maintainer issues a named key from `/access`
+  (`atlas_<prefix>_<secret>`, HMAC-hashed at rest, shown once, 90-day expiry, renewable,
+  revocable, its own daily Ask budget), colleagues request one from `/datasets/request`
+  (work-email domains allow-listed in `PORTAL_REQUEST_EMAIL_DOMAINS`; the maintainer is
+  emailed through Resend). A key travels as a signed `atlas_portal` cookie (30 days; the enter
+  link `/datasets/enter?k=<key>` or the inline panel on `/ask` sets it) or, for scripts, as
+  `Authorization: Bearer <key>` / `X-Atlas-Key` on `/api/datasets/*` and `/api/portal/*`.
+  Expiry and revocation bite on the next request (`isPortal()` looks the key up); a 401 says
+  why (`key_expired` / `key_revoked` / `key_required`). The legacy shared `PORTAL_KEY` still
+  works during the migration and can be killed by unsetting it. Key-gated means the file
+  carries retained article text, machine-extracted records including unreviewed items, agent
+  scores, `rigor_prior`, dossier fields, or tracked company names: material a guest should not
+  get by URL. Admins pass the gate implicitly.
 - Published signals in the `signals`, `signals-by-claim`, `evidence-ledger`, and
   `articles-full-text` datasets were published by a human or, for high-significance pipeline
   drafts with a claim touch, by the 48-hour promotion policy (mig 0055).
@@ -71,6 +78,32 @@ Copyright framing (also in the dataset's methodology): the full text is an inter
 corpus for research, provenance, and quotation. Not a redistribution channel; link to the
 original source when sharing outward.
 
+## Query grammar (since 2026-09-23)
+
+Every download URL accepts a filter grammar, validated against the dataset's registry columns
+(unknown column, op, or enum value = 400 naming the token). Everything except the pushdowns
+post-filters in JS over the builder's deterministic rows, so builder SQL never changes and no
+column can be added.
+
+| Param | Meaning |
+| --- | --- |
+| `where=<col>:<op>:<value>` | Repeatable, max 8. Ops by type: enum `eq ne in isnull notnull`; text/longtext adds `contains` (case-insensitive); number `eq ne gt gte lt lte in isnull notnull`; date `eq ne gt gte lt lte isnull notnull` (`YYYY-MM-DD`, ISO timestamps compare on their first 10 chars). `in` = comma list, max 20. `isnull`/`notnull` take no value. |
+| `cols=a,b,c` | Projection, in the given order; CSV header and JSON `columns` follow it. |
+| `sort=<col>:asc\|desc[,<col>:asc\|desc]` | Max 2; a stable tiebreak on the first column is always appended; nulls last. |
+| `limit=N` | 1..50000 after where/q/sort (a top-N). `preview=N` keeps its 1..100 JSON-only meaning and wins when both are present; a preview with `where`/`q` filters the full slice, then caps. |
+| `q=<text>` | Case-insensitive substring over every text, longtext, and enum column (max 200 chars). |
+| `schema=1` | The JSON Schema of exactly this slice (projected columns) plus the normalized spec; no rows, no DB call. |
+| `lens`, `day`, `since`, `source`, `company` | SQL pushdowns, each declared per dataset (`company=<slug>` on the three intel sets). |
+| `view=<uuid>` | Apply a saved view's stored params; explicit params override; the dataset's own gate still runs first. |
+
+Guardrails: `intel-metrics` (about 2M rows) needs `since`, `source`, or `company` before any
+JS-side filter or sort; any dataset whose built rows exceed 400,000 answers 413 to a filtered
+request. The JSON envelope carries `dataset.filter` (the normalized spec); a filtered filename
+ends in `-filtered`. Every keyed pull is logged to `portal_usage` with the spec and the served
+row count. Pure module: `lib/datasets/filter.ts` (`scripts/test-dataset-filter.mjs`).
+
+Example: `/api/datasets/signals?where=significance:in:high,medium&cols=signal_id,title,published_on&sort=published_on:desc&limit=50&format=json`.
+
 ## Where the value is (lens to team)
 
 The differentiated asset is the pre-built linkage development -> lens -> claim -> direction ->
@@ -93,10 +126,26 @@ evidence -> counterpoint, with citations. Per team:
 - `lib/datasets/{core,builders,registry,serialize}.ts` — the registry, patterned exactly on
   `lib/thesis/pack-core.ts`: injected `Q`, deterministic ORDER BY with id tiebreakers,
   guest-safe by construction, type-strippable for the Node test script.
-- `app/api/datasets/[slug]/route.ts` — the download route (BOM, attachment, CDN cache,
-  in-route `isPortal()` for key-gated, batch streaming for heavy).
-- `lib/auth.ts` — `verify(token, expected)` generalized; `atlas_portal` cookie; `isPortal()`;
-  `checkPortalKey()` (fail closed).
+- `app/api/datasets/[slug]/route.ts` — the download route (BOM, attachment, CDN cache for
+  public sets, `no-store` for key-gated, batch streaming for heavy): gate via
+  `identityFromRequest` first, then `?view=`, the pushdowns, `schema=1`, build, the
+  guardrails, `applyFilterSpec`, projection, serialize; keyed pulls logged in `after()`.
+- `app/api/datasets/[slug]/handoff/route.ts` — `GET` returns a generic importer orientation
+  document (`text/markdown`) for any dataset, built by the pure `lib/datasets/handoff-generic.ts`
+  `buildDatasetHandoff`; same gate shape as the download route. The four hand-written domain
+  handoffs (`lib/scan/handoff.ts`, `lib/intel/handoff.ts`, `lib/tooling/handoff.ts`,
+  `lib/research/handoff.ts`) and this generic one share their Transport-section prose
+  (authentication for scripts, the query grammar, saved views, the `schema=1` hint) from
+  `lib/datasets/handoff-shared.ts`, so the wording can never drift between the six.
+- `lib/datasets/filter.ts` — the pure grammar (`parseFilterSpec`, `applyFilterSpec`,
+  `projectColumns`, `guardFilterRequest`); `lib/datasets/cards.ts` the hub's card projection
+  and filters (`components/datasets/DatasetCatalog.tsx` renders them with the `.tl-filters`
+  plate, URL-mirrored).
+- `lib/portal/{keys,identity,budget}.ts` — per-person keys (pure key math + the one identity
+  resolver over cookie or header, the per-key budget); `lib/data/portal.ts` +
+  `lib/mutations/portal.ts` back `/access`.
+- `lib/auth.ts` — `verify(token, expected)` generalized; `atlas_portal` cookie; `isPortal()`
+  (authoritative: resolves the key row); `checkPortalKey()` for the legacy key (fail closed).
 - `lib/portal/budget.ts` — the daily spend/call check over `ai_cost_log`.
 - `lib/ask/retrieve.ts` — `buildAskContext(query, { mode: 'admin' | 'portal' })`; portal mode
   nulls personal columns in SQL and restricts signals to published; both modes get the

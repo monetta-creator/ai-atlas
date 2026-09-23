@@ -3,7 +3,8 @@ import type { DatasetDef } from '../datasets/core';
 // scripts/test-intel-datasets.mjs (type stripping), which resolves no
 // extensionless specifiers for real (non-type-only) imports.
 import {
-  buildRowJsonSchema, cronLabel, describeFieldType, envelopeJsonSchema,
+  authForScriptsParagraph, buildRowJsonSchema, cronLabel, describeFieldType,
+  envelopeJsonSchema, queryGrammarParagraphs, savedViewsParagraph, schemaHintLine,
 } from '../datasets/handoff-shared.ts';
 import type { CronEntry } from '../datasets/handoff-shared.ts';
 import { dimensionDigest } from './core.ts';
@@ -276,7 +277,7 @@ intel-facts, and intel-metrics can change on any weekday download.
 
 ## 8. Transport (the least stable section; mechanics may change)
 
-1. Unlock once per browser: ${host}/datasets/enter?k=<PORTAL_KEY> (sets a
+1. Unlock once per browser: ${host}/datasets/enter?k=<access key> (sets a
    30-day cookie; the key comes from the desk's operator, never this doc).
 2. Download intel-items for the latest completed day:
    ${host}/api/datasets/intel-items?format=json&download=1
@@ -292,5 +293,18 @@ intel-facts, and intel-metrics can change on any weekday download.
    once the initial full corpus is in hand.
 4. Fresh data lands via scheduled weekday runs; the intel-items default URL
    always serves the latest COMPLETED day, never a partial one.
+
+${authForScriptsParagraph()}
+
+${queryGrammarParagraphs([items, companiesDef, facts, metrics])}
+
+Guardrail: intel-metrics alone runs to about two million rows, so a where,
+sort, or q request against it needs since, source, or company set first;
+without one of those three the request answers 400 rather than scanning
+the whole table.
+
+${savedViewsParagraph()}
+
+${schemaHintLine()}
 `;
 }

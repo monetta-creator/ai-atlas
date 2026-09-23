@@ -118,6 +118,19 @@ check('registry: no em dash in any tooling dataset string', () => {
   }
 });
 
+// ---- (e) tooling-catalog carries no admin/internal-shaped key --------------
+// The public slice must never gain a curation/provenance/status column by
+// accident; every name below is admin- or portal-only elsewhere in the
+// tooling monitor (agent scores, dossier, deep dive, funnel status, review
+// state, raw fetch text, the pin flag, discovery origin/found_url).
+
+check('tooling-catalog: no column key matches the admin/internal ban', () => {
+  const banned = /^agent_|^dossier|^deep_dive|^status$|^pinned$|^origin$|^found_url$|^review_|^raw_content$/;
+  for (const c of catalogDef.columns) {
+    assert.ok(!banned.test(c.key), `tooling-catalog carries banned key '${c.key}'`);
+  }
+});
+
 // A mock Q that never touches a DB and returns no rows, so determinism can
 // be checked (and the "empty tables" contract exercised) without a live one.
 const mockQ = async () => [];

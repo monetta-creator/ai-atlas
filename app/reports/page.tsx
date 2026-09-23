@@ -36,7 +36,7 @@ export default async function ReportPortal({
   const [reports, theses, generated, targets] = await Promise.all([
     listSavedReports(),
     getLatestThesisReports(50),
-    listGeneratedReports(!admin, { toolingDraftsForPortal: portal && !admin, portal }),
+    listGeneratedReports(!admin, { portal }),
     admin ? getTargets() : Promise.resolve({ claims: [], bridges: [] }),
   ]);
 

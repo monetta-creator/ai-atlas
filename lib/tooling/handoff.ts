@@ -3,7 +3,8 @@ import type { DatasetDef } from '../datasets/core';
 // scripts/test-tooling-datasets.mjs (type stripping), which resolves no
 // extensionless specifiers for real (non-type-only) imports.
 import {
-  buildRowJsonSchema, cronLabel, describeFieldType, envelopeJsonSchema,
+  authForScriptsParagraph, buildRowJsonSchema, cronLabel, describeFieldType,
+  envelopeJsonSchema, queryGrammarParagraphs, savedViewsParagraph, schemaHintLine,
 } from '../datasets/handoff-shared.ts';
 import type { CronEntry } from '../datasets/handoff-shared.ts';
 import type { ToolingCategory } from '../types';
@@ -259,7 +260,7 @@ files and are indistinguishable from weekly discoveries once cataloged.
 
 ## 8. Transport (the least stable section; mechanics may change)
 
-1. Unlock once per browser: ${host}/datasets/enter?k=<PORTAL_KEY> (sets a
+1. Unlock once per browser: ${host}/datasets/enter?k=<access key> (sets a
    30-day cookie; the key comes from the monitor's operator, never this
    doc).
 2. Download the full corpus of each file:
@@ -272,5 +273,13 @@ files and are indistinguishable from weekly discoveries once cataloged.
 4. Fresh data lands via the scheduled weekly run (plus, occasionally, an
    admin-initiated backfill pull); re-download any file at any time for the
    current full corpus.
+
+${authForScriptsParagraph()}
+
+${queryGrammarParagraphs([products, events, features, catalog])}
+
+${savedViewsParagraph()}
+
+${schemaHintLine()}
 `;
 }

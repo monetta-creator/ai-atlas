@@ -159,6 +159,11 @@ export async function buildEvidenceLedger(q: Q, opts: DatasetOpts = {}): Promise
   // Never selects evidence.note (admin-only) or the source's reliability_prior.
   // The signal guard is belt and braces: syncSignalEvidence removes rows on
   // unpublish, so signal-anchored evidence should already be published-only.
+  // excerpt is null for signal-anchored rows: syncSignalEvidence copies the
+  // model's per-touch reason into evidence.excerpt on publish, and that reason
+  // is admin-only on the signal page and key-gated-only in signals-export, so
+  // it must not leak here. Source-anchored excerpts are quoted passages from
+  // the source and stay public. Mirrors lib/data/shared.ts getEvidenceFor.
   const params: unknown[] = [];
   let limitClause = '';
   if (isPositiveInt(opts.limit)) {
@@ -172,7 +177,7 @@ export async function buildEvidenceLedger(q: Q, opts: DatasetOpts = {}): Promise
             coalesce(c.statement, b.statement) as target_statement,
             e.direction::text as direction,
             e.weight::text as weight,
-            e.excerpt,
+            case when e.signal_id is null then e.excerpt end as excerpt,
             e.lens::text as lens,
             e.signal_id::text as signal_id,
             sig.title as signal_title,
@@ -696,6 +701,11 @@ export async function buildIntelItems(q: Q, opts: DatasetOpts = {}): Promise<Dat
   // source_kind/content_kind and the composed priority (migration 0052)
   // append after the mirrored columns, same as external-scan.
   const params: unknown[] = [opts.day ?? null];
+  let companyClause = '';
+  if (opts.company) {
+    params.push(opts.company);
+    companyClause = ` and $${params.length} = any(i.company_slugs)`;
+  }
   let limitClause = '';
   if (isPositiveInt(opts.limit)) {
     params.push(opts.limit);
@@ -735,7 +745,7 @@ export async function buildIntelItems(q: Q, opts: DatasetOpts = {}): Promise<Dat
            from intel_facts f
           where f.item_id = i.id
        ) fx on true
-      where r.day = coalesce($1::date, (select max(day) from intel_runs where status = 'completed'))
+      where r.day = coalesce($1::date, (select max(day) from intel_runs where status = 'completed'))${companyClause}
       order by i.published_date desc nulls last, i.normalized_url, i.id${limitClause}`,
     params
   );
@@ -830,6 +840,11 @@ export async function buildIntelFacts(q: Q, opts: DatasetOpts = {}): Promise<Dat
   // on-delete-cascade, but the item join stays a left join for the rare row
   // ingested without one).
   const params: unknown[] = [];
+  let companyClause = '';
+  if (opts.company) {
+    params.push(opts.company);
+    companyClause = ` where f.company_slug = $${params.length}`;
+  }
   let limitClause = '';
   if (isPositiveInt(opts.limit)) {
     params.push(opts.limit);
@@ -848,7 +863,7 @@ export async function buildIntelFacts(q: Q, opts: DatasetOpts = {}): Promise<Dat
             to_char(f.created_at, 'YYYY-MM-DD') as created_at
        from intel_facts f
        join intel_companies c on c.slug = f.company_slug
-       left join intel_items it on it.id = f.item_id
+       left join intel_items it on it.id = f.item_id${companyClause}
       order by f.company_slug, f.created_at desc, f.id${limitClause}`,
     params
   );
@@ -872,6 +887,10 @@ export async function buildIntelMetrics(q: Q, opts: DatasetOpts = {}): Promise<D
   if (opts.source) {
     params.push(opts.source);
     whereParts.push(`m.source = $${params.length}`);
+  }
+  if (opts.company) {
+    params.push(opts.company);
+    whereParts.push(`m.company_slug = $${params.length}`);
   }
   const whereClause = whereParts.length ? ` where ${whereParts.join(' and ')}` : '';
   let limitClause = '';

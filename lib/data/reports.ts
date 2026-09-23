@@ -180,20 +180,22 @@ export function textExcerpt(html: string | null | undefined, max: number): strin
 
 export async function listGeneratedReports(
   publishedOnly: boolean,
-  opts?: { toolingDraftsForPortal?: boolean; portal?: boolean }
+  opts?: { portal?: boolean }
 ): Promise<GeneratedReportMeta[]> {
   // The row-expansion preview projects only the small parts of the stored jsonb:
   // the bottom line (stripped to plain text below, so it carries no links and
   // needs no citation-gate pass) and the pack's deterministic stats/health.
-  // A portal keyholder (not admin) also sees unpublished tooling reports —
-  // /tooling/reports's own inline-unlock gate already covers those kinds, so
-  // the Report Portal shelf mirrors that visibility instead of hiding them.
-  // Portal-only kinds (lib/reports/access.ts: the company intel deck names
-  // tracked companies) are excluded in SQL unless the viewer holds an access
-  // key or is the admin (publishedOnly=false is the admin's own listing).
-  const guestClause = publishedOnly && !opts?.portal ? ` and kind::text <> all($1::text[])` : '';
+  // opts.portal is the SINGLE visibility rule for everyone but the admin
+  // (publishedOnly=false is the admin's own listing, which ignores opts and
+  // sees everything): a portal keyholder also sees unpublished tooling_*
+  // reports (mirroring /tooling/reports's own inline-unlock gate, so the
+  // Report Portal shelf doesn't hide what that page already shows them) and
+  // the portal-only kinds (lib/reports/access.ts PORTAL_ONLY_KINDS: the
+  // company intel deck names tracked companies); a guest gets neither.
+  const portalAccess = !!opts?.portal;
+  const guestClause = publishedOnly && !portalAccess ? ` and kind::text <> all($1::text[])` : '';
   const where = publishedOnly
-    ? (opts?.toolingDraftsForPortal
+    ? (portalAccess
         ? "where (is_published = true or kind::text like 'tooling_%')"
         : 'where is_published = true') + guestClause
     : '';

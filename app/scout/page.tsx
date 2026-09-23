@@ -18,10 +18,16 @@ export const metadata = { title: 'Startup Scout · The AI Atlas' };
 // working console (queue, runs, verticals) lives at /scout/console. Leak
 // discipline: verdicts, scores, reasons, and non-tracked companies are
 // admin-only and never fetched here for guests.
-export default async function ScoutPage() {
+export default async function ScoutPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ added?: string }>;
+}) {
   const personal = await isAdmin();
   const portal = await isPortal();
   const { editing, txt } = await getEditContext();
+  const { added } = await searchParams;
+  const justAdded = added === '1';
 
   const [verticals, tracked, events] = await Promise.all([
     getScoutVerticals(personal), getTrackedCompanies(personal), getRecentCompanyEvents(),
@@ -56,6 +62,12 @@ export default async function ScoutPage() {
         >
           {personal && `The desk: ${queued} compan${queued === 1 ? 'y' : 'ies'} in the review queue`}
         </PageTop>
+
+        {portal && !personal && justAdded && (
+          <p className="text-sm" style={{ color: 'var(--dim)', marginBottom: 16 }}>
+            Thanks, the target is in the review queue.
+          </p>
+        )}
 
         {portal && (
           <details style={{ marginBottom: 22 }}>

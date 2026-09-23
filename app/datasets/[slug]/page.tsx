@@ -1,34 +1,79 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getPortalIdentity } from '@/lib/portal/identity';
+import { getView } from '@/lib/data';
+import { canReadView } from '@/lib/portal/views-core';
 import { SIGNAL_LENSES } from '@/lib/datasets/core';
 import { getDataset } from '@/lib/datasets/registry';
+import { fieldEnumValues } from '@/lib/datasets/handoff-shared';
+import { fromSearchParams } from '@/lib/datasets/query-url';
 import PageTop from '@/components/PageTop';
 import DatasetSchemaTable from '@/components/datasets/DatasetSchemaTable';
-import DatasetExplorer from '@/components/datasets/DatasetExplorer';
-import DatasetPreview from '@/components/datasets/DatasetPreview';
+import QueryBuilder from '@/components/datasets/QueryBuilder';
 import RenewalNotice from '@/components/portal/RenewalNotice';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Dataset · The AI Atlas' };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // A dataset's public page: description, methodology, the auto-generated schema
-// table, downloads, and the in-browser explorer. Heavy datasets (bulk article
-// text) skip the explorer and, when key-gated, preview only for portal holders.
-// A key-gated dataset shows neither explorer nor preview until unlocked (the
-// datasets route refuses the fetch anyway, so rendering the explorer locked
-// would only surface a 4xx).
-export default async function DatasetPage({ params }: { params: Promise<{ slug: string }> }) {
+// table, downloads, and the query builder (components/datasets/QueryBuilder,
+// over lib/datasets/query-url's translation of the download route's own
+// where/cols/sort/limit/q grammar). The builder renders for every dataset,
+// heavy or key-gated included: it is the one surface that also runs the
+// small-preview fetch DatasetPreview used to handle on this page, and it
+// shows its own Unlock/Request-access links when the viewer has not
+// unlocked a key-gated dataset, rather than the page hiding it outright.
+export default async function DatasetPage({
+  params, searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { slug } = await params;
   const def = getDataset(slug);
   if (!def) notFound();
 
-  const identity = await getPortalIdentity();
+  const [identity, sp] = await Promise.all([getPortalIdentity(), searchParams]);
   const admin = identity.tier === 'admin';
   const portal = identity.active;
   const unlocked = !def.keyGated || portal;
-  const showExplorer = !def.heavy && unlocked;
-  const showPreview = def.heavy && unlocked;
+
+  // Seed the builder from the page's own query string: the same
+  // where/cols/sort/limit/q/lens/day/since/source/company grammar the
+  // download route accepts, so a shared /datasets/<slug>?... link
+  // reproduces the builder exactly (query-url.ts's fromSearchParams is
+  // tolerant of anything stale or malformed). Enum values are resolved here,
+  // server side, so the client component never imports handoff-shared.
+  const initialParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(sp)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) { for (const v of value) initialParams.append(key, v); }
+    else initialParams.append(key, value);
+  }
+  const initial = fromSearchParams(initialParams, def);
+
+  // ?view=<uuid> (migration 0064): seed the builder from a saved view's own
+  // spec. Never fetched for a guest (no active portal/admin identity), and
+  // only handed to the client when it belongs to THIS dataset and is
+  // readable by this identity (lib/portal/views-core.ts canReadView) - an
+  // unknown or unreadable id is simply ignored, same as the download route's
+  // own 404-not-403 posture (no existence oracle).
+  const rawView = sp.view;
+  const viewId = typeof rawView === 'string' ? rawView : Array.isArray(rawView) ? rawView[0] : undefined;
+  let initialView: { id: string; name: string; spec: Record<string, string | string[]> } | null = null;
+  if (viewId && UUID_RE.test(viewId) && (admin || portal)) {
+    const view = await getView(viewId);
+    if (view && view.dataset_slug === def.slug && canReadView(view, identity)) {
+      initialView = { id: view.id, name: view.name, spec: view.spec };
+    }
+  }
+
+  const queryColumns = def.columns.map((c) => ({
+    key: c.key, label: c.label, type: c.type, def: c.def,
+    values: c.type === 'enum' ? (c.values ?? fieldEnumValues(c.key) ?? null) : null,
+  }));
 
   return (
     <>
@@ -87,20 +132,18 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
         </div>
 
         <div style={{ margin: '26px 0' }}>
-          <div className="section-label">{def.heavy ? 'Preview' : 'Explore'}</div>
-          <div style={{ marginTop: 12 }}>
-            {showExplorer ? (
-              <DatasetExplorer slug={def.slug} columns={def.columns} />
-            ) : showPreview ? (
-              <DatasetPreview slug={def.slug} columns={def.columns} />
-            ) : (
-              <p style={{ fontSize: 13, color: 'var(--faint-ink)', maxWidth: 640, lineHeight: 1.7 }}>
-                This export needs an access key: the {def.heavy ? 'preview' : 'explorer'} and the
-                download sit behind it. Unlock once at the Ask page and both open up, or{' '}
-                <Link href="/datasets/request">request an access key</Link>.
-              </p>
-            )}
-          </div>
+          <QueryBuilder
+            slug={def.slug}
+            columns={queryColumns}
+            filters={def.filters}
+            heavy={!!def.heavy}
+            keyGated={!!def.keyGated}
+            unlocked={unlocked}
+            portal={portal}
+            lensValues={[...SIGNAL_LENSES]}
+            initial={initial}
+            initialView={initialView}
+          />
         </div>
       </section>
     </>

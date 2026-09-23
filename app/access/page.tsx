@@ -1,6 +1,8 @@
 import { adminGate } from '@/lib/admin-gate';
 import { getNavCounts } from '@/lib/data';
-import { listAccessRequests, listPortalKeys, listPortalUsage } from '@/lib/data/portal';
+import {
+  listAccessRequests, listPortalKeys, listPortalUsage, getKeyUsageSummary, getPortalUsageByDay,
+} from '@/lib/data/portal';
 import { parseDomainList } from '@/lib/portal/keys';
 import { emailConfigured } from '@/lib/email/resend';
 import { timeAgo } from '@/lib/format';
@@ -20,10 +22,12 @@ export default async function AccessPage() {
   const countsP = getNavCounts().catch(() => null);
   const admin = true as const;
 
-  const [requests, keys, usage, counts] = await Promise.all([
+  const [requests, keys, usage, usageSummary, usageByDay, counts] = await Promise.all([
     listAccessRequests(),
     listPortalKeys(),
     listPortalUsage({ limit: 50 }),
+    getKeyUsageSummary(30),
+    getPortalUsageByDay(30),
     countsP,
   ]);
 
@@ -46,6 +50,75 @@ export default async function AccessPage() {
         </PageTop>
 
         <AccessConsole requests={requests} keys={keys} defaultDays={defaultDays} />
+
+        <div style={{ marginTop: 34 }}>
+          <div className="section-label">Usage, last 30 days</div>
+          {usageSummary.keys.every((k) => k.pulls + k.schemaReads + k.askTurns + k.nlQueries + k.viewsSaved + k.deckViews === 0) ? (
+            <p className="text-sm" style={{ color: 'var(--faint-ink)', marginTop: 10 }}>No key activity in the last 30 days.</p>
+          ) : (
+            <>
+              <div style={{ marginTop: 12, overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                  <thead>
+                    <tr style={{ ...mono, color: 'var(--faint-ink)', textAlign: 'left' }}>
+                      <th style={{ padding: '6px 8px' }}>key</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>pulls</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>schema</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>ask</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>nl</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>views</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>deck</th>
+                      <th style={{ padding: '6px 8px', textAlign: 'right' }}>spend</th>
+                      <th style={{ padding: '6px 8px' }}>last used</th>
+                      <th style={{ padding: '6px 8px' }}>top datasets</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usageSummary.keys.map((k) => (
+                      <tr key={k.keyId} style={{ borderTop: '1px solid var(--line)' }}>
+                        <td style={{ padding: '6px 8px' }}>{k.name}</td>
+                        <td style={{ padding: '6px 8px', ...mono, textAlign: 'right' }}>{k.pulls}</td>
+                        <td style={{ padding: '6px 8px', ...mono, textAlign: 'right' }}>{k.schemaReads}</td>
+                        <td style={{ padding: '6px 8px', ...mono, textAlign: 'right' }}>{k.askTurns}</td>
+                        <td style={{ padding: '6px 8px', ...mono, textAlign: 'right' }}>{k.nlQueries}</td>
+                        <td style={{ padding: '6px 8px', ...mono, textAlign: 'right' }}>{k.viewsSaved}</td>
+                        <td style={{ padding: '6px 8px', ...mono, textAlign: 'right' }}>{k.deckViews}</td>
+                        <td style={{ padding: '6px 8px', ...mono, textAlign: 'right' }}>${k.spendUsd.toFixed(3)}</td>
+                        <td style={{ padding: '6px 8px', ...mono, color: 'var(--faint-ink)', whiteSpace: 'nowrap' }}>{k.lastUsedAt ? timeAgo(k.lastUsedAt) : 'never'}</td>
+                        <td style={{ padding: '6px 8px', ...mono, color: 'var(--faint-ink)' }}>
+                          {k.topDatasets.length ? k.topDatasets.map((d) => `${d.slug} (${d.n})`).join(', ') : '–'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ marginTop: 18, maxHeight: 260, overflowY: 'auto', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', ...mono }}>
+                  <thead>
+                    <tr style={{ color: 'var(--faint-ink)', textAlign: 'left' }}>
+                      <th style={{ padding: '4px 8px' }}>day</th>
+                      <th style={{ padding: '4px 8px', textAlign: 'right' }}>pulls</th>
+                      <th style={{ padding: '4px 8px', textAlign: 'right' }}>ask turns</th>
+                      <th style={{ padding: '4px 8px', textAlign: 'right' }}>spend</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usageByDay.map((d) => (
+                      <tr key={d.day} style={{ borderTop: '1px solid var(--line)', color: 'var(--dim)' }}>
+                        <td style={{ padding: '3px 8px' }}>{d.day}</td>
+                        <td style={{ padding: '3px 8px', textAlign: 'right' }}>{d.pulls}</td>
+                        <td style={{ padding: '3px 8px', textAlign: 'right' }}>{d.askTurns}</td>
+                        <td style={{ padding: '3px 8px', textAlign: 'right' }}>${d.spendUsd.toFixed(3)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
 
         <div style={{ marginTop: 34 }}>
           <div className="section-label">Recent usage · last {usage.length}</div>

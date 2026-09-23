@@ -4,7 +4,8 @@ import type { ScanTopic } from '../types';
 // scripts/test-scan.mjs (type stripping), which resolves no extensionless
 // specifiers for real (non-type-only) imports.
 import {
-  buildRowJsonSchema, cronLabel, describeFieldType, envelopeJsonSchema,
+  authForScriptsParagraph, buildRowJsonSchema, cronLabel, describeFieldType,
+  envelopeJsonSchema, queryGrammarParagraphs, savedViewsParagraph, schemaHintLine,
 } from '../datasets/handoff-shared.ts';
 import type { CronEntry } from '../datasets/handoff-shared.ts';
 
@@ -179,7 +180,7 @@ ${codes}
 
 ## 7. Transport (the least stable section; mechanics may change)
 
-1. Unlock once per browser: ${host}/datasets/enter?k=<PORTAL_KEY> (sets a
+1. Unlock once per browser: ${host}/datasets/enter?k=<access key> (sets a
    30-day cookie; the key comes from the scan's operator, never this doc).
 2. Download the latest completed day:
    ${host}/api/datasets/external-scan?format=json&download=1
@@ -187,6 +188,14 @@ ${codes}
    (download=1 forces a saved file; scripted fetches can drop it.)
 3. Fresh data lands via scheduled runs at ${schedule}; the default URL
    always serves the latest COMPLETED day, never a partial one.
+
+${authForScriptsParagraph()}
+
+${queryGrammarParagraphs([def])}
+
+${savedViewsParagraph()}
+
+${schemaHintLine()}
 `;
 }
 
@@ -293,5 +302,13 @@ resolved at export time. claim_touches is the same code list flattened with
    (CSV instead: format=csv). No day parameter; it is always the full
    corpus. Re-download whenever you want the current state; new signals
    publish continually.
+
+${authForScriptsParagraph()}
+
+${queryGrammarParagraphs([def])}
+
+${savedViewsParagraph()}
+
+${schemaHintLine()}
 `;
 }
