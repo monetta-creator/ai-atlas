@@ -36,7 +36,7 @@ export default async function ResearchPage() {
     getLatestRoundup(),
   ]);
   const pastRoundups = latestRoundup ? await getPastRoundups(latestRoundup.id) : [];
-  const counts = personal ? await getNavCounts() : null;
+  const counts = personal ? await getNavCounts().catch(() => null) : null;
   const fresh = freshPapers.length + freshRevisions.length;
 
   return (
