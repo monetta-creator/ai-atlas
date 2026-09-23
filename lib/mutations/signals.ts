@@ -268,13 +268,19 @@ export async function deleteSignal(id: string): Promise<void> {
 // Three judgment-free archive moves over ACTIVE drafts. Archive, never delete:
 // every row, candidate and link the crons pulled stays in the database; the
 // review queue just stops showing them. `stale_days` is the age cutoff for
-// the third cut.
+// the third cut. `minAgeDays` (0056, the Atlas Agent) additionally restricts
+// the cut to drafts older than N days — the agent's auto-tier
+// `drafts.archive_no_touches` remedy passes 3 so a same-day draft never gets
+// swept before a human has seen it.
 export type BulkArchiveKind = 'no_touches' | 'low' | 'stale';
 
-export async function archiveDraftsBulk(kind: BulkArchiveKind, staleDays = 45): Promise<number> {
+export async function archiveDraftsBulk(kind: BulkArchiveKind, staleDays = 45, minAgeDays?: number): Promise<number> {
+  const ageClause = minAgeDays != null
+    ? ` and created_at < now() - (${Math.max(0, Math.min(365, Math.floor(minAgeDays)))}::int * interval '1 day')`
+    : '';
   const where =
-    kind === 'no_touches' ? `coalesce(array_length(claim_touches, 1), 0) = 0` :
-    kind === 'low' ? `significance = 'low'` :
+    kind === 'no_touches' ? `coalesce(array_length(claim_touches, 1), 0) = 0${ageClause}` :
+    kind === 'low' ? `significance = 'low'${ageClause}` :
     `created_at < now() - ($2::int * interval '1 day')`;
   const params: unknown[] = [kind];
   if (kind === 'stale') params.push(Math.max(1, Math.min(365, Math.floor(staleDays))));

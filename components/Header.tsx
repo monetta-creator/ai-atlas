@@ -1,5 +1,5 @@
 import { isEditMode, isPreview, shareToken } from '@/lib/auth';
-import { getNavCounts } from '@/lib/data';
+import { getAgentPulse, getNavCounts } from '@/lib/data';
 import SiteNav from './SiteNav';
 import PortalRail from './PortalRail';
 import Brand from './Brand';
@@ -14,19 +14,22 @@ export default async function Header({ admin }: { admin: boolean }) {
   // Live queue counts for the admin nav badges (one cheap query; guests never pay).
   // Non-fatal: a failed read renders the nav without badges rather than 500ing the page.
   const counts = showAdmin ? await getNavCounts().catch(() => null) : null;
+  // The agent orb's first-paint badge: a server-fetched pulse so it renders
+  // without a flash, then polls client-side from there. Non-fatal like counts.
+  const agentPulse = showAdmin ? await getAgentPulse().catch(() => null) : null;
 
   return (
     <>
     {/* The rail must be a SIBLING of .nav, never a child: .nav's backdrop-filter
         makes it the containing block for fixed descendants, which pinned the
         rail to the header box instead of the viewport. */}
-    <PortalRail />
+    <PortalRail admin={showAdmin} agentPulse={agentPulse} />
     <nav className="nav">
       <Brand />
 
       {/* Only emit the share token when the admin nav will actually use it — otherwise it
           would be serialized into every guest's client payload (harmless but needless). */}
-      <SiteNav showAdmin={showAdmin} previewing={preview} editing={editing} shareToken={showAdmin ? shareToken() : ''} counts={counts} />
+      <SiteNav showAdmin={showAdmin} previewing={preview} editing={editing} shareToken={showAdmin ? shareToken() : ''} counts={counts} agentPulse={agentPulse} />
     </nav>
     </>
   );

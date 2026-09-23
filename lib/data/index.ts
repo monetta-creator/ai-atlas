@@ -18,3 +18,4 @@ export * from './ingestion';
 export * from './home';
 export * from './readiness';
 export * from './tooling';
+export * from './agent';

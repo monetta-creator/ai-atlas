@@ -16,3 +16,4 @@ export * from './scan';
 export * from './intel';
 export * from './home';
 export * from './tooling';
+export * from './agent';

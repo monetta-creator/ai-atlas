@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { NAV_ICONS, PORTALS } from '@/components/portal-icons';
 import FeedbackButtons from '@/components/feedback/FeedbackButtons';
+import AgentOrb from '@/components/agent/AgentOrb';
+import type { AgentPulse } from '@/lib/agent/types';
 
 // The left sidebar: the site's primary navigation on desktop (the top bar
 // keeps only the brand, the theme toggle, and the admin menu). Full-height
@@ -22,7 +24,9 @@ const EXPLORE_ITEMS = [
 // Detail pages that should light Explore without being listed in it.
 const EXPLORE_PREFIXES = ['/bridge/', '/claim/', '/q/', '/thesis-report/'];
 
-export default function PortalRail() {
+export default function PortalRail({
+  admin, agentPulse,
+}: { admin?: boolean; agentPulse?: AgentPulse | null } = {}) {
   const path = usePathname();
   const [exploreOpen, setExploreOpen] = useState(false);
   const flyRef = useRef<HTMLDivElement>(null);
@@ -115,6 +119,7 @@ export default function PortalRail() {
       </Link>
 
       <div className="portal-rail-bottom">
+        {admin && <AgentOrb variant="rail" initialPulse={agentPulse ?? null} />}
         <FeedbackButtons variant="rail" />
         <Link
           href="/about"

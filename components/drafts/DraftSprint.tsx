@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { sprintDecisionAction } from '@/lib/actions';
@@ -24,12 +24,17 @@ export default function DraftSprint({
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState({ published: 0, archived: 0, skipped: 0 });
   const [error, setError] = useState<string | null>(null);
+  // Written and read only inside event handlers (never during render).
+  const lastDecisionAt = useRef(0);
 
   const current = queue[index] ?? null;
   const remaining = queue.length - index;
 
   async function decide(decision: 'publish' | 'archive') {
     if (!current || busy) return;
+    const t = Date.now();
+    if (t - lastDecisionAt.current < 600) return;
+    lastDecisionAt.current = t;
     setBusy(true);
     setError(null);
     try {
@@ -59,6 +64,10 @@ export default function DraftSprint({
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // A held key auto-repeats at ~30 events a second; with the busy guard
+      // that still publishes one draft per server round trip until the key
+      // lifts. Ignore repeats, and require a pause between decisions.
+      if (e.repeat) return;
       if (e.key === 'p' || e.key === 'P') { e.preventDefault(); void decide('publish'); }
       else if (e.key === 'a' || e.key === 'A') { e.preventDefault(); void decide('archive'); }
       else if (e.key === 's' || e.key === 'S' || e.key === 'ArrowRight') { e.preventDefault(); skip(); }

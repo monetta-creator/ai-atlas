@@ -20,6 +20,7 @@
 @import "./styles/showcase.css";      /* the unlisted /showcase deck */
 @import "./styles/feedback.css";      /* bug/feature dialogs (.fb-*) */
 @import "./styles/paper-reader.css";  /* /research arXiv drawer (.pv-*) */
+@import "./styles/agent.css";         /* Atlas Agent orb + drawer + console (.ag-*) */
 @import "./styles/home.css"; /* Console Broadsheet layer — scoped to .bs (the home page) */
 @import "./styles/traceroute.css"; /* Traceroute explainer — scoped to .tr (/traceroute) */
 @import "./styles/costs-deck.css"; /* /costs/deck live 16:9 presentation stage (.cdk-*) */

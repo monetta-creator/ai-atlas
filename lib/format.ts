@@ -221,6 +221,9 @@ const FEATURE_LABEL: Record<string, string> = {
   tooling_report_sections: 'Tooling report · sections',
   tooling_report_close: 'Tooling report · bottom line',
   portal_tooling: 'Portal tooling research',
+  agent_brief: 'Agent brief',
+  agent_chat: 'Agent chat',
+  agent_remedy: 'Agent remedy',
 };
 
 // ---- Startup Scout (migration 0034) ----

@@ -114,6 +114,15 @@ export const NAV_ICONS: Record<string, ReactNode> = {
       <path d="M21.5 9.5v5" />
     </svg>
   ),
+  // The Atlas Agent: an orbit mark, a small dot circling a fixed center,
+  // reading as "something is watching and moving" at rail size.
+  agent: (
+    <svg {...ICON_ATTRS}>
+      <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+      <ellipse cx="12" cy="12" rx="8.5" ry="4.2" transform="rotate(-28 12 12)" />
+      <circle cx="20" cy="9.2" r="1.3" fill="currentColor" stroke="none" transform="rotate(-28 12 12)" />
+    </svg>
+  ),
 };
 
 // The rail's link list, in the lobby tiles' order.

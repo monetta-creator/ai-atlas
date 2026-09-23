@@ -5,9 +5,11 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { toggleEditModeAction, togglePreviewAction } from '@/lib/actions';
 import { logout } from '@/app/login/actions';
+import type { AgentPulse } from '@/lib/agent/types';
 import ThemeToggle from './ThemeToggle';
 import ShareLinkButton from './ShareLinkButton';
 import FeedbackButtons from './feedback/FeedbackButtons';
+import AgentOrb from './agent/AgentOrb';
 
 // The nav, slimmed for the lobby redesign (2026-08-13): the home tiles are the
 // premier navigation, the bar stays thin.
@@ -165,13 +167,14 @@ function Dropdown({
 }
 
 export default function SiteNav({
-  showAdmin, previewing, editing, shareToken, counts,
+  showAdmin, previewing, editing, shareToken, counts, agentPulse,
 }: {
   showAdmin: boolean;
   previewing: boolean;
   editing: boolean;
   shareToken: string;
   counts?: NavCounts | null;
+  agentPulse?: AgentPulse | null;
 }) {
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -194,7 +197,7 @@ export default function SiteNav({
     EXPLORE_VIEWS.some((v) => isActive(v.href)) ||
     EXPLORE_MORE.some((v) => isActive(v.href)) ||
     EXPLORE_DETAIL_PREFIXES.some((p) => path.startsWith(p));
-  const adminActive = ADMIN_ITEMS.some(itemActive);
+  const adminActive = ADMIN_ITEMS.some(itemActive) || isActive('/agent');
   // Signal Board (published feed) vs the admin-only Drafts page — kept mutually
   // exclusive so Signal Board doesn't highlight on /signals/drafts (Admin does).
   const signalsActive = path === '/signals' || (path.startsWith('/signals/') && !path.startsWith('/signals/drafts'));
@@ -251,6 +254,10 @@ export default function SiteNav({
           {newDot(a.href)}
         </Link>
       ))}
+      <Link href="/agent" className="navmenu-item" data-active={isActive('/agent') ? '' : undefined}>
+        Agent
+        {agentPulse && agentPulse.unread > 0 && <span className="nav-badge">{agentPulse.unread}</span>}
+      </Link>
       <div className="navmenu-sep" />
       <div className="navmenu-label">View</div>
       <form action={toggleEditModeAction}>
@@ -324,6 +331,7 @@ export default function SiteNav({
           <Link href="/ask" className="navmenu-item" data-active={isActive('/ask') ? '' : undefined}>Ask</Link>
           <Link href="/education" className="navmenu-item" data-active={isActive('/education') ? '' : undefined}>Education</Link>
           <Link href="/about" className="navmenu-item" data-active={isActive('/about') ? '' : undefined}>About</Link>
+          {showAdmin && <AgentOrb variant="menu" initialPulse={agentPulse ?? null} />}
           <FeedbackButtons variant="menu" />
           {showAdmin && (
             <details className="nav-acc" open={adminActive || undefined}>

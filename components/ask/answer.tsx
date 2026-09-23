@@ -35,7 +35,7 @@ const CITE_BAD: CSSProperties = {
 // permit exactly short bold section headers, so anything else the model tries
 // (lists, links, # headings) stays visible as literal text and gets fixed at
 // the prompt, not silently re-rendered.
-function boldNodes(text: string, keyBase: string): ReactNode[] {
+export function boldNodes(text: string, keyBase: string): ReactNode[] {
   const out: ReactNode[] = [];
   const re = /\*\*([^*\n][^*]*?)\*\*/g;
   let last = 0;
