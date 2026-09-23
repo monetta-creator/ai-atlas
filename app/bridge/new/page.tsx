@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getTargets, getArgumentGapScan, getThesis, nextBridgeCode } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { createBridgeAction } from '@/lib/actions';
@@ -18,7 +18,9 @@ export default async function NewBridgePage({
 }: {
   searchParams: Promise<{ gap?: string; thesis?: string }>;
 }) {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/bridge/new', 'New bridge-claim');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const { gap, thesis: thesisParam } = await searchParams;

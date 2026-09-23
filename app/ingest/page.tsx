@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
@@ -12,7 +12,9 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 export default async function IngestPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/ingest', 'Add a source');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   return (

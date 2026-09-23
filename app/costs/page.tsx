@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getCostDashboard, getMonthlyBill, FIXED_MONTHLY } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { cronLabel } from '@/lib/scan/handoff';
@@ -31,7 +31,9 @@ function cronSubsystemName(path: string): string | null {
 }
 
 export default async function CostsPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/costs', 'AI costs');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const [data, bill] = await Promise.all([getCostDashboard(), getMonthlyBill()]);

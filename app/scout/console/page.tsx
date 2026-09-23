@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import {
   getScoutVerticals, getScoutQueue, getScoutRuns,
   getScoutPrefs, getScoutQueueIds, getScoutAgentSummary,
@@ -25,7 +25,9 @@ export const metadata = { title: 'Scout console · The AI Atlas' };
 // history. The reading surface lives at /scout. Every server action re-checks
 // requireAdmin().
 export default async function ScoutConsolePage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/scout/console', 'Scout console');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const [verticals, queue, runs, prefs, queueIds, agentSummary] = await Promise.all([

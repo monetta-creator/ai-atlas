@@ -1,4 +1,4 @@
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getIngestionLedger } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
@@ -35,7 +35,9 @@ function tileGrid(tiles: { label: string; value: string; sub: string }[]) {
 }
 
 export default async function IngestionPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/ingestion', 'Signal ingestion');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
   const ledger = await getIngestionLedger();
 

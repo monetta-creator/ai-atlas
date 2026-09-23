@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import {
   getResearchRuns, getReviewQueuePapers, countPendingPapers,
   getResearchThreads, getThreadScan, reconcileThreadScan, getRisingRejects,
@@ -44,7 +44,9 @@ const pct = (num: number, den: number): string => (den > 0 ? `${Math.round((num 
 // 2026-08-14 so the portal proper leads with insights instead of the factory
 // (the /reports/period pattern). Every server action re-checks requireAdmin().
 export default async function ResearchConsolePage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/research/console', 'Research console');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const [

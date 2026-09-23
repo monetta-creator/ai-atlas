@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import {
   getToolingPrefs, getToolingCategories, getToolingRuns, getToolingHealth, getToolingModelStats,
   getCurationQueue, getTavilyQuota, getToolingRunByKey, getLatestPullRun, getToolingRun,
@@ -40,7 +40,9 @@ const WEEK_STRIP_LENGTH = 26;
 // scheduled driver is the weekly /api/cron/tooling trio, the public egress
 // is three key-gated tooling-* datasets plus the public tooling-catalog.
 export default async function ToolingConsolePage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/tooling/console', 'Tooling console');
+  if (gate) return gate;
+  const admin = true as const;
 
   const weekDay = weekKeyToday();
   const [prefs, categories, runs, health, modelStats, queue, quota, weeklyRun, pullRunRow, h] = await Promise.all([

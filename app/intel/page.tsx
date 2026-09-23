@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import {
   getIntelPrefs, getIntelCompanies, getIntelRuns, getIntelHealth, getIntelModelStats,
   getIntelCompanyYield, getTavilyQuota, getIntelMetricsCoverage, getIntelDatasetStats,
@@ -56,7 +56,9 @@ const TIER_LABEL: Record<IntelTier, string> = {
 // /api/cron/intel pair, the public egress is the four key-gated intel-*
 // datasets.
 export default async function IntelPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/intel', 'Intel desk');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
   const [companies, runs, prefs, budget, health, modelStats, companyYield, quota, metricsCoverage, dsStats, tierStats, recentTiers, h] = await Promise.all([
     getIntelCompanies(), getIntelRuns(130), getIntelPrefs(), checkIntelBudget(), getIntelHealth(30),

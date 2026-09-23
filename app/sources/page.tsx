@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getSourcesWithCounts, getEvidenceGraph } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
@@ -10,7 +10,9 @@ import WorkspaceTabs, { SOURCES_TABS } from '@/components/WorkspaceTabs';
 export const dynamic = 'force-dynamic';
 
 export default async function SourcesPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/sources', 'Sources');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const [sources, graph] = await Promise.all([getSourcesWithCounts(), getEvidenceGraph()]);

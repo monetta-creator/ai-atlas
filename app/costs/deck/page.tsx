@@ -1,4 +1,6 @@
-import { requireAdminPage } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { isAdmin } from '@/lib/auth';
+import { publicParentFor } from '@/lib/nav';
 import { buildCostDeckData } from '@/lib/costs-deck';
 import { renderDeckSlides } from '@/components/costs-deck/slides';
 import DeckController from '@/components/costs-deck/DeckController';
@@ -11,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Cost report · The AI Atlas' };
 
 export default async function CostsDeckPage() {
-  await requireAdminPage();
+  if (!(await isAdmin())) redirect(publicParentFor('/costs/deck').href);
   const deck = await buildCostDeckData();
   return <DeckController slides={renderDeckSlides(deck)} />;
 }

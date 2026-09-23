@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getQuestion, getTargets, getArgumentGapScan, getThesis, nextClaimCode } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { createClaimAction } from '@/lib/actions';
@@ -21,10 +21,12 @@ export default async function NewClaimPage({
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ gap?: string; thesis?: string }>;
 }) {
-  const admin = await requireAdminPage();
+  const { slug } = await params;
+  const gate = await adminGate(`/q/${slug}/claim/new`, 'New claim');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
-  const { slug } = await params;
   const { gap, thesis: thesisParam } = await searchParams;
   const question = await getQuestion(slug, true);
   if (!question) notFound();

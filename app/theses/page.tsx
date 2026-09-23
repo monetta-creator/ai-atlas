@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getTheses } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { dateLabel } from '@/lib/format';
@@ -14,7 +14,9 @@ export const metadata = { title: 'Theses · The AI Atlas' };
 // thesis links to its run console (/theses/[id]); saved runs get public
 // /thesis-report links to share.
 export default async function ThesesPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/theses', 'Theses');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
   const theses = await getTheses();
 

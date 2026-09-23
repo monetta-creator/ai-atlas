@@ -1,4 +1,6 @@
-import { requireAdminPage } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { isAdmin } from '@/lib/auth';
+import { publicParentFor } from '@/lib/nav';
 import { buildStoryDeckData } from '@/lib/story-deck';
 import { renderDeckSlides } from '@/components/costs-deck/slides';
 import DeckController from '@/components/costs-deck/DeckController';
@@ -10,7 +12,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'The 1000x question · The AI Atlas' };
 
 export default async function IngestionDeckPage() {
-  await requireAdminPage();
+  if (!(await isAdmin())) redirect(publicParentFor('/ingestion/deck').href);
   const deck = await buildStoryDeckData();
   return (
     <DeckController

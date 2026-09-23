@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getConceptGraph, getConceptGapScan, getTargets } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { createConceptAction } from '@/lib/actions';
@@ -18,7 +18,9 @@ export default async function NewConceptPage({
 }: {
   searchParams: Promise<{ gap?: string }>;
 }) {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/concepts/new', 'New concept');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const { gap } = await searchParams;

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getSignal, getTargets, getSources } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { updateSignalAction } from '@/lib/actions';
@@ -13,7 +13,9 @@ export const metadata = { title: 'Edit signal · The AI Atlas' };
 
 export default async function EditSignalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const admin = await requireAdminPage();
+  const gate = await adminGate(`/signals/${id}/edit`, 'Edit signal');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   // `admin` is guaranteed true here (the redirect above gates non-admins); derive the

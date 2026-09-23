@@ -2,76 +2,28 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { toggleEditModeAction, togglePreviewAction } from '@/lib/actions';
 import { logout } from '@/app/login/actions';
 import type { AgentPulse } from '@/lib/agent/types';
+import {
+  NAV_ISLAND, NAV_TREE, canSee, isActiveGroup, leafFor,
+  type NavCounts, type NavGroup, type NavLeaf, type NavViewer,
+} from '@/lib/nav';
 import ThemeToggle from './ThemeToggle';
 import ShareLinkButton from './ShareLinkButton';
 import FeedbackButtons from './feedback/FeedbackButtons';
 import AgentOrb from './agent/AgentOrb';
 
-// The nav, slimmed for the lobby redesign (2026-08-13): the home tiles are the
-// premier navigation, the bar stays thin.
-//  - PUBLIC: Home · Signal Board · Explore ▾ (the five portals + the map family) · Ask · About.
-//  - ADMIN: one FLAT list ordered by frequency, no group labels; the tab-shell
-//    merges (Sources+Ingest, Worldview+Data, Costs+Calibration) mean one nav
-//    row can front two routes (`also` drives the active state).
-//  - Queue badges (live counts from Header, admin-only) mark waiting work;
-//    localStorage "unvisited" dots mark dropdown pages never opened on this
-//    device. Mobile renders two accordions (Site / Admin) instead of one sheet.
+export type { NavCounts };
 
-export interface NavCounts {
-  pipeline: number;
-  drafts: number;
-  papers: number;
-  scout: number;
-  tickets: number;
-  tooling: number;
-}
-
-// The Explore dropdown mirrors the lobby tiles (minus Signal Board, which keeps
-// its own top-level slot), then the map-family reader pages beneath a rule.
-const EXPLORE_VIEWS = [
-  { href: '/blotter', label: 'News Blotter' },
-  { href: '/map', label: 'Claims & Theses' },
-  { href: '/reports', label: 'Report Portal' },
-  { href: '/datasets', label: 'Data Portal' },
-  { href: '/research', label: 'Research Portal' },
-  { href: '/scout', label: 'Startup Scout' },
-  { href: '/tooling', label: 'Tooling Monitor' },
-];
-const EXPLORE_MORE = [
-  { href: '/bridges', label: 'Bridges' },
-  { href: '/concepts', label: 'Concepts' },
-  { href: '/traceroute', label: 'Traceroute' },
-];
-// Detail pages that should light the Explore dropdown without being listed in it.
-const EXPLORE_DETAIL_PREFIXES = ['/bridge/', '/claim/', '/q/', '/thesis-report/'];
-
-interface AdminItem {
-  href: string;
-  label: string;
-  badge?: keyof NavCounts;
-  also?: string[];   // sibling routes this row fronts (tab-shell merges)
-}
-
-const ADMIN_ITEMS: AdminItem[] = [
-  { href: '/pipeline', label: 'Pipeline', badge: 'pipeline' },
-  { href: '/scan', label: 'Scan' },
-  { href: '/intel', label: 'Intel' },
-  { href: '/ingestion', label: 'Ingestion' },
-  { href: '/signals/drafts', label: 'Drafts', badge: 'drafts' },
-  { href: '/theses', label: 'Theses' },
-  { href: '/research/console', label: 'Papers', badge: 'papers' },
-  { href: '/scout/console', label: 'Scout', badge: 'scout' },
-  { href: '/tooling/console', label: 'Tooling', badge: 'tooling', also: ['/tooling/reports'] },
-  { href: '/sources', label: 'Sources', also: ['/ingest', '/source'] },
-  { href: '/worldview', label: 'Map editor', also: ['/data'] },
-  { href: '/tickets', label: 'Tickets', badge: 'tickets' },
-  { href: '/costs', label: 'Costs', also: ['/calibration'] },
-  { href: '/showcase', label: 'Showcase' },
-];
+// The nav, rebuilt on lib/nav's ONE tree (2026-09-23): the rail (desktop)
+// and this file's mobile sheet both walk NAV_TREE + NAV_ISLAND, so a page
+// moves in exactly one place. What lives here:
+//  - The mobile hamburger sheet: the same tree as <details> accordions.
+//  - The account menu (desktop dropdown + the mobile sheet's tail): session
+//    controls only (Edit mode, Preview as guest, Share link, Copy showcase
+//    link, Sign out) — every page LINK moved into the tree/rail.
 
 // Copies the direct /showcase URL: the deck is public but unlisted, so the
 // link IS the invitation for demo guests. Origin filled in client-side.
@@ -93,26 +45,6 @@ function CopyShowcaseLink() {
     </button>
   );
 }
-
-const VISITED_KEY = 'atlas_nav_visited';
-
-// The visited set is an external store (localStorage) read via useSyncExternalStore:
-// navigation WRITES to it (effect below) and emits; subscribers re-read. The server
-// snapshot is the '' sentinel, so SSR/hydration renders no dots (no mismatch, no
-// flash of every page looking new).
-const visitedListeners = new Set<() => void>();
-const subscribeVisited = (cb: () => void) => {
-  visitedListeners.add(cb);
-  return () => { visitedListeners.delete(cb); };
-};
-const readVisited = () => {
-  try {
-    return localStorage.getItem(VISITED_KEY) ?? '[]';
-  } catch {
-    return '[]';
-  }
-};
-const emitVisited = () => visitedListeners.forEach((l) => l());
 
 // Desktop dropdown: a trigger + a panel that closes on outside-click, Escape, or any
 // click inside (so following a link / submitting a toggle dismisses it).
@@ -167,9 +99,10 @@ function Dropdown({
 }
 
 export default function SiteNav({
-  showAdmin, previewing, editing, shareToken, counts, agentPulse,
+  showAdmin, portal, previewing, editing, shareToken, counts, agentPulse,
 }: {
   showAdmin: boolean;
+  portal?: boolean;
   previewing: boolean;
   editing: boolean;
   shareToken: string;
@@ -178,88 +111,50 @@ export default function SiteNav({
 }) {
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const visitedJson = useSyncExternalStore(subscribeVisited, readVisited, () => '');
-  // null while the server sentinel is in effect (pre-hydration): dots stay hidden.
-  const visited = useMemo<Set<string> | null>(() => {
-    if (visitedJson === '') return null;
-    try {
-      return new Set<string>(JSON.parse(visitedJson));
-    } catch {
-      return new Set<string>();
+  const viewer: NavViewer = { admin: showAdmin, portal: !!portal };
+
+  function badgeEl(leaf: NavLeaf) {
+    const key = leaf.badge;
+    if (!key) return null;
+    if (key === 'agent') {
+      const n = agentPulse?.unread ?? 0;
+      return n > 0 ? <span className="nav-badge">{n}</span> : null;
     }
-  }, [visitedJson]);
-
-  const isActive = (href: string) => path === href || path.startsWith(href + '/');
-  const itemActive = (item: AdminItem) => isActive(item.href) || (item.also ?? []).some(isActive);
-  // Home is an exact match — `isActive('/')` would light up on every route.
-  const homeActive = path === '/';
-  const exploreActive =
-    EXPLORE_VIEWS.some((v) => isActive(v.href)) ||
-    EXPLORE_MORE.some((v) => isActive(v.href)) ||
-    EXPLORE_DETAIL_PREFIXES.some((p) => path.startsWith(p));
-  const adminActive = ADMIN_ITEMS.some(itemActive) || isActive('/agent');
-  // Signal Board (published feed) vs the admin-only Drafts page — kept mutually
-  // exclusive so Signal Board doesn't highlight on /signals/drafts (Admin does).
-  const signalsActive = path === '/signals' || (path.startsWith('/signals/') && !path.startsWith('/signals/drafts'));
-
-  // Record which dropdown destinations this device has opened; never-visited ones
-  // get a discovery dot. localStorage only — a per-device orientation aid. The
-  // effect only writes the store and emits; the render subscription above re-reads.
-  useEffect(() => {
-    try {
-      const set = new Set<string>(JSON.parse(localStorage.getItem(VISITED_KEY) ?? '[]'));
-      const before = set.size;
-      for (const v of [...EXPLORE_VIEWS, ...EXPLORE_MORE]) if (isActive(v.href)) set.add(v.href);
-      for (const a of ADMIN_ITEMS) if (itemActive(a)) set.add(a.href);
-      if (set.size !== before) localStorage.setItem(VISITED_KEY, JSON.stringify([...set]));
-      emitVisited();   // wake subscribers even on first mount (sentinel -> real data)
-    } catch {
-      /* private mode etc.: dots simply never resolve */
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [path]);
-
-  const newDot = (href: string) =>
-    visited !== null && !visited.has(href) ? <span className="nav-dot-new" aria-label="not yet visited" /> : null;
-
-  const badge = (key?: keyof NavCounts) => {
-    const n = key && counts ? counts[key] : 0;
+    const n = counts ? counts[key] : 0;
     return n > 0 ? <span className="nav-badge">{n}</span> : null;
-  };
+  }
 
-  const exploreLinks = (
-    <>
-      {EXPLORE_VIEWS.map((v) => (
-        <Link key={v.href} href={v.href} className="navmenu-item" data-active={isActive(v.href) ? '' : undefined}>
-          {v.label}
-          {newDot(v.href)}
-        </Link>
-      ))}
-      <div className="navmenu-sep" />
-      {EXPLORE_MORE.map((v) => (
-        <Link key={v.href} href={v.href} className="navmenu-item" data-active={isActive(v.href) ? '' : undefined}>
-          {v.label}
-          {newDot(v.href)}
-        </Link>
-      ))}
-    </>
-  );
+  function MobileGroupRow({ group }: { group: NavGroup }) {
+    if (!canSee(group.access, viewer)) return null;
+    const kids = group.children.filter((l) => !l.hidden && canSee(l.access, viewer));
+    const isAccordion = kids.some((l) => l.href !== group.href);
+    const active = isActiveGroup(path, group);
 
-  const adminMenu = (
-    <>
-      {ADMIN_ITEMS.map((a) => (
-        <Link key={a.href} href={a.href} className="navmenu-item" data-active={itemActive(a) ? '' : undefined}>
-          {a.label}
-          {badge(a.badge)}
-          {newDot(a.href)}
+    if (!isAccordion) {
+      return (
+        <Link href={group.href} className="navmenu-item" data-active={active ? '' : undefined}>
+          {group.label}
         </Link>
-      ))}
-      <Link href="/agent" className="navmenu-item" data-active={isActive('/agent') ? '' : undefined}>
-        Agent
-        {agentPulse && agentPulse.unread > 0 && <span className="nav-badge">{agentPulse.unread}</span>}
-      </Link>
-      <div className="navmenu-sep" />
-      <div className="navmenu-label">View</div>
+      );
+    }
+
+    const activeLeaf = leafFor(path, group);
+    return (
+      <details className="nav-acc" open={active || undefined}>
+        <summary>{group.label}</summary>
+        {kids.map((leaf) => (
+          <Link key={leaf.href} href={leaf.href} className="navmenu-item" data-active={activeLeaf === leaf ? '' : undefined}>
+            {leaf.label}
+            {badgeEl(leaf)}
+          </Link>
+        ))}
+      </details>
+    );
+  }
+
+  const accountRows = (
+    <>
+      <div className="navmenu-label">Account</div>
       <form action={toggleEditModeAction}>
         <button type="submit" className="navmenu-item navmenu-item--btn" data-active={editing ? '' : undefined}>
           {editing ? 'Editing ✓' : 'Edit mode'}
@@ -278,7 +173,7 @@ export default function SiteNav({
   );
 
   const adminArea = showAdmin ? (
-    <Dropdown label="Admin" active={adminActive} align="right" accent>{adminMenu}</Dropdown>
+    <Dropdown label="Account" align="right" accent>{accountRows}</Dropdown>
   ) : previewing ? (
     <form action={togglePreviewAction}>
       <button type="submit" className="toggle" data-action="preview" data-on="1">Previewing as guest · Exit</button>
@@ -290,7 +185,7 @@ export default function SiteNav({
   return (
     <>
       {/* desktop: the links live in the left portal rail now; the top bar
-          keeps only the theme toggle and the admin area. */}
+          keeps only the theme toggle and the account menu. */}
       <div className="sitenav-desktop">
         <ThemeToggle />
         {adminArea}
@@ -322,23 +217,12 @@ export default function SiteNav({
             setTimeout(() => setMobileOpen(false), 0);
           }}
         >
-          <Link href="/" className="navmenu-item" data-active={homeActive ? '' : undefined}>Home</Link>
-          <Link href="/signals" className="navmenu-item" data-active={signalsActive ? '' : undefined}>Signal Board</Link>
-          <details className="nav-acc" open={exploreActive || undefined}>
-            <summary>Explore</summary>
-            {exploreLinks}
-          </details>
-          <Link href="/ask" className="navmenu-item" data-active={isActive('/ask') ? '' : undefined}>Ask</Link>
-          <Link href="/education" className="navmenu-item" data-active={isActive('/education') ? '' : undefined}>Education</Link>
-          <Link href="/about" className="navmenu-item" data-active={isActive('/about') ? '' : undefined}>About</Link>
+          {NAV_TREE.map((g) => <MobileGroupRow key={g.key} group={g} />)}
+          {NAV_ISLAND.map((g) => <MobileGroupRow key={g.key} group={g} />)}
           {showAdmin && <AgentOrb variant="menu" initialPulse={agentPulse ?? null} />}
           <FeedbackButtons variant="menu" />
-          {showAdmin && (
-            <details className="nav-acc" open={adminActive || undefined}>
-              <summary>Admin</summary>
-              {adminMenu}
-            </details>
-          )}
+          <div className="navmenu-sep" />
+          {showAdmin && accountRows}
           {previewing && (
             <form action={togglePreviewAction}>
               <button type="submit" className="navmenu-item navmenu-item--btn">Previewing as guest · Exit</button>

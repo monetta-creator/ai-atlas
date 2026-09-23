@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getTickets } from '@/lib/data';
 import type { TicketKind, TicketStatus } from '@/lib/types';
 import { getEditContext } from '@/lib/content';
@@ -20,7 +20,9 @@ export default async function TicketsPage({
 }: {
   searchParams: Promise<{ kind?: string; status?: string }>;
 }) {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/tickets', 'Tickets');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
   const sp = await searchParams;
   const kind = sp.kind && KINDS.has(sp.kind) ? (sp.kind as TicketKind) : undefined;

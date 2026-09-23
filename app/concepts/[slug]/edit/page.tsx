@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getConceptForEdit, getConceptGraph, getTargets } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { updateConceptAction, deleteConceptAction } from '@/lib/actions';
@@ -18,10 +18,12 @@ export default async function EditConceptPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const admin = await requireAdminPage();
+  const { slug } = await params;
+  const gate = await adminGate(`/concepts/${slug}/edit`, 'Edit concept');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
-  const { slug } = await params;
   const [data, { concepts }, { claims, bridges }] = await Promise.all([
     getConceptForEdit(decodeURIComponent(slug)),
     getConceptGraph(),

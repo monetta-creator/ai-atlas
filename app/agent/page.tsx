@@ -1,4 +1,4 @@
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getAgentSpendToday, listBriefs } from '@/lib/data';
 import { AGENT_CHECKS } from '@/lib/agent/checks';
 import type { CheckDomain } from '@/lib/agent/types';
@@ -7,8 +7,8 @@ import { AgentPanel } from '@/components/agent/AgentDrawer';
 
 // The console page: the same tabbed content as the drawer, full width, plus
 // a sidebar orienting the operator itself (the check registry, today's
-// spend against the cap, and the briefs archive). requireAdminPage first,
-// per house convention for every admin-only route.
+// spend against the cap, and the briefs archive). adminGate first, per
+// house convention for every admin-only route.
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Atlas Agent · The AI Atlas' };
 
@@ -24,7 +24,9 @@ function fmtDay(iso: string): string {
 const AGENT_DAILY_BUDGET_USD = Math.max(0.05, Number(process.env.AGENT_DAILY_BUDGET_USD || 0.25));
 
 export default async function AgentPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/agent', 'Atlas Agent');
+  if (gate) return gate;
+  const admin = true as const;
   const [spend, briefs] = await Promise.all([getAgentSpendToday(), listBriefs(30)]);
 
   const domains = new Map<CheckDomain, typeof AGENT_CHECKS>();

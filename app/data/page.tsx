@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getAllDomainRows, getNodeLensMap } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
@@ -11,7 +11,9 @@ import WorkspaceTabs, { MAP_EDITOR_TABS } from '@/components/WorkspaceTabs';
 export const dynamic = 'force-dynamic';
 
 export default async function DataPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/data', 'Data');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const [{ questions, stances, claims, bridges }, lensMap] = await Promise.all([

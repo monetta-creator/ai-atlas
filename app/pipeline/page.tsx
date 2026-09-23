@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import {
   getRuns, getCandidates, getTextCoverage, getPipelinePrefs, getAnalysisModelStats,
 } from '@/lib/data';
@@ -21,7 +21,9 @@ export const maxDuration = 60;
 export const metadata = { title: 'Discovery pipeline · The AI Atlas' };
 
 export default async function PipelinePage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/pipeline', 'Discovery pipeline');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const [runs, textCoverage, prefs, modelStats] = await Promise.all([

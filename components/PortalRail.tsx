@@ -3,134 +3,174 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { NAV_ICONS, PORTALS } from '@/components/portal-icons';
+import { NAV_ICONS, PORTAL_ICONS } from '@/components/portal-icons';
 import FeedbackButtons from '@/components/feedback/FeedbackButtons';
 import AgentOrb from '@/components/agent/AgentOrb';
 import type { AgentPulse } from '@/lib/agent/types';
+import {
+  NAV_ISLAND, NAV_TREE, canSee, groupFor, isActiveGroup, leafFor,
+  type NavCounts, type NavGroup, type NavLeaf, type NavViewer,
+} from '@/lib/nav';
 
-// The left sidebar: the site's primary navigation on desktop (the top bar
-// keeps only the brand, the theme toggle, and the admin menu). Full-height
-// fixed column, icons with name tooltips: Home, the six portals, Explore
-// (a globe with a nested flyout for the map-family extras), Ask, and About
-// pinned at the bottom in its own island. Hidden under 761px, where the
-// hamburger sheet remains the complete nav. Content clears the rail via
-// body:has(.portal-rail) padding, so pages without it (the showcase) stay
-// full-bleed.
-const EXPLORE_ITEMS = [
-  { href: '/bridges', name: 'Bridges' },
-  { href: '/concepts', name: 'Concepts' },
-  { href: '/traceroute', name: 'Traceroute' },
-];
-// Detail pages that should light Explore without being listed in it.
-const EXPLORE_PREFIXES = ['/bridge/', '/claim/', '/q/', '/thesis-report/'];
-
+// The left sidebar: 56px icon column at rest, widening to a 232px overlay on
+// hover/focus-within (no layout shift, content keeps padding-left:56px via
+// body:has in rail.css) or when pinned open. Driven entirely by lib/nav's
+// NAV_TREE + NAV_ISLAND: a group with more than one visible leaf (beyond the
+// leaf that IS its own hub, e.g. Data Portal's lone "Catalog") is a toggling
+// accordion; everything else is a plain Link. Admin-only groups/leaves are
+// filtered out of the tree entirely for non-admin viewers, never dimmed.
 export default function PortalRail({
-  admin, agentPulse,
-}: { admin?: boolean; agentPulse?: AgentPulse | null } = {}) {
+  admin, portal, agentPulse, counts,
+}: {
+  admin?: boolean;
+  portal?: boolean;
+  agentPulse?: AgentPulse | null;
+  counts?: NavCounts | null;
+} = {}) {
   const path = usePathname();
-  const [exploreOpen, setExploreOpen] = useState(false);
-  const flyRef = useRef<HTMLDivElement>(null);
+  const viewer: NavViewer = { admin: !!admin, portal: !!portal };
+  const activeGroup = groupFor(path);
 
+  const [pinned, setPinned] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [openKey, setOpenKey] = useState<string | null>(activeGroup?.key ?? null);
+  const railRef = useRef<HTMLElement>(null);
+
+  const expanded = pinned || hovered;
+
+  // Escape unpins/collapses; a click outside a pinned rail closes whichever
+  // accordion is open without unpinning the rail itself.
   useEffect(() => {
-    if (!exploreOpen) return;
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setPinned(false);
+      setHovered(false);
+      (document.activeElement as HTMLElement | null)?.blur?.();
+    };
     const onDoc = (e: MouseEvent) => {
-      if (flyRef.current && !flyRef.current.contains(e.target as Node)) setExploreOpen(false);
+      if (pinned && railRef.current && !railRef.current.contains(e.target as Node)) setOpenKey(null);
     };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExploreOpen(false); };
-    document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onDoc);
     return () => {
-      document.removeEventListener('mousedown', onDoc);
       document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDoc);
     };
-  }, [exploreOpen]);
+  }, [expanded, pinned]);
 
-  const isActive = (href: string) => path === href || path.startsWith(href + '/');
-  const exploreActive =
-    EXPLORE_ITEMS.some((v) => isActive(v.href)) || EXPLORE_PREFIXES.some((p) => path.startsWith(p));
+  function icon(key: string) {
+    return PORTAL_ICONS[key] ?? NAV_ICONS[key];
+  }
 
-  return (
-    <nav className="portal-rail" aria-label="Site">
-      <Link
-        href="/"
-        className="portal-rail-link"
-        data-active={path === '/' ? '' : undefined}
-        data-tip="Home"
-        aria-label="Home"
-      >
-        {NAV_ICONS.home}
-      </Link>
+  function badgeFor(leaf: NavLeaf) {
+    const key = leaf.badge;
+    if (!key) return null;
+    if (key === 'agent') {
+      const n = agentPulse?.unread ?? 0;
+      return n > 0 ? <span className="nav-badge">{n}</span> : null;
+    }
+    const n = counts ? counts[key] : 0;
+    return n > 0 ? <span className="nav-badge">{n}</span> : null;
+  }
 
-      {PORTALS.map((p) => (
-        <Link
-          key={p.href}
-          href={p.href}
-          className="portal-rail-link"
-          data-active={isActive(p.href) && !(p.href === '/signals' && path.startsWith('/signals/drafts')) ? '' : undefined}
-          data-tip={p.name}
-          aria-label={p.name}
-        >
-          {p.icon}
-        </Link>
-      ))}
+  function renderGroup(group: NavGroup) {
+    if (!canSee(group.access, viewer)) return null;
+    const kids = group.children.filter((l) => !l.hidden && canSee(l.access, viewer));
+    // Accordion only when a group has a leaf beyond the one that IS its own
+    // hub (Data Portal's lone "Catalog" leaf never makes it an accordion).
+    const isAccordion = kids.some((l) => l.href !== group.href);
+    const active = isActiveGroup(path, group);
 
-      <div className="portal-rail-item" data-open={exploreOpen ? '' : undefined} ref={flyRef}>
+    if (!isAccordion) {
+      return (
+        <div className="portal-rail-item" key={group.key}>
+          <Link
+            href={group.href}
+            className="portal-rail-link"
+            data-active={active ? '' : undefined}
+            data-tip={group.label}
+            aria-label={group.label}
+          >
+            {icon(group.icon)}
+            <span className="portal-rail-label">{group.label}</span>
+          </Link>
+        </div>
+      );
+    }
+
+    const activeLeaf = leafFor(path, group);
+    const open = expanded && openKey === group.key;
+
+    return (
+      <div className="portal-rail-item" key={group.key} data-open={open ? '' : undefined}>
         <button
           type="button"
-          className="portal-rail-link"
-          data-active={exploreActive ? '' : undefined}
-          data-tip="Explore"
-          aria-label="Explore"
-          aria-expanded={exploreOpen}
-          aria-haspopup="menu"
-          onClick={() => setExploreOpen((o) => !o)}
+          className="portal-rail-link portal-rail-group"
+          data-active={active ? '' : undefined}
+          data-tip={group.label}
+          aria-label={group.label}
+          aria-expanded={open}
+          onClick={() => setOpenKey((k) => (k === group.key ? null : group.key))}
         >
-          {NAV_ICONS.explore}
+          {icon(group.icon)}
+          <span className="portal-rail-label">{group.label}</span>
+          <span className="portal-rail-chevron" data-open={open ? '' : undefined} aria-hidden="true">›</span>
         </button>
-        {exploreOpen && (
-          <div className="portal-rail-fly" role="menu" onClick={() => setTimeout(() => setExploreOpen(false), 0)}>
-            {EXPLORE_ITEMS.map((v) => (
-              <Link key={v.href} href={v.href} className="navmenu-item" data-active={isActive(v.href) ? '' : undefined}>
-                {v.name}
+        {open && (
+          <div className="portal-rail-sub" role="menu">
+            {kids.map((leaf) => (
+              <Link
+                key={leaf.href}
+                href={leaf.href}
+                className="navmenu-item"
+                data-active={activeLeaf === leaf ? '' : undefined}
+              >
+                {leaf.label}
+                {badgeFor(leaf)}
               </Link>
             ))}
           </div>
         )}
       </div>
+    );
+  }
 
-      <Link
-        href="/education"
-        className="portal-rail-link"
-        data-active={isActive('/education') ? '' : undefined}
-        data-tip="Education"
-        aria-label="Education"
+  return (
+    <nav
+      className="portal-rail"
+      aria-label="Site"
+      ref={railRef}
+      data-expanded={expanded ? '' : undefined}
+      data-pinned={pinned ? '' : undefined}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={(e) => {
+        if (!railRef.current?.contains(e.relatedTarget as Node)) setHovered(false);
+      }}
+    >
+      <button
+        type="button"
+        className="portal-rail-pin"
+        data-tip={pinned ? 'Collapse navigation' : 'Pin navigation open'}
+        aria-label={pinned ? 'Collapse navigation' : 'Pin navigation open'}
+        aria-pressed={pinned}
+        onClick={() => setPinned((p) => !p)}
       >
-        {NAV_ICONS.education}
-      </Link>
+        {pinned ? '✕' : '☰'}
+      </button>
 
-      <Link
-        href="/ask"
-        className="portal-rail-link"
-        data-active={isActive('/ask') ? '' : undefined}
-        data-tip="Ask the Atlas"
-        aria-label="Ask the Atlas"
-      >
-        {NAV_ICONS.ask}
-      </Link>
+      {NAV_TREE.map(renderGroup)}
 
       <div className="portal-rail-bottom">
-        {admin && <AgentOrb variant="rail" initialPulse={agentPulse ?? null} />}
-        <FeedbackButtons variant="rail" />
-        <Link
-          href="/about"
-          className="portal-rail-link"
-          data-active={isActive('/about') ? '' : undefined}
-          data-tip="About"
-          aria-label="About"
-        >
-          {NAV_ICONS.about}
-        </Link>
+        {NAV_ISLAND.map(renderGroup)}
+        <div className="portal-rail-item">
+          {admin && <AgentOrb variant="rail" initialPulse={agentPulse ?? null} />}
+        </div>
+        <div className="portal-rail-item"><FeedbackButtons variant="rail" /></div>
       </div>
     </nav>
   );
 }
+

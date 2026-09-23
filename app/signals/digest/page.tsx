@@ -1,4 +1,6 @@
-import { requireAdminPage } from '@/lib/auth';
+import { redirect } from 'next/navigation';
+import { isAdmin } from '@/lib/auth';
+import { publicParentFor } from '@/lib/nav';
 import { getSignals } from '@/lib/data';
 import {
   SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL, SIGNIFICANCE_LABEL, dateLabel,
@@ -18,7 +20,7 @@ export default async function DigestPage({
 }: {
   searchParams: Promise<{ since?: string; lenses?: string; significance?: string }>;
 }) {
-  await requireAdminPage();
+  if (!(await isAdmin())) redirect(publicParentFor('/signals/digest').href);
   const sp = await searchParams;
 
   const validLens = new Set<string>(SIGNAL_LENS_SLUGS);

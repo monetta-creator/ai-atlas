@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { headers } from 'next/headers';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import {
   getScanTopics, getScanRuns, getScanPrefs, getScanHealth, getPublishedSignalCount,
   getEnrichModelStats, getSourceTierStats, getRecentSourceTiers, getRelevanceEnsembleStats,
@@ -41,7 +41,9 @@ const panel = {
 // scheduled driver is the /api/cron/scan pair; the public egress is the
 // key-gated external-scan dataset.
 export default async function ScanPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/scan', 'External scan');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
   const [topics, runs, prefs, budget, health, signalCount, modelStats, tierStats, recentTiers, ensemble, h] = await Promise.all([
     getScanTopics(), getScanRuns(130), getScanPrefs(), checkScanBudget(), getScanHealth(30),

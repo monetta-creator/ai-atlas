@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getTargets, getSources } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { createSignalAction } from '@/lib/actions';
@@ -11,7 +11,9 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'New signal · The AI Atlas' };
 
 export default async function NewSignalPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/signals/new', 'New signal');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const { claims, bridges } = await getTargets();

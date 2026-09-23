@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getSource, getTargets } from '@/lib/data';
 import { setPriorAction, reassignEvidenceAction, deleteEvidenceAction } from '@/lib/actions';
 import { DOMAIN_LABEL, directionLabel, directionColor } from '@/lib/format';
@@ -25,7 +25,9 @@ export default async function SourcePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const admin = await requireAdminPage();
+  const gate = await adminGate(`/source/${id}`, 'Source');
+  if (gate) return gate;
+  const admin = true as const;
 
   const data = await getSource(id);
   if (!data) notFound();

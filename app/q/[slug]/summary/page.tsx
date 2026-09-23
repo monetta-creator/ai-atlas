@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { requireAdminPage, isPreview } from '@/lib/auth';
+import { isPreview } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getQuestionBySlug, getQuestionSummaries, getAsOf } from '@/lib/data';
 import { LENS_LABEL } from '@/lib/format';
 import { getEditContext } from '@/lib/content';
@@ -23,7 +24,9 @@ export default async function QuestionSummaryHistoryPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const admin = await requireAdminPage();
+  const gate = await adminGate(`/q/${slug}/summary`, 'State summaries');
+  if (gate) return gate;
+  const admin = true as const;
   const preview = await isPreview();
   const personal = admin && !preview;
   const { editing, txt } = await getEditContext();

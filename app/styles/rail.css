@@ -1,16 +1,25 @@
 /* ============================================================
-   THE PORTAL RAIL — the site's left sidebar nav on desktop:
-   full height, Home + the six portals + Explore (nested flyout)
-   + Ask, with About pinned at the bottom in its own island.
-   Name tooltips on hover. Content clears it via the body:has
-   padding below; pages without a Header (the showcase) stay
-   full-bleed. Under 761px the hamburger sheet is the whole nav.
+   THE PORTAL RAIL — the site's left sidebar nav on desktop, driven
+   by lib/nav.ts's NAV_TREE + NAV_ISLAND. 56px icon column at rest;
+   hover/focus-within (or the pin toggle, [data-pinned]) widens it
+   to a 264px fixed overlay — the page never reflows, it keeps
+   padding-left:56px via body:has below. A group with sub-pages is
+   a button that toggles an inline accordion ([data-open]); a group
+   with none is a plain Link. Tooltips (data-tip) only make sense
+   collapsed, so they're gated on :not([data-expanded]). Under
+   761px the hamburger sheet (SiteNav) is the whole nav.
    ============================================================ */
 .portal-rail {
   position: fixed; left: 0; top: 0; bottom: 0; width: 56px; z-index: 30;
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  display: flex; flex-direction: column; gap: 3px;
   padding: 14px 0 12px;
   background: var(--surface); border-right: 1px solid var(--line);
+  overflow-y: auto; overflow-x: visible;
+  transition: width .18s var(--ease-soft), box-shadow .18s;
+}
+.portal-rail[data-expanded] {
+  width: 264px;
+  box-shadow: 14px 0 36px -18px color-mix(in oklab, var(--ink) 45%, transparent);
 }
 @media (min-width: 761px) {
   body:has(.portal-rail) { padding-left: 56px; }
@@ -22,14 +31,30 @@
   .portal-rail { display: none; }
   body { padding-left: 0 !important; }
 }
-.portal-rail-item { position: relative; }
-.portal-rail-link {
-  position: relative; display: flex; align-items: center; justify-content: center;
-  width: 38px; height: 38px; border: 1px solid transparent; border-radius: var(--radius);
-  background: transparent; color: var(--dim); cursor: pointer;
-  transition: color .18s, border-color .18s, background .18s, box-shadow .18s;
+
+.portal-rail-pin {
+  display: flex; align-items: center; justify-content: center;
+  width: 38px; height: 30px; margin: 0 auto 6px;
+  border: 1px solid transparent; border-radius: var(--radius);
+  background: transparent; color: var(--faint-ink); font-size: 14px; cursor: pointer;
+  transition: color .18s, border-color .18s, background .18s;
 }
-.portal-rail-link svg { width: 17px; height: 17px; }
+.portal-rail-pin:hover { color: var(--ink); border-color: var(--line); }
+.portal-rail[data-pinned] .portal-rail-pin { color: var(--accent); }
+
+.portal-rail-item { position: relative; padding: 0 9px; }
+.portal-rail-link {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  width: 38px; height: 38px; margin: 0 auto;
+  border: 1px solid transparent; border-radius: var(--radius);
+  background: transparent; color: var(--dim); cursor: pointer;
+  white-space: nowrap;
+  transition: width .18s var(--ease-soft), color .18s, border-color .18s, background .18s, box-shadow .18s;
+}
+.portal-rail[data-expanded] .portal-rail-link {
+  width: 100%; padding: 0 10px; justify-content: flex-start;
+}
+.portal-rail-link svg { width: 17px; height: 17px; flex: 0 0 auto; }
 .portal-rail-link:hover {
   color: var(--accent); border-color: var(--accent);
   box-shadow:
@@ -42,6 +67,29 @@
   background: color-mix(in oklab, var(--accent) 8%, var(--surface));
   box-shadow: 0 0 14px -4px color-mix(in oklab, var(--accent) 45%, transparent);
 }
+.portal-rail-group { width: 38px; }
+.portal-rail[data-expanded] .portal-rail-group { width: 100%; }
+
+.portal-rail-label {
+  display: inline-block; max-width: 0; opacity: 0; overflow: hidden;
+  font-size: 13px; line-height: 1.2;
+  transition: max-width .18s var(--ease-soft), opacity .12s;
+}
+.portal-rail[data-expanded] .portal-rail-label { max-width: 182px; opacity: 1; }
+/* Tooltips belong to the collapsed rail only; kill the element outright when
+   expanded so a fading tooltip never sits beside its own label. */
+.portal-rail[data-expanded] .portal-rail-link::after,
+.portal-rail[data-expanded] .portal-rail-pin::after { display: none; }
+
+.portal-rail-chevron {
+  margin-left: auto; flex: 0 0 auto; max-width: 0; opacity: 0; overflow: hidden;
+  font-size: 13px; color: var(--faint-ink);
+  transition: max-width .18s var(--ease-soft), opacity .12s, transform .18s var(--ease-soft), color .18s;
+}
+.portal-rail[data-expanded] .portal-rail-chevron { max-width: 16px; opacity: 1; }
+.portal-rail-chevron[data-open] { transform: rotate(90deg); color: var(--dim); }
+
+/* tooltips only make sense while the rail is collapsed */
 .portal-rail-link::after {
   content: attr(data-tip);
   position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%);
@@ -52,23 +100,34 @@
   opacity: 0; pointer-events: none; transition: opacity .15s;
   box-shadow: 0 6px 18px -10px color-mix(in oklab, var(--ink) 40%, transparent);
 }
-.portal-rail-link:hover::after, .portal-rail-link:focus-visible::after { opacity: 1; }
-/* the flyout replaces the tooltip while open */
-.portal-rail-item[data-open] .portal-rail-link::after { display: none; }
-.portal-rail-fly {
-  position: absolute; left: calc(100% + 12px); top: -4px; z-index: 70;
-  min-width: 170px; padding: 6px;
-  display: flex; flex-direction: column;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: 0 16px 36px rgba(15, 23, 42, .12);
-  animation: navmenu-in .16s var(--ease-soft);
-}
-/* About's island at the foot of the rail */
-.portal-rail-bottom {
-  margin-top: auto; padding: 4px;
-  display: flex; flex-direction: column; gap: 5px;
+.portal-rail:not([data-expanded]) .portal-rail-link:hover::after,
+.portal-rail:not([data-expanded]) .portal-rail-link:focus-visible::after { opacity: 1; }
+.portal-rail-pin::after {
+  content: attr(data-tip);
+  position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%);
+  white-space: nowrap; padding: 4px 10px;
   border: 1px solid var(--line); border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--surface); color: var(--ink);
+  font-size: 11.5px; line-height: 1.4; z-index: 60;
+  opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+.portal-rail:not([data-expanded]) .portal-rail-pin:hover::after { opacity: 1; }
+
+/* the accordion drop-down: leaves render as navmenu-item rows */
+.portal-rail-sub {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 2px 0 6px 26px;
+  animation: navmenu-in .14s var(--ease-soft);
+}
+.portal-rail-sub .navmenu-item { font-size: 12.5px; padding: 6px 9px; }
+.portal-rail-sub .navmenu-sep { margin: 4px 9px; }
+
+/* the bottom island: About + (admin) the Admin desk group, each its own
+   accordion, then the agent orb and feedback buttons */
+.portal-rail-bottom {
+  margin-top: auto; padding-top: 8px;
+  display: flex; flex-direction: column; gap: 3px;
+  border-top: 1px solid var(--line);
 }
 
 /* ============================================================

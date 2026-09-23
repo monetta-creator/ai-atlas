@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import { getWorldview, getNodeOptions } from '@/lib/data';
 import {
   createPositionAction,
@@ -20,7 +20,9 @@ import type { NodeOption } from '@/lib/types';
 export const dynamic = 'force-dynamic';
 
 export default async function WorldviewPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/worldview', 'Worldview & spine');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const [{ spine, positions }, nodes] = await Promise.all([getWorldview(), getNodeOptions()]);
