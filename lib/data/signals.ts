@@ -312,3 +312,66 @@ export async function getRelatedSignals(
     [signalId, codes]
   );
 }
+
+// ---- Draft review sprint (0055) --------------------------------------------
+// Every ACTIVE draft with its touch details, high significance first, newest
+// first, so the one-at-a-time review works the most consequential drafts
+// before the queue's long tail. Admin-only by construction (the caller gates).
+export async function getSprintDrafts(limit = 500): Promise<Signal[]> {
+  return q<Signal>(
+    `select ${SIGNAL_COLUMNS}, s.touch_details, s.drafted_by
+       from signals s
+       left join sources src on src.id = s.source_id
+      where s.is_published = false and s.archived_at is null
+      order by case s.significance when 'high' then 0 when 'medium' then 1 else 2 end,
+               s.created_at desc
+      limit $1`,
+    [Math.max(1, Math.min(2000, limit))]
+  );
+}
+
+export interface DraftBacklogStats {
+  active: number;
+  archived: number;
+  noTouches: number;      // active drafts touching no claim
+  low: number;            // active low-significance drafts
+  stale: number;          // active drafts older than staleDays
+  staleDays: number;
+  high: number;
+  medium: number;
+  dueForPromotion: number; // eligible under the policy right now
+  autoPublished30d: number;
+}
+
+// The backlog bar's counts: what each judgment-free cut would archive, and how
+// many drafts the promotion policy would publish on its next sweep.
+export async function getDraftBacklogStats(policy: {
+  afterHours: number; from: string;
+}, staleDays = 45): Promise<DraftBacklogStats> {
+  const row = await one<Omit<DraftBacklogStats, 'staleDays'>>(
+    `select
+       count(*) filter (where not is_published and archived_at is null)::int as active,
+       count(*) filter (where not is_published and archived_at is not null)::int as archived,
+       count(*) filter (where not is_published and archived_at is null
+                          and coalesce(array_length(claim_touches,1),0) = 0)::int as "noTouches",
+       count(*) filter (where not is_published and archived_at is null and significance = 'low')::int as low,
+       count(*) filter (where not is_published and archived_at is null
+                          and created_at < now() - ($1::int * interval '1 day'))::int as stale,
+       count(*) filter (where not is_published and archived_at is null and significance = 'high')::int as high,
+       count(*) filter (where not is_published and archived_at is null and significance = 'medium')::int as medium,
+       count(*) filter (where not is_published and archived_at is null and origin = 'pipeline'
+                          and significance = 'high' and coalesce(array_length(claim_touches,1),0) >= 1
+                          and created_at >= $2::timestamptz
+                          and created_at < now() - ($3::int * interval '1 hour'))::int as "dueForPromotion",
+       count(*) filter (where auto_published_at > now() - interval '30 days')::int as "autoPublished30d"
+     from signals`,
+    [staleDays, policy.from, policy.afterHours]
+  );
+  return {
+    active: row?.active ?? 0, archived: row?.archived ?? 0, noTouches: row?.noTouches ?? 0,
+    low: row?.low ?? 0, stale: row?.stale ?? 0, high: row?.high ?? 0, medium: row?.medium ?? 0,
+    dueForPromotion: row?.dueForPromotion ?? 0, autoPublished30d: row?.autoPublished30d ?? 0,
+    staleDays,
+  };
+}
+

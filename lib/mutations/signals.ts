@@ -1,4 +1,4 @@
-import { one, exec, withTx } from '../db';
+import { q, one, exec, withTx } from '../db';
 import type { PoolClient } from 'pg';
 import type {
   Direction, Significance, SignalLens,
@@ -147,6 +147,14 @@ export async function createDraftForCandidate(
     }
     // Always a draft (is_published=false) — publishing is the human gate, same as the manual path.
     const id = await insertSignalRow(c, { ...input, is_published: false, origin: input.origin ?? 'pipeline' });
+    // Low-significance pipeline drafts are stored but set aside at intake (0055): the
+    // row, its candidate and its links all stay; only the review queue skips them.
+    if (input.significance === 'low' && (input.origin ?? 'pipeline') === 'pipeline') {
+      await c.query(
+        `update signals set archived_at = now(), archive_reason = 'low_at_intake' where id = $1`,
+        [id]
+      );
+    }
     // Claim the candidate AND record the analysis outcome in the same locked transaction,
     // so a draft and its 'drafted' status can never disagree (migration 0007).
     await c.query(
@@ -238,21 +246,75 @@ export async function setSignalPublished(id: string, published: boolean): Promis
 // Archive / unarchive a DRAFT — set it aside (out of the active queue + dedupe) without
 // deleting, or restore it. Archiving only applies to unpublished signals (a published one
 // isn't a draft sitting in the queue); the is_published=false guard makes that explicit.
-export async function setSignalArchived(id: string, archived: boolean): Promise<void> {
+export async function setSignalArchived(id: string, archived: boolean, reason: string | null = null): Promise<void> {
   if (archived) {
     await exec(
-      `update signals set archived_at = now(), updated_at = now() where id = $1 and is_published = false`,
-      [id]
+      `update signals set archived_at = now(), archive_reason = $2, updated_at = now()
+        where id = $1 and is_published = false`,
+      [id, reason]
     );
   } else {
     // Symmetric is_published=false guard (defense-in-depth): a published signal never carries
     // archived_at, so unarchiving one is a no-op either way, but keep the invariant explicit.
-    await exec(`update signals set archived_at = null, updated_at = now() where id = $1 and is_published = false`, [id]);
+    await exec(`update signals set archived_at = null, archive_reason = null, updated_at = now() where id = $1 and is_published = false`, [id]);
   }
 }
 
 export async function deleteSignal(id: string): Promise<void> {
   await exec(`delete from signals where id = $1`, [id]);
+}
+
+// ---- Backlog cuts (0055) ----------------------------------------------------
+// Three judgment-free archive moves over ACTIVE drafts. Archive, never delete:
+// every row, candidate and link the crons pulled stays in the database; the
+// review queue just stops showing them. `stale_days` is the age cutoff for
+// the third cut.
+export type BulkArchiveKind = 'no_touches' | 'low' | 'stale';
+
+export async function archiveDraftsBulk(kind: BulkArchiveKind, staleDays = 45): Promise<number> {
+  const where =
+    kind === 'no_touches' ? `coalesce(array_length(claim_touches, 1), 0) = 0` :
+    kind === 'low' ? `significance = 'low'` :
+    `created_at < now() - ($2::int * interval '1 day')`;
+  const params: unknown[] = [kind];
+  if (kind === 'stale') params.push(Math.max(1, Math.min(365, Math.floor(staleDays))));
+  const r = await q<{ id: string }>(
+    `update signals
+        set archived_at = now(), archive_reason = $1, updated_at = now()
+      where is_published = false and archived_at is null and ${where}
+      returning id`,
+    params
+  );
+  return r.length;
+}
+
+// ---- Promotion policy (0055) --------------------------------------------------
+// Publishes every eligible draft: pipeline origin, high significance, at least
+// one claim touch, still active (not archived = not vetoed), created at or
+// after the policy start, and older than the veto window. Each publish goes
+// through setSignalPublished so evidence materializes exactly as a human
+// click would; auto_published_at records that the policy did it.
+export async function publishDueDrafts(opts: {
+  afterHours: number; from: string; limit?: number;
+}): Promise<string[]> {
+  const due = await q<{ id: string }>(
+    `select id from signals
+      where is_published = false and archived_at is null
+        and origin = 'pipeline' and significance = 'high'
+        and coalesce(array_length(claim_touches, 1), 0) >= 1
+        and created_at >= $1::timestamptz
+        and created_at < now() - ($2::int * interval '1 hour')
+      order by created_at asc
+      limit $3`,
+    [opts.from, Math.max(1, Math.floor(opts.afterHours)), Math.max(1, Math.min(200, opts.limit ?? 50))]
+  );
+  const published: string[] = [];
+  for (const { id } of due) {
+    await setSignalPublished(id, true);
+    await exec(`update signals set auto_published_at = now() where id = $1`, [id]);
+    published.push(id);
+  }
+  return published;
 }
 
 // ---- Draft-queue dedupe (manual consolidate / discard) ---------------------
@@ -361,7 +423,9 @@ export async function saveDedupeScan(rec: DedupeRecommendation | null): Promise<
 }
 
 // Discard a single unpublished draft: terminalize its candidate so it won't re-queue, then
-// delete it. Refuses to touch a published signal. Returns the affected run ids (0 or 1).
+// ARCHIVE it (0055: nothing the crons pulled is deleted; the row stays reachable under the
+// archived view with archive_reason 'dedupe_discard'). Refuses to touch a published
+// signal. Returns the affected run ids (0 or 1).
 export async function discardDraftSignal(signalId: string): Promise<string[]> {
   return withTx(async (c) => {
     const row = (await c.query(`select is_published from signals where id = $1 for update`, [signalId]))
@@ -381,7 +445,10 @@ export async function discardDraftSignal(signalId: string): Promise<string[]> {
         where signal_id = $1`,
       [signalId]
     );
-    await c.query(`delete from signals where id = $1`, [signalId]);
+    await c.query(
+      `update signals set archived_at = now(), archive_reason = 'dedupe_discard', updated_at = now() where id = $1`,
+      [signalId]
+    );
     return runIds;
   });
 }

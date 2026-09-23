@@ -334,3 +334,47 @@ export async function setPipelineAnalysisModelsAction(models: string[]): Promise
   await m.setPipelineAnalysisModels(clean);
   revalidatePath('/pipeline');
 }
+
+// ---- Backlog cuts, review sprint, promotion (0055) ------------------------
+
+const BULK_KINDS = new Set(['no_touches', 'low', 'stale']);
+
+// One judgment-free archive move over the active drafts. Archive, never delete.
+export async function bulkArchiveDraftsAction(kind: string): Promise<number> {
+  await requireAdmin();
+  if (!BULK_KINDS.has(kind)) throw new Error('Unknown bulk action.');
+  const n = await m.archiveDraftsBulk(kind as m.BulkArchiveKind);
+  revalidatePath('/', 'layout');
+  return n;
+}
+
+// The sprint's per-draft decision: publish (the human gate, evidence
+// materializes) or archive (set aside, kept). Skip is client-side only.
+export async function sprintDecisionAction(id: string, decision: 'publish' | 'archive'): Promise<void> {
+  await requireAdmin();
+  if (!UUID_RE.test(id)) throw new Error('Bad signal id.');
+  if (decision === 'publish') await m.setSignalPublished(id, true);
+  else if (decision === 'archive') await m.setSignalArchived(id, true, 'sprint');
+  else throw new Error('Unknown decision.');
+  revalidatePath('/', 'layout');
+}
+
+// Run the promotion sweep now (the cron runs it every weekday window).
+export async function promoteDueDraftsAction(): Promise<number> {
+  await requireAdmin();
+  const prefs = await getPipelinePrefs();
+  if (!prefs.auto_publish_high) return 0;
+  const ids = await m.publishDueDrafts({ afterHours: prefs.auto_publish_after_hours, from: prefs.auto_publish_from });
+  if (ids.length) revalidatePath('/', 'layout');
+  return ids.length;
+}
+
+export async function setAutoPublishAction(enabled: boolean, afterHours: number): Promise<void> {
+  await requireAdmin();
+  const h = Number(afterHours);
+  if (!Number.isFinite(h) || h < 1 || h > 720) throw new Error('The veto window must be 1 to 720 hours.');
+  await m.setPipelineAutoPublish(Boolean(enabled), h);
+  revalidatePath('/signals/drafts');
+  revalidatePath('/pipeline');
+}
+

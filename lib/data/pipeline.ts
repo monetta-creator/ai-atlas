@@ -29,16 +29,34 @@ export async function getRuns(limit = 20): Promise<PipelineRun[]> {
 
 // The /pipeline prefs singleton (0042). Missing row = enabled with no A/B
 // models (the Sonnet fallback) and the default utility model.
-export async function getPipelinePrefs(): Promise<{
-  enabled: boolean; analysis_models: string[]; utility_model: string | null;
-}> {
-  const row = await one<{ enabled: boolean; analysis_models: string[]; utility_model: string | null }>(
-    `select enabled, analysis_models, utility_model from pipeline_prefs where id = true`
+export interface PipelinePrefs {
+  enabled: boolean;
+  analysis_models: string[];
+  utility_model: string | null;
+  // The promotion policy (0055): high-significance pipeline drafts with a
+  // claim touch publish on their own after the veto window, for drafts
+  // created at or after auto_publish_from.
+  auto_publish_high: boolean;
+  auto_publish_after_hours: number;
+  auto_publish_from: string;
+}
+
+export async function getPipelinePrefs(): Promise<PipelinePrefs> {
+  const row = await one<{
+    enabled: boolean; analysis_models: string[]; utility_model: string | null;
+    auto_publish_high: boolean; auto_publish_after_hours: number; auto_publish_from: string;
+  }>(
+    `select enabled, analysis_models, utility_model,
+            auto_publish_high, auto_publish_after_hours, auto_publish_from::text as auto_publish_from
+       from pipeline_prefs where id = true`
   );
   return {
     enabled: row?.enabled ?? true,
     analysis_models: row?.analysis_models ?? [],
     utility_model: row?.utility_model ?? null,
+    auto_publish_high: row?.auto_publish_high ?? true,
+    auto_publish_after_hours: row?.auto_publish_after_hours ?? 48,
+    auto_publish_from: row?.auto_publish_from ?? new Date().toISOString(),
   };
 }
 

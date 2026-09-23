@@ -144,3 +144,49 @@ a.touch-chip:hover { color: var(--accent); border-color: color-mix(in oklab, var
   a { color: inherit; text-decoration: none; }
 }
 
+/* ---- Draft queue: backlog bar (.dbb-*) + review sprint (.ds-*) (0055) ---- */
+.dbb { background: var(--surface); border: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.dbb-counts { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13.5px; color: var(--dim); }
+.dbb-counts strong { color: var(--ink); }
+.dbb-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.dbb-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint-ink); min-width: 140px; }
+.dbb-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); }
+.dbb-toggle input { accent-color: var(--accent); }
+.dbb-hours { width: 64px; padding: 5px 8px; font-size: 13px; }
+.dbb-muted { font-size: 12px; color: var(--faint-ink); font-family: var(--font-mono); }
+.dbb-note { margin: 0; font-size: 12.5px; color: var(--accent); }
+.dbb .dot, .ds .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--faint-ink); opacity: .6; display: inline-block; }
+
+.ds { margin-top: 12px; }
+.ds-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-family: var(--font-mono); font-size: 12px; color: var(--faint-ink); margin-bottom: 10px; }
+.ds-card { background: var(--surface); border: 1px solid var(--frame); padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; border-left-width: 4px; }
+.ds-card[data-sig="high"] { border-left-color: var(--heat-4); }
+.ds-card[data-sig="medium"] { border-left-color: var(--heat-2); }
+.ds-card[data-sig="low"] { border-left-color: var(--faint-ink); }
+.ds-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; color: var(--faint-ink); }
+.ds-sig { text-transform: uppercase; letter-spacing: .1em; color: var(--ink); }
+.ds-lens { padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; }
+.ds-title { font-family: var(--font-display); font-weight: 600; font-size: 22px; line-height: 1.25; margin: 0; color: var(--ink); text-wrap: pretty; }
+.ds-summary { margin: 0; font-size: 15px; line-height: 1.6; color: var(--dim); }
+.ds-source { margin: 0; font-size: 13px; }
+.ds-source a { color: var(--accent); }
+.ds-touches { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.ds-touch { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-left-width: 3px; }
+.ds-touch[data-dir="supports"] { border-left-color: var(--supports); }
+.ds-touch[data-dir="contradicts"] { border-left-color: var(--contradicts); }
+.ds-touch[data-dir="neutral"] { border-left-color: var(--faint-ink); }
+.ds-touch-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ds-touch-statement { font-size: 13.5px; color: var(--ink); line-height: 1.45; }
+.ds-touch-reason { font-size: 13px; color: var(--dim); line-height: 1.5; }
+.ds-dir { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint-ink); margin-right: 6px; }
+.ds-none { color: var(--faint-ink); font-size: 13px; margin: 0; }
+.ds-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ds-actions kbd { font-family: var(--font-mono); font-size: 10.5px; margin-left: 6px; padding: 1px 5px; border: 1px solid currentColor; border-radius: 3px; opacity: .7; }
+.ds-error { margin: 0; font-size: 12.5px; color: var(--heat-4); }
+.ds-empty { background: var(--surface); border: 1px solid var(--line); padding: 24px; display: flex; align-items: center; gap: 14px; color: var(--dim); }
+.ds-empty p { margin: 0; }
+.ds-list > summary { cursor: pointer; font-size: 13.5px; color: var(--dim); list-style: none; display: flex; align-items: center; gap: 8px; }
+.ds-list > summary::-webkit-details-marker { display: none; }
+.ds-list > summary::before { content: '▸'; font-size: 11px; color: var(--faint-ink); }
+.ds-list[open] > summary::before { content: '▾'; }
+

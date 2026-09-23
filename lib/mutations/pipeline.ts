@@ -213,6 +213,23 @@ export async function setPipelineEnabled(enabled: boolean): Promise<void> {
   );
 }
 
+// The promotion policy toggle + veto window (0055). Turning the policy back on
+// restarts the eligibility clock (auto_publish_from = now) so drafts that
+// accumulated while it was off stay a human review.
+export async function setPipelineAutoPublish(enabled: boolean, afterHours: number): Promise<void> {
+  await exec(
+    `insert into pipeline_prefs (id, auto_publish_high, auto_publish_after_hours)
+     values (true, $1, $2)
+     on conflict (id) do update
+        set auto_publish_high = excluded.auto_publish_high,
+            auto_publish_after_hours = excluded.auto_publish_after_hours,
+            auto_publish_from = case when excluded.auto_publish_high and not pipeline_prefs.auto_publish_high
+                                     then now() else pipeline_prefs.auto_publish_from end,
+            updated_at = now()`,
+    [enabled, Math.max(1, Math.min(720, Math.floor(afterHours)))]
+  );
+}
+
 export async function setPipelineAnalysisModels(models: string[]): Promise<void> {
   await exec(
     `insert into pipeline_prefs (id, analysis_models) values (true, $1::text[])
