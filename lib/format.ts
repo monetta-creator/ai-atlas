@@ -194,6 +194,7 @@ const FEATURE_LABEL: Record<string, string> = {
   signal_analysis: 'Signal briefing + counterpoint',
   signal_ask: 'Ask this signal',
   ask: 'Ask the Atlas',
+  ask_classify: 'Ask classifier',
   portal_ask: 'Ask · portal',
   ask_deep: 'Ask · deep research',
   ask_verify: 'Ask · answer check',

@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { ArticleHit, AtlasSearchHit, PeekKind, PeekPayload } from './search';
 import type { AskCostReport, AskWebSource } from './history';
+import type { DeclinePayload, Lane } from './lanes';
 
 // Pure helpers for the deep-research loop behind /api/ask/deep: the signal-tag
 // minter, the tool definitions and their input validation, tool-result
@@ -300,6 +301,13 @@ export const ndDone = (signals: Record<string, string>): string => ndLine({ type
 export const ndVerify = (report: VerifyReport): string => ndLine({ type: 'verify', report });
 export const ndCost = (report: AskCostReport): string => ndLine({ type: 'cost', report });
 export const ndWebSources = (sources: AskWebSource[]): string => ndLine({ type: 'web_sources', sources });
+// Emitted first, before any research: which lane the question landed in and
+// why (a short human-readable reason, never shown as-is but useful in logs).
+export const ndLane = (lane: Lane, reason: string): string => ndLine({ type: 'lane', lane, reason });
+// Sent instead of the research loop when the lane is 'unrelated': no model
+// call, no cost row, the client renders the same decline card the plain
+// routes send over the DECLINE_MARKER sentinel.
+export const ndDecline = (payload: DeclinePayload): string => ndLine({ type: 'decline', payload });
 
 export const STATUS_START = 'Reading the question and the map';
 export const STATUS_WRITING = 'Writing the answer';
@@ -333,6 +341,10 @@ export interface VerifyReport {
   // the deterministic layer cannot see (search results arrive encrypted), so
   // the UI softens those lines instead of flagging them.
   webSearched?: boolean;
+  // The answer carried a @@BEYOND@@ section, which verification never reads
+  // (only splitBeyond(answer).atlas is checked): the UI uses this to say the
+  // Beyond block was not checked against the records.
+  beyondPresent?: boolean;
 }
 
 const normText = (s: string): string =>
@@ -449,7 +461,8 @@ export function parseVerifyOutput(
       const f = raw as Record<string, unknown>;
       const excerpt = typeof f.excerpt === 'string' ? f.excerpt.trim().slice(0, 140) : '';
       const issue = typeof f.issue === 'string' ? f.issue.trim().slice(0, 280) : '';
-      if (excerpt && issue) flags.push({ excerpt, issue });
+      // The verifier is told never to write an em dash and still does now and then.
+      if (excerpt && issue) flags.push({ excerpt: excerpt.replace(/\s*\u2014\s*/g, ', '), issue: issue.replace(/\s*\u2014\s*/g, ', ') });
     }
   }
   const verdictLanguage: string[] = [];

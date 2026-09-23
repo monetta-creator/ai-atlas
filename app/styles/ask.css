@@ -158,6 +158,54 @@
 /* empty state */
 .ask-hero { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 7vh 0 0; text-align: center; }
 .ask-hero h1 { font-family: var(--font-headline); font-weight: 400; font-size: clamp(28px, 3.6vw, 44px); margin: 0; }
+.ask-start-link {
+  font-size: 12.5px; color: var(--accent); background: none; border: none;
+  cursor: pointer; padding: 0; text-decoration: none;
+}
+.ask-start-link:hover { text-decoration: underline; }
+
+/* the lane chip (2026-09-23): how much of the Atlas actually covers this
+   question, shown at the top of every classified assistant turn. */
+.ask-lane {
+  display: inline-block; margin: 0 0 8px;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.05em;
+  padding: 2px 8px; border: 1px solid var(--line); border-radius: 2px;
+  color: var(--faint-ink);
+}
+.ask-lane[data-lane="covered"] { color: var(--faint-ink); }
+.ask-lane[data-lane="thin"] { color: var(--heat-2); border-color: color-mix(in oklab, var(--heat-2) 45%, var(--line)); }
+.ask-lane[data-lane="adjacent"] { color: var(--heat-3); border-color: color-mix(in oklab, var(--heat-3) 45%, var(--line)); }
+.ask-lane[data-lane="unrelated"] { color: var(--ink-faint); }
+
+/* the Beyond the Atlas block: what the answer draws from once the records
+   run out, always visibly separated from the cited head. */
+.ask-beyond {
+  margin-top: 14px; padding: 12px 14px;
+  border-left: 3px solid var(--heat-3);
+  background: color-mix(in oklab, var(--heat-3) 7%, var(--surface));
+}
+.ask-beyond-kicker {
+  margin: 0 0 6px; font-family: var(--font-mono); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--heat-3);
+}
+.ask-beyond-body { font-size: 14.5px; line-height: 1.68; color: var(--ink); white-space: pre-wrap; }
+
+/* the coded decline card: no model call, dry copy, a way back to what the
+   Atlas actually covers. */
+.ask-decline {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px 18px; display: flex; flex-direction: column; gap: 10px;
+}
+.ask-decline-headline { font-family: var(--font-display); font-weight: 600; font-size: 16px; margin: 0; }
+.ask-decline-body { font-size: 13.5px; line-height: 1.6; color: var(--dim); margin: 0; }
+.ask-decline-qs { display: flex; flex-direction: column; gap: 2px; }
+.ask-decline-q {
+  display: flex; align-items: baseline; gap: 6px;
+  font-size: 13px; color: var(--ink); padding: 3px 0;
+}
+.ask-decline-q:hover { color: var(--accent); text-decoration: none; }
+.ask-decline-q span { color: var(--faint-ink); }
+.ask-decline-starters { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* citation peek panel: desktop third column, mobile right sheet (one instance;
    the media block below repositions it). Backdrop exists only on mobile. */

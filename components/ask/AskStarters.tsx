@@ -1,6 +1,7 @@
 'use client';
 
 import ExamplePill from '@/components/ask/ExamplePill';
+import StartHere from '@/components/lobby/StartHere';
 
 // The empty-state hero: headline face title, one grounding line, and the
 // typing example pill (the lobby launcher's idiom, replacing the old labeled
@@ -22,6 +23,7 @@ export default function AskStarters({
         to its record{locked ? '. Unlock below with the team key to start.' : '.'}
       </p>
       <ExamplePill onPick={onPick} />
+      <StartHere variant="link" />
     </div>
   );
 }

@@ -30,13 +30,14 @@ export default function AskComposer({
     onSend(t);
   }
 
+  const freshNote = ' Recent-events questions still search the web automatically.';
   const hint = researchMode
     ? web
       ? 'researches the Atlas, then the web, before answering · sources listed under the answer'
-      : 'researches the Atlas in rounds before answering, may take a minute'
+      : `researches the Atlas in rounds before answering, may take a minute.${freshNote}`
     : web
       ? 'web search on: the Atlas stays primary, the web fills gaps, sources listed under the answer'
-      : 'grounded in the Atlas database · enter to send, shift+enter for a new line';
+      : `grounded in the Atlas database · enter to send, shift+enter for a new line.${freshNote}`;
 
   return (
     <div className="ask-composer">

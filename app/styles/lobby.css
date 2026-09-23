@@ -270,3 +270,57 @@
 .lwc-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
 .lwc-err { font-size: 12px; color: var(--heat-4); margin-top: 8px; }
 
+/* ============================================================
+   "WHERE DO I START?" — components/lobby/StartHere.tsx. The round
+   ? button lives in the .lobby-ask row; the dialog reuses the
+   .fb-card shell (app/styles/feedback.css) at a wider stage.
+   ============================================================ */
+.lobby-start-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; margin: 3px 3px 3px 0; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--surface); color: var(--accent);
+  font-family: var(--font-mono); font-weight: 600; font-size: 14px; cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.lobby-start-btn:hover {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+  background: color-mix(in oklab, var(--accent) 8%, var(--surface));
+}
+
+.fb-card.sh-card { width: min(720px, 100%); }
+.sh-h {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--faint-ink); margin: 18px 0 6px;
+}
+.sh-what { font-size: 15px; line-height: 1.6; color: var(--dim); margin: 0 0 8px; }
+.sh-why {
+  margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.6;
+  color: var(--dim); display: grid; gap: 4px;
+}
+
+.sh-table-wrap { overflow-x: auto; }
+.sh-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sh-table th, .sh-table td { padding: 6px 10px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+.sh-table thead th {
+  border-top: none; font-family: var(--font-mono); font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint-ink); font-weight: 600;
+}
+.sh-table tbody th { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.sh-table td { color: var(--dim); }
+.sh-table-atlas { color: var(--ink); font-weight: 600; }
+
+.sh-portals { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 0; }
+@media (max-width: 520px) { .sh-portals { grid-template-columns: 1fr; } }
+.sh-portal {
+  display: flex; flex-direction: column; gap: 2px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 2px; color: var(--ink);
+  transition: border-color .15s;
+}
+.sh-portal:hover { border-color: var(--accent); text-decoration: none; }
+.sh-portal-icon svg { width: 18px; height: 18px; color: var(--accent); }
+.sh-portal-name { font-family: var(--font-display); font-weight: 600; font-size: 13.5px; }
+.sh-portal-line { font-size: 12.5px; color: var(--dim); line-height: 1.4; }
+
+.sh-starters { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.sh-foot { margin: 4px 0 0; font-size: 12.5px; }
+

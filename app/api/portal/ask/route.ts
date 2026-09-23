@@ -1,8 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { isPortal } from '@/lib/auth';
 import { priceUsage, recordApiCall } from '@/lib/cost';
-import { buildAskContext } from '@/lib/ask/retrieve';
+import { buildAskContext, loadNamespace } from '@/lib/ask/retrieve';
 import { askSystem, conversationMessages } from '@/lib/ask/prompt';
+import { classifyQuestion, beatDescriptionFrom, questionLinksFrom } from '@/lib/ask/classify';
+import { decideLane, composeDecline, encodeDecline, priorUserTurn } from '@/lib/ask/lanes';
+import { EXAMPLE_QUESTIONS } from '@/components/ask/starters';
 import {
   clampHistory, clampSignalOffset, parseAskBody, retrievalQuery,
   collectWebSources, encodeCostReport, encodeWebSources,
@@ -56,18 +59,30 @@ export async function POST(req: Request): Promise<Response> {
     );
   }
 
-  const ctx = await buildAskContext(retrievalQuery(msgs), { mode: 'portal', tagStart });
+  const ns = await loadNamespace();
+  const latest = msgs[msgs.length - 1].content;
+  const [ctx, cls] = await Promise.all([
+    buildAskContext(retrievalQuery(msgs), { mode: 'portal', tagStart, ns }),
+    classifyQuestion(latest, beatDescriptionFrom(ns), priorUserTurn(msgs)),
+  ]);
+  const lane = decideLane({
+    hitCount: ctx.hitCount, maxRank: ctx.maxRank, explicit: ctx.explicit,
+    beat: cls.beat, followUp: msgs.length > 1,
+  });
+  // Auto web: a thin/adjacent question that hinges on recent events searches
+  // even with the composer's toggle off; portal keyholders may use web already.
+  const useWeb = webOn || (cls.fresh && lane !== 'covered');
+
   const enc = new TextEncoder();
   const headers = {
     ...TEXT_HEADERS,
+    'X-Ask-Lane': lane,
     'X-Ask-Signals': JSON.stringify(Object.fromEntries(ctx.signalRefs.map((r) => [r.tag, r.id]))),
   };
 
-  if (ctx.hitCount === 0 && msgs.length === 1 && !webOn) {
-    return new Response(
-      'Not in the Atlas. Nothing in the Atlas matched that. Try a topic, a claim code like 2.3, or a concept name.',
-      { headers }
-    );
+  if (lane === 'unrelated') {
+    const decline = composeDecline(cls.topic, questionLinksFrom(ns), EXAMPLE_QUESTIONS.slice(0, 3));
+    return new Response(encodeDecline(decline), { headers });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -81,9 +96,9 @@ export async function POST(req: Request): Promise<Response> {
         const params = {
           model: MODEL,
           max_tokens: 1500,
-          system: [{ type: 'text', text: askSystem(webOn), cache_control: { type: 'ephemeral' } }],
-          messages: conversationMessages(msgs, ctx, { web: webOn }),
-          ...(webOn
+          system: [{ type: 'text', text: askSystem(useWeb, lane, cls.fresh), cache_control: { type: 'ephemeral' } }],
+          messages: conversationMessages(msgs, ctx, { web: useWeb, lane }),
+          ...(useWeb
             ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] }
             : {}),
         };
@@ -99,7 +114,7 @@ export async function POST(req: Request): Promise<Response> {
           seenSrc.add(c.url);
           webSources.push({ url: c.url.slice(0, 600), title: String(c.title ?? '').slice(0, 200) || c.url });
         };
-        if (webOn) {
+        if (useWeb) {
           ms.on('streamEvent', (ev) => {
             const e = ev as {
               type?: string;
@@ -135,7 +150,7 @@ export async function POST(req: Request): Promise<Response> {
           rounds: 1,
           model: MODEL,
         })));
-        if (webOn) {
+        if (useWeb) {
           for (const s of collectWebSources(final)) addSource({ type: 'web_search_result_location', ...s });
           if (webSources.length) controller.enqueue(enc.encode(encodeWebSources(webSources.slice(0, 8))));
         }

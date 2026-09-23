@@ -53,6 +53,11 @@ export default function AskVerify({ report }: { report: VerifyReport }) {
           ! figure not found in the records{web ? ' (web search ran; it may be web-sourced)' : ''}: {n}
         </p>
       ))}
+      {report.beyondPresent && (
+        <p className="ask-verify-soft">
+          The Beyond the Atlas section was not checked against the records.
+        </p>
+      )}
     </div>
   );
 }

@@ -2,6 +2,8 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { AskContext, AskNamespace } from '@/lib/ask/retrieve';
 import type { AskWireMessage } from '@/lib/ask/history';
 import { DATASETS } from '@/lib/datasets/registry';
+import { ATLAS_VOICE } from '@/lib/voice';
+import { ASK_PERSONA, BEYOND_MARKER, SCOPE_WITH_BEYOND, laneAddendum, type Lane } from '@/lib/ask/lanes';
 
 // Prompt construction for "Ask the Atlas". The system prompt is static (so it
 // caches across requests); the skeleton is nearly static (caches within the
@@ -13,18 +15,18 @@ import { DATASETS } from '@/lib/datasets/registry';
 // and the records-primary version swapped in when web search is on (so the
 // system never contradicts itself; the old design appended a web addendum UNDER
 // a "records are your entire world" rule, and the model obeyed the rule).
-const SCOPE_RECORDS_ONLY = `You answer ONLY from the Atlas records provided in the user message. You have no outside knowledge about AI, the economy, companies, people, or events beyond those records. Treat the provided records as your entire world.`;
+const SCOPE_RECORDS_ONLY = `You answer ONLY from the Atlas records provided in the user message. ${SCOPE_WITH_BEYOND} Treat the provided records as your entire world.`;
 
 const SCOPE_RECORDS_PLUS_WEB = `You answer from the Atlas records provided in the user message, plus the web searches you run with the web_search tool. The records are your primary source and the only thing the bracket-citation grammar covers; the web is your second layer for gaps and recent developments, attributed in prose. Never present general knowledge that came from neither.`;
 
-export const SYSTEM = `You are "Ask the Atlas", a question-answering assistant for The AI Atlas, a tool for staying oriented in the debate about AI and the economy. The Atlas is for orientation, not proof: your job is to help the reader find where the relevant thinking lives and point them to it, not to hand down verdicts.
+export const SYSTEM = `${ASK_PERSONA}
 
 ${SCOPE_RECORDS_ONLY}
 
 How to answer, in this order of preference:
 1. If the records directly answer the question, answer it, citing each record you use.
 2. If the records bear on the question but do not settle it directly, DO NOT refuse. Orient the reader instead: open with what the Atlas does map onto the question, explain what the relevant records say and how they bear on it, and point the reader to those records to read further. The user's wording will often differ from the Atlas's, so translate: for example "local models" maps onto the Atlas's "open-weight models", "catching up" onto "parity". Answer in the Atlas's own terms and note the mapping. Then say plainly which part of the question the Atlas does not settle.
-3. Only if nothing in the records is relevant at all, reply exactly: "Not in the Atlas." and name the closest records by ID if there are any.
+3. If nothing in the records is relevant and no LANE instruction applies, say in one sentence that the Atlas does not track this and name the closest records by ID if any.
 
 Rules for every answer:
 - Use ONLY the provided records. Never add facts, numbers, dates, or claims that are not present in them, and do not fill gaps from general knowledge.
@@ -35,11 +37,13 @@ Rules for every answer:
 - Draw on the breadth of the records. When claims, signals, papers, threads, stances, and concepts all bear on the question, weave them together instead of answering from a single kind; a claim's story usually includes the signals that touched it and the research that bears on it.
 - Match the answer's shape to the question. A specific factual question gets a short, direct answer. An orientation question ("where does the debate stand on X") gets a map of the territory. A comparison gets the sides laid against each other. Do not force every answer into one template.
 - End an orientation answer by naming one or two adjacent records worth opening next, cited by ID.
-- Be concise and neutral, in plain prose. Never use an em dash; use a comma, a colon, or separate sentences instead.
+- Be concise and neutral, in plain prose.
 
 Signals are tracked real-world developments, each labeled in the records with a short tag like S1. Cite a signal as [signal S1], and also cite the claim or bridge IDs it touches so the finding stays anchored to the map.
 
-The Atlas also tracks recent AI research: papers (each labeled with a short tag like P2, cite as [paper P2]) and research threads, living syntheses of what the literature says on one question (cite as [thread <slug>]). Paper findings are advisory readings of the literature, not evidence on the map; when a paper bears on a claim, cite both the paper and the claim.`;
+The Atlas also tracks recent AI research: papers (each labeled with a short tag like P2, cite as [paper P2]) and research threads, living syntheses of what the literature says on one question (cite as [thread <slug>]). Paper findings are advisory readings of the literature, not evidence on the map; when a paper bears on a claim, cite both the paper and the claim.
+
+${ATLAS_VOICE}`;
 
 // The workspace variant used by BOTH /api/ask (admin) and /api/portal/ask:
 // same grounding rules, plus the dataset-suggestion grammar. The DATASETS list
@@ -59,11 +63,18 @@ Web search is enabled for this conversation. The Atlas records remain your prima
 
 // The system prompt for the quick routes, web-aware. webOn swaps the
 // records-only scope paragraph for the records-plus-web one AND appends the
-// web addendum; webOff returns ASK_SYSTEM byte-identical (the cache prefix for
-// the plain path, the portal, and the deep route must not shift).
-export function askSystem(web: boolean): string {
-  if (!web) return ASK_SYSTEM;
-  return ASK_SYSTEM.replace(SCOPE_RECORDS_ONLY, SCOPE_RECORDS_PLUS_WEB) + WEB_ADDENDUM;
+// web addendum; webOff/no lane returns ASK_SYSTEM byte-identical (the cache
+// prefix for the plain path, the portal, and the deep route must not shift).
+// A thin or adjacent lane appends its addendum (lib/ask/lanes.ts), which owns
+// the @@BEYOND@@ marker instruction; covered and unrelated add nothing.
+export function askSystem(web: boolean, lane?: Lane, fresh?: boolean): string {
+  const base = web
+    ? ASK_SYSTEM.replace(SCOPE_RECORDS_ONLY, SCOPE_RECORDS_PLUS_WEB) + WEB_ADDENDUM
+    : ASK_SYSTEM;
+  if (lane === 'thin' || lane === 'adjacent') {
+    return `${base}\n\n${laneAddendum(lane, { web, fresh: !!fresh })}`;
+  }
+  return base;
 }
 
 // The full citable namespace. Cached as its own message block. (AskNamespace,
@@ -93,7 +104,7 @@ function fullSkeletonBlock(ctx: AskNamespace): string {
 export function conversationMessages(
   msgs: AskWireMessage[],
   ctx: AskContext,
-  opts: { web?: boolean } = {}
+  opts: { web?: boolean; lane?: Lane } = {}
 ): Anthropic.MessageParam[] {
   const web = opts.web === true;
   const latest = msgs[msgs.length - 1];
@@ -103,7 +114,7 @@ export function conversationMessages(
     cache_control: { type: 'ephemeral' },
   };
   if (msgs.length === 1) {
-    return [{ role: 'user', content: [skeleton, { type: 'text', text: queryBlock(latest.content, ctx, web) }] }];
+    return [{ role: 'user', content: [skeleton, { type: 'text', text: queryBlock(latest.content, ctx, web, opts.lane) }] }];
   }
   const out: Anthropic.MessageParam[] = [
     { role: 'user', content: [skeleton, { type: 'text', text: msgs[0].content }] },
@@ -117,7 +128,7 @@ export function conversationMessages(
         : { role: m.role, content: m.content }
     );
   }
-  out.push({ role: 'user', content: queryBlock(latest.content, ctx, web) });
+  out.push({ role: 'user', content: queryBlock(latest.content, ctx, web, opts.lane) });
   return out;
 }
 
@@ -129,7 +140,7 @@ export function conversationMessages(
 export function deepConversationMessages(
   msgs: AskWireMessage[],
   ns: AskNamespace,
-  opts: { web?: boolean } = {}
+  opts: { web?: boolean; lane?: Lane } = {}
 ): Anthropic.MessageParam[] {
   const web = opts.web === true;
   const latest = msgs[msgs.length - 1];
@@ -139,7 +150,7 @@ export function deepConversationMessages(
     cache_control: { type: 'ephemeral' },
   };
   if (msgs.length === 1) {
-    return [{ role: 'user', content: [skeleton, { type: 'text', text: deepQueryBlock(latest.content, web) }] }];
+    return [{ role: 'user', content: [skeleton, { type: 'text', text: deepQueryBlock(latest.content, web, opts.lane) }] }];
   }
   const out: Anthropic.MessageParam[] = [
     { role: 'user', content: [skeleton, { type: 'text', text: msgs[0].content }] },
@@ -147,27 +158,40 @@ export function deepConversationMessages(
   for (let i = 1; i < msgs.length - 1; i++) {
     out.push({ role: msgs[i].role, content: msgs[i].content });
   }
-  out.push({ role: 'user', content: deepQueryBlock(latest.content, web) });
+  out.push({ role: 'user', content: deepQueryBlock(latest.content, web, opts.lane) });
   return out;
 }
 
-function deepQueryBlock(query: string, web: boolean): string {
+// The marker instruction lives in the system prompt, which the model reads
+// once; the reminder in the user turn is what makes it comply.
+export function laneReminder(lane?: Lane, web = false): string {
+  if (lane !== 'thin' && lane !== 'adjacent') return '';
+  const split = web
+    ? ` Above that line write only what the Atlas records say, in at most three sentences when they say little: no web findings, no description of your search, no "based on the web results". Every web finding goes below the line.`
+    : '';
+  return `\n\nLANE REMINDER: this question is ${lane === 'thin' ? 'only partly covered' : 'not covered'} by the records. Your answer is incomplete unless it ends with a line reading exactly ${BEYOND_MARKER} followed by the labeled section the LANE instruction describes.${split}`;
+}
+
+function deepQueryBlock(query: string, web: boolean, lane?: Lane): string {
   const webLine = web
     ? ' Web search is on: after the Atlas research, search the web when a current development or an outside figure would sharpen the answer, and attribute web material in prose by naming the outlet.'
     : '';
-  return `QUESTION:\n${query}\n\nResearch this with your tools first: search the Atlas for the relevant records, fetch the ones that matter in full, and check the article text when the primary wording matters.${webLine} Then write one comprehensive, self-contained answer from what your research returned and the map above, citing every record you use by its bracketed ID.`;
+  return `QUESTION:\n${query}\n\nResearch this with your tools first: search the Atlas for the relevant records, fetch the ones that matter in full, and check the article text when the primary wording matters.${webLine} Then write one comprehensive, self-contained answer from what your research returned and the map above, citing every record you use by its bracketed ID.` + laneReminder(lane, web);
 }
 
 // The matched deep detail plus the question. Volatile, sent uncached and last.
 // The web variant of the closing instruction is the load-bearing half of the
 // web toggle: this block is the LAST thing the model reads, and the old
 // records-only wording here overrode the mid-system web addendum every time.
-function queryBlock(query: string, ctx: AskContext, web: boolean): string {
+function queryBlock(query: string, ctx: AskContext, web: boolean, lane?: Lane): string {
   const records = ctx.detail
     ? `RELEVANT RECORDS, deeper detail on what your question matched:\n\n${ctx.detail}`
     : 'RELEVANT RECORDS: none matched beyond the map above.';
-  const close = web
+  const beyondLane = lane === 'thin' || lane === 'adjacent';
+  const close = beyondLane
+    ? `Orient from the records above where they bear on the question, citing each record you use by its ID in square brackets, and say plainly what they do not settle. Never reply "Not in the Atlas.": the LANE instruction governs how the answer continues past the records.`
+    : web
     ? `Answer using the records above as the primary layer, citing each record you use by its ID in square brackets. Where the records leave a gap or a current development would sharpen the answer, search the web first and attribute what it adds in prose by naming the outlet. Never reply "Not in the Atlas." and never say the records lack something without having searched the web.`
     : `Answer using only the records above, citing each record you use by its ID in square brackets. If the records bear on the question without settling it, orient the reader to the relevant records and say what is not settled, rather than refusing. Reply "Not in the Atlas." only if nothing above is relevant.`;
-  return `${records}\n\n----\n\nQUESTION:\n${query}\n\n${close}`;
+  return `${records}\n\n----\n\nQUESTION:\n${query}\n\n${close}` + laneReminder(lane, web);
 }

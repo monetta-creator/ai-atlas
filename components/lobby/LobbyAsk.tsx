@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import ExamplePill from '@/components/ask/ExamplePill';
+import StartHere from '@/components/lobby/StartHere';
 
 // The lobby's chat launcher. No API calls here: the question rides ?q= into
 // the /ask workspace, which auto-fires it as the conversation's first turn.
@@ -29,6 +30,7 @@ export default function LobbyAsk() {
           aria-label="Ask the Atlas"
         />
         <button type="submit" className="btn btn--primary">Ask</button>
+        <StartHere variant="button" autoOpen />
       </form>
       <ExamplePill onPick={go} />
     </div>

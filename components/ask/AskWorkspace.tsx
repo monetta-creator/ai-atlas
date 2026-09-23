@@ -10,6 +10,7 @@ import {
   maxSignalSuffix, mergedSignalMap, setMessageVerify, useAskConvos,
 } from '@/components/ask/store';
 import { extractCostReport, extractWebSources, parseCostReport, type AskCostReport, type AskWebSource } from '@/lib/ask/history';
+import { extractDecline, type DeclinePayload, type Lane } from '@/lib/ask/lanes';
 import AskRail from '@/components/ask/AskRail';
 import AskThread from '@/components/ask/AskThread';
 import AskComposer from '@/components/ask/AskComposer';
@@ -20,6 +21,10 @@ import PortalUnlock from '@/components/datasets/PortalUnlock';
 export type AskMode = 'admin' | 'portal' | 'locked';
 
 const DATASET_TOKEN = /\[dataset\s+([a-z0-9-]+)\]/gi;
+const LANES = new Set<Lane>(['covered', 'thin', 'adjacent', 'unrelated']);
+function parseLane(v: string | null | undefined): Lane | undefined {
+  return v && LANES.has(v as Lane) ? (v as Lane) : undefined;
+}
 
 // The Ask workspace: the app's one viewport-height shell. Owns the active
 // conversation, the streaming turn, and the mobile history sheet. Conversations
@@ -39,6 +44,7 @@ export default function AskWorkspace({
   const [draft, setDraft] = useState('');
   const [draftMap, setDraftMap] = useState<SignalMap>({});
   const [draftSteps, setDraftSteps] = useState<string[]>([]);
+  const [draftLane, setDraftLane] = useState<Lane | undefined>(undefined);
   const [webOn, setWebOn] = useState(false);
   const [verifyingIndex, setVerifyingIndex] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
@@ -141,9 +147,11 @@ export default function AskWorkspace({
     setStreaming(true);
     setDraft('');
     setDraftMap(priorMap);
+    setDraftLane(undefined);
 
     let acc = '';
     let mergedMap: SignalMap = priorMap;
+    let lane: Lane | undefined;
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -166,15 +174,23 @@ export default function AskWorkspace({
         try { mergedMap = { ...priorMap, ...(JSON.parse(hdr) as SignalMap) }; } catch { /* keep prior */ }
       }
       setDraftMap(mergedMap);
+      lane = parseLane(res.headers.get('X-Ask-Lane'));
+      setDraftLane(lane);
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         acc += dec.decode(value, { stream: true });
-        // The cost and web-sources sentinels arrive in the final chunks; keep
-        // both out of the visible draft.
-        setDraft(extractCostReport(extractWebSources(acc).text).text);
+        // The decline sentinel (a coded "unrelated" answer), the cost sentinel
+        // and the web-sources sentinel are all kept out of the visible draft;
+        // a decline shows nothing until the card renders at completion.
+        setDraft(extractCostReport(extractWebSources(extractDecline(acc).text).text).text);
+      }
+      const { decline } = extractDecline(acc);
+      if (decline) {
+        appendMessage(convoId, { role: 'assistant', content: '', lane: lane ?? 'unrelated', decline });
+        return;
       }
       const { text: withCost, sources } = extractWebSources(acc);
       const { text: bodyText, cost } = extractCostReport(withCost);
@@ -186,11 +202,12 @@ export default function AskWorkspace({
         datasets: slugs.length ? slugs : undefined,
         webSources: sources.length ? sources : undefined,
         cost: cost ?? undefined,
+        lane,
         error: clean ? undefined : true,
       });
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
-        const { text: withCost, sources } = extractWebSources(acc);
+        const { text: withCost, sources } = extractWebSources(extractDecline(acc).text);
         const { text: bodyText, cost } = extractCostReport(withCost);
         const { clean, slugs } = extractDatasets(bodyText);
         if (clean) {
@@ -199,6 +216,7 @@ export default function AskWorkspace({
             datasets: slugs.length ? slugs : undefined,
             webSources: sources.length ? sources : undefined,
             cost: cost ?? undefined,
+            lane,
             stopped: true,
           });
         }
@@ -211,6 +229,7 @@ export default function AskWorkspace({
       abortRef.current = null;
       setStreaming(false);
       setDraft('');
+      setDraftLane(undefined);
     }
   }
 
@@ -229,6 +248,7 @@ export default function AskWorkspace({
     setDraft('');
     setDraftMap(priorMap);
     setDraftSteps([]);
+    setDraftLane(undefined);
 
     let acc = '';
     let mergedMap: SignalMap = priorMap;
@@ -237,9 +257,11 @@ export default function AskWorkspace({
     let verifyReport: VerifyReport | undefined;
     let costReport: AskCostReport | undefined;
     let webSources: AskWebSource[] | undefined;
+    let lane: Lane | undefined;
+    let declinePayload: DeclinePayload | undefined;
     const handleLine = (line: string) => {
       if (!line.trim()) return;
-      let ev: { type?: string; text?: unknown; signals?: unknown; report?: unknown; sources?: unknown };
+      let ev: { type?: string; text?: unknown; signals?: unknown; report?: unknown; sources?: unknown; lane?: unknown; payload?: unknown };
       try {
         ev = JSON.parse(line) as typeof ev;
       } catch {
@@ -251,6 +273,14 @@ export default function AskWorkspace({
       } else if (ev.type === 'delta' && typeof ev.text === 'string') {
         acc += ev.text;
         setDraft(acc);
+      } else if (ev.type === 'lane' && typeof ev.lane === 'string') {
+        const l = parseLane(ev.lane);
+        if (l) {
+          lane = l;
+          setDraftLane(l);
+        }
+      } else if (ev.type === 'decline' && ev.payload && typeof ev.payload === 'object') {
+        declinePayload = ev.payload as DeclinePayload;
       } else if (ev.type === 'done' && ev.signals && typeof ev.signals === 'object') {
         mergedMap = { ...priorMap, ...(ev.signals as SignalMap) };
         setDraftMap(mergedMap);
@@ -304,6 +334,11 @@ export default function AskWorkspace({
       }
       if (buf.trim()) handleLine(buf);
 
+      if (declinePayload) {
+        appendMessage(convoId, { role: 'assistant', content: '', lane: lane ?? 'unrelated', decline: declinePayload });
+        return;
+      }
+
       const { clean, slugs } = extractDatasets(acc);
       if (!clean) {
         appendMessage(convoId, {
@@ -323,6 +358,7 @@ export default function AskWorkspace({
         verify: verifyReport,
         cost: costReport,
         webSources,
+        lane,
         stopped: errText ? true : undefined, // cut short server-side; partial stands
       });
     } catch (e) {
@@ -332,6 +368,7 @@ export default function AskWorkspace({
           appendMessage(convoId, {
             role: 'assistant', content: clean, signalMap: mergedMap,
             datasets: slugs.length ? slugs : undefined, stopped: true,
+            lane,
             steps: steps.length ? steps : undefined,
             verify: verifyReport,
             cost: costReport,
@@ -348,6 +385,7 @@ export default function AskWorkspace({
       setStreaming(false);
       setDraft('');
       setDraftSteps([]);
+      setDraftLane(undefined);
     }
   }
 
@@ -454,6 +492,7 @@ export default function AskWorkspace({
           draft={draft}
           draftMap={draftMap}
           draftSteps={draftSteps}
+          draftLane={draftLane}
           validIds={validIds}
           datasets={datasets}
           locked={locked}

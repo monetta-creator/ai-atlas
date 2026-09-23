@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 import type { SignalMap } from '@/lib/ask/verify';
 import type { VerifyReport } from '@/lib/ask/deep';
 import type { AskCostReport, AskWebSource } from '@/lib/ask/history';
+import type { DeclinePayload, Lane } from '@/lib/ask/lanes';
 
 // The Ask workspace's conversation store: browser-only localStorage, no
 // accounts, no server persistence. Pattern copied from SiteNav's visited-store:
@@ -26,6 +27,8 @@ export interface AskMessage {
   verify?: VerifyReport;   // assistant only: faithfulness check (deep always-on, quick on-demand)
   webSources?: AskWebSource[]; // assistant only: cited web sources (the web toggle)
   cost?: AskCostReport;    // assistant only: what this turn cost (tokens, searches, USD)
+  lane?: Lane;             // assistant only: the classified lane (2026-09-23)
+  decline?: DeclinePayload; // assistant only: a coded decline, no model call ran
   stopped?: boolean;       // aborted mid-stream; partial kept
   error?: boolean;         // failed turn; enables Retry
 }

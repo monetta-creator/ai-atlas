@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import Link from 'next/link';
 import type { CitationKind, ParsedCode, ValidIdsPlain, SignalMap } from '@/lib/ask/verify';
 import type { PeekKind } from '@/lib/ask/search';
+import type { Lane } from '@/lib/ask/lanes';
+import { LANE_LABEL } from '@/lib/ask/lanes';
 import type { AskConvo } from '@/components/ask/store';
 import { renderAnswer } from '@/components/ask/answer';
 import AskStarters from '@/components/ask/AskStarters';
@@ -32,7 +35,7 @@ const KIND_TO_PEEK: Record<CitationKind, PeekKind> = {
 // unless the reader scrolled up (tracked in a ref from the scroll handler;
 // the ref is only read inside the effect, per the React Compiler rules).
 export default function AskThread({
-  convo, streaming, draft, draftMap, draftSteps, validIds, datasets, locked,
+  convo, streaming, draft, draftMap, draftSteps, draftLane, validIds, datasets, locked,
   canVerify, verifyingIndex,
   onPickStarter, onRegenerate, onGenerate, onCite, onVerify,
 }: {
@@ -41,6 +44,7 @@ export default function AskThread({
   draft: string;
   draftMap: SignalMap;
   draftSteps: string[];
+  draftLane?: Lane;
   validIds: ValidIdsPlain;
   datasets: DatasetSuggestionMeta[];
   locked: boolean;
@@ -94,21 +98,56 @@ export default function AskThread({
               return <div key={i} className="ask-msg--user">{m.content}</div>;
             }
             const map = m.signalMap ?? {};
-            const citeOpts = onCite
-              ? {
-                  onCite: (c: ParsedCode) => {
-                    if (c.kind === 'signal' || c.kind === 'paper') {
-                      const uuid = map[c.id];
-                      if (uuid) onCite(KIND_TO_PEEK[c.kind], uuid, i);
-                      return;
-                    }
-                    onCite(KIND_TO_PEEK[c.kind], c.id, i);
-                  },
-                }
-              : {};
+            const lane = m.lane && <span className="ask-lane" data-lane={m.lane}>{LANE_LABEL[m.lane]}</span>;
+            if (m.decline) {
+              const d = m.decline;
+              return (
+                <div key={i}>
+                  {lane}
+                  <div className="ask-decline">
+                    <p className="ask-decline-headline">{d.headline}</p>
+                    <p className="ask-decline-body">{d.body}</p>
+                    {d.questions.length > 0 && (
+                      <div className="ask-decline-qs">
+                        {d.questions.map((q, j) => (
+                          <Link key={j} href={q.href} className="ask-decline-q">
+                            <span aria-hidden="true">›</span> {q.title}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                    {d.starters.length > 0 && (
+                      <div className="ask-decline-starters">
+                        {d.starters.map((s, j) => (
+                          <button key={j} type="button" className="lenschip" onClick={() => onPickStarter(s)}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+            const citeOpts = {
+              ...(onCite
+                ? {
+                    onCite: (c: ParsedCode) => {
+                      if (c.kind === 'signal' || c.kind === 'paper') {
+                        const uuid = map[c.id];
+                        if (uuid) onCite(KIND_TO_PEEK[c.kind], uuid, i);
+                        return;
+                      }
+                      onCite(KIND_TO_PEEK[c.kind], c.id, i);
+                    },
+                  }
+                : {}),
+              webSourced: !!m.webSources?.length,
+            };
             const { nodes, unverified } = renderAnswer(m.content, validIds, map, citeOpts);
             return (
               <div key={i}>
+                {lane}
                 {m.steps && m.steps.length > 0 && (
                   <details className="ask-steps">
                     <summary>Research · {m.steps.length} step{m.steps.length === 1 ? '' : 's'}</summary>
@@ -180,6 +219,7 @@ export default function AskThread({
 
           {streaming && (
             <div>
+              {draftLane && <span className="ask-lane" data-lane={draftLane}>{LANE_LABEL[draftLane]}</span>}
               {draftSteps.length > 0 && (
                 <div className="ask-steps ask-steps--live">
                   <ol>

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
 import { parseCitations, type CitationKind, type ParsedCode, type SignalMap, type ValidIdsPlain } from '@/lib/ask/verify';
+import { splitBeyond } from '@/lib/ask/lanes';
 
 // The citation renderer, extracted from AskAtlas so both the single-shot widget
 // (per-signal ask) and the chat workspace share one implementation. Splices the
@@ -50,13 +51,19 @@ export function boldNodes(text: string, keyBase: string): ReactNode[] {
   return out;
 }
 
+const BEYOND_LABEL_RE = /^\s*From the (?:model's own knowledge|web), not the Atlas records[^\n]*\n*/;
+function stripBeyondLabel(text: string): string {
+  return text.replace(BEYOND_LABEL_RE, '');
+}
+
 export function renderAnswer(
   text: string,
   ids: ValidIdsPlain,
   sig: SignalMap,
-  opts: { onCite?: (c: ParsedCode) => void } = {}
+  opts: { onCite?: (c: ParsedCode) => void; webSourced?: boolean } = {}
 ): RenderedAnswer {
-  const spans = parseCitations(text, ids, sig);
+  const { atlas, beyond } = splitBeyond(text);
+  const spans = parseCitations(atlas, ids, sig);
   const nodes: ReactNode[] = [];
   let cursor = 0;
   let unverified = 0;
@@ -98,7 +105,7 @@ export function renderAnswer(
   };
 
   spans.forEach((sp, i) => {
-    if (sp.start > cursor) nodes.push(...boldNodes(text.slice(cursor, sp.start), `t${i}`));
+    if (sp.start > cursor) nodes.push(...boldNodes(atlas.slice(cursor, sp.start), `t${i}`));
     if (sp.codes.length === 1) {
       nodes.push(chip(`${i}`, sp.codes[0], sp.raw));
     } else {
@@ -112,6 +119,19 @@ export function renderAnswer(
     }
     cursor = sp.end;
   });
-  if (cursor < text.length) nodes.push(...boldNodes(text.slice(cursor), 'tail'));
+  if (cursor < atlas.length) nodes.push(...boldNodes(atlas.slice(cursor), 'tail'));
+  if (beyond) {
+    // The model opens the section with the exact label line the prompt
+    // demands; the kicker already says it, so the body drops it.
+    const kicker = opts.webSourced
+      ? 'Beyond the Atlas · from the web'
+      : "Beyond the Atlas · from the model's own knowledge, not current";
+    nodes.push(
+      <aside key="beyond" className="ask-beyond" data-source={opts.webSourced ? 'web' : 'model'}>
+        <p className="ask-beyond-kicker">{kicker}</p>
+        <div className="ask-beyond-body">{boldNodes(stripBeyondLabel(beyond), 'beyond')}</div>
+      </aside>
+    );
+  }
   return { nodes, unverified, readMore };
 }

@@ -41,6 +41,14 @@ export type AskMode = 'admin' | 'portal';
 export interface AskContext extends AskNamespace {
   detail: string;
   hitCount: number;
+  // Best ts_rank across every FTS leg that matched, 0 when none did. Feeds
+  // lib/ask/lanes.ts decideLane: a high hitCount of weakly-related rows should
+  // not count as "covered" the way a handful of sharply on-topic rows does.
+  maxRank: number;
+  // True when the question named a claim code, concept slug, question slug,
+  // bridge code, or research-thread slug that detectIds resolved (the same
+  // signal that already drove the explicit-match retrieval path below).
+  explicit: boolean;
   // Signals and papers have no stable short code, so each retrieved one gets a
   // per-request tag on ONE shared counter (signals S1, S2, ... and papers P3,
   // P4, ...) the model can cite as [signal S1] / [paper P3]; the route ships
@@ -204,7 +212,7 @@ async function detectIds(
 
 export async function buildAskContext(
   query: string,
-  opts: { mode?: AskMode; tagStart?: number } = {}
+  opts: { mode?: AskMode; tagStart?: number; ns?: AskNamespace } = {}
 ): Promise<AskContext> {
   const mode = opts.mode ?? 'admin';
   // Multi-turn: signal tags are minted per REQUEST, so without an offset a
@@ -212,13 +220,18 @@ export async function buildAskContext(
   // (which sees its own prior [signal S1] citations) would silently mislink.
   // The client sends the highest suffix it has seen; new tags continue from it.
   const tagStart = opts.tagStart ?? 0;
-  const ns = await loadNamespace();
+  // The routes classify the question in parallel and need the namespace for
+  // the beat description; pass it through here so that call doesn't pay for
+  // loadNamespace's queries twice.
+  const ns = opts.ns ?? await loadNamespace();
   const trimmed = query.trim();
-  if (!trimmed) return { ...ns, detail: '', hitCount: 0, signalRefs: [] };
+  if (!trimmed) return { ...ns, detail: '', hitCount: 0, maxRank: 0, explicit: false, signalRefs: [] };
 
   const seen = new Set<string>();
   const blocks: Block[] = [];
-  const push = (key: string, text: string) => {
+  let maxRank = 0;
+  const push = (key: string, text: string, rank = 0) => {
+    if (rank > maxRank) maxRank = rank;
     if (!text || seen.has(key)) return;
     seen.add(key);
     blocks.push({ key, text });
@@ -504,130 +517,132 @@ export async function buildAskContext(
   }
 
   const signalRefs = [...signalTags, ...paperTags].map(([id, tag]) => ({ tag, id }));
-  return { ...ns, detail: detail.trim(), hitCount: blocks.length, signalRefs };
+  return { ...ns, detail: detail.trim(), hitCount: blocks.length, maxRank, explicit, signalRefs };
 }
 
 // ---------------------------------------------------------------- FTS helpers
 // websearch_to_tsquery handles bare user phrases gracefully (returns an empty
 // query, matching nothing, when there are no searchable terms).
-async function ftsClaims(query: string, push: (k: string, t: string) => void): Promise<string[]> {
-  const rows = await q<{ code: string; statement: string; test: string | null; is_frame: boolean }>(
-    `select code, statement, test, is_frame from claims
+async function ftsClaims(query: string, push: (k: string, t: string, r?: number) => void): Promise<string[]> {
+  const rows = await q<{ code: string; statement: string; test: string | null; is_frame: boolean; rank: number }>(
+    `select code, statement, test, is_frame, ts_rank(search_tsv, ${ORQ}) as rank from claims
       where code is not null and search_tsv @@ ${ORQ}
-      order by ts_rank(search_tsv, ${ORQ}) desc limit 8`,
+      order by rank desc limit 8`,
     [query]
   );
   for (const r of rows) {
     push(`claim:${r.code}`, lines(
       `[claim ${r.code}]${r.is_frame ? ' (frame)' : ''} ${clip(r.statement)}`,
       r.test && `  Falsifying test: ${clip(r.test)}`,
-    ));
+    ), r.rank);
   }
   return rows.map((r) => r.code);
 }
 
-async function ftsBridges(query: string, push: (k: string, t: string) => void): Promise<string[]> {
-  const rows = await q<{ code: string; statement: string; test: string | null; domain_from: string; domain_to: string }>(
-    `select code, statement, test, domain_from, domain_to from bridge_claims
+async function ftsBridges(query: string, push: (k: string, t: string, r?: number) => void): Promise<string[]> {
+  const rows = await q<{ code: string; statement: string; test: string | null; domain_from: string; domain_to: string; rank: number }>(
+    `select code, statement, test, domain_from, domain_to, ts_rank(search_tsv, ${ORQ}) as rank from bridge_claims
       where code is not null and search_tsv @@ ${ORQ}
-      order by ts_rank(search_tsv, ${ORQ}) desc limit 4`,
+      order by rank desc limit 4`,
     [query]
   );
   for (const r of rows) {
     push(`bridge:${r.code}`, lines(
       `[bridge ${r.code}] ${clip(r.statement)} (${r.domain_from} -> ${r.domain_to})`,
       r.test && `  Falsifying test: ${clip(r.test)}`,
-    ));
+    ), r.rank);
   }
   return rows.map((r) => r.code);
 }
 
-async function ftsStances(query: string, push: (k: string, t: string) => void) {
-  const rows = await q<{ code: string; title: string; summary: string | null; test: string; q_slug: string }>(
-    `select s.code, s.title, s.summary, s.test, qn.slug as q_slug
+async function ftsStances(query: string, push: (k: string, t: string, r?: number) => void) {
+  const rows = await q<{ code: string; title: string; summary: string | null; test: string; q_slug: string; rank: number }>(
+    `select s.code, s.title, s.summary, s.test, qn.slug as q_slug, ts_rank(s.search_tsv, ${ORQ}) as rank
        from stances s join questions qn on qn.id = s.question_id
       where s.code is not null and s.search_tsv @@ ${ORQ}
-      order by ts_rank(s.search_tsv, ${ORQ}) desc limit 6`,
+      order by rank desc limit 6`,
     [query]
   );
   for (const r of rows) {
     push(`stance:${r.code}`, lines(
       `[stance ${r.code}] ${r.title} (under Q ${r.q_slug})`,
       r.summary && `  ${clip(r.summary)}`,
-    ));
+    ), r.rank);
   }
 }
 
-async function ftsConcepts(query: string, push: (k: string, t: string) => void) {
-  const rows = await q<{ slug: string; name: string; short_definition: string; status: string }>(
-    `select slug, name, short_definition, status from concepts
+async function ftsConcepts(query: string, push: (k: string, t: string, r?: number) => void) {
+  const rows = await q<{ slug: string; name: string; short_definition: string; status: string; rank: number }>(
+    `select slug, name, short_definition, status, ts_rank(search_tsv, ${ORQ}) as rank from concepts
       where search_tsv @@ ${ORQ}
-      order by ts_rank(search_tsv, ${ORQ}) desc limit 6`,
+      order by rank desc limit 6`,
     [query]
   );
   for (const r of rows) {
-    push(`concept:${r.slug}`, `[concept ${r.slug}] ${r.name} (${r.status}): ${clip(r.short_definition)}`);
+    push(`concept:${r.slug}`, `[concept ${r.slug}] ${r.name} (${r.status}): ${clip(r.short_definition)}`, r.rank);
   }
 }
 
-async function ftsSignals(query: string, push: (k: string, t: string) => void, tagFor: (id: string) => string, mode: AskMode) {
-  const rows = await q<{ id: string; title: string; summary: string | null; claim_touches: string[]; is_published: boolean }>(
-    `select id, title, summary, claim_touches, is_published from signals
+async function ftsSignals(query: string, push: (k: string, t: string, r?: number) => void, tagFor: (id: string) => string, mode: AskMode) {
+  const rows = await q<{ id: string; title: string; summary: string | null; claim_touches: string[]; is_published: boolean; rank: number }>(
+    `select id, title, summary, claim_touches, is_published, ts_rank(search_tsv, ${ORQ}, ${RANK_NORM}) as rank from signals
       where search_tsv @@ ${ORQ}
         ${mode === 'portal' ? 'and is_published = true' : ''}
-      order by ts_rank(search_tsv, ${ORQ}, ${RANK_NORM}) desc limit 8`,
+      order by rank desc limit 8`,
     [query]
   );
   for (const r of rows) {
     const touches = r.claim_touches.length ? ` (touches ${r.claim_touches.join(', ')})` : '';
     push(`sig:${r.id}`,
-      `[signal ${tagFor(r.id)}] "${r.title}"${r.is_published ? '' : ' (draft)'} ${clip(r.summary, 300)}${touches}`);
+      `[signal ${tagFor(r.id)}] "${r.title}"${r.is_published ? '' : ' (draft)'} ${clip(r.summary, 300)}${touches}`, r.rank);
   }
 }
 
-async function ftsThreads(query: string, push: (k: string, t: string) => void) {
-  const rows = await q<{ slug: string; title: string; question: string; synthesis: string | null; status: string }>(
-    `select slug, title, question, synthesis, status::text as status from research_threads
+async function ftsThreads(query: string, push: (k: string, t: string, r?: number) => void) {
+  const rows = await q<{ slug: string; title: string; question: string; synthesis: string | null; status: string; rank: number }>(
+    `select slug, title, question, synthesis, status::text as status, ts_rank(search_tsv, ${ORQ}) as rank from research_threads
       where search_tsv @@ ${ORQ}
-      order by ts_rank(search_tsv, ${ORQ}) desc limit 3`,
+      order by rank desc limit 3`,
     [query]
   );
   for (const r of rows) {
     push(`thread:${r.slug}`, lines(
       `[thread ${r.slug}]${r.status !== 'open' ? ` (${r.status})` : ''} ${r.title}: ${clip(r.question, 200)}`,
       r.synthesis && `  Synthesis: ${clip(r.synthesis.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '), 400)}`,
-    ));
+    ), r.rank);
   }
 }
 
 // The research corpus: kept papers (never rejected/pending-triage rows), the
 // reviewed shelf ranked first. Indexed text is public editorial only; the
 // snippet leads with the finding's headline when one exists.
-async function ftsPapers(query: string, push: (k: string, t: string) => void, ptagFor: (id: string) => string) {
-  const rows = await q<{ id: string; title: string; arxiv_id: string | null; published_at: string | null; headline: string | null; summary: string | null; claim_touches: string[]; reviewed: boolean }>(
+async function ftsPapers(query: string, push: (k: string, t: string, r?: number) => void, ptagFor: (id: string) => string) {
+  const rows = await q<{ id: string; title: string; arxiv_id: string | null; published_at: string | null; headline: string | null; summary: string | null; claim_touches: string[]; reviewed: boolean; rank: number }>(
     `select id::text as id, title, arxiv_id,
             to_char(published_at, 'YYYY-MM-DD') as published_at,
             extraction->>'headline_claim' as headline, triage_summary as summary,
-            claim_touches, review_status in ('tracked', 'noted') as reviewed
+            claim_touches, review_status in ('tracked', 'noted') as reviewed,
+            ts_rank(search_tsv, ${ORQ}, ${RANK_NORM}) as rank
        from papers
       where triage_status = 'kept' and review_status <> 'dismissed'
         and search_tsv @@ ${ORQ}
-      order by (review_status in ('tracked', 'noted')) desc, ts_rank(search_tsv, ${ORQ}, ${RANK_NORM}) desc
+      order by (review_status in ('tracked', 'noted')) desc, rank desc
       limit 4`,
     [query]
   );
   for (const r of rows) {
     const touches = r.claim_touches.length ? ` (touches ${r.claim_touches.join(', ')})` : '';
     push(`paper:${r.id}`,
-      `[paper ${ptagFor(r.id)}] "${clip(r.title, 150)}"${r.arxiv_id ? ` (arXiv ${r.arxiv_id}${r.published_at ? `, ${r.published_at}` : ''})` : ''}: ${clip(r.headline ?? r.summary, 300)}${touches}`);
+      `[paper ${ptagFor(r.id)}] "${clip(r.title, 150)}"${r.arxiv_id ? ` (arXiv ${r.arxiv_id}${r.published_at ? `, ${r.published_at}` : ''})` : ''}: ${clip(r.headline ?? r.summary, 300)}${touches}`, r.rank);
   }
 }
 
-async function ftsEvidence(query: string, push: (k: string, t: string) => void, mode: AskMode) {
-  const rows = await q<{ target_type: string; target_code: string | null; direction: string; excerpt: string | null; note: string | null }>(
+async function ftsEvidence(query: string, push: (k: string, t: string, r?: number) => void, mode: AskMode) {
+  const rows = await q<{ target_type: string; target_code: string | null; direction: string; excerpt: string | null; note: string | null; rank: number }>(
     `select e.target_type, e.direction, e.excerpt,
             ${mode === 'admin' ? 'e.note' : 'null::text as note'},
-            coalesce(c.code, b.code) as target_code
+            coalesce(c.code, b.code) as target_code,
+            ts_rank(e.search_tsv, ${ORQ}, ${RANK_NORM}) as rank
        from evidence e
        left join claims c on e.target_type = 'claim' and c.id = e.target_id
        left join bridge_claims b on e.target_type = 'bridge_claim' and b.id = e.target_id
@@ -635,13 +650,13 @@ async function ftsEvidence(query: string, push: (k: string, t: string) => void, 
         and coalesce(c.code, b.code) is not null
         ${mode === 'portal' ? `and e.excerpt is not null
         and (e.signal_id is null or exists (select 1 from signals g where g.id = e.signal_id and g.is_published))` : ''}
-      order by ts_rank(e.search_tsv, ${ORQ}, ${RANK_NORM}) desc limit 8`,
+      order by rank desc limit 8`,
     [query]
   );
   for (const e of rows) {
     const token = e.target_type === 'bridge_claim' ? `[bridge ${e.target_code}]` : `[claim ${e.target_code}]`;
     push(`ev:${e.target_code}:${clip(e.excerpt ?? e.note, 40)}`,
-      `Evidence for ${token} (${e.direction}): ${clip(e.excerpt ?? e.note, 300)}`);
+      `Evidence for ${token} (${e.direction}): ${clip(e.excerpt ?? e.note, 300)}`, e.rank);
   }
 }
 
@@ -649,12 +664,13 @@ async function ftsEvidence(query: string, push: (k: string, t: string) => void, 
 // pipeline's cached page text, surfaced ONLY through a published signal or a
 // publicly cited source (guest-safe in both modes). ts_headline generates two
 // short fragments; full articles never enter the prompt.
-async function ftsArticles(query: string, push: (k: string, t: string) => void, tagFor: (id: string) => string) {
+async function ftsArticles(query: string, push: (k: string, t: string, r?: number) => void, tagFor: (id: string) => string) {
   const HL_OPTS = `'MaxFragments=2, MaxWords=30, MinWords=8'`;
-  const srcRows = await q<{ id: string; title: string; outlet: string | null; excerpt: string; sig_id: string | null; sig_title: string | null }>(
+  const srcRows = await q<{ id: string; title: string; outlet: string | null; excerpt: string; sig_id: string | null; sig_title: string | null; rank: number }>(
     `select s.id, s.title, s.outlet,
             ts_headline('english', left(coalesce(s.raw_text, ''), 200000), ${ORQ}, ${HL_OPTS}) as excerpt,
-            sig.id as sig_id, sig.title as sig_title
+            sig.id as sig_id, sig.title as sig_title,
+            ts_rank(s.search_tsv, ${ORQ}, ${RANK_NORM}) as rank
        from sources s
        left join lateral (
          select g.id, g.title from signals g
@@ -663,25 +679,26 @@ async function ftsArticles(query: string, push: (k: string, t: string) => void, 
        ) sig on true
       where s.search_tsv @@ ${ORQ} and s.raw_text is not null
         and (sig.id is not null or exists (select 1 from evidence e where e.source_id = s.id))
-      order by ts_rank(s.search_tsv, ${ORQ}, ${RANK_NORM}) desc, s.id limit 3`,
+      order by rank desc, s.id limit 3`,
     [query]
   );
   for (const r of srcRows) {
     const anchor = r.sig_id ? ` [signal ${tagFor(r.sig_id)}]` : '';
     push(`art:src:${r.id}`,
-      `Article excerpt from "${r.title}"${r.outlet ? ` (${r.outlet})` : ''}${anchor}: ${clip(r.excerpt, 400)}`);
+      `Article excerpt from "${r.title}"${r.outlet ? ` (${r.outlet})` : ''}${anchor}: ${clip(r.excerpt, 400)}`, r.rank);
   }
-  const candRows = await q<{ sig_id: string; sig_title: string; excerpt: string }>(
+  const candRows = await q<{ sig_id: string; sig_title: string; excerpt: string; rank: number }>(
     `select g.id as sig_id, g.title as sig_title,
-            ts_headline('english', left(coalesce(sc.raw_content, ''), 200000), ${ORQ}, ${HL_OPTS}) as excerpt
+            ts_headline('english', left(coalesce(sc.raw_content, ''), 200000), ${ORQ}, ${HL_OPTS}) as excerpt,
+            ts_rank(sc.search_tsv, ${ORQ}, ${RANK_NORM}) as rank
        from signal_candidates sc
        join signals g on g.id = sc.signal_id and g.is_published = true
       where sc.search_tsv @@ ${ORQ}
-      order by ts_rank(sc.search_tsv, ${ORQ}, ${RANK_NORM}) desc, sc.id limit 3`,
+      order by rank desc, sc.id limit 3`,
     [query]
   );
   for (const r of candRows) {
     push(`art:sig:${r.sig_id}`,
-      `Article excerpt behind [signal ${tagFor(r.sig_id)}] "${r.sig_title}": ${clip(r.excerpt, 400)}`);
+      `Article excerpt behind [signal ${tagFor(r.sig_id)}] "${r.sig_title}": ${clip(r.excerpt, 400)}`, r.rank);
   }
 }

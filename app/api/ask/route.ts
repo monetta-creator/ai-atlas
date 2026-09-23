@@ -1,8 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { isAdmin } from '@/lib/auth';
 import { priceUsage, recordApiCall } from '@/lib/cost';
-import { buildAskContext } from '@/lib/ask/retrieve';
+import { buildAskContext, loadNamespace } from '@/lib/ask/retrieve';
 import { askSystem, conversationMessages } from '@/lib/ask/prompt';
+import { classifyQuestion, beatDescriptionFrom, questionLinksFrom } from '@/lib/ask/classify';
+import { decideLane, composeDecline, encodeDecline, priorUserTurn } from '@/lib/ask/lanes';
+import { EXAMPLE_QUESTIONS } from '@/components/ask/starters';
 import {
   clampHistory, clampSignalOffset, parseAskBody, retrievalQuery,
   collectWebSources, encodeCostReport, encodeWebSources,
@@ -42,23 +45,32 @@ export async function POST(req: Request): Promise<Response> {
   // The composer's web-search toggle: records stay primary, the web fills gaps.
   const webOn = Boolean((body as { web?: unknown })?.web);
 
-  const ctx = await buildAskContext(retrievalQuery(msgs), { mode: 'admin', tagStart });
+  const ns = await loadNamespace();
+  const latest = msgs[msgs.length - 1].content;
+  const [ctx, cls] = await Promise.all([
+    buildAskContext(retrievalQuery(msgs), { mode: 'admin', tagStart, ns }),
+    classifyQuestion(latest, beatDescriptionFrom(ns), priorUserTurn(msgs)),
+  ]);
+  const lane = decideLane({
+    hitCount: ctx.hitCount, maxRank: ctx.maxRank, explicit: ctx.explicit,
+    beat: cls.beat, followUp: msgs.length > 1,
+  });
+  // Auto web: a thin/adjacent question that hinges on recent events searches
+  // even with the composer's toggle off; covered questions never need it.
+  const useWeb = webOn || (cls.fresh && lane !== 'covered');
+
   const enc = new TextEncoder();
   // Resolve [signal Sn] citations client-side: ship the per-request tag -> uuid map.
   const headers = {
     ...TEXT_HEADERS,
+    'X-Ask-Lane': lane,
     'X-Ask-Signals': JSON.stringify(Object.fromEntries(ctx.signalRefs.map((r) => [r.tag, r.id]))),
   };
 
-  // No retrieval hits on the OPENING turn: short-circuit with the canned
-  // refusal, no model call. Follow-ups proceed regardless ("summarize that"
-  // legitimately matches nothing) with the none-matched query block. With web
-  // search on there is no short-circuit: gap-filling is the toggle's job.
-  if (ctx.hitCount === 0 && msgs.length === 1 && !webOn) {
-    return new Response(
-      'Not in the Atlas. Nothing in the Atlas matched that. Try a topic, a claim code like 2.3, or a concept name.',
-      { headers }
-    );
+  // Unrelated: a coded decline, no model call, no cost row.
+  if (lane === 'unrelated') {
+    const decline = composeDecline(cls.topic, questionLinksFrom(ns), EXAMPLE_QUESTIONS.slice(0, 3));
+    return new Response(encodeDecline(decline), { headers });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -73,11 +85,11 @@ export async function POST(req: Request): Promise<Response> {
         const params = {
           model: MODEL,
           max_tokens: 1500,
-          system: [{ type: 'text', text: askSystem(webOn), cache_control: { type: 'ephemeral' } }],
-          messages: conversationMessages(msgs, ctx, { web: webOn }),
+          system: [{ type: 'text', text: askSystem(useWeb, lane, cls.fresh), cache_control: { type: 'ephemeral' } }],
+          messages: conversationMessages(msgs, ctx, { web: useWeb, lane }),
           // The raw web-search tool object is not in the SDK Tool union, hence
           // the double-cast below (the lib/pipeline/web.ts pattern).
-          ...(webOn
+          ...(useWeb
             ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] }
             : {}),
         };
@@ -95,7 +107,7 @@ export async function POST(req: Request): Promise<Response> {
           seenSrc.add(c.url);
           webSources.push({ url: c.url.slice(0, 600), title: String(c.title ?? '').slice(0, 200) || c.url });
         };
-        if (webOn) {
+        if (useWeb) {
           ms.on('streamEvent', (ev) => {
             const e = ev as {
               type?: string;
@@ -138,7 +150,7 @@ export async function POST(req: Request): Promise<Response> {
           rounds: 1,
           model: MODEL,
         })));
-        if (webOn) {
+        if (useWeb) {
           // Belt and braces: merge anything a future SDK's accumulator sees.
           for (const s of collectWebSources(final)) addSource({ type: 'web_search_result_location', ...s });
           // The sources ride a trailing sentinel line (headers are long gone);

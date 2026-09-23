@@ -2,14 +2,17 @@ import Anthropic from '@anthropic-ai/sdk';
 import { isAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { priceUsage, recordApiCall, type ApiUsage } from '@/lib/cost';
-import { loadNamespace } from '@/lib/ask/retrieve';
-import { askSystem, deepConversationMessages } from '@/lib/ask/prompt';
-import { clampHistory, clampSignalOffset, parseAskBody, type AskWebSource } from '@/lib/ask/history';
+import { buildAskContext, loadNamespace } from '@/lib/ask/retrieve';
+import { askSystem, laneReminder, deepConversationMessages } from '@/lib/ask/prompt';
+import { classifyQuestion, beatDescriptionFrom, questionLinksFrom } from '@/lib/ask/classify';
+import { decideLane, composeDecline, splitBeyond, priorUserTurn } from '@/lib/ask/lanes';
+import { EXAMPLE_QUESTIONS } from '@/components/ask/starters';
+import { clampHistory, clampSignalOffset, parseAskBody, retrievalQuery, type AskWebSource } from '@/lib/ask/history';
 import { fetchRecord, searchArticles, searchAtlas } from '@/lib/ask/search';
 import {
   DEEP_ADDENDUM, DEEP_TOOLS, DEEP_WEB_ADDENDUM, INPUT_TOKEN_CAP, MAX_CALLS_PER_ROUND, MAX_ROUNDS,
   VERIFY_INSTRUCTION, VERIFY_TOOL, type VerifyReport,
-  citeToken, createTagger, ndCost, ndDelta, ndDone, ndError, ndStatus, ndVerify, ndWebSources,
+  citeToken, createTagger, ndCost, ndDecline, ndDelta, ndDone, ndError, ndLane, ndStatus, ndVerify, ndWebSources,
   parseFetchRecordInput, parseSearchArticlesInput, parseSearchAtlasInput, parseSignalMap,
   parseVerifyOutput, renderArticleHits, renderRecord, renderSearchHits, runDeterministicChecks,
   STATUS_START, STATUS_VERIFYING, STATUS_WRITING, statusArticles, statusRead, statusRound, statusSearch,
@@ -62,18 +65,35 @@ export async function POST(req: Request): Promise<Response> {
   const client = new Anthropic({ apiKey, timeout: 45_000, maxRetries: 1 });
 
   const ns = await loadNamespace();
+  const latest = msgs[msgs.length - 1].content;
+  // Classify in parallel with a cheap context build used ONLY for its lane
+  // signals (hitCount/maxRank/explicit); the loop below still does its own
+  // digging with the search_atlas/fetch_record tools.
+  const [cls, laneCtx] = await Promise.all([
+    classifyQuestion(latest, beatDescriptionFrom(ns), priorUserTurn(msgs)),
+    buildAskContext(retrievalQuery(msgs), { mode: 'admin', ns }),
+  ]);
+  const lane = decideLane({
+    hitCount: laneCtx.hitCount, maxRank: laneCtx.maxRank, explicit: laneCtx.explicit,
+    beat: cls.beat, followUp: msgs.length > 1,
+  });
+  // Auto web: a thin/adjacent question that hinges on recent events searches
+  // even with the composer's toggle off.
+  const autoWeb = cls.fresh && lane !== 'covered';
+  const useWeb = webOn || autoWeb;
+
   const system: Anthropic.TextBlockParam[] = [
     {
       type: 'text',
-      text: `${askSystem(webOn)}\n\n${DEEP_ADDENDUM}${webOn ? `\n\n${DEEP_WEB_ADDENDUM}` : ''}`,
+      text: `${askSystem(useWeb, lane, cls.fresh)}\n\n${DEEP_ADDENDUM}${useWeb ? `\n\n${DEEP_WEB_ADDENDUM}` : ''}`,
       cache_control: { type: 'ephemeral' },
     },
   ];
-  const convo: Anthropic.MessageParam[] = deepConversationMessages(msgs, ns, { web: webOn });
+  const convo: Anthropic.MessageParam[] = deepConversationMessages(msgs, ns, { web: useWeb, lane });
   // The web_search server tool is not in the pinned SDK's Tool union, hence the
   // cast (the lib/pipeline/web.ts pattern). One tools array for every call.
   const tools = (
-    webOn
+    useWeb
       ? [...DEEP_TOOLS, { type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]
       : DEEP_TOOLS
   ) as unknown as Anthropic.Tool[];
@@ -93,6 +113,19 @@ export async function POST(req: Request): Promise<Response> {
           // client gone
         }
       };
+
+      emit(ndLane(lane, `beat ${cls.beat}${cls.fresh ? ', recent-events question' : ''}, ${laneCtx.hitCount} record${laneCtx.hitCount === 1 ? '' : 's'} matched, best rank ${laneCtx.maxRank.toFixed(3)}`));
+      if (lane === 'unrelated') {
+        const decline = composeDecline(cls.topic, questionLinksFrom(ns), EXAMPLE_QUESTIONS.slice(0, 3));
+        emit(ndDecline(decline));
+        emit(ndDone(Object.fromEntries(tagger.refs().map((r) => [r.tag, r.id]))));
+        try {
+          controller.close();
+        } catch {
+          // already closed
+        }
+        return;
+      }
 
       // One tool call. Validation failures and misses go back to the model as
       // is_error results so a malformed call self-corrects on the next round.
@@ -139,6 +172,7 @@ export async function POST(req: Request): Promise<Response> {
       let answered = false;
       let streamedAny = false;
       let answerText = '';
+      const finalInstruction = `Research is over. Write the final answer now from the records gathered above, following the citation rules. Begin directly with the answer, with no preamble about your research.${laneReminder(lane, useWeb)}`;
       // Everything the model was shown, for the deterministic quote/figure
       // checks: the skeleton plus every successful tool result (web result
       // titles too; the searched page text itself arrives encrypted and never
@@ -196,6 +230,7 @@ export async function POST(req: Request): Promise<Response> {
 
       try {
         emit(ndStatus(STATUS_START));
+        if (autoWeb) emit(ndStatus('Searching the web: the question asks about recent events'));
 
         for (let round = 1; round <= MAX_ROUNDS; round++) {
           if (req.signal.aborted) break;
@@ -217,7 +252,7 @@ export async function POST(req: Request): Promise<Response> {
           await recordApiCall({
             feature: FEATURE, model: MODEL, usage: res.usage, wallMs: Date.now() - t, metadata: { round },
           });
-          if (webOn && captureServerBlocks(res.content as unknown[])) {
+          if (useWeb && captureServerBlocks(res.content as unknown[])) {
             emit(ndStatus('Searched the web'));
           }
 
@@ -249,6 +284,20 @@ export async function POST(req: Request): Promise<Response> {
               convo.push({ role: 'assistant', content: res.content as unknown as Anthropic.ContentBlockParam[] });
               answerText = '';
               continue;
+            }
+            // A thin or adjacent lane with the web on: when the model answers
+            // in the same turn as its web searches it keeps writing web findings
+            // above the marker, whatever the system prompt says about the split
+            // (measured 2026-09-23 across three prompt variants). The forced
+            // final, which carries the reminder in the user turn, complies; so
+            // route these answers through it at the cost of one more call.
+            const beyondLane = lane === 'thin' || lane === 'adjacent';
+            if (beyondLane && useWeb && serverOnly && answerText.trim() && round < MAX_ROUNDS) {
+              convo.push({ role: 'assistant', content: res.content as unknown as Anthropic.ContentBlockParam[] });
+              convo.push({ role: 'user', content: [{ type: 'text', text: finalInstruction }] });
+              emit(ndStatus('Separating the records from the web findings'));
+              answerText = '';
+              break;
             }
             // The model answered without (more) research; its text is the answer.
             if (answerText.trim()) {
@@ -303,11 +352,10 @@ export async function POST(req: Request): Promise<Response> {
           // the last tool results (a trailing sibling user message would break
           // role alternation), and tool_choice none blocks further calls.
           const last = convo[convo.length - 1];
-          if (last?.role === 'user' && Array.isArray(last.content)) {
-            last.content.push({
-              type: 'text',
-              text: 'Research is over. Write the final answer now from the records gathered above, following the citation rules. Do not request more tools.',
-            });
+          const carriesFinal = last?.role === 'user' && Array.isArray(last.content)
+            && last.content.some((c) => c.type === 'text' && c.text === finalInstruction);
+          if (last?.role === 'user' && Array.isArray(last.content) && !carriesFinal) {
+            last.content.push({ type: 'text', text: finalInstruction });
           }
           emit(ndStatus(STATUS_WRITING));
           const t = Date.now();
@@ -322,7 +370,7 @@ export async function POST(req: Request): Promise<Response> {
             },
             { timeout: 55_000, maxRetries: 0 }
           );
-          if (webOn) {
+          if (useWeb) {
             // Raw wire events, never the accumulator: citations when the model
             // quotes, plus the result blocks themselves as the fallback.
             ms.on('streamEvent', (ev) => {
@@ -373,12 +421,20 @@ export async function POST(req: Request): Promise<Response> {
         // cross-check costs a fraction of a cent; skipped near the deadline or
         // if it fails, in which case the deterministic results still ship.
         if (answerText.trim() && !req.signal.aborted) {
-          let report: VerifyReport = { flags: [], ...runDeterministicChecks(answerText, corpus) };
-          if (webOn && totals.server_tool_use.web_search_requests > 0) report.webSearched = true;
+          // Verification reads only the Atlas-grounded part of the answer: the
+          // Beyond section draws on the model's own knowledge or the web, not
+          // the records, so checking it against the corpus would just flag it.
+          const { atlas: atlasAnswer, beyond } = splitBeyond(answerText);
+          let report: VerifyReport = {
+            flags: [],
+            beyondPresent: beyond !== null,
+            ...runDeterministicChecks(atlasAnswer, corpus),
+          };
+          if (useWeb && totals.server_tool_use.web_search_requests > 0) report.webSearched = true;
           if (Date.now() < deadline - 25_000) {
             emit(ndStatus(STATUS_VERIFYING));
             try {
-              convo.push({ role: 'assistant', content: answerText });
+              convo.push({ role: 'assistant', content: atlasAnswer });
               convo.push({ role: 'user', content: VERIFY_INSTRUCTION });
               const t = Date.now();
               const vres = await client.messages.create(
