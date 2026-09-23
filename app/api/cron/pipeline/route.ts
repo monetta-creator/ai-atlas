@@ -3,6 +3,7 @@ import { getOrCreateDailyRun, advancePipelineRun } from '@/lib/pipeline/engine';
 import { getRun, getPipelinePrefs } from '@/lib/data';
 import { claimPipelineRun, updateRun, reopenPipelineRunForDiscovery } from '@/lib/mutations/pipeline';
 import { publishDueDrafts } from '@/lib/mutations/signals';
+import { resetTavilyBreaker } from '@/lib/scan/search-tavily';
 
 // The discovery pipeline's cron driver (lifted out of the shared
 // /api/cron/scan route when the Vercel Pro upgrade lifted the two-cron cap,
@@ -54,6 +55,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   // reopenPipelineRunForDiscovery). Bearer-gated like the rest.
   const rerun = req.nextUrl.searchParams.get('rerun');
   if (rerun === 'discovery' && run?.status === 'completed') {
+    resetTavilyBreaker(); // a warm instance may still hold a stale trip
     if (await reopenPipelineRunForDiscovery(runId)) run = await getRun(runId);
   }
   if (run?.status === 'completed') {

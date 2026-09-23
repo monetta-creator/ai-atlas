@@ -196,6 +196,7 @@ const FEATURE_LABEL: Record<string, string> = {
   ask: 'Ask the Atlas',
   ask_classify: 'Ask classifier',
   portal_ask: 'Ask · portal',
+  portal_ask_classify: 'Ask classifier · portal',
   ask_deep: 'Ask · deep research',
   ask_verify: 'Ask · answer check',
   tearsheet_sections: 'Report Portal · sections',

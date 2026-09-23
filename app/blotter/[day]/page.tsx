@@ -13,6 +13,14 @@ export const dynamic = 'force-dynamic';
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Shape AND calendar: '2026-02-30' passes the regex but Postgres throws on
+// the ::date cast, which would 500 instead of 404.
+function isRealDay(s: string): boolean {
+  if (!DAY_RE.test(s)) return false;
+  const d = new Date(`${s}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
 // Cheap and never throws: a bad or missing day just falls back to the
 // generic title, the page body 404s on its own read.
 export async function generateMetadata({
@@ -21,7 +29,7 @@ export async function generateMetadata({
   params: Promise<{ day: string }>;
 }): Promise<Metadata> {
   const { day } = await params;
-  if (!DAY_RE.test(day)) return { title: 'Daily edition · The AI Atlas' };
+  if (!isRealDay(day)) return { title: 'Daily edition · The AI Atlas' };
   return { title: `Daily edition, ${dateLabel(day)} · The AI Atlas` };
 }
 
@@ -31,7 +39,7 @@ export async function generateMetadata({
 // the archive without going back to the calendar.
 export default async function BlotterDay({ params }: { params: Promise<{ day: string }> }) {
   const { day } = await params;
-  if (!DAY_RE.test(day)) notFound();
+  if (!isRealDay(day)) notFound();
 
   const admin = (await isAdmin()) && !(await isPreview());
   const [edition, list] = await Promise.all([

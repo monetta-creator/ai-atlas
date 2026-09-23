@@ -16,18 +16,19 @@ import {
 // consistent snapshot), plans via reconcileFindings, then writes each bucket.
 export async function upsertFindings(
   inputs: FindingInput[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  failedChecks: Set<string> = new Set()
 ): Promise<{ opened: number; reopened: number; updated: number; resolved: number }> {
   return withTx(async (c) => {
     const keys = Array.from(new Set(inputs.map((i) => i.key)));
     const existingRes = await c.query(
-      `select key, state, snoozed_until::text as snoozed_until
+      `select key, check_key, state, snoozed_until::text as snoozed_until
          from agent_findings
         where key = any($1::text[]) or state in ('open', 'acked', 'snoozed')`,
       [keys]
     );
     const existing = existingRes.rows as ExistingFindingLite[];
-    const plan = reconcileFindings(existing, inputs, now);
+    const plan = reconcileFindings(existing, inputs, now, failedChecks);
     const nowIso = now.toISOString();
 
     for (const input of plan.insert) {

@@ -79,7 +79,8 @@ function actionLines(actions: AgentAction[]): string[] {
   return actions.slice(0, 30).map((a) => `- ${a.actor} ran ${a.remedy_key} (${a.tier}): ${a.ok ? 'ok' : `failed, ${a.error ?? 'no detail'}`}, cost $${a.cost_usd.toFixed(3)}`);
 }
 
-function buildDeterministicMemo(findings: AgentFinding[]): BriefMemo {
+function buildDeterministicMemo(findings: AgentFinding[], reason: 'budget' | 'model_failed'): BriefMemo {
+  const lead = reason === 'budget' ? 'Budget spent' : 'The model call failed';
   const bySeverity: Record<Severity, AgentFinding[]> = { high: [], warn: [], info: [] };
   for (const f of findings) bySeverity[f.severity]?.push(f);
   const sectionFor = (sev: Severity, label: string) => {
@@ -92,8 +93,8 @@ function buildDeterministicMemo(findings: AgentFinding[]): BriefMemo {
   );
   return {
     headline: findings.length
-      ? `Budget spent; here is the raw list (${findings.length} open)`
-      : 'Budget spent; nothing open right now',
+      ? `${lead}; here is the raw list (${findings.length} open)`
+      : `${lead}; nothing open right now`,
     sections: sections.length ? sections : [{ title: 'Nothing open', body: 'No open findings right now.' }],
     proposals: findings.filter((f) => f.remedy?.tier === 'propose').map((f) => ({ findingKey: f.key, text: f.remedy!.label })),
     willDo: findings.filter((f) => f.remedy?.tier === 'auto').map((f) => ({ findingKey: f.key, text: f.remedy!.label })),
@@ -121,7 +122,7 @@ export async function runDailyBrief(now: Date = new Date()): Promise<{ id: strin
   let model: string; // 'none' when no model call was made (budget spent, or the call failed)
 
   if (!budget.ok) {
-    memo = buildDeterministicMemo(findings);
+    memo = buildDeterministicMemo(findings, 'budget');
     model = 'none';
   } else {
     const spendToday = await getAgentSpendToday()
@@ -163,7 +164,7 @@ export async function runDailyBrief(now: Date = new Date()): Promise<{ id: strin
       }
       model = prefs.brief_model || 'none';
     } catch {
-      memo = buildDeterministicMemo(findings);
+      memo = buildDeterministicMemo(findings, 'model_failed');
       model = 'none';
     }
   }

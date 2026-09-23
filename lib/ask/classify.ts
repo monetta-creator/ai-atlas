@@ -66,7 +66,11 @@ function cleanTopic(raw: unknown): string {
 // ("what about Europe?") reads as unrelated on its own and as on-beat next to
 // the question it continues. The classifier sees both; the lane rule then
 // needs no blanket exemption for follow-ups.
-export async function classifyQuestion(question: string, beatDescription: string, prior?: string): Promise<ClassifyResult> {
+// `feature` is the cost-log slug: the portal route passes its own so the
+// classifier call counts toward the portal's daily budget.
+export async function classifyQuestion(
+  question: string, beatDescription: string, prior?: string, feature = 'ask_classify',
+): Promise<ClassifyResult> {
   const trimmed = question.trim();
   if (!trimmed) return FAIL_OPEN;
   try {
@@ -81,7 +85,7 @@ export async function classifyQuestion(question: string, beatDescription: string
       schema: SCHEMA,
       maxTokens: 200,
       timeoutMs: 6000,
-      feature: 'ask_classify',
+      feature,
     });
     const beat: Beat = BEATS.includes(out.beat as Beat) ? (out.beat as Beat) : 'atlas';
     const fresh = out.fresh === true || looksFresh(question);

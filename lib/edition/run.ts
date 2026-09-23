@@ -67,17 +67,32 @@ export async function runDailyEdition(
   const day1 = new Date(`${pack.day}T00:00:00Z`);
   day1.setUTCDate(day1.getUTCDate() + 1);
 
-  const reportId = await saveGeneratedReport({
-    kind: 'edition',
-    subject: null,
-    title: front[0]?.headline ?? `Daily edition, ${pack.day}`,
-    scope_from: pack.windowFrom.slice(0, 10),
-    scope_to: pack.day,
-    pack,
-    narrative,
-    generated_at: pack.generatedAt,
-    isPublished: true,
-  });
+  // Things happen = every ranked cluster the front did not take, so a story
+  // the model picked from past the default tail start never renders twice.
+  const frontIds = new Set(front.map((f) => f.clusterId));
+  pack.thingsHappen = pack.clusters
+    .filter((c) => !frontIds.has(c.id))
+    .slice(0, 23)
+    .map((c) => ({ headline: c.lead.headline, url: c.lead.url, domain: c.lead.domain, tier: c.lead.tier, href: c.lead.href }));
+
+  let reportId: string;
+  try {
+    reportId = await saveGeneratedReport({
+      kind: 'edition',
+      subject: null,
+      title: front[0]?.headline ?? `Daily edition, ${pack.day}`,
+      scope_from: pack.windowFrom.slice(0, 10),
+      scope_to: pack.day,
+      pack,
+      narrative,
+      generated_at: pack.generatedAt,
+      isPublished: true,
+    });
+  } catch (e) {
+    // generated_reports_edition_day_uq (0058): a concurrent run won the day.
+    if ((e as { code?: string } | null)?.code === '23505') return { skipped: `already generated for ${pack.day}` };
+    throw e;
+  }
 
   return { id: reportId, day: pack.day, items: front.length };
 }

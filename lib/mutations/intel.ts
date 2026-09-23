@@ -74,6 +74,7 @@ export async function reopenIntelRunForSearch(runId: string): Promise<boolean> {
   const row = await one<{ id: string }>(
     `update intel_runs
         set status = 'running', step = 'search', lease_until = null, error = null, updated_at = now(),
+            notes = coalesce((select array_agg(n) from unnest(notes) as n where n !~* 'Tavily 432|Tavily quota exhausted'), '{}'),
             swept_units = coalesce(
               (select array_agg(u) from unnest(swept_units) as u where u not like 'search:%'), '{}')
       where id = $1

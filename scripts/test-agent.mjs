@@ -173,6 +173,15 @@ check('reconcileFindings: a snoozed finding that stops firing is resolved, not l
   assert.deepEqual(plan.resolveKeys, ['x']);
 });
 
+check('reconcileFindings: a failed check keeps its snoozed finding (not resolved)', () => {
+  const existing = [
+    { key: 'engine.daily_status:scan', check_key: 'engine.daily_status', state: 'snoozed', snoozed_until: '2026-09-25T00:00:00Z' },
+    { key: 'drafts.backlog', check_key: 'drafts.backlog', state: 'open', snoozed_until: null },
+  ];
+  const plan = reconcileFindings(existing, [], NOW, new Set(['engine.daily_status']));
+  assert.deepEqual(plan.resolveKeys, ['drafts.backlog']);
+});
+
 check('reconcileFindings: mixed batch buckets correctly', () => {
   const existing = [
     { key: 'a', state: 'open', snoozed_until: null },       // still fires -> update

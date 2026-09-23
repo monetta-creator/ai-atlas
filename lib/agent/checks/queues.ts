@@ -9,8 +9,9 @@ import type { AgentCheck, FindingInput, Severity } from '../types';
 
 // Queue checks (the plan's Queues table): drafts, tooling, Scout, research
 // review, tickets, unpublished reports, stale gap recommendations, and the
-// pipeline's own coverage-miss advisory. Every run() catches its own errors
-// and returns [] on failure so one bad check never blocks the others.
+// pipeline's own coverage-miss advisory. Every run() logs and rethrows its
+// errors; runChecks catches them, so one bad check never blocks the others
+// and a failed check never resolves its own findings.
 
 async function oldestActiveDraftDays(): Promise<number> {
   const row = await one<{ d: number | null }>(
@@ -48,7 +49,7 @@ const draftsBacklog: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] drafts.backlog failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -76,7 +77,7 @@ const draftsPromotionDue: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] drafts.promotion_due failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -103,7 +104,7 @@ const draftsDedupePending: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] drafts.dedupe_pending failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -129,7 +130,7 @@ const toolingHeld: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] tooling.held failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -163,7 +164,7 @@ const scoutQueue: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] scout.queue failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -197,7 +198,7 @@ const researchReview: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] research.review failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -229,7 +230,7 @@ const ticketsOpen: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] tickets.open failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -258,7 +259,7 @@ const reportsUnpublished: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] reports.unpublished failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -313,7 +314,7 @@ const gapsStaleRecs: AgentCheck = {
       return findings;
     } catch (e) {
       console.error('[agent] gaps.stale_recs failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -341,7 +342,7 @@ const pipelineCoverageMisses: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] pipeline.coverage_misses failed', e);
-      return [];
+      throw e;
     }
   },
 };

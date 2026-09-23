@@ -7,7 +7,7 @@ import {
   getToolingRunByKey, getToolingPrefs,
 } from '../data';
 import { getFindingByKey } from '../data/agent';
-import { isBlackout, hoursSince, mondayUtc, isWeekdayUtc } from './time';
+import { isBlackout, hoursSince, mondayUtc, isWeekdayUtc, lastFridayUtc } from './time';
 import { checkAgentBudget } from './budget';
 import type { Actor, JobKey, RemedyResult, RemedyRef, RemedyTier } from './types';
 import { JOB_KEYS } from './types';
@@ -282,7 +282,11 @@ export const REMEDIES: Record<string, Remedy> = {
     label: 'Generate the weekly research roundup',
     tier: 'propose', costsModel: true, reversible: false, createsRun: false,
     run: async () => {
-      const { value, costUsd } = await measureCost(['roundup_sections', 'roundup_close'], () => runWeeklyRoundup());
+      // Key the roundup to the Friday the reports.roundup_missing finding asks
+      // for, so a weekend tap fills that week instead of a Saturday-keyed one.
+      const { value, costUsd } = await measureCost(['roundup_sections', 'roundup_close'], () =>
+        runWeeklyRoundup(lastFridayUtc(new Date()))
+      );
       if ('skipped' in value) return { ok: true, result: { skipped: value.skipped }, summary: `Skipped: ${value.skipped}.` };
       return { ok: true, result: { reportId: value.reportId, costUsd }, summary: 'Generated the weekly research roundup.' };
     },

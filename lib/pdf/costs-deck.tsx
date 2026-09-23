@@ -203,7 +203,7 @@ const s = StyleSheet.create({
   bulletsList: { flexGrow: 1, justifyContent: 'center', marginTop: 6 },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 20 },
   bulletMark: { width: 6, height: 6, marginTop: 5, marginRight: 12, backgroundColor: COBALT },
-  bulletCopy: { flex: 1, fontSize: 11, lineHeight: 1.5, color: DIM },
+  bulletCopy: { fontSize: 11, lineHeight: 1.5, color: DIM },
   bulletLead: { fontWeight: 'bold', color: INK },
   // A bullet whose lead links out (the edition deck's "go deeper" / source
   // items): cobalt, bold, no underline beyond the color itself.
@@ -227,12 +227,12 @@ function SlideBody({ kicker, title, children, takeaway }: {
         <Text style={s.title}>{title}</Text>
         {children}
       </View>
-      {takeaway !== undefined && (
+      {takeaway ? (
         <View style={s.takeawayAbsolute} wrap={false}>
           <Text style={s.takeawayLabel}>Takeaway</Text>
           <Text style={s.takeawayText}>{takeaway}</Text>
         </View>
-      )}
+      ) : null}
       <DeckFooter />
     </Page>
   );

@@ -10,11 +10,14 @@ import { one } from '@/lib/db';
 // pass the check (no lock; acceptable overshoot for a sub-cent call).
 
 export const PORTAL_FEATURE = 'portal_ask';
+// The portal Ask's lane classifier (one utility-model call per turn, declined
+// turns included), metered under its own slug so it counts toward both caps.
+export const PORTAL_CLASSIFY_FEATURE = 'portal_ask_classify';
 // Every feature slug that draws on the portal's daily budget. Portal-triggered
 // scout research (intel sweeps, document reads) all log as 'portal_scout';
 // per-tool granularity lives in ai_cost_log.metadata.tool. 'portal_tooling'
 // covers a portal keyholder's tooling-monitor deep dives and report legs.
-const PORTAL_FEATURES = ['portal_ask', 'portal_scout', 'portal_tooling'];
+const PORTAL_FEATURES = ['portal_ask', PORTAL_CLASSIFY_FEATURE, 'portal_scout', 'portal_tooling'];
 
 function envNumber(name: string, fallback: number): number {
   const v = Number(process.env[name]);

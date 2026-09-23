@@ -181,13 +181,13 @@ export async function pendingAnalysisIdsAction(runId: string): Promise<string[]>
   return approved.filter((c) => !c.signal_id).map((c) => c.id);
 }
 
-// Home-dashboard candidate archive (section 3). A PUBLIC read action — the archive is
-// visible to guests and returns only pipeline metadata (no personal-layer fields), so it
-// is intentionally NOT admin-gated. Every filter is validated/allow-listed here; the
-// data layer parameterizes the rest. pageSize is fixed server-side.
+// Candidate archive on /blotter/desk (admin-only since the Desk moved behind adminGate on
+// 2026-09-23). Every filter is validated/allow-listed here; the data layer parameterizes
+// the rest. pageSize is fixed server-side.
 export async function getCandidateArchiveAction(
   filters: CandidateArchiveFilters
 ): Promise<CandidateArchiveResult> {
+  await requireAdmin();
   const f = filters ?? {};
   const lens = (SIGNAL_LENS_SLUGS as string[]).includes(f.lens as string)
     ? (f.lens as SignalLens) : undefined;

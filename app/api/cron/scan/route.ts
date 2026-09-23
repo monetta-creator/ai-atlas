@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { getOrCreateTodayRun, claimScanRun, advanceScanRun } from '@/lib/scan/run';
 import { getScanRun, getScanPrefs } from '@/lib/data/scan';
 import { failScanRun, reopenScanRunForSearch } from '@/lib/mutations/scan';
+import { resetTavilyBreaker } from '@/lib/scan/search-tavily';
 
 // The External Scan's cron driver: GET /api/cron/scan, invoked by the weekday
 // vercel.json crons (the /sweep sibling is the second invocation that
@@ -48,6 +49,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   // Tavily-quota day; see reopenScanRunForSearch). Bearer-gated like the rest.
   const rerun = req.nextUrl.searchParams.get('rerun');
   if (rerun === 'search' && existing?.status === 'completed') {
+    resetTavilyBreaker(); // a warm instance may still hold a stale trip
     if (await reopenScanRunForSearch(runId)) existing = await getScanRun(runId);
   }
   if (existing?.status === 'completed') {

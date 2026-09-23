@@ -10,7 +10,7 @@ import {
   clampHistory, clampSignalOffset, parseAskBody, retrievalQuery,
   collectWebSources, encodeCostReport, encodeWebSources,
 } from '@/lib/ask/history';
-import { checkPortalBudget, PORTAL_FEATURE } from '@/lib/portal/budget';
+import { checkPortalBudget, PORTAL_CLASSIFY_FEATURE, PORTAL_FEATURE } from '@/lib/portal/budget';
 
 // The team Ask endpoint: /api/ask's envelope with four diffs.
 // 1. Gate: the portal cookie (shared team key), not admin. This is the one
@@ -63,7 +63,7 @@ export async function POST(req: Request): Promise<Response> {
   const latest = msgs[msgs.length - 1].content;
   const [ctx, cls] = await Promise.all([
     buildAskContext(retrievalQuery(msgs), { mode: 'portal', tagStart, ns }),
-    classifyQuestion(latest, beatDescriptionFrom(ns), priorUserTurn(msgs)),
+    classifyQuestion(latest, beatDescriptionFrom(ns), priorUserTurn(msgs), PORTAL_CLASSIFY_FEATURE),
   ]);
   const lane = decideLane({
     hitCount: ctx.hitCount, maxRank: ctx.maxRank, explicit: ctx.explicit,

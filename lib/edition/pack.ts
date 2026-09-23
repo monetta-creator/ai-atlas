@@ -117,21 +117,30 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
       [w.from, w.to]
     ),
     q<CandidateRow>(
+      // A draft signal 404s for guests, so link it only once published;
+      // otherwise the item falls back to the external url.
       `select sc.id, sc.headline, sc.url, sc.source_domain,
-              to_char(sc.published_date, 'YYYY-MM-DD') as published_date, sc.signal_id
+              to_char(sc.published_date, 'YYYY-MM-DD') as published_date,
+              case when s.is_published then sc.signal_id end as signal_id
          from signal_candidates sc
+         left join signals s on s.id = sc.signal_id
         where sc.triage_status = 'approved'
           and sc.created_at >= $1::timestamptz and sc.created_at < $2::timestamptz`,
       [w.from, w.to]
     ),
+    // Window on when a signal went public, not its editorial date: pipeline
+    // drafts carry the article's date and the promotion policy publishes them
+    // 48h+ later (auto_published_at). A human publishing an old draft is
+    // still missed; that needs a first_published_at column.
     q<SignalRow>(
       `select s.id, s.title, s.summary, to_char(s.published_at, 'YYYY-MM-DD') as published_date,
               s.claim_touches, src.url as source_url
          from signals s
          left join sources src on src.id = s.source_id
         where s.is_published = true
-          and s.published_at >= $1::timestamptz and s.published_at < $2::timestamptz
-        order by s.published_at desc`,
+          and coalesce(s.auto_published_at, s.published_at) >= $1::timestamptz
+          and coalesce(s.auto_published_at, s.published_at) < $2::timestamptz
+        order by coalesce(s.auto_published_at, s.published_at) desc`,
       [w.from, w.to]
     ),
     q<{ company_slug: string; company_name: string; fact: string; value_text: string | null; url: string | null }>(
@@ -271,17 +280,17 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
   // the most evidence in the last 30 days (guest-safe: codes, statements,
   // hrefs, no confidence).
   if (claimsTouched.length < 4) {
-    const standing = await q<{ code: string; type: 'claim' | 'bridge_claim'; statement: string }>(
-      `select c.code, 'claim'::text as type, c.statement
+    const standing = await q<{ code: string; type: 'claim' | 'bridge_claim'; statement: string; n: number }>(
+      `select c.code, 'claim'::text as type, c.statement, count(*)::int as n
          from claims c join evidence e on e.target_type = 'claim' and e.target_id = c.id
         where c.is_frame = false and e.created_at > now() - interval '30 days'
         group by c.code, c.statement
        union all
-       select b.code, 'bridge_claim'::text as type, b.statement
+       select b.code, 'bridge_claim'::text as type, b.statement, count(*)::int as n
          from bridge_claims b join evidence e on e.target_type = 'bridge_claim' and e.target_id = b.id
         where e.created_at > now() - interval '30 days'
         group by b.code, b.statement
-        order by 1
+        order by n desc, code
         limit 40`
     );
     const have = new Set(claimsTouched.map((c) => c.code));

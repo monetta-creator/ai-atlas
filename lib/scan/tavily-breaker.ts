@@ -4,8 +4,10 @@
 // engine still fired its full search plan into it (30+ doomed calls and 30+
 // identical notes per run). One 432 trips the breaker for the rest of this
 // process, and the engines check tavilyAvailable() before each search leg
-// and skip the leg with ONE note. Module state: it protects one serverless
-// invocation (one cron window); the next window re-learns with one call.
+// and skip the leg with ONE note. Module state, and Fluid Compute reuses warm
+// instances across invocations, so the trip lasts 15 minutes (one 700s work
+// budget) rather than the month: the next cron window re-learns with one
+// call, and the ?rerun= recovery routes reset it outright.
 export const TAVILY_QUOTA_STATUS = 432;
 let tavilyDownUntil = 0;
 
@@ -13,7 +15,7 @@ export function tavilyAvailable(): boolean {
   return Date.now() >= tavilyDownUntil;
 }
 
-export function markTavilyQuotaExhausted(ms = 6 * 60 * 60_000): void {
+export function markTavilyQuotaExhausted(ms = 15 * 60_000): void {
   tavilyDownUntil = Date.now() + ms;
 }
 

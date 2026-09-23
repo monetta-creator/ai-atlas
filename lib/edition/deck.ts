@@ -225,15 +225,16 @@ export function buildEditionDeck(edition: SavedEdition, origin: string): CostDec
   });
 
   const links = gatedColumnHtml ? extractLinks(gatedColumnHtml) : [];
-  if (links.length > 0) {
+  const linkChunks = chunk(links, 8);
+  linkChunks.forEach((group, i) => {
     slides.push({
       kind: 'bullets',
-      kicker: 'The column · links',
+      kicker: linkChunks.length > 1 ? `THE COLUMN · LINKS · ${i + 1}/${linkChunks.length}` : 'The column · links',
       title: 'Links from the column',
-      bullets: links.map((l) => ({ lead: l.text || l.href, text: '', href: abs(l.href) })),
+      bullets: group.map((l) => ({ lead: l.text || l.href, text: '', href: abs(l.href) })),
       takeaway: '',
     });
-  }
+  });
 
   // ---- things happen -----------------------------------------------------
 
@@ -271,15 +272,16 @@ export function buildEditionDeck(edition: SavedEdition, origin: string): CostDec
 
   // ---- research / tools / blind spots ------------------------------------
 
-  if (pack.papers.length > 0) {
+  const paperChunks = chunk(pack.papers, 4);
+  paperChunks.forEach((group, i) => {
     slides.push({
       kind: 'bullets',
-      kicker: 'Research',
+      kicker: paperChunks.length > 1 ? `RESEARCH · ${i + 1}/${paperChunks.length}` : 'Research',
       title: 'Research',
-      bullets: pack.papers.map((p) => ({ lead: p.title, text: p.whoCares ?? '', href: abs(p.href) })),
+      bullets: group.map((p) => ({ lead: p.title, text: p.whoCares ?? '', href: abs(p.href) })),
       takeaway: '',
     });
-  }
+  });
 
   if (pack.tools.length > 0) {
     slides.push({
@@ -311,15 +313,18 @@ export function buildEditionDeck(edition: SavedEdition, origin: string): CostDec
 
   // ---- sources --------------------------------------------------------
 
-  slides.push({
-    kind: 'bullets',
-    kicker: 'Sources',
-    title: 'Sources',
-    bullets: pack.sources.map((s) => ({
-      lead: s.domain,
-      text: `${s.count} items${s.tier ? `, tier ${s.tier}` : ''}`,
-    })),
-    takeaway: `${pack.numbers.outlets} outlets read today`,
+  const srcChunks = chunk(pack.sources, 6);
+  srcChunks.forEach((group, i) => {
+    slides.push({
+      kind: 'bullets',
+      kicker: srcChunks.length > 1 ? `SOURCES · ${i + 1}/${srcChunks.length}` : 'Sources',
+      title: 'Sources',
+      bullets: group.map((s) => ({
+        lead: s.domain,
+        text: `${s.count} items${s.tier ? `, tier ${s.tier}` : ''}`,
+      })),
+      takeaway: `${pack.numbers.outlets} outlets read today`,
+    });
   });
 
   // ---- close ------------------------------------------------------------

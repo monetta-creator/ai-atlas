@@ -5,10 +5,11 @@ import { upsertFindings } from '../mutations/agent';
 import { getAgentPrefs, listFindings } from '../data/agent';
 import type { CheckContext, FindingInput } from './types';
 
-// The hourly sensor sweep: run every check (each already catches its own
-// errors and returns [] on failure; this loop adds a second net so a check
-// that throws before its own try/catch still can't take the run down),
-// collect every finding, and reconcile the whole set in one transaction.
+// The hourly sensor sweep: run every check (each logs and rethrows its own
+// errors; this loop catches them so one failing check can't take the run
+// down, and records the failed check keys so the reconciler leaves their
+// findings alone instead of resolving them), collect every finding, and
+// reconcile the whole set in one transaction.
 export async function runChecks(now: Date = new Date()): Promise<{
   opened: number;
   reopened: number;
@@ -20,14 +21,16 @@ export async function runChecks(now: Date = new Date()): Promise<{
   const start = Date.now();
   const ctx: CheckContext = { now, weekday: isWeekdayUtc(now), hourUtc: now.getUTCHours() };
   const inputs: FindingInput[] = [];
+  const failed = new Set<string>();
   for (const check of AGENT_CHECKS) {
     try {
       inputs.push(...(await check.run(ctx)));
     } catch (e) {
+      failed.add(check.key);
       console.error(`[agent] check "${check.key}" threw`, e);
     }
   }
-  const counts = await upsertFindings(inputs, now);
+  const counts = await upsertFindings(inputs, now, failed);
   return { ...counts, checked: AGENT_CHECKS.length, durationMs: Date.now() - start };
 }
 

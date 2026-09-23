@@ -23,7 +23,7 @@ export default function AskStarters({
         to its record{locked ? '. Unlock below with the team key to start.' : '.'}
       </p>
       <ExamplePill onPick={onPick} />
-      <StartHere variant="link" />
+      <StartHere variant="link" onPick={onPick} />
     </div>
   );
 }

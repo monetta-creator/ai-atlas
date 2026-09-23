@@ -297,9 +297,9 @@ export async function archiveDraftsBulk(kind: BulkArchiveKind, staleDays = 45, m
 // ---- Promotion policy (0055) --------------------------------------------------
 // Publishes every eligible draft: pipeline origin, high significance, at least
 // one claim touch, still active (not archived = not vetoed), created at or
-// after the policy start, and older than the veto window. Each publish goes
-// through setSignalPublished so evidence materializes exactly as a human
-// click would; auto_published_at records that the policy did it.
+// after the policy start, and older than the veto window. Each publish runs
+// syncSignalEvidence so evidence materializes exactly as a human click would;
+// auto_published_at records that the policy did it.
 export async function publishDueDrafts(opts: {
   afterHours: number; from: string; limit?: number;
 }): Promise<string[]> {
@@ -316,9 +316,20 @@ export async function publishDueDrafts(opts: {
   );
   const published: string[] = [];
   for (const { id } of due) {
-    await setSignalPublished(id, true);
-    await exec(`update signals set auto_published_at = now() where id = $1`, [id]);
-    published.push(id);
+    // Guarded claim, not setSignalPublished: a draft archived (vetoed) after the
+    // SELECT above must stay archived, and a human publish un-archives by design.
+    const ok = await withTx(async (c) => {
+      const r = await c.query(
+        `update signals set is_published = true, auto_published_at = now(), updated_at = now()
+          where id = $1 and is_published = false and archived_at is null
+          returning id`,
+        [id]
+      );
+      if (!r.rowCount) return false;          // vetoed or already published since the SELECT
+      await syncSignalEvidence(c, id, true);
+      return true;
+    });
+    if (ok) published.push(id);
   }
   return published;
 }
@@ -328,9 +339,10 @@ export async function publishDueDrafts(opts: {
 // Consolidate a group of duplicate DRAFT signals into the canonical one: union the
 // argument-map footprint (claim_touches + touch_details + lenses), widen significance to the
 // group max, and APPEND the discarded sources' URLs to the canonical summary so the kept
-// record shows every link that reported the same story. Then delete the duplicates and
-// terminalize their pipeline candidates so they don't re-queue. Drafts only (unpublished):
-// no evidence to unwind (syncSignalEvidence runs on publish), so a plain delete is safe.
+// record shows every link that reported the same story. Then archive the duplicates
+// (archive_reason 'dedupe_merge'; archive, never delete, so their rows and candidate links
+// survive) and terminalize their pipeline candidates so they don't re-queue. Drafts only
+// (unpublished): no evidence to unwind (syncSignalEvidence runs on publish).
 // Returns the distinct run ids whose candidate tallies the caller should recompute.
 export async function mergeDraftSignals(canonicalId: string, duplicateIds: string[]): Promise<string[]> {
   const dupes = Array.from(new Set(duplicateIds.filter((id) => id && id !== canonicalId)));
@@ -392,10 +404,10 @@ export async function mergeDraftSignals(canonicalId: string, duplicateIds: strin
       [summary || null, significance, Array.from(lenses), Array.from(touches), JSON.stringify(details), canonicalId]
     );
 
-    // Capture the affected runs BEFORE the delete NULLs signal_id, so the caller can refresh
-    // their tallies. Then terminalize the duplicates' candidates (triage 'rejected' is what
-    // keeps them out of the pending-analysis set — mirrors markCandidateUnanalyzable) and
-    // delete the duplicate drafts.
+    // Capture the affected runs so the caller can refresh their tallies. Then terminalize the
+    // duplicates' candidates (triage 'rejected' is what keeps them out of the pending-analysis
+    // set — mirrors markCandidateUnanalyzable) and archive the duplicate drafts with reason
+    // 'dedupe_merge'; they keep their candidate links.
     const runRes = await c.query(
       `select distinct run_id from signal_candidates where signal_id = any($1::uuid[])`,
       [dupes]
@@ -408,7 +420,11 @@ export async function mergeDraftSignals(canonicalId: string, duplicateIds: strin
         where signal_id = any($1::uuid[])`,
       [dupes]
     );
-    await c.query(`delete from signals where id = any($1::uuid[])`, [dupes]);
+    await c.query(
+      `update signals set archived_at = now(), archive_reason = 'dedupe_merge', updated_at = now()
+        where id = any($1::uuid[]) and is_published = false`,
+      [dupes]
+    );
     return runIds;
   });
 }

@@ -179,6 +179,7 @@ export async function reopenPipelineRunForDiscovery(runId: string): Promise<bool
   const row = await one<{ id: string }>(
     `update pipeline_runs
         set status = 'running', step = 'discovery', discovered_units = '{}', lease_until = null,
+            notes = coalesce((select array_agg(n) from unnest(notes) as n where n !~* 'Tavily 432|Tavily quota exhausted'), '{}'),
             error = null, updated_at = now()
       where id = $1
         and status = 'completed'

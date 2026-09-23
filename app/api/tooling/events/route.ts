@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
-import { isAdmin, isPreview } from '@/lib/auth';
-import { getProductEvents } from '@/lib/data';
+import { isAdmin, isPortal, isPreview } from '@/lib/auth';
+import { getProduct, getProductEvents } from '@/lib/data';
 
 // The tooling table's quick-read drawer: GET /api/tooling/events?product=<uuid>.
 // Public (needs a proxy.ts allow-list entry, its matcher does not exempt /api/*)
@@ -16,9 +16,16 @@ export async function GET(req: NextRequest): Promise<Response> {
   if (!UUID_RE.test(productId)) {
     return Response.json({ error: 'Unknown product.' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
   }
-  const [adminFlag, preview] = await Promise.all([isAdmin(), isPreview()]);
+  const [adminFlag, preview, portal] = await Promise.all([isAdmin(), isPreview(), isPortal()]);
   const admin = adminFlag && !preview;
-  const events = await getProductEvents(productId, 5);
+  // Same visibility gate as app/tooling/[slug]/page.tsx: a product the viewer
+  // cannot open (parked/candidate for guests, dismissed for keyholders) has no
+  // events either.
+  const product = await getProduct(productId, { admin, portal: portal || admin });
+  if (!product) {
+    return Response.json({ error: 'Unknown product.' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
+  }
+  const events = await getProductEvents(product.id, 5);
   const rows = events.map((e) => ({
     id: e.id,
     event_date: e.event_date,

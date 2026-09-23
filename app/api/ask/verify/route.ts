@@ -6,6 +6,7 @@ import { loadNamespace } from '@/lib/ask/retrieve';
 import { parseCitations, type CitationKind, type ValidIdsPlain } from '@/lib/ask/verify';
 import { fetchRecord, type PeekKind } from '@/lib/ask/search';
 import { skeletonBlock } from '@/lib/ask/prompt';
+import { splitBeyond } from '@/lib/ask/lanes';
 import {
   VERIFY_INSTRUCTION, VERIFY_SYSTEM, VERIFY_TOOL, type VerifyReport,
   createTagger, parseSignalMap, parseVerifyOutput, renderRecord, runDeterministicChecks,
@@ -43,6 +44,13 @@ export async function POST(req: Request): Promise<Response> {
   const question = typeof body.question === 'string' ? body.question.trim().slice(0, 2_000) : '';
   if (!answer) return new Response('Empty answer', { status: 400 });
   const map = parseSignalMap(body.signalMap);
+  // Only the Atlas part is checked against the records: text below the
+  // @@BEYOND@@ marker is labeled model or web knowledge, not a records claim.
+  const { atlas, beyond } = splitBeyond(answer);
+  if (!atlas.trim()) {
+    const empty: VerifyReport = { flags: [], beyondPresent: beyond !== null, ...runDeterministicChecks('', []) };
+    return Response.json({ verify: empty }, { headers: { 'Cache-Control': 'no-store' } });
+  }
 
   const ns = await loadNamespace();
   const idsPlain: ValidIdsPlain = {
@@ -57,7 +65,7 @@ export async function POST(req: Request): Promise<Response> {
 
   // Every valid citation in the answer, deduped, becomes verification corpus.
   const cited = new Map<string, { kind: CitationKind; id: string }>();
-  for (const span of parseCitations(answer, idsPlain, map)) {
+  for (const span of parseCitations(atlas, idsPlain, map)) {
     for (const c of span.codes) {
       if (!c.valid) continue;
       const key = `${c.kind}:${c.id}`;
@@ -78,7 +86,7 @@ export async function POST(req: Request): Promise<Response> {
     recordBlocks.push(block);
   }
 
-  let report: VerifyReport = { flags: [], ...runDeterministicChecks(answer, corpus) };
+  let report: VerifyReport = { flags: [], beyondPresent: beyond !== null, ...runDeterministicChecks(atlas, corpus) };
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (recordBlocks.length && apiKey) {
@@ -98,7 +106,7 @@ export async function POST(req: Request): Promise<Response> {
               { type: 'text', text: skeletonBlock(ns), cache_control: { type: 'ephemeral' } },
               {
                 type: 'text',
-                text: `RECORDS, the material the answer cites:\n\n${recordBlocks.join('\n\n')}\n\n----\n\nQUESTION:\n${question || '(not provided)'}\n\nANSWER TO CHECK:\n${answer}\n\n----\n\n${VERIFY_INSTRUCTION}`,
+                text: `RECORDS, the material the answer cites:\n\n${recordBlocks.join('\n\n')}\n\n----\n\nQUESTION:\n${question || '(not provided)'}\n\nANSWER TO CHECK:\n${atlas}\n\n----\n\n${VERIFY_INSTRUCTION}`,
               },
             ],
           },

@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { q, one } from '../db';
 import {
   DEFAULT_AGENT_MODEL,
@@ -114,7 +115,7 @@ export async function getFindingByKey(key: string): Promise<AgentFinding | null>
   return row ? mapFinding(row) : null;
 }
 
-export async function getAgentPulse(): Promise<AgentPulse> {
+async function loadAgentPulse(): Promise<AgentPulse> {
   const [counts, brief, newSince] = await Promise.all([
     one<{ unread: number; open: number; high: number }>(
       `select
@@ -142,6 +143,10 @@ export async function getAgentPulse(): Promise<AgentPulse> {
     newSince,
   };
 }
+
+// Deduped per request with React cache(): Header and the page's PageTop both
+// read it on every admin navigation (2026-09-23 latency pass).
+export const getAgentPulse = cache(loadAgentPulse);
 
 export async function listAgentActions(limit = 50): Promise<AgentAction[]> {
   return q<AgentAction>(
@@ -184,9 +189,14 @@ const SPEND_FEATURES = ['agent_brief', 'agent_chat', 'agent_remedy'];
 
 export async function getAgentSpendToday(): Promise<{ usd: number; calls: number }> {
   const row = await one<{ usd: number; calls: number }>(
-    `select coalesce(sum(cost_usd), 0)::numeric as usd, count(*)::int as calls
-       from ai_cost_log
-      where feature = any($1::text[]) and created_at >= date_trunc('day', now() at time zone 'utc')`,
+    `select (select coalesce(sum(cost_usd), 0) from ai_cost_log
+               where feature = any($1::text[]) and created_at >= date_trunc('day', now() at time zone 'utc'))
+          + (select coalesce(sum(cost_usd), 0) from agent_actions
+               where created_at >= date_trunc('day', now() at time zone 'utc')) as usd,
+            (select count(*)::int from ai_cost_log
+               where feature = any($1::text[]) and created_at >= date_trunc('day', now() at time zone 'utc'))
+          + (select count(*)::int from agent_actions
+               where cost_usd > 0 and created_at >= date_trunc('day', now() at time zone 'utc')) as calls`,
     [SPEND_FEATURES]
   );
   return { usd: row?.usd ?? 0, calls: row?.calls ?? 0 };

@@ -14,8 +14,8 @@ import { JOB_KEYS, type AgentCheck, type FindingInput, type JobKey, type Severit
 // Engine checks (the plan's Engines table): the four daily jobs' run health
 // (via getDailyJobStatus, so state semantics match the lobby widget exactly),
 // daily budgets, the Tavily quota, retained-text coverage, zero-yield
-// domains, and the two weekly reports' presence. Every run() catches its own
-// errors and returns [] on failure.
+// domains, and the two weekly reports' presence. Every run() logs and rethrows
+// its errors; runChecks marks the check failed so its findings are kept.
 
 const CONSOLE: Record<JobKey, string> = {
   scan: '/scan', pipeline: '/pipeline', intel: '/intel', research: '/research/console', tooling: '/tooling/console',
@@ -66,7 +66,7 @@ const engineDailyStatus: AgentCheck = {
       return out;
     } catch (e) {
       console.error('[agent] engine.daily_status failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -93,7 +93,7 @@ const engineMissedDays: AgentCheck = {
         }));
     } catch (e) {
       console.error('[agent] engine.missed_days failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -122,7 +122,7 @@ const enginePaused: AgentCheck = {
       return out;
     } catch (e) {
       console.error('[agent] engine.paused failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -162,7 +162,7 @@ const budgetNearCap: AgentCheck = {
       return out;
     } catch (e) {
       console.error('[agent] budget.near_cap failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -180,13 +180,13 @@ const tavilyQuota: AgentCheck = {
         key: 'tavily.quota', checkKey: 'tavily.quota', severity,
         title: q.capHit ? 'Tavily monthly cap hit' : `Tavily quota at ${Math.round(q.pctUsed * 100)}%`,
         detail: q.capHit
-          ? `Tavily's monthly query cap has been hit (${q.used} of ${q.cap}); the scan/pipeline/intel engines fall back to their Sonnet paths, which cost more.`
+          ? `Tavily's monthly query cap has been hit (${q.used} of ${q.cap}). Once Tavily returns 432, the scan, pipeline and intel engines skip their remaining search legs for the day with one run note (feeds, filings and metrics still run). When credits are back, recover the day with /api/cron/{scan,intel}?rerun=search or /api/cron/pipeline?rerun=discovery (outside 00:00-09:00 UTC).`
           : `Tavily usage is at ${Math.round(q.pctUsed * 100)}% of the monthly cap (${q.used} of ${q.cap}), projected ${q.projected} by month end.`,
         metric: { used: q.used, cap: q.cap, projected: q.projected }, href: '/intel', remedy: null,
       }];
     } catch (e) {
       console.error('[agent] tavily.quota failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -210,7 +210,7 @@ const textCoverage: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] text.coverage failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -231,7 +231,7 @@ const pipelineZeroYield: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] pipeline.zero_yield failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -258,7 +258,7 @@ const reportsRoundupMissing: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] reports.roundup_missing failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -283,7 +283,7 @@ const reportsEntrantsMissing: AgentCheck = {
       }];
     } catch (e) {
       console.error('[agent] reports.entrants_missing failed', e);
-      return [];
+      throw e;
     }
   },
 };
@@ -319,7 +319,7 @@ const notesErrors: AgentCheck = {
       return out;
     } catch (e) {
       console.error('[agent] notes.errors failed', e);
-      return [];
+      throw e;
     }
   },
 };

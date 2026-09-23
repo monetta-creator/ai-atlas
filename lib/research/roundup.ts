@@ -347,9 +347,9 @@ export function gateRoundupNarrative(
 // The cron's whole unit. Errors propagate to the caller (the route wraps this
 // in try/catch and returns the error as data); everything else here is a
 // deliberate, typed skip.
-export async function runWeeklyRoundup(): Promise<{ reportId: string } | { skipped: string }> {
-  const weekEnd = isoDay(new Date());
-
+export async function runWeeklyRoundup(
+  weekEnd: string = isoDay(new Date())
+): Promise<{ reportId: string } | { skipped: string }> {
   const existing = await getRoundupForWeek(weekEnd);
   if (existing) return { skipped: `already complete for the week ending ${weekEnd}` };
 

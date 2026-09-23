@@ -24,10 +24,13 @@ function markSeen() {
 // (a plain text link, never auto-opening). Same overlay idiom as PageInfo and
 // the feedback dialogs: Escape, backdrop, and the close button all dismiss.
 export default function StartHere({
-  variant, autoOpen,
+  variant, autoOpen, onPick,
 }: {
   variant: 'button' | 'link';
   autoOpen?: boolean;
+  // On /ask the workspace is already mounted and its ?q= seed effect runs once,
+  // so a router.push there would change the URL and send nothing.
+  onPick?: (q: string) => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -68,7 +71,8 @@ export default function StartHere({
 
   function askStarter(q: string) {
     close();
-    router.push(`/ask?q=${encodeURIComponent(q)}`);
+    if (onPick) onPick(q);
+    else router.push(`/ask?q=${encodeURIComponent(q)}`);
   }
 
   return (

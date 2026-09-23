@@ -20,15 +20,17 @@ export default function DraftSprint({
 }) {
   const router = useRouter();
   const [queue, setQueue] = useState<Signal[]>(drafts);
-  const [index, setIndex] = useState(0);
+  // Ids skipped this session, most recent last: Back pops the latest one still queued.
+  const [skipped, setSkipped] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState({ published: 0, archived: 0, skipped: 0 });
   const [error, setError] = useState<string | null>(null);
   // Written and read only inside event handlers (never during render).
   const lastDecisionAt = useRef(0);
 
-  const current = queue[index] ?? null;
-  const remaining = queue.length - index;
+  const current = queue[0] ?? null;
+  const remaining = queue.length;
+  const canBack = skipped.some((id) => queue.some((d) => d.id === id));
 
   async function decide(decision: 'publish' | 'archive') {
     if (!current || busy) return;
@@ -50,13 +52,21 @@ export default function DraftSprint({
 
   function skip() {
     if (!current || busy) return;
-    setQueue((qq) => [...qq.slice(0, index), ...qq.slice(index + 1), current]);
+    setQueue((qq) => [...qq.slice(1), current]);
+    setSkipped((s) => [...s, current.id]);
     setDone((d) => ({ ...d, skipped: d.skipped + 1 }));
   }
 
   function back() {
-    if (busy || index === 0) return;
-    setIndex((i) => i - 1);
+    if (busy) return;
+    const live = skipped.filter((id) => queue.some((d) => d.id === id));
+    const id = live[live.length - 1];
+    if (!id) return;
+    setSkipped(live.slice(0, -1));
+    setQueue((qq) => {
+      const d = qq.find((x) => x.id === id);
+      return d ? [d, ...qq.filter((x) => x.id !== id)] : qq;
+    });
   }
 
   useEffect(() => {
@@ -150,7 +160,7 @@ export default function DraftSprint({
           <button type="button" className="btn btn--ghost" disabled={busy} onClick={() => void decide('archive')}>Archive <kbd>A</kbd></button>
           <button type="button" className="btn btn--quiet" disabled={busy} onClick={skip}>Skip <kbd>S</kbd></button>
           <Link href={`/signals/${current.id}/edit`} className="btn btn--quiet" target="_blank">Edit ↗</Link>
-          {index > 0 && <button type="button" className="btn btn--quiet" disabled={busy} onClick={back}>← Back</button>}
+          {canBack && <button type="button" className="btn btn--quiet" disabled={busy} onClick={back}>← Back</button>}
         </div>
         {error && <p className="ds-error">{error}</p>}
       </article>

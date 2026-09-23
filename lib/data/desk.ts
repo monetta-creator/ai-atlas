@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { q, one } from '../db';
 import type {
   Ticket, TicketKind, TicketStatus,
@@ -7,7 +8,7 @@ import type {
 // One cheap round trip for the admin nav's live counts: work waiting in an
 // in-flight pipeline run, active signal drafts, and the paper review queue.
 // Called by Header ONLY for admins, so guests never pay for it.
-export async function getNavCounts(): Promise<{
+async function loadNavCounts(): Promise<{
   pipeline: number; drafts: number; papers: number; scout: number; tickets: number; tooling: number;
 }> {
   const row = await one<{ pipeline: number; drafts: number; papers: number; scout: number; tickets: number; tooling: number }>(
@@ -26,6 +27,10 @@ export async function getNavCounts(): Promise<{
   );
   return row ?? { pipeline: 0, drafts: 0, papers: 0, scout: 0, tickets: 0, tooling: 0 };
 }
+
+// Deduped per request with React cache(): Header and the page's PageTop both
+// read it on every admin navigation (2026-09-23 latency pass).
+export const getNavCounts = cache(loadNavCounts);
 
 // ---- Tickets — the public feedback box (migration 0032) ---------------------
 // Admin-only readers: `email`, `admin_note`, and `user_agent` never leave an

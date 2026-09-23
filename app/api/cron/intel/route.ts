@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { getOrCreateTodayIntelRun, claimIntelRun, advanceIntelRun } from '@/lib/intel/engine';
 import { getIntelRun, getIntelPrefs } from '@/lib/data/intel';
 import { failIntelRun, reopenIntelRunForSearch } from '@/lib/mutations/intel';
+import { resetTavilyBreaker } from '@/lib/scan/search-tavily';
 
 // The intel desk's cron driver: one run per UTC weekday through the
 // checkpointed engine (feeds, search, filings, hydrate, enrich). Same gate
@@ -37,6 +38,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   // reopenIntelRunForSearch). Bearer-gated like the rest.
   const rerun = req.nextUrl.searchParams.get('rerun');
   if (rerun === 'search' && existing?.status === 'completed') {
+    resetTavilyBreaker(); // a warm instance may still hold a stale trip
     if (await reopenIntelRunForSearch(runId)) existing = await getIntelRun(runId);
   }
   if (existing?.status === 'completed') {

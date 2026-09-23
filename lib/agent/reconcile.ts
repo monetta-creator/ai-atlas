@@ -10,10 +10,12 @@ import type { FindingInput, FindingState } from './types';
 // buckets upsertFindings needs to write: brand-new keys (insert), resolved
 // findings a check fired on again (reopen), still-active findings to refresh
 // in place (update; `unsnooze` when a snooze has expired), and active
-// findings this run's checks never mentioned (resolve).
+// findings this run's checks never mentioned (resolve), unless their check
+// threw this run (failedChecks).
 
 export interface ExistingFindingLite {
   key: string;
+  check_key: string;
   state: FindingState;
   snoozed_until: string | null;
 }
@@ -28,7 +30,8 @@ export interface FindingPlan {
 export function reconcileFindings(
   existing: ExistingFindingLite[],
   inputs: FindingInput[],
-  now: Date
+  now: Date,
+  failedChecks: ReadonlySet<string> = new Set()
 ): FindingPlan {
   const byKey = new Map(existing.map((e) => [e.key, e]));
   const inputKeys = new Set(inputs.map((i) => i.key));
@@ -50,8 +53,11 @@ export function reconcileFindings(
     update.push({ input, unsnooze });
   }
 
+  // A check that threw this run is not evidence its findings went away: keep
+  // them as they are (a transient DB error must not resolve then reopen a
+  // snoozed finding unread).
   const resolveKeys = existing
-    .filter((e) => e.state !== 'resolved' && !inputKeys.has(e.key))
+    .filter((e) => e.state !== 'resolved' && !inputKeys.has(e.key) && !failedChecks.has(e.check_key))
     .map((e) => e.key);
 
   return { insert, reopen, update, resolveKeys };

@@ -6,8 +6,8 @@ import type { AgentCheck, FindingInput, Severity } from '../types';
 // Editorial checks: the map's own upkeep (confidence upkeep, one-sided
 // evidence, drifted signal touches, stale summaries and gap scans, sources
 // with no reliability prior). Every check is pure SQL or a read of an
-// existing data helper, never a model call; each catches its own error and
-// returns [] so one bad query never takes the others down.
+// existing data helper, never a model call; each logs and rethrows its own
+// error so runChecks marks it failed and the reconciler leaves its findings be.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const daysSince = (iso: string | null | undefined): number | null => {
@@ -92,8 +92,9 @@ async function checkUntouched(): Promise<FindingInput[]> {
       if (findings.length >= 10) break;
     }
     return findings;
-  } catch {
-    return [];
+  } catch (e) {
+    console.error('[agent] editorial check failed', e);
+    throw e;
   }
 }
 
@@ -115,8 +116,9 @@ async function checkOneSided(): Promise<FindingInput[]> {
         remedy: null,
       },
     ];
-  } catch {
-    return [];
+  } catch (e) {
+    console.error('[agent] editorial check failed', e);
+    throw e;
   }
 }
 
@@ -169,8 +171,9 @@ async function checkDanglingTouches(): Promise<FindingInput[]> {
         remedy: null,
       },
     ];
-  } catch {
-    return [];
+  } catch (e) {
+    console.error('[agent] editorial check failed', e);
+    throw e;
   }
 }
 
@@ -244,8 +247,9 @@ async function checkSummaryStale(): Promise<FindingInput[]> {
       });
     }
     return findings;
-  } catch {
-    return [];
+  } catch (e) {
+    console.error('[agent] editorial check failed', e);
+    throw e;
   }
 }
 
@@ -268,14 +272,16 @@ async function checkSourcesNoPrior(): Promise<FindingInput[]> {
         remedy: null,
       },
     ];
-  } catch {
-    return [];
+  } catch (e) {
+    console.error('[agent] editorial check failed', e);
+    throw e;
   }
 }
 
 // ---------------------------------------------------------------- stale gap scans
 async function checkGapScanStale(): Promise<FindingInput[]> {
   const findings: FindingInput[] = [];
+  let failure: unknown;
   try {
     const scan = await getArgumentGapScan();
     const age = scan ? daysSince(scan.generatedAt) : null;
@@ -294,8 +300,9 @@ async function checkGapScanStale(): Promise<FindingInput[]> {
         remedy: remedyRef('gaps.diagnose_argument', 'Diagnose gaps in the argument map'),
       });
     }
-  } catch {
-    // fall through to the concept half
+  } catch (e) {
+    // fall through to the concept half, then rethrow below
+    failure = e;
   }
   try {
     const scan = await getConceptGapScan();
@@ -315,8 +322,14 @@ async function checkGapScanStale(): Promise<FindingInput[]> {
         remedy: remedyRef('gaps.diagnose_concept', 'Diagnose gaps in the concept scaffold'),
       });
     }
-  } catch {
-    // best-effort: the argument half above still stands
+  } catch (e) {
+    failure ??= e;
+  }
+  // Either half failing marks the whole check failed, so the reconciler keeps
+  // its existing findings instead of resolving them.
+  if (failure !== undefined) {
+    console.error('[agent] editorial.gap_scan_stale failed', failure);
+    throw failure;
   }
   return findings;
 }

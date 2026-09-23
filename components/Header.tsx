@@ -17,10 +17,12 @@ export default async function Header({ admin }: { admin: boolean }) {
   const portal = !showAdmin && (await isPortal());
   // Live queue counts for the admin nav badges (one cheap query; guests never pay).
   // Non-fatal: a failed read renders the nav without badges rather than 500ing the page.
-  const counts = showAdmin ? await getNavCounts().catch(() => null) : null;
   // The agent orb's first-paint badge: a server-fetched pulse so it renders
   // without a flash, then polls client-side from there. Non-fatal like counts.
-  const agentPulse = showAdmin ? await getAgentPulse().catch(() => null) : null;
+  // Both reads run in parallel (they were two serial waves on every admin page).
+  const [counts, agentPulse] = showAdmin
+    ? await Promise.all([getNavCounts().catch(() => null), getAgentPulse().catch(() => null)])
+    : [null, null];
 
   return (
     <>

@@ -76,6 +76,7 @@ export async function reopenScanRunForSearch(runId: string): Promise<boolean> {
   const row = await one<{ id: string }>(
     `update scan_runs
         set status = 'running', step = 'search', searched_topics = '{}', lease_until = null,
+            notes = coalesce((select array_agg(n) from unnest(notes) as n where n !~* 'Tavily 432|Tavily quota exhausted'), '{}'),
             error = null, updated_at = now()
       where id = $1
         and status = 'completed'
