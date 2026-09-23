@@ -3,7 +3,6 @@ import { isAdmin, isPortal } from '@/lib/auth';
 import { SHEET_KIND_LABEL, dateLabel } from '@/lib/format';
 import { getToolingCategories, listToolingReports } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ToolingUnlock from '@/components/tooling/ToolingUnlock';
@@ -39,7 +38,6 @@ export default async function ToolingReportsPage() {
     const published = await listToolingReports({ admin: false, portal: false });
     return (
       <>
-        <Header admin={admin} />
         <section className="wrap" style={{ maxWidth: 760, paddingBottom: 100 }}>
           <PageTop pathname="/tooling/reports" label="Tooling reports" viewer={{ admin, portal }} title={title} />
           {published.length > 0 && (
@@ -80,7 +78,6 @@ export default async function ToolingReportsPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1000, paddingBottom: 100 }}>
         <PageTop pathname="/tooling/reports" label="Tooling reports" viewer={{ admin, portal }} title={title} />
         <ToolingReportConsole categories={categories} reports={reports} admin={admin} />

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { NAV_ICONS } from '@/components/portal-icons';
 import type { AgentPulse } from '@/lib/agent/types';
 import AgentDrawer from '@/components/agent/AgentDrawer';
@@ -18,6 +19,14 @@ export default function AgentOrb({
   variant, initialPulse,
 }: { variant: 'rail' | 'menu'; initialPulse: AgentPulse | null }) {
   const [open, setOpen] = useState(false);
+  // The orb persists across navigation (root layout): close the drawer when
+  // the page changes, which the old per-page remount did implicitly.
+  const path = usePathname();
+  const [seenPath, setSeenPath] = useState(path);
+  if (path !== seenPath) {
+    setSeenPath(path);
+    setOpen(false);
+  }
   const [tick, setTick] = useState(0);
   const [polled, setPolled] = useState<{ key: number; data: AgentPulse } | null>(null);
 
@@ -29,17 +38,25 @@ export default function AgentOrb({
     return () => window.clearInterval(id);
   }, []);
 
+  const router = useRouter();
   useEffect(() => {
     if (tick === 0) return; // the server-rendered initialPulse covers first paint
     let live = true;
     fetch('/api/agent/pulse', { cache: 'no-store' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((r) => {
+        // The session ended under the persistent chrome: re-render it.
+        if (r.status === 401 || r.redirected) { if (live) router.refresh(); return Promise.reject(new Error('session')); }
+        return r.ok ? r.json() : Promise.reject(new Error(String(r.status)));
+      })
       .then((data: AgentPulse) => { if (live) setPolled({ key: tick, data }); })
       .catch(() => { /* keep the last known pulse */ });
     return () => { live = false; };
-  }, [tick]);
+  }, [tick, router]);
 
-  const pulse = (polled && polled.key === tick ? polled.data : null) ?? initialPulse;
+  // The last successful poll wins (the effect's live flag already drops
+  // out-of-order responses). The chrome persists across navigation now, so
+  // initialPulse can be hours old: never fall back to it between polls.
+  const pulse = polled?.data ?? initialPulse;
   const unread = pulse?.unread ?? 0;
   const high = pulse?.high ?? 0;
 

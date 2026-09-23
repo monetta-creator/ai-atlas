@@ -2,7 +2,6 @@ import { adminGate } from '@/lib/admin-gate';
 import { getAgentSpendToday, listBriefs, getNavCounts } from '@/lib/data';
 import { AGENT_CHECKS } from '@/lib/agent/checks';
 import type { CheckDomain } from '@/lib/agent/types';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import { AgentPanel } from '@/components/agent/AgentDrawer';
 
@@ -41,7 +40,6 @@ export default async function AgentPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1180, paddingBottom: 100 }}>
         <PageTop
           pathname="/agent"

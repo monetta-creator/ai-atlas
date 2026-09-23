@@ -3,7 +3,6 @@ import { adminGate } from '@/lib/admin-gate';
 import { getTickets, getNavCounts } from '@/lib/data';
 import type { TicketKind, TicketStatus } from '@/lib/types';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import TicketRow from '@/components/TicketRow';
@@ -41,7 +40,6 @@ export default async function TicketsPage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 900, paddingBottom: 100 }}>
         <PageTop
           pathname="/tickets"

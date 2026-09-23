@@ -10,7 +10,6 @@ import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import { checkIntelBudget } from '@/lib/intel/budget';
 import { cronLabel } from '@/lib/scan/handoff';
 import vercelConfig from '@/vercel.json';
-import Header from '@/components/Header';
 import IntelConsole from '@/components/intel/IntelConsole';
 import IntelEnabledToggle from '@/components/intel/IntelEnabledToggle';
 import CompanyToggle from '@/components/intel/CompanyToggle';
@@ -136,7 +135,6 @@ export default async function IntelPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname="/intel"

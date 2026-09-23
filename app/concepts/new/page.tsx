@@ -3,7 +3,6 @@ import { getConceptGraph, getConceptGapScan, getTargets, getNavCounts } from '@/
 import { getEditContext } from '@/lib/content';
 import { createConceptAction } from '@/lib/actions';
 import type { ConceptStatus } from '@/lib/types';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ConceptForm from '@/components/ConceptForm';
@@ -60,7 +59,6 @@ export default async function NewConceptPage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
         <PageTop
           pathname="/concepts/new"

@@ -4,7 +4,6 @@ import { listSavedReports, getNavCounts } from '@/lib/data';
 import { SIGNAL_LENS_SLUGS } from '@/lib/format';
 import type { SignalLens } from '@/lib/types';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ReportGenerator from '@/components/ReportGenerator';
@@ -55,7 +54,6 @@ export default async function PeriodReportPage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname="/reports/period"

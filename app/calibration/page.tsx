@@ -2,7 +2,6 @@ import { adminGate } from '@/lib/admin-gate';
 import { getCalibration, getNavCounts } from '@/lib/data';
 import { snapshotAction } from '@/lib/actions';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import CalibrationView from '@/components/CalibrationView';
@@ -23,7 +22,6 @@ export default async function CalibrationPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname="/calibration"

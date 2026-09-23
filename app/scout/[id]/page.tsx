@@ -5,7 +5,6 @@ import {
   COMPANY_STAGE_LABEL, COMPANY_STATUS_LABEL, COMPANY_EVENT_LABEL,
   SCOUT_VERDICT_LABEL, scoutVerdictColor, timeAgo,
 } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import CompanyReviewControls from '@/components/scout/CompanyReviewControls';
 import CompanyEventForm from '@/components/scout/CompanyEventForm';
@@ -39,7 +38,6 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
         <PageTop
           pathname={`/scout/${company.id}`}

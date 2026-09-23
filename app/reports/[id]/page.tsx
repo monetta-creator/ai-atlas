@@ -2,7 +2,6 @@ import { notFound } from 'next/navigation';
 import { isAdmin } from '@/lib/auth';
 import { getSavedReport } from '@/lib/data';
 import { sanitizeReportNarrative } from '@/lib/sanitize';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import ReportReadView from '@/components/ReportReadView';
 
@@ -22,7 +21,6 @@ export default async function ReportViewPage({ params }: { params: Promise<{ id:
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
         <PageTop
           pathname={`/reports/${row.id}`}

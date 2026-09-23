@@ -5,7 +5,6 @@ import { getSignal, getSource, getRelatedSignals } from '@/lib/data';
 import { getAskClientData } from '@/lib/ask/retrieve';
 import { dateLabel, DOMAIN_LABEL, confidenceText, directionLabel, directionColor } from '@/lib/format';
 import { publishSignalAction, deleteSignalAction, archiveSignalAction, unarchiveSignalAction } from '@/lib/actions';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import { LensBadges, SignificanceTag } from '@/components/SignalBadges';
 import RelatedSignalsTable from '@/components/RelatedSignalsTable';
@@ -47,7 +46,6 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
         <PageTop
           pathname={`/signals/${signal.id}`}

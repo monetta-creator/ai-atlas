@@ -1,7 +1,6 @@
 import { isAdmin, isPortal } from '@/lib/auth';
 import { listSavedReports, getLatestThesisReports, listGeneratedReports, getTargets } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import SheetConsole from '@/components/reports/SheetConsole';
@@ -62,7 +61,6 @@ export default async function ReportPortal({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap rp-wrap">
         <PageTop
           pathname="/reports"

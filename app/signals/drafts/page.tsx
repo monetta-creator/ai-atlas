@@ -6,7 +6,6 @@ import {
 import DraftBacklogBar from '@/components/drafts/DraftBacklogBar';
 import DraftSprint from '@/components/drafts/DraftSprint';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import Editable from '@/components/Editable';
 import DraftQueue from '@/components/DraftQueue';
@@ -43,7 +42,6 @@ export default async function DraftsPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap">
         <PageTop
           pathname="/signals/drafts"

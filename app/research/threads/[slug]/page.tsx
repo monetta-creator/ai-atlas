@@ -4,7 +4,6 @@ import { isAdmin } from '@/lib/auth';
 import { getThreadBySlug, getThreadPapers, getThreadRevisions } from '@/lib/data';
 import { sanitizeSynthesisHtml } from '@/lib/sanitize';
 import { timeAgo } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import ThreadSynthesisButton from '@/components/ThreadSynthesisButton';
 import type { ThreadRelation } from '@/lib/types';
@@ -40,7 +39,6 @@ export default async function ThreadPage({ params }: { params: Promise<{ slug: s
 
   return (
     <>
-      <Header admin={personal} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
         <PageTop
           pathname={`/research/threads/${thread.slug}`}

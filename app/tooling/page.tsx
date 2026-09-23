@@ -3,7 +3,6 @@ import { isAdmin, isPortal, isPreview } from '@/lib/auth';
 import { getEditContext } from '@/lib/content';
 import { getToolingCategories, searchProducts, listToolingReports, getToolingRuns, countCataloged } from '@/lib/data';
 import { dateLabel } from '@/lib/format';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import ProductFilters from '@/components/tooling/ProductFilters';
 import ProductCard from '@/components/tooling/ProductCard';
@@ -82,7 +81,6 @@ export default async function ToolingPage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ paddingBottom: 100 }}>
         <PageTop
           pathname="/tooling"

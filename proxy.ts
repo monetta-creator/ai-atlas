@@ -24,6 +24,7 @@ export function proxy(req: NextRequest) {
     pathname === '/api/ask/peek' ||
     pathname === '/api/ask/doc' ||
     pathname === '/api/tooling/events' ||
+    pathname === '/api/nav/viewer' ||
     pathname === '/api/tickets' ||
     pathname.startsWith('/api/cron/');
 

@@ -2,7 +2,6 @@ import { adminGate } from '@/lib/admin-gate';
 import { getTargets, getSources, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { createSignalAction } from '@/lib/actions';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import SignalForm from '@/components/SignalForm';
@@ -22,7 +21,6 @@ export default async function NewSignalPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
         <PageTop
           pathname="/signals/new"

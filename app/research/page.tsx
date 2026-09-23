@@ -7,7 +7,6 @@ import {
 } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { timeAgo } from '@/lib/format';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 
@@ -41,7 +40,6 @@ export default async function ResearchPage() {
 
   return (
     <>
-      <Header admin={personal} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname="/research"

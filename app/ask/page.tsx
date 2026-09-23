@@ -1,7 +1,6 @@
 import { isAdmin, isPortal } from '@/lib/auth';
 import { getAskClientData } from '@/lib/ask/retrieve';
 import { DATASETS } from '@/lib/datasets/registry';
-import Header from '@/components/Header';
 import AskWorkspace from '@/components/ask/AskWorkspace';
 
 export const dynamic = 'force-dynamic';
@@ -25,7 +24,6 @@ export default async function AskPage({ searchParams }: { searchParams: Promise<
 
   return (
     <div className="ask-page">
-      <Header admin={admin} />
       <AskWorkspace mode={mode} validIds={validIds} datasets={datasets} initialQuestion={initialQuestion} />
     </div>
   );

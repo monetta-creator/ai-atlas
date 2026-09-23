@@ -10,7 +10,6 @@ import { DEFAULT_RUBRIC } from '@/lib/tooling/score';
 import { checkToolingBudget } from '@/lib/tooling/budget';
 import { cronLabel } from '@/lib/scan/handoff';
 import vercelConfig from '@/vercel.json';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import ToolingConsole from '@/components/tooling/ToolingConsole';
 import ToolingPrefsForm from '@/components/tooling/ToolingPrefsForm';
@@ -97,7 +96,6 @@ export default async function ToolingConsolePage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname="/tooling/console"

@@ -6,7 +6,6 @@ import { setPipelineAnalysisModelsAction } from '@/lib/actions';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import { timeAgo } from '@/lib/format';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import PipelineConsole from '@/components/PipelineConsole';
@@ -41,7 +40,6 @@ export default async function PipelinePage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname="/pipeline"

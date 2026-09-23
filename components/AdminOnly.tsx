@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import Header from '@/components/Header';
 import { publicParentFor } from '@/lib/nav';
 
 // The sessionless landing for an admin-only page now that the proxy is open
@@ -10,7 +9,6 @@ export default function AdminOnly({ pathname, title }: { pathname: string; title
   const parent = publicParentFor(pathname);
   return (
     <>
-      <Header admin={false} />
       <div className="wrap" style={{ maxWidth: 720, paddingTop: 64, paddingBottom: 80 }}>
         <div className="plate">
           <p

@@ -8,7 +8,6 @@ import {
 import {
   diagnoseThesisGapsAction, dismissThesisGapAction, clearThesisGapScanAction,
 } from '@/lib/actions';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import ArgumentGapPanel from '@/components/ArgumentGapPanel';
 import ThesisLogicTree, { type ThesisTreeGhost } from '@/components/ThesisLogicTree';
@@ -59,7 +58,6 @@ export default async function ThesisPage({ params }: { params: Promise<{ id: str
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 900, paddingBottom: 100 }}>
         <PageTop
           pathname={`/theses/${thesis.id}`}

@@ -1,7 +1,6 @@
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getSignalsPage } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import SignalFeed from '@/components/SignalFeed';
@@ -23,7 +22,6 @@ export default async function SignalsPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap">
         <PageTop
           pathname="/signals"

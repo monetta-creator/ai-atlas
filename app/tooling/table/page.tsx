@@ -1,7 +1,6 @@
 import { isAdmin, isPortal, isPreview } from '@/lib/auth';
 import { getToolingCategories, searchProducts } from '@/lib/data';
 import { toTableRow } from '@/lib/tooling/table-core';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import ProductFilters from '@/components/tooling/ProductFilters';
 import ProductTable from '@/components/tooling/ProductTable';
@@ -53,7 +52,6 @@ export default async function ToolingTablePage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1360, paddingBottom: 100 }}>
         <PageTop pathname="/tooling/table" label="Tooling table" viewer={{ admin, portal: viewer.portal }} />
 

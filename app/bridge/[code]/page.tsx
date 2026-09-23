@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getBridge, getAsOf, getSignalsTouchingClaim, getPapersForTarget, getThesesForTarget } from '@/lib/data';
 import { DOMAIN_LABEL, RESOLVABILITY_LABEL, relationColor, dateLabel, directionLabel } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import ConfidenceEditor from '@/components/ConfidenceEditor';
@@ -39,7 +38,6 @@ export default async function BridgePage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
         <PageTop
           pathname={`/bridge/${bridge.code}`}

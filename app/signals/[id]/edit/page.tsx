@@ -3,7 +3,6 @@ import { adminGate } from '@/lib/admin-gate';
 import { getSignal, getTargets, getSources, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { updateSignalAction } from '@/lib/actions';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import SignalForm from '@/components/SignalForm';
@@ -30,7 +29,6 @@ export default async function EditSignalPage({ params }: { params: Promise<{ id:
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
         <PageTop
           pathname={`/signals/${signal.id}/edit`}

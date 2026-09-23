@@ -4,7 +4,6 @@ import { notFound, redirect } from 'next/navigation';
 import { isAdmin, isPortal } from '@/lib/auth';
 import { getProduct, getProductEvents, getSiblings, getToolingCategories } from '@/lib/data';
 import { TOOLING_STATUS_LABEL, TOOLING_MATURITY_LABEL, TOOLING_EVENT_LABEL, dateLabel, timeAgo } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import ProductReviewControls from '@/components/tooling/ProductReviewControls';
 import ProductFactsForm from '@/components/tooling/ProductFactsForm';
@@ -90,7 +89,6 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
         <PageTop
           pathname={`/tooling/${product.slug}`}

@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getConcept, getAsOf, getPapersForConcept } from '@/lib/data';
 import { CONCEPT_STATUS_LABEL } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import ShareNotice from '@/components/ShareNotice';
@@ -34,7 +33,6 @@ export default async function ConceptPage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
         <PageTop
           pathname={`/concepts/${concept.slug}`}

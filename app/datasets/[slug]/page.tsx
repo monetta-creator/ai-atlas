@@ -3,7 +3,6 @@ import { notFound } from 'next/navigation';
 import { isAdmin, isPortal } from '@/lib/auth';
 import { SIGNAL_LENSES } from '@/lib/datasets/core';
 import { getDataset } from '@/lib/datasets/registry';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import DatasetSchemaTable from '@/components/datasets/DatasetSchemaTable';
 import DatasetExplorer from '@/components/datasets/DatasetExplorer';
@@ -25,7 +24,6 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname={`/datasets/${def.slug}`}

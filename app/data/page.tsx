@@ -1,7 +1,6 @@
 import { adminGate } from '@/lib/admin-gate';
 import { getAllDomainRows, getNodeLensMap, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import DataField from '@/components/DataField';
@@ -24,7 +23,6 @@ export default async function DataPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
         <PageTop
           pathname="/data"

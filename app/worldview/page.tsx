@@ -9,7 +9,6 @@ import {
 } from '@/lib/actions';
 import { DOMAIN_LABEL } from '@/lib/format';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ConfidenceEditor from '@/components/ConfidenceEditor';
@@ -40,7 +39,6 @@ export default async function WorldviewPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
         <PageTop
           pathname="/worldview"

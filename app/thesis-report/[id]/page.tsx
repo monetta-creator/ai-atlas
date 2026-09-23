@@ -3,7 +3,6 @@ import { isAdmin } from '@/lib/auth';
 import { getThesisReport } from '@/lib/data';
 import { gateThesisNarrative } from '@/lib/thesis/citations';
 import { dateLabel } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import ThesisReportView from '@/components/ThesisReportView';
 
@@ -26,7 +25,6 @@ export default async function ThesisReportPage({ params }: { params: Promise<{ i
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
         <PageTop
           pathname={`/thesis-report/${report.id}`}

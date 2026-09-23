@@ -6,7 +6,6 @@ import {
 import { DEFAULT_RUBRIC } from '@/lib/scout/agent';
 import { timeAgo } from '@/lib/format';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ScoutConsole from '@/components/scout/ScoutConsole';
@@ -48,7 +47,6 @@ export default async function ScoutConsolePage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname="/scout/console"

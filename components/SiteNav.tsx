@@ -14,6 +14,7 @@ import ThemeToggle from './ThemeToggle';
 import ShareLinkButton from './ShareLinkButton';
 import FeedbackButtons from './feedback/FeedbackButtons';
 import AgentOrb from './agent/AgentOrb';
+import { useLiveNavCounts } from '@/lib/nav-counts-client';
 
 export type { NavCounts };
 
@@ -112,6 +113,14 @@ export default function SiteNav({
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const viewer: NavViewer = { admin: showAdmin, portal: !!portal };
+  // The bar persists across navigation (root layout): close the mobile sheet
+  // when the page changes, which the old per-page remount did implicitly.
+  const [seenPath, setSeenPath] = useState(path);
+  if (path !== seenPath) {
+    setSeenPath(path);
+    setMobileOpen(false);
+  }
+  const liveCounts = useLiveNavCounts(counts, showAdmin);
 
   function badgeEl(leaf: NavLeaf) {
     const key = leaf.badge;
@@ -120,7 +129,7 @@ export default function SiteNav({
       const n = agentPulse?.unread ?? 0;
       return n > 0 ? <span className="nav-badge">{n}</span> : null;
     }
-    const n = counts ? counts[key] : 0;
+    const n = liveCounts ? liveCounts[key] : 0;
     return n > 0 ? <span className="nav-badge">{n}</span> : null;
   }
 

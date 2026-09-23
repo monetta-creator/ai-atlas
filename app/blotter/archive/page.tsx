@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { listEditions } from '@/lib/data';
 import { dateLabel } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 
 export const dynamic = 'force-dynamic';
@@ -31,7 +30,6 @@ export default async function BlotterArchive() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 780, paddingBottom: 100 }}>
         <PageTop pathname="/blotter/archive" label="Archive" viewer={{ admin, portal: admin }} />
 

@@ -6,7 +6,6 @@ import {
 } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { COMPANY_STAGE_LABEL, COMPANY_EVENT_LABEL, timeAgo } from '@/lib/format';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import AddCompanyForm from '@/components/scout/AddCompanyForm';
@@ -41,7 +40,6 @@ export default async function ScoutPage() {
 
   return (
     <>
-      <Header admin={personal} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname="/scout"

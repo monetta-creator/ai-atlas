@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Schibsted_Grotesk, JetBrains_Mono, Anton } from "next/font/google";
 import "./globals.css";
+import ChromeGate from "@/components/ChromeGate";
+import Header from "@/components/Header";
 
 // Variable fonts: the design system uses non-standard display weights (620/640/660/680),
 // which only render correctly from a variable axis — so load these as variable, no fixed weight.
@@ -49,6 +51,12 @@ export default function RootLayout({
     <html lang="en" className={`${schibsted.variable} ${jetbrains.variable} ${anton.variable} h-full`}>
       <body className="dir-console app min-h-full" data-dir="console">
         <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+        {/* The chrome renders here, once, so it survives client navigation
+            (pages used to render <Header> themselves and the rail remounted
+            on every click). ChromeGate hides it on the chromeless routes. */}
+        <ChromeGate>
+          <Header />
+        </ChromeGate>
         {children}
       </body>
     </html>

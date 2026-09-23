@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getConceptGraph, getConceptGapScan, reconcileConceptGapScan } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ConceptGraph from '@/components/ConceptGraph';
@@ -40,7 +39,6 @@ export default async function ConceptsPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1100, paddingBottom: 100 }}>
         <PageTop
           pathname="/concepts"

@@ -1,9 +1,13 @@
 /* ---- Ask workspace (/ask) — the app's one viewport-height shell ------------
-   The page root (.ask-page) is a 100dvh flex column with the sticky Header as
-   its first child, so the shell takes the remainder structurally: no magic nav
-   heights, immune to nav wrapping. Everything else on the site stays a
+   The body is a 100dvh flex column on this page (the Header, rendered by the
+   root layout, is its first flow child) and .ask-page takes the remainder
+   structurally: no magic nav heights, immune to nav wrapping. Everything else on the site stays a
    scrolling document; this layout is scoped to /ask. */
-.ask-page { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+/* Since 2026-09-23 the Header lives in the root layout, a SIBLING before
+   .ask-page, so the body becomes the 100dvh column on this page only and the
+   page takes the remainder under the sticky bar. */
+body:has(> .ask-page) { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.ask-page { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* The single explicit row is load-bearing: without it the shell's implicit
    auto row grows to the tallest column's content height (a long conversation),
    the thread's own 1fr row inherits that height, and nothing ever scrolls —

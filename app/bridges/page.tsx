@@ -3,7 +3,6 @@ import { isAdmin, isPreview } from '@/lib/auth';
 import { getBridges, getAsOf } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { DOMAIN_LABEL, relationColor } from '@/lib/format';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
@@ -20,7 +19,6 @@ export default async function BridgesPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 900, paddingBottom: 100 }}>
         <PageTop
           pathname="/bridges"

@@ -2,7 +2,6 @@ import { isAdmin, isPreview } from '@/lib/auth';
 import { getLatestEdition, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { dateLabel } from '@/lib/format';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import EditionView from '@/components/edition/EditionView';
@@ -27,7 +26,6 @@ export default async function Blotter() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1080, paddingBottom: 100 }}>
         <PageTop
           pathname="/blotter"

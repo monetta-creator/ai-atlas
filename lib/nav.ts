@@ -247,3 +247,16 @@ export function isActiveGroup(pathname: string, group: NavGroup): boolean {
 // Live queue counts for the rail/mobile-sheet badges (BadgeKey minus 'agent',
 // which rides the AgentPulse instead — see lib/data/desk.ts getNavCounts()).
 export type NavCounts = Record<Exclude<BadgeKey, 'agent'>, number>;
+
+// Routes that render WITHOUT the site chrome (rail + header bar). The chrome
+// lives in the root layout since 2026-09-23 (it used to render inside every
+// page, so the rail remounted and lost its hover/pin/accordion state on each
+// click); ChromeGate hides it on these paths: the login card, the unlisted
+// showcase deck, the 16:9 deck stages, and the print digests.
+const CHROMELESS_EXACT = new Set(['/login', '/showcase', '/costs/deck', '/ingestion/deck', '/research/digest', '/signals/digest']);
+const CHROMELESS_RE = [/^\/education\/[^/]+\/deck\/?$/];
+
+export function isChromeless(pathname: string): boolean {
+  const p = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  return CHROMELESS_EXACT.has(p) || CHROMELESS_RE.some((re) => re.test(p));
+}

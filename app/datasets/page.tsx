@@ -3,7 +3,6 @@ import { isAdmin, isPortal } from '@/lib/auth';
 import { SIGNAL_LENSES } from '@/lib/datasets/core';
 import { DATASETS } from '@/lib/datasets/registry';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import Editable from '@/components/Editable';
 
@@ -29,7 +28,6 @@ export default async function DatasetsPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ paddingBottom: 100 }}>
         <PageTop
           pathname="/datasets"

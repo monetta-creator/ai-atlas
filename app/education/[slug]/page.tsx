@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import { isAdmin } from '@/lib/auth';
 import { getGuide } from '@/lib/education/registry';
@@ -42,7 +41,6 @@ export default async function EducationGuidePage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap edu" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname={`/education/${guide.slug}`}

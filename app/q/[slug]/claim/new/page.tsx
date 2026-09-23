@@ -4,7 +4,6 @@ import { getQuestion, getTargets, getArgumentGapScan, getThesis, nextClaimCode, 
 import { getEditContext } from '@/lib/content';
 import { createClaimAction } from '@/lib/actions';
 import type { Domain, Resolvability, Relation } from '@/lib/types';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ClaimForm, { type ClaimEdgeInitial } from '@/components/ClaimForm';
@@ -77,7 +76,6 @@ export default async function NewClaimPage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
         <PageTop
           pathname={`/q/${slug}/claim/new`}

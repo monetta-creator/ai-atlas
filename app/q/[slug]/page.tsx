@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getQuestion, getQuestionSummaries, getAsOf } from '@/lib/data';
 import { LENS_LABEL } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import StanceCard from '@/components/StanceCard';
 import QuestionMap from '@/components/QuestionMap';
@@ -46,7 +45,6 @@ export default async function QuestionPage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ paddingBottom: 100 }}>
         <PageTop
           pathname={`/q/${question.slug}`}

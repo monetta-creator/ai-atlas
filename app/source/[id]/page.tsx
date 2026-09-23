@@ -4,7 +4,6 @@ import { adminGate } from '@/lib/admin-gate';
 import { getSource, getTargets, getNavCounts } from '@/lib/data';
 import { setPriorAction, reassignEvidenceAction, deleteEvidenceAction } from '@/lib/actions';
 import { DOMAIN_LABEL, directionLabel, directionColor } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import EvidenceForm from '@/components/EvidenceForm';
 import DossierView from '@/components/DossierView';
@@ -39,7 +38,6 @@ export default async function SourcePage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
         <PageTop
           pathname={`/source/${source.id}`}

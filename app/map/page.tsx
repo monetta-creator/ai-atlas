@@ -8,7 +8,6 @@ import {
 import {
   diagnoseArgumentGapsAction, dismissArgumentGapAction, clearArgumentGapScanAction,
 } from '@/lib/actions';
-import Header from '@/components/Header';
 import QuestionCard from '@/components/QuestionCard';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
@@ -55,7 +54,6 @@ export default async function ArgumentMap() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap">
         <PageTop
           pathname="/map"

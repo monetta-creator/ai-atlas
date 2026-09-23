@@ -1,5 +1,4 @@
 import { isAdmin, isPreview } from '@/lib/auth';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import Traceroute from '@/components/traceroute/Traceroute';
 import { getSupplyChain } from '@/lib/supply-chain/data';
@@ -34,7 +33,6 @@ export default async function TraceroutePage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1180, paddingBottom: 100 }}>
         <PageTop
           pathname="/traceroute"

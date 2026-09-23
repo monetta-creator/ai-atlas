@@ -4,7 +4,6 @@ import { notFound } from 'next/navigation';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getEditionForDay, listEditions } from '@/lib/data';
 import { dateLabel } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import EditionView from '@/components/edition/EditionView';
 import EditionPdfButton from '@/components/edition/EditionPdfButton';
@@ -55,7 +54,6 @@ export default async function BlotterDay({ params }: { params: Promise<{ day: st
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1080, paddingBottom: 100 }}>
         <PageTop
           pathname={`/blotter/${day}`}

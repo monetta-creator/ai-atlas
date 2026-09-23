@@ -7,7 +7,6 @@ import {
 } from '@/lib/data';
 import { setPaperRigorAction } from '@/lib/actions';
 import { SIGNAL_LENS_LABEL } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import PaperAnalysisButton from '@/components/PaperAnalysisButton';
 import PaperReader from '@/components/PaperReader';
@@ -83,7 +82,6 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
 
   return (
     <>
-      <Header admin={personal} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
         <PageTop
           pathname={`/research/${paper.id}`}

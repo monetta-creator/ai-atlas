@@ -4,7 +4,6 @@ import { getCostDashboard, getMonthlyBill, FIXED_MONTHLY, getNavCounts } from '@
 import { getEditContext } from '@/lib/content';
 import { cronLabel } from '@/lib/scan/handoff';
 import vercelConfig from '@/vercel.json';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import CostsDashboard from '@/components/CostsDashboard';
@@ -46,7 +45,6 @@ export default async function CostsPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1080, paddingBottom: 100 }}>
         <PageTop
           pathname="/costs"

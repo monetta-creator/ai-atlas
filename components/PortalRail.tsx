@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NAV_ICONS, PORTAL_ICONS } from '@/components/portal-icons';
 import FeedbackButtons from '@/components/feedback/FeedbackButtons';
 import AgentOrb from '@/components/agent/AgentOrb';
+import { useLiveNavCounts } from '@/lib/nav-counts-client';
 import type { AgentPulse } from '@/lib/agent/types';
 import {
   NAV_ISLAND, NAV_TREE, canSee, groupFor, isActiveGroup, leafFor,
@@ -35,6 +36,31 @@ export default function PortalRail({
   const [hovered, setHovered] = useState(false);
   const [openKey, setOpenKey] = useState<string | null>(activeGroup?.key ?? null);
   const railRef = useRef<HTMLElement>(null);
+  // The rail persists across navigation (root layout), so its accordion no
+  // longer resets to the current page's group on its own: when the page moves
+  // into a different group, open that one (React's derived-state recipe;
+  // moving within a group leaves a manually opened accordion alone).
+  const activeKey = activeGroup?.key ?? null;
+  const [seenActiveKey, setSeenActiveKey] = useState(activeKey);
+  if (activeKey !== seenActiveKey) {
+    setSeenActiveKey(activeKey);
+    if (activeKey) setOpenKey(activeKey);
+  }
+  // Hover/focus expansion must not carry over to the next page when the
+  // pointer has left (the old per-page remount reset it): after a keyboard
+  // Enter or a touch tap the rail would stay open over the new page. A rail
+  // still under the mouse stays expanded (that is the whole point of the
+  // persistent chrome), and a pinned rail stays as it is. The reset runs from
+  // a timeout, never synchronously in the effect body (React compiler rule).
+  useEffect(() => {
+    const rail = railRef.current;
+    if (pinned || !rail || rail.matches(':hover')) return;
+    const el = document.activeElement;
+    if (el instanceof HTMLElement && rail.contains(el)) el.blur();
+    const t = window.setTimeout(() => setHovered(false), 0);
+    return () => window.clearTimeout(t);
+  }, [path, pinned]);
+  const liveCounts = useLiveNavCounts(counts, !!admin);
 
   const expanded = pinned || hovered;
 
@@ -70,7 +96,7 @@ export default function PortalRail({
       const n = agentPulse?.unread ?? 0;
       return n > 0 ? <span className="nav-badge">{n}</span> : null;
     }
-    const n = counts ? counts[key] : 0;
+    const n = liveCounts ? liveCounts[key] : 0;
     return n > 0 ? <span className="nav-badge">{n}</span> : null;
   }
 

@@ -3,7 +3,6 @@ import { getTargets, getArgumentGapScan, getThesis, nextBridgeCode, getNavCounts
 import { getEditContext } from '@/lib/content';
 import { createBridgeAction } from '@/lib/actions';
 import type { Domain, Resolvability, Relation } from '@/lib/types';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import BridgeForm, { type BridgeFeederInitial } from '@/components/BridgeForm';
@@ -67,7 +66,6 @@ export default async function NewBridgePage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
         <PageTop
           pathname="/bridge/new"

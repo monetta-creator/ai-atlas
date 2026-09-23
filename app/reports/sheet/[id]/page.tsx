@@ -1,7 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { isAdmin, isPortal } from '@/lib/auth';
 import { getGeneratedReport } from '@/lib/data';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import SheetReadView from '@/components/reports/SheetReadView';
 import SheetActions from './SheetActions';
@@ -31,7 +30,6 @@ export default async function SheetPage({ params }: { params: Promise<{ id: stri
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
         <PageTop
           pathname={`/reports/sheet/${saved.id}`}

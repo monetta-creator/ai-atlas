@@ -6,7 +6,6 @@ import {
   getLatestSavedReport, getLatestThesisReports, getNavCounts,
 } from '@/lib/data';
 import { formatDateRange } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import TopClaimsPanel from '@/components/dashboard/TopClaimsPanel';
 import TopSignalsPanel from '@/components/dashboard/TopSignalsPanel';
@@ -57,7 +56,6 @@ export default async function BlotterDesk() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap bs" style={{ maxWidth: 1080, paddingBottom: 100 }}>
         <PageTop
           pathname="/blotter/desk"

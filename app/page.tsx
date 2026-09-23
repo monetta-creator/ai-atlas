@@ -1,6 +1,5 @@
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getHomeWidgets } from '@/lib/data';
-import Header from '@/components/Header';
 import LobbyAsk from '@/components/lobby/LobbyAsk';
 import WidgetBoard from '@/components/lobby/WidgetBoard';
 import CustomizeWidgets from '@/components/lobby/CustomizeWidgets';
@@ -49,7 +48,6 @@ export default async function Lobby() {
 
   return (
     <div className="lobby-page">
-      <Header admin={admin} />
       <section className="wrap lobby-wrap" style={{ maxWidth: 1080 }}>
         <div className="lobby-hero">
           <h1 className="lobby-greeting">{greeting()}</h1>

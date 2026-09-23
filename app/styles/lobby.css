@@ -6,7 +6,10 @@
 /* One-viewport lobby: the page is a 100dvh column, the section fills the
    remainder under the header and centers its content; every vertical space
    below compresses via clamp so a laptop viewport never scrolls. */
-.lobby-page { min-height: 100dvh; display: flex; flex-direction: column; }
+/* The Header lives in the root layout (a sibling before .lobby-page), so the
+   body is the 100dvh column on the lobby and the page fills the remainder. */
+body:has(> .lobby-page) { min-height: 100dvh; display: flex; flex-direction: column; }
+.lobby-page { flex: 1; display: flex; flex-direction: column; }
 .lobby-wrap {
   flex: 1; display: flex; flex-direction: column; justify-content: center;
   width: 100%; padding-top: 6px; padding-bottom: clamp(12px, 3vh, 28px);

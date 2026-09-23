@@ -13,7 +13,6 @@ import { checkScanBudget } from '@/lib/scan/budget';
 import { buildScanHandoff, buildSignalsExportHandoff, cronLabel } from '@/lib/scan/handoff';
 import { getEditContext } from '@/lib/content';
 import vercelConfig from '@/vercel.json';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ScanConsole from '@/components/scan/ScanConsole';
@@ -106,7 +105,6 @@ export default async function ScanPage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname="/scan"

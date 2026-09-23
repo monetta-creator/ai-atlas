@@ -14,7 +14,6 @@ import { getDataset } from '@/lib/datasets/registry';
 import { cronLabel } from '@/lib/datasets/handoff-shared';
 import { buildResearchHandoff } from '@/lib/research/handoff';
 import vercelConfig from '@/vercel.json';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ResearchConsole from '@/components/ResearchConsole';
@@ -99,7 +98,6 @@ export default async function ResearchConsolePage() {
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop
           pathname="/research/console"

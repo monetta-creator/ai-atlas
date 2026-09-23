@@ -4,7 +4,6 @@ import { adminGate } from '@/lib/admin-gate';
 import { getQuestionBySlug, getQuestionSummaries, getAsOf, getNavCounts } from '@/lib/data';
 import { LENS_LABEL } from '@/lib/format';
 import { getEditContext } from '@/lib/content';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import GenerateSummaryButton from '@/components/GenerateSummaryButton';
@@ -41,7 +40,6 @@ export default async function QuestionSummaryHistoryPage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
         <PageTop
           pathname={`/q/${slug}/summary`}

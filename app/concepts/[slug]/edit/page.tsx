@@ -3,7 +3,6 @@ import { adminGate } from '@/lib/admin-gate';
 import { getConceptForEdit, getConceptGraph, getTargets, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { updateConceptAction, deleteConceptAction } from '@/lib/actions';
-import Header from '@/components/Header';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import ConceptForm from '@/components/ConceptForm';
@@ -35,7 +34,6 @@ export default async function EditConceptPage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
         <PageTop
           pathname={`/concepts/${concept.slug}/edit`}

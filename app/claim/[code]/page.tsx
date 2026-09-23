@@ -3,7 +3,6 @@ import Link from 'next/link';
 import { isAdmin, isPreview } from '@/lib/auth';
 import { getClaim, getAsOf, getSignalsTouchingClaim, getPapersForTarget, getThesesForTarget } from '@/lib/data';
 import { DOMAIN_LABEL, RESOLVABILITY_LABEL, LENS_LABEL, relationColor, dateLabel, directionLabel } from '@/lib/format';
-import Header from '@/components/Header';
 import PageTop from '@/components/PageTop';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import ConfidenceEditor from '@/components/ConfidenceEditor';
@@ -48,7 +47,6 @@ export default async function ClaimPage({
   if (claim.is_frame) {
     return (
       <>
-        <Header admin={admin} />
         <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
           <PageTop
             pathname={`/claim/${claim.code}`}
@@ -93,7 +91,6 @@ export default async function ClaimPage({
 
   return (
     <>
-      <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
         <PageTop
           pathname={`/claim/${claim.code}`}

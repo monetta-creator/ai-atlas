@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import {
-  groupFor, tabsFor, pathwayFor, publicParentFor, canSee, leafFor, isActiveGroup,
+  groupFor, tabsFor, pathwayFor, publicParentFor, canSee, leafFor, isActiveGroup, isChromeless,
 } from '../lib/nav.ts';
 
 let pass = 0;
@@ -125,6 +125,15 @@ check('isActiveGroup: /tooling/console is active for the tooling group, not scou
   const scout = groupFor('/scout');
   assert.equal(isActiveGroup('/tooling/console', tooling), true);
   assert.equal(isActiveGroup('/tooling/console', scout), false);
+});
+
+check('isChromeless: login, showcase, decks and print digests render without the chrome', () => {
+  for (const p of ['/login', '/showcase', '/costs/deck', '/ingestion/deck', '/research/digest', '/signals/digest', '/education/agentic-harnesses/deck', '/login/']) {
+    assert.equal(isChromeless(p), true, p);
+  }
+  for (const p of ['/', '/ask', '/blotter', '/education/agentic-harnesses', '/costs', '/research', '/signals', '/blotter/2026-09-22/pdf-not', '/education/x/deck/extra']) {
+    assert.equal(isChromeless(p), false, p);
+  }
 });
 
 console.log(`\n${pass} passed · ${fail} failed`);
