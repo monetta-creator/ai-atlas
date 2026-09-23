@@ -5,6 +5,7 @@ import { isAdmin, isPortal } from '@/lib/auth';
 import { getProduct, getProductEvents, getSiblings, getToolingCategories } from '@/lib/data';
 import { TOOLING_STATUS_LABEL, TOOLING_MATURITY_LABEL, TOOLING_EVENT_LABEL, dateLabel, timeAgo } from '@/lib/format';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import ProductReviewControls from '@/components/tooling/ProductReviewControls';
 import ProductFactsForm from '@/components/tooling/ProductFactsForm';
 import DeepDivePanel from '@/components/tooling/DeepDivePanel';
@@ -91,40 +92,38 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 24 }}>
-          <p className="text-xs" style={{ color: 'var(--faint-ink)', marginBottom: 8 }}>
-            <Link href="/tooling" className="hover:underline" style={{ color: 'inherit' }}>AI Tooling Monitor</Link>
-            {' '}·{' '}
-            <Link href={`/tooling?category=${product.category}`} className="hover:underline" style={{ color: 'inherit' }}>
-              {categoryName}
-            </Link>
-          </p>
-          <div className="flex items-center gap-4" style={{ marginBottom: 8 }}>
-            <ProductLogo name={product.name} domain={product.vendor_domain} url={product.url} size={52} />
-            <h1 style={{ margin: 0 }}>
-              {product.pinned && <span role="img" aria-label="Pinned by an editor" style={{ color: 'var(--accent)', marginRight: 8 }}>★</span>}
+        <PageTop
+          pathname={`/tooling/${product.slug}`}
+          label={product.name.slice(0, 60)}
+          compact
+          title={
+            <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <ProductLogo name={product.name} domain={product.vendor_domain} url={product.url} size={36} />
+              {product.pinned && <span role="img" aria-label="Pinned by an editor" style={{ color: 'var(--accent)' }}>★</span>}
               {product.name}
             </h1>
-          </div>
-          <p className="text-sm" style={{ color: 'var(--dim)', marginBottom: 10 }}>
-            {product.one_liner ?? 'No description yet.'}
-          </p>
-          <div className="flex items-center flex-wrap gap-3 text-xs" style={{ fontFamily: 'var(--font-mono)', color: 'var(--faint-ink)' }}>
-            {product.vendor && <span>{product.vendor}</span>}
-            {product.url && (
+          }
+          viewer={{ admin, portal: portal || admin }}
+          infoKey="/tooling/[slug]"
+        >
+          {categoryName}
+          {product.vendor && ` · ${product.vendor}`}
+          {' · '}{TOOLING_MATURITY_LABEL[product.maturity]}
+          {admin && ` · ${TOOLING_STATUS_LABEL[product.status]}`}
+          {!admin && portal && product.status !== 'cataloged' && (product.status === 'candidate' ? ' · not yet reviewed' : ' · parked by the agent')}
+        </PageTop>
+
+        <p className="text-sm" style={{ color: 'var(--dim)', marginBottom: 10 }}>
+          {product.one_liner ?? 'No description yet.'}
+          {product.url && (
+            <>
+              {' '}
               <a href={product.url} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: 'var(--accent)' }}>
                 {product.vendor_domain ?? product.url} ↗
               </a>
-            )}
-            <span>{TOOLING_MATURITY_LABEL[product.maturity]}</span>
-            {admin && <span>{TOOLING_STATUS_LABEL[product.status]}</span>}
-            {!admin && portal && product.status !== 'cataloged' && (
-              <span style={{ color: 'var(--heat-2)' }}>
-                {product.status === 'candidate' ? 'Not yet reviewed' : 'Parked by the agent'}
-              </span>
-            )}
-          </div>
-        </header>
+            </>
+          )}
+        </p>
 
         <section style={{ marginBottom: 22 }}>
           <div className="section-label">Facts</div>

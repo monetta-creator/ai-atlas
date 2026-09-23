@@ -1,12 +1,12 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { adminGate } from '@/lib/admin-gate';
-import { getQuestion, getTargets, getArgumentGapScan, getThesis, nextClaimCode } from '@/lib/data';
+import { getQuestion, getTargets, getArgumentGapScan, getThesis, nextClaimCode, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { createClaimAction } from '@/lib/actions';
 import type { Domain, Resolvability, Relation } from '@/lib/types';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ClaimForm, { type ClaimEdgeInitial } from '@/components/ClaimForm';
 
 export const dynamic = 'force-dynamic';
@@ -73,28 +73,29 @@ export default async function NewClaimPage({
     }
   }
 
+  const counts = await getNavCounts().catch(() => null);
+
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/map">Map</Link> / <Link href={`/q/${slug}`}>Q{question.question.sort_order}</Link> / New claim
-        </div>
-        <header className="pagehead" style={{ padding: '20px 0 18px' }}>
-          <Editable
-            as="h1"
-            k="claim-new.title"
-            value={txt('claim-new.title', 'New claim')}
-            editing={editing}
-            style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}
-          />
-          {/* lede branches on fromGap and interpolates question.question.title. Left static. */}
-          <p className="lede" style={{ fontSize: 14, marginTop: 8 }}>
-            {fromGap
-              ? 'Pre-filled from the gap diagnosis: the statement, test, and wiring below are the model’s draft, grounded in recent evidence. Review and edit everything before creating.'
-              : `Add a falsifiable claim to ${question.question.title}. Write the statement and its test, then wire it to the stances it bears on. The AI suggests the wiring; you confirm each edge.`}
-          </p>
-        </header>
+        <PageTop
+          pathname={`/q/${slug}/claim/new`}
+          label="New claim"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          infoKey="/q/[slug]/claim/new"
+          title={
+            <Editable
+              as="h1"
+              k="claim-new.title"
+              value={txt('claim-new.title', 'New claim')}
+              editing={editing}
+            />
+          }
+        >
+          {fromGap ? 'Pre-filled from the gap diagnosis' : `Adding to ${question.question.title}`}
+        </PageTop>
 
         <ClaimForm
           action={createClaimAction}

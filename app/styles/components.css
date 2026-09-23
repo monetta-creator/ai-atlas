@@ -147,17 +147,6 @@ svg.edges path { transition: opacity .2s, stroke-width .2s; }
   .reveal { opacity: 1; transform: none; }
 }
 
-/* ------------------------------------------------------------
-   ABOUT SECTION  (sub-nav + long-form prose)
-   .about-nav reuses .navlinks for the links (incl. its .active rule);
-   these rules only add the rhythm + bottom hairline. .about-prose
-   centralizes the heading/body typography the About pages share.
-   ------------------------------------------------------------ */
-.about-nav {
-  gap: 22px; padding: 22px 0 18px; margin-bottom: 8px;
-  border-bottom: 1px solid var(--line); flex-wrap: wrap;
-  justify-content: center;
-}
 .about-prose { display: flex; flex-direction: column; max-width: 68ch; counter-reset: about-sec; }
 .about-prose > section {
   display: flex; flex-direction: column; gap: 10px;

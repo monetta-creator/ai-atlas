@@ -1,12 +1,12 @@
 import { notFound } from 'next/navigation';
-import Link from 'next/link';
 import { isPreview } from '@/lib/auth';
 import { adminGate } from '@/lib/admin-gate';
-import { getQuestionBySlug, getQuestionSummaries, getAsOf } from '@/lib/data';
+import { getQuestionBySlug, getQuestionSummaries, getAsOf, getNavCounts } from '@/lib/data';
 import { LENS_LABEL } from '@/lib/format';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import GenerateSummaryButton from '@/components/GenerateSummaryButton';
 import QuestionSummaryView from '@/components/QuestionSummaryView';
 import ShareNotice from '@/components/ShareNotice';
@@ -33,7 +33,9 @@ export default async function QuestionSummaryHistoryPage({
 
   const question = await getQuestionBySlug(slug);
   if (!question) notFound();
-  const [summaries, asOf] = await Promise.all([getQuestionSummaries(question.id), getAsOf()]);
+  const [summaries, asOf, counts] = await Promise.all([
+    getQuestionSummaries(question.id), getAsOf(), getNavCounts().catch(() => null),
+  ]);
   const latest = summaries[0];
   const earlier = summaries.slice(1);
 
@@ -41,24 +43,29 @@ export default async function QuestionSummaryHistoryPage({
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/map">Map</Link> / <Link href={`/q/${slug}`}>Q{question.sort_order}</Link> / summaries
-        </div>
-
-        <header className="pagehead" style={{ padding: '24px 0 22px' }}>
-          <div className="qcode">
-            Q{question.sort_order}
-            {question.primary_lens && <span className="lens">· lens: {LENS_LABEL[question.primary_lens]}</span>}
-          </div>
-          <Editable
-            as="h1"
-            style={{ fontSize: 'clamp(22px, 3vw, 34px)' }}
-            k="q-summary.title"
-            value={txt('q-summary.title', 'State summaries')}
-            editing={editing}
-          />
-          <p className="lede" style={{ fontSize: 15, marginTop: 8 }}>{question.title}</p>
-        </header>
+        <PageTop
+          pathname={`/q/${slug}/summary`}
+          label="State summaries"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          infoKey="/q/[slug]/summary"
+          title={
+            <div>
+              <div className="qcode">
+                Q{question.sort_order}
+                {question.primary_lens && <span className="lens">· lens: {LENS_LABEL[question.primary_lens]}</span>}
+              </div>
+              <Editable
+                as="h1"
+                k="q-summary.title"
+                value={txt('q-summary.title', 'State summaries')}
+                editing={editing}
+              />
+            </div>
+          }
+        >
+          {question.title}
+        </PageTop>
 
         <div className="flex items-center gap-3 flex-wrap" style={{ marginBottom: 24 }}>
           {personal && (

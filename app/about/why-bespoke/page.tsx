@@ -1,6 +1,8 @@
 import Prose from '@/components/Prose';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import { getEditContext } from '@/lib/content';
+import { isAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Why bespoke · The AI Atlas' };
@@ -43,27 +45,22 @@ const SECTIONS = [
 ];
 
 export default async function WhyBespokePage() {
-  const { editing, txt } = await getEditContext();
+  const [admin, { editing, txt }] = await Promise.all([isAdmin(), getEditContext()]);
   return (
     <>
-      <header className="pagehead" style={{ paddingBottom: 16 }}>
-        <Editable
-          as="h1"
-          k="about.whybespoke.title"
-          value={txt('about.whybespoke.title', 'Why bespoke')}
-          editing={editing}
-        />
-        <Editable
-          as="p"
-          className="lede"
-          k="about.whybespoke.lede"
-          value={txt(
-            'about.whybespoke.lede',
-            'What this does that a general chatbot cannot, where it stands against commercial enterprise research platforms, and why every layer of it is changeable.'
-          )}
-          editing={editing}
-        />
-      </header>
+      <PageTop
+        pathname="/about/why-bespoke"
+        label="Why bespoke"
+        viewer={{ admin, portal: admin }}
+        title={
+          <Editable
+            as="h1"
+            k="about.whybespoke.title"
+            value={txt('about.whybespoke.title', 'Why bespoke')}
+            editing={editing}
+          />
+        }
+      />
       <Prose sections={SECTIONS} editing={editing} keyPrefix="about.whybespoke" txt={txt} />
     </>
   );

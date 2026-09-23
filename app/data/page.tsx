@@ -1,12 +1,11 @@
-import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
-import { getAllDomainRows, getNodeLensMap } from '@/lib/data';
+import { getAllDomainRows, getNodeLensMap, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import DataField from '@/components/DataField';
 import LensTagger from '@/components/LensTagger';
-import WorkspaceTabs, { MAP_EDITOR_TABS } from '@/components/WorkspaceTabs';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,28 +20,19 @@ export default async function DataPage() {
     getNodeLensMap(),
   ]);
   const lensesFor = (type: string, id: string) => lensMap[`${type}:${id}`] ?? [];
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/map">Map</Link> / Data
-        </div>
-        <header className="pagehead" style={{ padding: '24px 0 22px' }}>
-          <Editable as="h1" k="data.title" value={txt('data.title', 'Data')} editing={editing} />
-          <Editable
-            as="p"
-            className="lede"
-            k="data.lede"
-            value={txt(
-              'data.lede',
-              'Edit the text of the records directly. Saves write straight to the database and show across the site. Confidence keeps its own editor on the detail pages, and codes stay fixed.'
-            )}
-            editing={editing}
-          />
-        </header>
-        <WorkspaceTabs tabs={MAP_EDITOR_TABS} active="/data" />
+        <PageTop
+          pathname="/data"
+          label="Data"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={<Editable as="h1" k="data.title" value={txt('data.title', 'Data')} editing={editing} />}
+        />
 
         <div className="data-section">
           <h2>Questions ({questions.length})</h2>

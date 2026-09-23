@@ -5,6 +5,7 @@ import { getThreadBySlug, getThreadPapers, getThreadRevisions } from '@/lib/data
 import { sanitizeSynthesisHtml } from '@/lib/sanitize';
 import { timeAgo } from '@/lib/format';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import ThreadSynthesisButton from '@/components/ThreadSynthesisButton';
 import type { ThreadRelation } from '@/lib/types';
 
@@ -41,16 +42,16 @@ export default async function ThreadPage({ params }: { params: Promise<{ slug: s
     <>
       <Header admin={personal} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
-        <p style={{ marginBottom: 12 }}>
-          <Link href="/research" className="text-xs hover:underline" style={{ color: 'var(--faint-ink)' }}>
-            ← Research
-          </Link>
-        </p>
-
-        <header style={{ marginBottom: 20 }}>
-          <h1 style={{ marginBottom: 8 }}>{thread.title}</h1>
-          <p className="text-sm" style={{ color: 'var(--dim)', margin: 0 }}>{thread.question}</p>
-        </header>
+        <PageTop
+          pathname={`/research/threads/${thread.slug}`}
+          label={thread.title.slice(0, 60)}
+          compact
+          title={<h1>{thread.title}</h1>}
+          viewer={{ admin: personal, portal: personal }}
+          infoKey="/research/threads/[slug]"
+        >
+          {thread.question}
+        </PageTop>
 
         {personal && (
           <div className="rounded-[var(--radius)] border p-[var(--card-pad)]"

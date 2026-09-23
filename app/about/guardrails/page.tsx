@@ -1,6 +1,8 @@
 import Prose from '@/components/Prose';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import { getEditContext } from '@/lib/content';
+import { isAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Guardrails · The AI Atlas' };
@@ -88,17 +90,22 @@ const SECTIONS = [
 ];
 
 export default async function GuardrailsPage() {
-  const { editing, txt } = await getEditContext();
+  const [admin, { editing, txt }] = await Promise.all([isAdmin(), getEditContext()]);
   return (
     <>
-      <header className="pagehead" style={{ paddingBottom: 16 }}>
-        <Editable
-          as="h1"
-          k="about.guardrails.title"
-          value={txt('about.guardrails.title', 'Guardrails')}
-          editing={editing}
-        />
-      </header>
+      <PageTop
+        pathname="/about/guardrails"
+        label="Guardrails"
+        viewer={{ admin, portal: admin }}
+        title={
+          <Editable
+            as="h1"
+            k="about.guardrails.title"
+            value={txt('about.guardrails.title', 'Guardrails')}
+            editing={editing}
+          />
+        }
+      />
       <Prose sections={SECTIONS} editing={editing} keyPrefix="about.guardrails" txt={txt} />
     </>
   );

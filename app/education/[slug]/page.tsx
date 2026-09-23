@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import { isAdmin } from '@/lib/auth';
 import { getGuide } from '@/lib/education/registry';
 import GuideAgenticHarnesses from '@/components/education/agentic-harnesses';
@@ -43,18 +44,21 @@ export default async function EducationGuidePage({
     <>
       <Header admin={admin} />
       <section className="wrap edu" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <header className="pagehead">
-          <div className="qcode">{guide.kicker}</div>
-          <h1>{guide.title}</h1>
-          <div className="flex items-center gap-3" style={{ marginTop: 18 }}>
-            <Link href="/education" className="btn btn--ghost btn--sm">← All guides</Link>
-            {guide.hasDeck && (
-              <Link href={`/education/${guide.slug}/deck`} className="btn btn--primary btn--sm">
-                View as 16:9 deck
-              </Link>
-            )}
-          </div>
-        </header>
+        <PageTop
+          pathname={`/education/${guide.slug}`}
+          label={guide.title.slice(0, 60)}
+          compact
+          title={<h1>{guide.title}</h1>}
+          viewer={{ admin, portal: admin }}
+          infoKey="/education/[slug]"
+          action={guide.hasDeck && (
+            <Link href={`/education/${guide.slug}/deck`} className="btn btn--primary btn--sm">
+              View as 16:9 deck
+            </Link>
+          )}
+        >
+          {guide.kicker}
+        </PageTop>
 
         {GUIDE_BODIES[guide.slug] ?? null}
       </section>

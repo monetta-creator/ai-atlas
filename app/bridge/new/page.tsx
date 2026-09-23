@@ -1,11 +1,11 @@
-import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
-import { getTargets, getArgumentGapScan, getThesis, nextBridgeCode } from '@/lib/data';
+import { getTargets, getArgumentGapScan, getThesis, nextBridgeCode, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { createBridgeAction } from '@/lib/actions';
 import type { Domain, Resolvability, Relation } from '@/lib/types';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import BridgeForm, { type BridgeFeederInitial } from '@/components/BridgeForm';
 
 export const dynamic = 'force-dynamic';
@@ -63,28 +63,28 @@ export default async function NewBridgePage({
     }
   }
 
+  const counts = await getNavCounts().catch(() => null);
+
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/map">Map</Link> / <Link href="/bridges">Bridges</Link> / New bridge-claim
-        </div>
-        <header className="pagehead" style={{ padding: '20px 0 18px' }}>
-          <Editable
-            as="h1"
-            k="bridge-new.title"
-            value={txt('bridge-new.title', 'New bridge-claim')}
-            editing={editing}
-            style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}
-          />
-          {/* lede branches on fromGap (a runtime condition, not a fixed string). Left static. */}
-          <p className="lede" style={{ fontSize: 14, marginTop: 8 }}>
-            {fromGap
-              ? 'Pre-filled from the gap diagnosis: the statement, test, domains, and feeders below are the model’s draft, grounded in recent evidence. Review and edit everything before creating.'
-              : 'A bridge-claim links two domains. Write the inter-domain statement and its test, then wire the claims that feed it. The AI suggests the feeders; you confirm each.'}
-          </p>
-        </header>
+        <PageTop
+          pathname="/bridge/new"
+          label="New bridge-claim"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="bridge-new.title"
+              value={txt('bridge-new.title', 'New bridge-claim')}
+              editing={editing}
+            />
+          }
+        >
+          {fromGap ? 'Pre-filled from the gap diagnosis' : 'Links two domains'}
+        </PageTop>
 
         <BridgeForm
           action={createBridgeAction}

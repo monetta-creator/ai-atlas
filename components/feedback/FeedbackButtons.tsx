@@ -64,6 +64,7 @@ export default function FeedbackButtons({ variant }: { variant: 'rail' | 'menu' 
         onClick={() => setOpen('bug')}
       >
         {BUG_ICON}
+        <span className="portal-rail-label">Report a bug</span>
       </button>
       <button
         type="button"
@@ -73,6 +74,7 @@ export default function FeedbackButtons({ variant }: { variant: 'rail' | 'menu' 
         onClick={() => setOpen('feature')}
       >
         {IDEA_ICON}
+        <span className="portal-rail-label">Request a feature</span>
       </button>
       {dialogs}
     </>

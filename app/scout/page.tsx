@@ -8,6 +8,7 @@ import { getEditContext } from '@/lib/content';
 import { COMPANY_STAGE_LABEL, COMPANY_EVENT_LABEL, timeAgo } from '@/lib/format';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import AddCompanyForm from '@/components/scout/AddCompanyForm';
 
 export const dynamic = 'force-dynamic';
@@ -42,53 +43,21 @@ export default async function ScoutPage() {
     <>
       <Header admin={personal} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <Editable
-            as="h1"
-            k="scout.title"
-            value={txt('scout.title', 'Startup Scout')}
-            editing={editing}
-            style={{ marginBottom: 10 }}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            k="scout.lede"
-            value={txt(
-              'scout.lede',
-              'Young AI companies tracked as acquisition candidates, organized by vertical. Each profile carries what the company does, the AI tech itself, and a running event timeline.'
-            )}
-            editing={editing}
-            style={{ marginBottom: 20 }}
-          />
-          <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
-            {events.length > 0 && <a href="#activity" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Activity</a>}
-            {verticals.filter((v) => v.active).map((v) => (
-              <a key={v.slug} href={`#v-${v.slug}`} className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>
-                {v.name} <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{v.tracked_count ?? 0}</span>
-              </a>
-            ))}
-            {personal && (
-              <Link href="/scout/console" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>
-                Console →
-              </Link>
-            )}
-          </nav>
-        </header>
-
-        {personal && (
-          <div
-            className="flex items-center flex-wrap gap-3 rounded-[var(--radius)] border p-3 text-sm"
-            style={{ background: 'var(--surface)', borderColor: 'var(--line)', marginBottom: 22 }}
-          >
-            <span style={{ color: 'var(--dim)' }}>
-              The desk: {queued} compan{queued === 1 ? 'y' : 'ies'} in the review queue.
-            </span>
-            <span style={{ marginLeft: 'auto' }}>
-              <Link href="/scout/console" className="btn btn--ghost btn--sm">Open the console →</Link>
-            </span>
-          </div>
-        )}
+        <PageTop
+          pathname="/scout"
+          label="Startup Scout"
+          viewer={{ admin: personal, portal: portal || personal }}
+          title={
+            <Editable
+              as="h1"
+              k="scout.title"
+              value={txt('scout.title', 'Startup Scout')}
+              editing={editing}
+            />
+          }
+        >
+          {personal && `The desk: ${queued} compan${queued === 1 ? 'y' : 'ies'} in the review queue`}
+        </PageTop>
 
         {portal && (
           <details style={{ marginBottom: 22 }}>

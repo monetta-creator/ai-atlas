@@ -1,7 +1,9 @@
 import Link from 'next/link';
 import Prose from '@/components/Prose';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import { getEditContext } from '@/lib/content';
+import { isAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'About · The AI Atlas' };
@@ -61,26 +63,23 @@ const SCOPE_DEFAULT =
   'The deep argument map covers one lens: the market and economics of AI. The Signal Board ranges wider, filing developments under six audience lenses. The whole thing is a running record of how one person is thinking, not a consensus.';
 
 export default async function AboutPage() {
-  const { editing, txt } = await getEditContext();
+  const [admin, { editing, txt }] = await Promise.all([isAdmin(), getEditContext()]);
 
   return (
     <>
-      <header className="pagehead">
-        <Editable
-          as="h1"
-          k="about.overview.title"
-          value={txt('about.overview.title', 'About the AI Atlas')}
-          editing={editing}
-        />
-        <Editable
-          as="p"
-          className="lede"
-          multiline
-          k="about.overview.lede"
-          value={txt('about.overview.lede', 'A structured map for staying oriented in the AI economy debate.')}
-          editing={editing}
-        />
-      </header>
+      <PageTop
+        pathname="/about"
+        label="About"
+        viewer={{ admin, portal: admin }}
+        title={
+          <Editable
+            as="h1"
+            k="about.overview.title"
+            value={txt('about.overview.title', 'About the AI Atlas')}
+            editing={editing}
+          />
+        }
+      />
 
       <Editable
         as="p"

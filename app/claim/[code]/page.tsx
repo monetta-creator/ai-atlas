@@ -4,6 +4,7 @@ import { isAdmin, isPreview } from '@/lib/auth';
 import { getClaim, getAsOf, getSignalsTouchingClaim, getPapersForTarget, getThesesForTarget } from '@/lib/data';
 import { DOMAIN_LABEL, RESOLVABILITY_LABEL, LENS_LABEL, relationColor, dateLabel, directionLabel } from '@/lib/format';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import ConfidenceEditor from '@/components/ConfidenceEditor';
 import EvidenceList from '@/components/EvidenceList';
@@ -49,23 +50,21 @@ export default async function ClaimPage({
       <>
         <Header admin={admin} />
         <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-          <div className="crumbs">
-            <Link href="/map">Map</Link> / Frame {claim.code}
-          </div>
-          <header className="qhead">
-            <div className="qcode">
-              <span className="badge badge--accent">◆ Frame · {claim.code}</span>
-            </div>
-            <h1>{claim.statement}</h1>
-            <p className="lede">
-              A frame is an organizing belief that shapes which claims are looked for, but isn&apos;t
-              itself cleanly falsifiable. It is stored and labeled, and{' '}
-              <span style={{ color: 'var(--ink)', fontWeight: 500 }}>
-                quarantined from confirming-evidence accumulation
-              </span>
-              . It records what it organizes; it accumulates no evidence.
-            </p>
-          </header>
+          <PageTop
+            pathname={`/claim/${claim.code}`}
+            label={`Frame ${claim.code}`}
+            viewer={{ admin: personal, portal: personal }}
+            infoKey="/claim"
+            compact
+            title={
+              <div>
+                <div className="qcode">
+                  <span className="badge badge--accent">◆ Frame · {claim.code}</span>
+                </div>
+                <h1>{claim.statement}</h1>
+              </div>
+            }
+          />
 
           {!personal && <ShareNotice asOf={asOf} />}
 
@@ -96,27 +95,32 @@ export default async function ClaimPage({
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/map">Map</Link> / Claim {claim.code}
-        </div>
-
-        <header className="qhead">
-          <div className="qcode" style={{ justifyContent: 'space-between' }}>
-            <span>Claim {claim.code}</span>
-            {personal && <ConfidenceBadge label={claim.confidence_label} size="md" />}
-          </div>
-          <h1>{claim.statement}</h1>
-          <div className="flex items-center flex-wrap gap-2 mt-4">
-            {claim.domain && <span className="badge">{DOMAIN_LABEL[claim.domain]}</span>}
-            {claim.resolvability && (
-              <span className="badge">{RESOLVABILITY_LABEL[claim.resolvability]} to resolve</span>
-            )}
-            {claim.reflexive && <span className="badge badge--accent">⟳ reflexive</span>}
-            {lenses.map((l) => (
-              <span key={l} className="badge">{LENS_LABEL[l]}</span>
-            ))}
-          </div>
-        </header>
+        <PageTop
+          pathname={`/claim/${claim.code}`}
+          label={`Claim ${claim.code}`}
+          viewer={{ admin: personal, portal: personal }}
+          infoKey="/claim"
+          compact
+          title={
+            <div>
+              <div className="qcode" style={{ justifyContent: 'space-between' }}>
+                <span>Claim {claim.code}</span>
+                {personal && <ConfidenceBadge label={claim.confidence_label} size="md" />}
+              </div>
+              <h1>{claim.statement}</h1>
+              <div className="flex items-center flex-wrap gap-2 mt-4">
+                {claim.domain && <span className="badge">{DOMAIN_LABEL[claim.domain]}</span>}
+                {claim.resolvability && (
+                  <span className="badge">{RESOLVABILITY_LABEL[claim.resolvability]} to resolve</span>
+                )}
+                {claim.reflexive && <span className="badge badge--accent">⟳ reflexive</span>}
+                {lenses.map((l) => (
+                  <span key={l} className="badge">{LENS_LABEL[l]}</span>
+                ))}
+              </div>
+            </div>
+          }
+        />
 
         {!personal && <ShareNotice asOf={asOf} />}
 

@@ -70,6 +70,7 @@ export default function AgentOrb({
           onClick={openDrawer}
         >
           {NAV_ICONS.agent}
+          <span className="portal-rail-label">Atlas Agent</span>
           {unread > 0 && (
             <span className="ag-badge" data-high={high > 0 ? '' : undefined}>{unread > 99 ? '99+' : unread}</span>
           )}

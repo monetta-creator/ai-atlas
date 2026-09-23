@@ -1,11 +1,10 @@
-import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
-import { getSourcesWithCounts, getEvidenceGraph } from '@/lib/data';
+import { getSourcesWithCounts, getEvidenceGraph, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import SourcesHub from '@/components/SourcesHub';
-import WorkspaceTabs, { SOURCES_TABS } from '@/components/WorkspaceTabs';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,28 +15,19 @@ export default async function SourcesPage() {
   const { editing, txt } = await getEditContext();
 
   const [sources, graph] = await Promise.all([getSourcesWithCounts(), getEvidenceGraph()]);
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/map">Map</Link> / Sources
-        </div>
-        <header className="pagehead" style={{ padding: '24px 0 22px' }}>
-          <Editable as="h1" k="sources.title" value={txt('sources.title', 'Sources')} editing={editing} />
-          <Editable
-            as="p"
-            className="lede"
-            k="sources.lede"
-            value={txt(
-              'sources.lede',
-              "The source library: filter sources, view dossiers, and see which claims each source's evidence attaches to."
-            )}
-            editing={editing}
-          />
-        </header>
-        <WorkspaceTabs tabs={SOURCES_TABS} active="/sources" />
+        <PageTop
+          pathname="/sources"
+          label="Sources"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={<Editable as="h1" k="sources.title" value={txt('sources.title', 'Sources')} editing={editing} />}
+        />
         <SourcesHub sources={sources} graph={graph} />
       </section>
     </>

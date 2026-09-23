@@ -6,6 +6,7 @@ import { getAskClientData } from '@/lib/ask/retrieve';
 import { dateLabel, DOMAIN_LABEL, confidenceText, directionLabel, directionColor } from '@/lib/format';
 import { publishSignalAction, deleteSignalAction, archiveSignalAction, unarchiveSignalAction } from '@/lib/actions';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import { LensBadges, SignificanceTag } from '@/components/SignalBadges';
 import RelatedSignalsTable from '@/components/RelatedSignalsTable';
 import { SignalBriefSection, SignalCounterpointSection } from '@/components/SignalBriefView';
@@ -48,57 +49,56 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/signals">Signal Board</Link> / {signal.title}
-        </div>
-
-        <header className="pagehead" style={{ padding: '20px 0 18px' }}>
-          <div className="signal-top" style={{ marginBottom: 12 }}>
-            <LensBadges lenses={signal.lenses} />
-            <SignificanceTag significance={signal.significance} />
-            {personal && !signal.is_published && (
-              <span className="badge badge--dashed" style={{ fontSize: 11, padding: '3px 9px' }}>
-                {signal.archived_at ? 'Archived' : 'Draft'}
-              </span>
-            )}
-            {personal && signal.origin === 'pipeline' && (
-              <span className="badge badge--accent" style={{ fontSize: 11, padding: '3px 9px' }}>pipeline</span>
-            )}
-            {personal && signal.origin === 'manual' && (
-              <span className="badge" style={{ fontSize: 11, padding: '3px 9px' }}>manual</span>
-            )}
-            {personal && signal.drafted_by && (
-              <span
-                className="badge"
-                style={{ fontSize: 11, padding: '3px 9px', fontFamily: 'var(--font-mono)' }}
-                title="Model that drafted this signal (the analysis A/B stamp)"
-              >
-                {signal.drafted_by}
-              </span>
-            )}
-          </div>
-          <h1 style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}>{signal.title}</h1>
-          <p className="lede" style={{ fontSize: 14, marginTop: 8 }}>
-            {date}
-            {signal.source_title && (
-              <>
-                {' · '}
-                {signal.source_url ? (
-                  <a
-                    href={signal.source_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ color: 'var(--accent)' }}
-                  >
-                    {signal.source_title}
-                  </a>
-                ) : (
-                  signal.source_title
+        <PageTop
+          pathname={`/signals/${signal.id}`}
+          label={signal.title.length > 60 ? `${signal.title.slice(0, 60)}…` : signal.title}
+          viewer={{ admin: personal, portal: personal }}
+          infoKey="/signals/[id]"
+          compact
+          title={
+            <div>
+              <div className="signal-top" style={{ marginBottom: 12 }}>
+                <LensBadges lenses={signal.lenses} />
+                <SignificanceTag significance={signal.significance} />
+                {personal && !signal.is_published && (
+                  <span className="badge badge--dashed" style={{ fontSize: 11, padding: '3px 9px' }}>
+                    {signal.archived_at ? 'Archived' : 'Draft'}
+                  </span>
                 )}
-              </>
-            )}
-          </p>
-        </header>
+                {personal && signal.origin === 'pipeline' && (
+                  <span className="badge badge--accent" style={{ fontSize: 11, padding: '3px 9px' }}>pipeline</span>
+                )}
+                {personal && signal.origin === 'manual' && (
+                  <span className="badge" style={{ fontSize: 11, padding: '3px 9px' }}>manual</span>
+                )}
+                {personal && signal.drafted_by && (
+                  <span
+                    className="badge"
+                    style={{ fontSize: 11, padding: '3px 9px', fontFamily: 'var(--font-mono)' }}
+                    title="Model that drafted this signal (the analysis A/B stamp)"
+                  >
+                    {signal.drafted_by}
+                  </span>
+                )}
+              </div>
+              <h1>{signal.title}</h1>
+            </div>
+          }
+        >
+          {date}
+          {signal.source_title && (
+            <>
+              {' · '}
+              {signal.source_url ? (
+                <a href={signal.source_url} target="_blank" rel="noopener noreferrer">
+                  {signal.source_title}
+                </a>
+              ) : (
+                signal.source_title
+              )}
+            </>
+          )}
+        </PageTop>
 
         {signal.summary && (
           <p style={{ fontSize: 16, lineHeight: 1.6, color: 'var(--ink)', margin: '0 0 12px' }}>

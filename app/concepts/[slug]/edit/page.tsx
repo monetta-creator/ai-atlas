@@ -1,11 +1,11 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { adminGate } from '@/lib/admin-gate';
-import { getConceptForEdit, getConceptGraph, getTargets } from '@/lib/data';
+import { getConceptForEdit, getConceptGraph, getTargets, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { updateConceptAction, deleteConceptAction } from '@/lib/actions';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ConceptForm from '@/components/ConceptForm';
 
 export const dynamic = 'force-dynamic';
@@ -31,24 +31,27 @@ export default async function EditConceptPage({
   ]);
   if (!data) notFound();
   const { concept, prerequisite_ids, claim_codes } = data;
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/concepts">Concepts</Link> /{' '}
-          <Link href={`/concepts/${concept.slug}`}>{concept.name}</Link> / Edit
-        </div>
-        <header className="pagehead" style={{ padding: '20px 0 18px' }}>
-          <Editable
-            as="h1"
-            k="concepts-edit.title"
-            value={txt('concepts-edit.title', 'Edit concept')}
-            editing={editing}
-            style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}
-          />
-        </header>
+        <PageTop
+          pathname={`/concepts/${concept.slug}/edit`}
+          label="Edit concept"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          infoKey="/concepts/[slug]/edit"
+          title={
+            <Editable
+              as="h1"
+              k="concepts-edit.title"
+              value={txt('concepts-edit.title', 'Edit concept')}
+              editing={editing}
+            />
+          }
+        />
 
         <ConceptForm
           mode="edit"

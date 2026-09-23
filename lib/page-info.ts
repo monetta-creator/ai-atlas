@@ -1,3 +1,6 @@
+import { PAGE_INFO_A } from './page-info-a';
+import { PAGE_INFO_B } from './page-info-b';
+import { PAGE_INFO_C } from './page-info-c';
 // Page explainers behind the round "i" at the top of every page (2026-09-23).
 // One entry per route pattern, longest prefix wins. `summary` is the sentence
 // that used to be the page's lede; `sections` are two to four short heads with
@@ -14,7 +17,7 @@ export interface PageInfoContent {
   sections: PageInfoSection[];
 }
 
-export const PAGE_INFO: Record<string, PageInfoContent> = {
+const CORE: Record<string, PageInfoContent> = {
   '/signals/drafts': {
     title: 'How the draft queue works',
     summary:
@@ -81,6 +84,10 @@ export const PAGE_INFO: Record<string, PageInfoContent> = {
     ],
   },
 };
+
+// Slices written per portal group live in page-info-a.ts / page-info-b.ts / page-info-c.ts;
+// CORE holds the first four (the golden examples). Later keys win on collision.
+export const PAGE_INFO: Record<string, PageInfoContent> = { ...PAGE_INFO_A, ...PAGE_INFO_B, ...PAGE_INFO_C, ...CORE };
 
 export function pageInfoFor(pathname: string): PageInfoContent | null {
   let best: string | null = null;

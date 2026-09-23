@@ -4,6 +4,7 @@ import { getConceptGraph, getConceptGapScan, reconcileConceptGapScan } from '@/l
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ConceptGraph from '@/components/ConceptGraph';
 import ConceptGapPanel from '@/components/ConceptGapPanel';
 
@@ -41,37 +42,26 @@ export default async function ConceptsPage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1100, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/map">Map</Link> / Concepts
-        </div>
-
-        <header className="pagehead" style={{ padding: '24px 0 28px' }}>
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <Editable
-                as="h1"
-                k="concepts.title"
-                value={txt('concepts.title', 'Concepts · the semantic scaffold')}
-                editing={editing}
-              />
-              <Editable
-                as="p"
-                className="lede"
-                k="concepts.lede"
-                value={txt(
-                  'concepts.lede',
-                  'The vocabulary the AI-economy debate is conducted in, stacked by dependency: foundational ideas at the bottom, the concepts built on them above. Most terms have settled technical meanings; the contested ones are where arguments quietly talk past each other.'
-                )}
-                editing={editing}
-              />
-            </div>
-            {personal && (
-              <Link href="/concepts/new" className="btn btn--primary" style={{ marginTop: 6 }}>
+        <PageTop
+          pathname="/concepts"
+          label="Concepts"
+          viewer={{ admin: personal, portal: personal }}
+          title={
+            <Editable
+              as="h1"
+              k="concepts.title"
+              value={txt('concepts.title', 'Concepts · the semantic scaffold')}
+              editing={editing}
+            />
+          }
+          action={
+            personal && (
+              <Link href="/concepts/new" className="btn btn--primary">
                 Create concept
               </Link>
-            )}
-          </div>
-        </header>
+            )
+          }
+        />
 
         {personal && <ConceptGapPanel initial={gapScan} />}
 

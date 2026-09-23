@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import { getEditContext } from '@/lib/content';
 import { isAdmin } from '@/lib/auth';
 import { GUIDES } from '@/lib/education/registry';
@@ -19,25 +20,19 @@ export default async function EducationPage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 900, paddingBottom: 100 }}>
-        <header className="pagehead">
-          <Editable
-            as="h1"
-            k="education.hub.title"
-            value={txt('education.hub.title', 'Education')}
-            editing={editing}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            multiline
-            k="education.hub.lede"
-            value={txt(
-              'education.hub.lede',
-              'Guides worth keeping: things learned along the way, written up properly and given a permanent home. Not a feed, a shelf.'
-            )}
-            editing={editing}
-          />
-        </header>
+        <PageTop
+          pathname="/education"
+          label="Education"
+          viewer={{ admin, portal: admin }}
+          title={
+            <Editable
+              as="h1"
+              k="education.hub.title"
+              value={txt('education.hub.title', 'Education')}
+              editing={editing}
+            />
+          }
+        />
 
         <div className="qgrid" style={{ paddingBottom: 8 }}>
           {GUIDES.map((g) => (

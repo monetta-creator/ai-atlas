@@ -4,6 +4,7 @@ import { isAdmin, isPreview } from '@/lib/auth';
 import { getBridge, getAsOf, getSignalsTouchingClaim, getPapersForTarget, getThesesForTarget } from '@/lib/data';
 import { DOMAIN_LABEL, RESOLVABILITY_LABEL, relationColor, dateLabel, directionLabel } from '@/lib/format';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import ConfidenceEditor from '@/components/ConfidenceEditor';
 import EvidenceList from '@/components/EvidenceList';
@@ -40,31 +41,39 @@ export default async function BridgePage({
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/bridges">Bridges</Link> / {bridge.code}
-        </div>
+        <PageTop
+          pathname={`/bridge/${bridge.code}`}
+          label={bridge.code}
+          viewer={{ admin: personal, portal: personal }}
+          infoKey="/bridge"
+          compact
+          title={
+            <div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="btag">⤧ bridge-claim · {bridge.code}</div>
+                {personal && <ConfidenceBadge label={bridge.confidence_label} size="md" />}
+              </div>
+              <div className="domains">
+                <span className="domain">{DOMAIN_LABEL[bridge.domain_from]}</span>
+                <span className="arrow">
+                  <svg width="26" height="14" viewBox="0 0 26 14" fill="none" stroke="currentColor" strokeWidth="1.6">
+                    <path d="M1 7h22M18 2l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                <span className="domain">{DOMAIN_LABEL[bridge.domain_to]}</span>
+                {bridge.resolvability && (
+                  <span className="domain">{RESOLVABILITY_LABEL[bridge.resolvability]} to resolve</span>
+                )}
+                {bridge.reflexive && <span className="domain" style={{ color: 'var(--accent)' }}>⟳ reflexive</span>}
+              </div>
+              <h1 style={{ fontSize: 'clamp(20px, 2.6vw, 26px)' }}>{bridge.statement}</h1>
+            </div>
+          }
+        />
 
         {!personal && <ShareNotice asOf={asOf} />}
 
         <div className="bridge" style={{ marginTop: 8 }}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="btag">⤧ bridge-claim · {bridge.code}</div>
-            {personal && <ConfidenceBadge label={bridge.confidence_label} size="md" />}
-          </div>
-          <div className="domains">
-            <span className="domain">{DOMAIN_LABEL[bridge.domain_from]}</span>
-            <span className="arrow">
-              <svg width="26" height="14" viewBox="0 0 26 14" fill="none" stroke="currentColor" strokeWidth="1.6">
-                <path d="M1 7h22M18 2l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </span>
-            <span className="domain">{DOMAIN_LABEL[bridge.domain_to]}</span>
-            {bridge.resolvability && (
-              <span className="domain">{RESOLVABILITY_LABEL[bridge.resolvability]} to resolve</span>
-            )}
-            {bridge.reflexive && <span className="domain" style={{ color: 'var(--accent)' }}>⟳ reflexive</span>}
-          </div>
-          <h3>{bridge.statement}</h3>
           <div className="test">
             <span className="tlabel">would falsify</span>
             <span>{bridge.test}</span>

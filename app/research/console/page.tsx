@@ -5,7 +5,7 @@ import {
   getResearchRuns, getReviewQueuePapers, countPendingPapers,
   getResearchThreads, getThreadScan, reconcileThreadScan, getRisingRejects,
   getFindingCoverage, getSteeringNote, getAllPendingPaperIds, getAgentQueueSummary,
-  getResearchPrefs, getResearchRunByDay, getResearchHealth, getResearchModelAB,
+  getResearchPrefs, getResearchRunByDay, getResearchHealth, getResearchModelAB, getNavCounts,
 } from '@/lib/data';
 import { createThreadFormAction } from '@/lib/actions';
 import { timeAgo } from '@/lib/format';
@@ -16,6 +16,7 @@ import { buildResearchHandoff } from '@/lib/research/handoff';
 import vercelConfig from '@/vercel.json';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ResearchConsole from '@/components/ResearchConsole';
 import ResearchEnginePanel from '@/components/ResearchEnginePanel';
 import ResearchEnabledToggle from '@/components/ResearchEnabledToggle';
@@ -80,6 +81,7 @@ export default async function ResearchConsolePage() {
       })
     : '';
   const completedRuns = Math.max(1, health.runs.completed);
+  const counts = await getNavCounts().catch(() => null);
 
   // The agent's recommendations turn the queue into a decision surface: track
   // candidates first (confidence desc), then notes, unprocessed, and dismissals
@@ -99,39 +101,22 @@ export default async function ResearchConsolePage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <Editable
-            as="h1"
-            style={{ marginBottom: 10 }}
-            k="research-console.title"
-            value={txt('research-console.title', 'Research console')}
-            editing={editing}
-          />
-          <p className="lede" style={{ marginBottom: 20 }}>
-            The working side of the Research Portal: pull and triage arXiv, review the queue,
-            tend the threads. The reading surface lives at <Link href="/research">/research</Link>.
-          </p>
-          <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
-            <a href="#engine" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Engine</a>
-            <a href="#config" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Config</a>
-            <a href="#health" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Health</a>
-            <a href="#exports" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Exports</a>
-            <a href="#run" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Run</a>
-            <a href="#agent" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>✦ Agent</a>
-            <a href="#queue" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>
-              Queue <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{queue.length}</span>
-            </a>
-            {coverage.missing.length > 0 && (
-              <a href="#findings" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>
-                Findings <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{coverage.missing.length}</span>
-              </a>
-            )}
-            <a href="#add" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Add paper</a>
-            <a href="#threads" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Thread tools</a>
-            <a href="#citations" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Citations</a>
-            {runs.length > 0 && <a href="#history" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>History</a>}
-          </nav>
-        </header>
+        <PageTop
+          pathname="/research/console"
+          label="Research console"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="research-console.title"
+              value={txt('research-console.title', 'Research console')}
+              editing={editing}
+            />
+          }
+        >
+          Queue {queue.length}{coverage.missing.length > 0 ? ` · findings gap ${coverage.missing.length}` : ''}{runs.length > 0 ? ` · ${runs.length} runs on record` : ''}
+        </PageTop>
 
         <section id="engine" style={{ scrollMarginTop: 80 }}>
           <div className="section-label">Engine · today&apos;s run</div>

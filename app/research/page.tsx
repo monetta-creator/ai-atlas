@@ -9,7 +9,7 @@ import { getEditContext } from '@/lib/content';
 import { timeAgo } from '@/lib/format';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
-import ResearchInfo from '@/components/ResearchInfo';
+import PageTop from '@/components/PageTop';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Research Portal · The AI Atlas' };
@@ -43,57 +43,22 @@ export default async function ResearchPage() {
     <>
       <Header admin={personal} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <Editable
-            as="h1"
-            k="research.title"
-            value={txt('research.title', 'Research')}
-            editing={editing}
-            style={{ marginBottom: 10 }}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            k="research.lede"
-            value={txt(
-              'research.lede',
-              "What the recent AI literature says, and what it changes: living syntheses by question, a tracked watchlist, and every paper's finding one click away."
-            )}
-            editing={editing}
-            style={{ marginBottom: 20 }}
-          />
-          <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
-            {latestRoundup && <a href="#roundup" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>This week</a>}
-            {fresh > 0 && <a href="#new" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>New</a>}
-            <a href="#threads" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Threads</a>
-            {touchRollup.length > 0 && <a href="#map" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Map</a>}
-            <a href="#watchlist" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>
-              Watchlist <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{tracked.length}</span>
-            </a>
-            {noted.length > 0 && <a href="#noted" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Noted</a>}
-            {personal && (
-              <Link href="/research/console" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>
-                Console →
-              </Link>
-            )}
-            <ResearchInfo />
-          </nav>
-        </header>
-
-        {personal && (
-          <div
-            className="flex items-center flex-wrap gap-3 rounded-[var(--radius)] border p-3 text-sm"
-            style={{ background: 'var(--surface)', borderColor: 'var(--line)', marginBottom: 22 }}
-          >
-            <span style={{ color: 'var(--dim)' }}>
-              The desk: {counts?.papers ?? 0} paper{(counts?.papers ?? 0) === 1 ? '' : 's'} awaiting review.
-            </span>
-            <span style={{ marginLeft: 'auto' }} className="flex items-center gap-2">
-              <Link href="/research/console" className="btn btn--ghost btn--sm">Open the console →</Link>
-              <Link href="/research/digest" className="btn btn--quiet btn--sm">Digest</Link>
-            </span>
-          </div>
-        )}
+        <PageTop
+          pathname="/research"
+          label="Research"
+          viewer={{ admin: personal, portal: personal }}
+          counts={personal ? counts : null}
+          title={
+            <Editable
+              as="h1"
+              k="research.title"
+              value={txt('research.title', 'Research')}
+              editing={editing}
+            />
+          }
+        >
+          {personal && `The desk: ${counts?.papers ?? 0} paper${(counts?.papers ?? 0) === 1 ? '' : 's'} awaiting review`}
+        </PageTop>
 
         {latestRoundup && (
           <section id="roundup" style={{ scrollMarginTop: 80, marginBottom: 26 }}>

@@ -8,6 +8,7 @@ import {
 import { setPaperRigorAction } from '@/lib/actions';
 import { SIGNAL_LENS_LABEL } from '@/lib/format';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import PaperAnalysisButton from '@/components/PaperAnalysisButton';
 import PaperReader from '@/components/PaperReader';
 import PaperReviewControls from '@/components/PaperReviewControls';
@@ -84,44 +85,40 @@ export default async function PaperPage({ params }: { params: Promise<{ id: stri
     <>
       <Header admin={personal} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
-        <p style={{ marginBottom: 12 }}>
-          <Link href="/research" className="text-xs hover:underline" style={{ color: 'var(--faint-ink)' }}>
-            ← Research
-          </Link>
-        </p>
+        <PageTop
+          pathname={`/research/${paper.id}`}
+          label={paper.title.slice(0, 60)}
+          compact
+          title={<h1>{paper.title}</h1>}
+          viewer={{ admin: personal, portal: personal }}
+          infoKey="/research/[id]"
+          action={<PaperReader arxivId={paper.arxiv_id} url={paper.url} title={paper.title} />}
+        >
+          <a href={paper.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+            {paper.arxiv_id ?? paper.url} ↗
+          </a>
+          {paper.published_at && ` · ${paper.published_at}`}
+          {paper.categories.length > 0 && ` · ${paper.categories.join(', ')}`}
+          {paper.author_hindex != null && ` · h-max ${paper.author_hindex}`}
+          {paper.citation_count != null && ` · ${paper.citation_count} citations`}
+          {personal && paper.rigor_prior != null && ` · rigor ${paper.rigor_prior}/100`}
+        </PageTop>
 
-        <header style={{ marginBottom: 20 }}>
-          <h1 style={{ marginBottom: 8 }}>{paper.title}</h1>
-          <div className="text-xs flex items-center gap-2 flex-wrap" style={{ color: 'var(--faint-ink)' }}>
-            <a href={paper.url} target="_blank" rel="noopener noreferrer" className="hover:underline"
-              style={{ fontFamily: 'var(--font-mono)' }}>
-              {paper.arxiv_id ?? paper.url} ↗
-            </a>
-            {paper.published_at && <span>· {paper.published_at}</span>}
-            {paper.categories.length > 0 && <span>· {paper.categories.join(', ')}</span>}
-            {paper.author_hindex != null && (
-              <span title="Highest author h-index (Semantic Scholar), a track-record prior, not a verdict">
-                · h-max {paper.author_hindex}
-              </span>
-            )}
-            {paper.citation_count != null && <span>· {paper.citation_count} citations</span>}
-            {personal && paper.rigor_prior != null && <span>· rigor {paper.rigor_prior}/100</span>}
-            {paper.signal_id && (
-              <Link href={`/signals/${paper.signal_id}`} className="hover:underline" style={{ color: 'var(--supports)' }}>
-                · signal →
-              </Link>
-            )}
-          </div>
-          {paper.authors.length > 0 && (
-            <p className="text-xs" style={{ color: 'var(--dim)', marginTop: 6 }}>
-              {paper.authors.slice(0, 12).join(', ')}{paper.authors.length > 12 ? ` +${paper.authors.length - 12}` : ''}
-            </p>
-          )}
-          {paper.comments && (
-            <p className="text-xs" style={{ color: 'var(--heat-2)', marginTop: 4 }}>{paper.comments}</p>
-          )}
-          <PaperReader arxivId={paper.arxiv_id} url={paper.url} title={paper.title} />
-        </header>
+        {paper.authors.length > 0 && (
+          <p className="text-xs" style={{ color: 'var(--dim)', marginBottom: 12 }}>
+            {paper.authors.slice(0, 12).join(', ')}{paper.authors.length > 12 ? ` +${paper.authors.length - 12}` : ''}
+          </p>
+        )}
+        {paper.comments && (
+          <p className="text-xs" style={{ color: 'var(--heat-2)', marginBottom: 12 }}>{paper.comments}</p>
+        )}
+        {paper.signal_id && (
+          <p className="text-xs" style={{ marginBottom: 12 }}>
+            <Link href={`/signals/${paper.signal_id}`} className="hover:underline" style={{ color: 'var(--supports)' }}>
+              signal →
+            </Link>
+          </p>
+        )}
 
         {personal && (
           <div className="rounded-[var(--radius)] border p-[var(--card-pad)]"

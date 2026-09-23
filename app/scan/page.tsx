@@ -4,6 +4,7 @@ import { adminGate } from '@/lib/admin-gate';
 import {
   getScanTopics, getScanRuns, getScanPrefs, getScanHealth, getPublishedSignalCount,
   getEnrichModelStats, getSourceTierStats, getRecentSourceTiers, getRelevanceEnsembleStats,
+  getNavCounts,
 } from '@/lib/data';
 import { ensemblePanel } from '@/lib/scan/ensemble';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
@@ -14,6 +15,7 @@ import { getEditContext } from '@/lib/content';
 import vercelConfig from '@/vercel.json';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ScanConsole from '@/components/scan/ScanConsole';
 import TopicToggle from '@/components/scan/TopicToggle';
 import ScanEnabledToggle from '@/components/scan/ScanEnabledToggle';
@@ -30,7 +32,6 @@ export const maxDuration = 60;
 export const metadata = { title: 'External scan · The AI Atlas' };
 
 const DATASET_SLUG = 'external-scan';
-const chip = { fontSize: 12, padding: '5px 13px' } as const;
 const panel = {
   background: 'var(--surface)', borderColor: 'var(--line)',
 } as const;
@@ -101,40 +102,28 @@ export default async function ScanPage() {
   });
   const pct = (num: number, den: number): string => (den > 0 ? `${Math.round((num / den) * 100)}%` : '–');
   const completedRuns = Math.max(1, health.runs.completed);
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <Editable
-            as="h1"
-            style={{ marginBottom: 10 }}
-            k="scan.title"
-            value={txt('scan.title', 'External scan')}
-            editing={editing}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            style={{ marginBottom: 20 }}
-            k="scan.lede"
-            value={txt(
-              'scan.lede',
-              'The daily outside-the-firewall sweep: press feeds and topic web searches, hydrated to full text and lightly enriched. The output that matters is one JSON file per day.'
-            )}
-            editing={editing}
-          />
-          <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
-            <a href="#json" className="touch-chip" style={chip}>The JSON</a>
-            <a href="#signals" className="touch-chip" style={chip}>Signals export</a>
-            <a href="#config" className="touch-chip" style={chip}>Schedule &amp; config</a>
-            <a href="#run" className="touch-chip" style={chip}>Run</a>
-            <a href="#topics" className="touch-chip" style={chip}>Topics</a>
-            <a href="#contract" className="touch-chip" style={chip}>Contract</a>
-            <a href="#history" className="touch-chip" style={chip}>History &amp; health</a>
-          </nav>
-        </header>
+        <PageTop
+          pathname="/scan"
+          label="External scan"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="scan.title"
+              value={txt('scan.title', 'External scan')}
+              editing={editing}
+            />
+          }
+        >
+          {latestDay ? `Latest run ${latestDay}` : 'No completed run yet'}
+        </PageTop>
 
         <section id="json" style={{ scrollMarginTop: 80 }}>
           <div className="section-label">The daily JSON</div>

@@ -4,6 +4,7 @@ import { isAdmin, isPreview } from '@/lib/auth';
 import { getQuestion, getQuestionSummaries, getAsOf } from '@/lib/data';
 import { LENS_LABEL } from '@/lib/format';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import StanceCard from '@/components/StanceCard';
 import QuestionMap from '@/components/QuestionMap';
 import ClaimRow from '@/components/ClaimRow';
@@ -47,20 +48,29 @@ export default async function QuestionPage({
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link id="crumb-map" href="/map">Map</Link> / Q{question.sort_order}
-          {question.primary_lens ? ` / ${LENS_LABEL[question.primary_lens]}` : ''}
-        </div>
+        <PageTop
+          pathname={`/q/${question.slug}`}
+          label={`Q${question.sort_order}`}
+          viewer={{ admin: personal, portal: personal }}
+          infoKey="/q"
+          compact
+          title={
+            <div>
+              <div className="qcode">
+                Q{question.sort_order}
+                {question.primary_lens && <span className="lens">· lens: {LENS_LABEL[question.primary_lens]}</span>}
+              </div>
+              <h1>{question.title}</h1>
+              <span className="neutral-tag">◇ Neutral question</span>
+            </div>
+          }
+        />
 
-        <header className="qhead">
-          <div className="qcode">
-            Q{question.sort_order}
-            {question.primary_lens && <span className="lens">· lens: {LENS_LABEL[question.primary_lens]}</span>}
-          </div>
-          <h1>{question.title}</h1>
-          {question.summary && <p className="lede">{question.summary}</p>}
-          <span className="neutral-tag">◇ Neutral question</span>
-        </header>
+        {question.summary && (
+          <p style={{ fontSize: 16.5, color: 'var(--dim)', maxWidth: '64ch', lineHeight: 1.6, marginBottom: 18 }}>
+            {question.summary}
+          </p>
+        )}
 
         {(personal || summaryCount > 0) && (
           <div className="flex items-center gap-4 flex-wrap" style={{ margin: '18px 0 4px' }}>

@@ -1,10 +1,11 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
-import { getSource, getTargets } from '@/lib/data';
+import { getSource, getTargets, getNavCounts } from '@/lib/data';
 import { setPriorAction, reassignEvidenceAction, deleteEvidenceAction } from '@/lib/actions';
 import { DOMAIN_LABEL, directionLabel, directionColor } from '@/lib/format';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import EvidenceForm from '@/components/EvidenceForm';
 import DossierView from '@/components/DossierView';
 import GenerateDossierButton from '@/components/GenerateDossierButton';
@@ -33,37 +34,39 @@ export default async function SourcePage({
   if (!data) notFound();
   const { source, evidence } = data;
   const { claims, bridges } = await getTargets();
+  const counts = await getNavCounts().catch(() => null);
+  const sourceTitle = source.title || 'Untitled source';
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="crumbs">
-            <Link href="/ingest">Sources</Link> / {source.title || 'Untitled source'}
-          </div>
-          <DeleteSourceButton sourceId={source.id} label={source.title || 'Untitled source'} />
-        </div>
+        <PageTop
+          pathname={`/source/${source.id}`}
+          label={sourceTitle.length > 60 ? `${sourceTitle.slice(0, 60)}…` : sourceTitle}
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          infoKey="/source/[id]"
+          compact
+          title={<h1>{sourceTitle}</h1>}
+          action={<DeleteSourceButton sourceId={source.id} label={sourceTitle} />}
+        >
+          {[source.outlet, source.author].filter(Boolean).join(' · ') || '–'}
+          {source.published_at ? ` · ${source.published_at}` : ''}
+          {source.domain_tag ? ` · ${DOMAIN_LABEL[source.domain_tag]}` : ''}
+        </PageTop>
 
-        <header className="pagehead" style={{ padding: '24px 0 22px' }}>
-          <h1 style={{ fontSize: 'clamp(22px, 3vw, 32px)' }}>{source.title || 'Untitled source'}</h1>
-          <p className="lede" style={{ fontSize: 14.5, marginTop: 8 }}>
-            {[source.outlet, source.author].filter(Boolean).join(' · ') || '–'}
-            {source.published_at ? ` · ${source.published_at}` : ''}
-            {source.domain_tag ? ` · ${DOMAIN_LABEL[source.domain_tag]}` : ''}
-          </p>
-          {source.url && (
-            <a
-              href={source.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs hover:underline"
-              style={{ color: 'var(--accent)', overflowWrap: 'anywhere' }}
-            >
-              {source.url}
-            </a>
-          )}
-        </header>
+        {source.url && (
+          <a
+            href={source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs hover:underline"
+            style={{ color: 'var(--accent)', overflowWrap: 'anywhere' }}
+          >
+            {source.url}
+          </a>
+        )}
 
         {/* AI source dossier — descriptive profile, not a score. The reliability
             prior is set below, separately. */}

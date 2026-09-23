@@ -3,12 +3,13 @@ import { notFound } from 'next/navigation';
 import { adminGate } from '@/lib/admin-gate';
 import {
   getTargets, getThesis, getThesisReportsMeta, getThesisTreeData,
-  resolvePeriodTouches, reconcileArgumentGapScan,
+  resolvePeriodTouches, reconcileArgumentGapScan, getNavCounts,
 } from '@/lib/data';
 import {
   diagnoseThesisGapsAction, dismissThesisGapAction, clearThesisGapScanAction,
 } from '@/lib/actions';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import ArgumentGapPanel from '@/components/ArgumentGapPanel';
 import ThesisLogicTree, { type ThesisTreeGhost } from '@/components/ThesisLogicTree';
 import ThesisConsole from '@/components/ThesisConsole';
@@ -54,18 +55,27 @@ export default async function ThesisPage({ params }: { params: Promise<{ id: str
       ? `/bridge/new?gap=${encodeURIComponent(r.code)}&thesis=${thesis.id}`
       : `/q/${r.question_slug}/claim/new?gap=${encodeURIComponent(r.code)}&thesis=${thesis.id}`,
   }));
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 900, paddingBottom: 100 }}>
-        <header className="pagehead">
-          <p style={{ margin: '0 0 6px', fontSize: 12 }}>
-            <Link href="/theses" style={{ color: 'var(--faint-ink)' }}>← Theses</Link>
+        <PageTop
+          pathname={`/theses/${thesis.id}`}
+          label={thesis.statement.length > 60 ? `${thesis.statement.slice(0, 60)}…` : thesis.statement}
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          infoKey="/theses/[id]"
+          compact
+          title={<h1>{thesis.statement}</h1>}
+        />
+
+        {thesis.mapping_note && (
+          <p style={{ fontSize: 16.5, color: 'var(--dim)', maxWidth: '64ch', lineHeight: 1.6, marginBottom: 18 }}>
+            {thesis.mapping_note}
           </p>
-          <h1 style={{ fontSize: 'clamp(20px,3.2vw,28px)' }}>{thesis.statement}</h1>
-          {thesis.mapping_note && <p className="lede">{thesis.mapping_note}</p>}
-        </header>
+        )}
 
         {/* 1 · The thesis: the statement above; editing it (and its mapping) is
             the step-1 affordance. Opens automatically while the thesis is

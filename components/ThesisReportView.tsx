@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { dateLabel } from '@/lib/format';
 import type { SavedThesisReport } from '@/lib/types';
 import ThesisStatsView from './ThesisStatsView';
 
@@ -21,27 +20,9 @@ function Prose({ html }: { html: string }) {
 
 export default function ThesisReportView({ report }: { report: SavedThesisReport }) {
   const { pack, narrative } = report;
-  const when = dateLabel(report.generated_at) ?? report.generated_at.slice(0, 10);
 
   return (
     <article className="flex flex-col gap-2">
-      <header style={{ marginBottom: 8 }}>
-        <h1 style={{ fontFamily: 'var(--font-headline)', fontWeight: 400, fontSize: 'clamp(30px,5vw,46px)', margin: '0 0 6px', color: 'var(--ink)', lineHeight: 1.05, letterSpacing: '0.005em' }}>
-          {report.title}
-        </h1>
-        <p style={{ margin: '0 0 4px', fontSize: 15, color: 'var(--dim)' }}>
-          Thesis: <span style={{ color: 'var(--ink)' }}>{report.statement}</span>
-        </p>
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--faint-ink)' }}>
-          AI Atlas thesis report · generated {when} · grounded only in the Atlas&apos;s tracked signals
-        </p>
-        <p style={{ margin: '14px 0 0' }}>
-          <a href={`/thesis-report/${report.id}/pdf`} className="btn btn--primary btn--sm">
-            Download the PDF
-          </a>
-        </p>
-      </header>
-
       <section>
         <div className="section-label">Evidence at a glance</div>
         <ThesisStatsView stats={pack.stats} delta={pack.delta} />

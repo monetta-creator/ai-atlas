@@ -1,11 +1,11 @@
-import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
-import { getConceptGraph, getConceptGapScan, getTargets } from '@/lib/data';
+import { getConceptGraph, getConceptGapScan, getTargets, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { createConceptAction } from '@/lib/actions';
 import type { ConceptStatus } from '@/lib/types';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ConceptForm from '@/components/ConceptForm';
 
 export const dynamic = 'force-dynamic';
@@ -56,28 +56,28 @@ export default async function NewConceptPage({
     }
   }
 
+  const counts = await getNavCounts().catch(() => null);
+
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/concepts">Concepts</Link> / New concept
-        </div>
-        <header className="pagehead" style={{ padding: '20px 0 18px' }}>
-          <Editable
-            as="h1"
-            k="concepts-new.title"
-            value={txt('concepts-new.title', 'New concept')}
-            editing={editing}
-            style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}
-          />
-          {/* lede branches on fromGap (a runtime condition, not a fixed string). Left static. */}
-          <p className="lede" style={{ fontSize: 14, marginTop: 8 }}>
-            {fromGap
-              ? 'Pre-filled from the gap diagnosis: the definition, explanation, and wiring below are the model’s draft. Review and edit everything before creating.'
-              : 'Define the term, then wire it in: which concepts a reader must understand first, and which claims on the map lean on it. The AI suggests both; you confirm each one.'}
-          </p>
-        </header>
+        <PageTop
+          pathname="/concepts/new"
+          label="New concept"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="concepts-new.title"
+              value={txt('concepts-new.title', 'New concept')}
+              editing={editing}
+            />
+          }
+        >
+          {fromGap ? 'Pre-filled from the gap diagnosis' : 'Define the term, then wire it in'}
+        </PageTop>
 
         <ConceptForm
           mode="create"

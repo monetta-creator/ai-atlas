@@ -1,5 +1,7 @@
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import { getEditContext } from '@/lib/content';
+import { isAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Glossary · The AI Atlas' };
@@ -34,17 +36,22 @@ const TERMS: { id: string; term: string; def: string }[] = [
 ];
 
 export default async function GlossaryPage() {
-  const { editing, txt } = await getEditContext();
+  const [admin, { editing, txt }] = await Promise.all([isAdmin(), getEditContext()]);
   return (
     <>
-      <header className="pagehead" style={{ paddingBottom: 16 }}>
-        <Editable
-          as="h1"
-          k="about.glossary.title"
-          value={txt('about.glossary.title', 'Glossary')}
-          editing={editing}
-        />
-      </header>
+      <PageTop
+        pathname="/about/glossary"
+        label="Glossary"
+        viewer={{ admin, portal: admin }}
+        title={
+          <Editable
+            as="h1"
+            k="about.glossary.title"
+            value={txt('about.glossary.title', 'Glossary')}
+            editing={editing}
+          />
+        }
+      />
 
       <div style={{ maxWidth: '68ch' }}>
         {TERMS.map((t) => (

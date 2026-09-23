@@ -1,12 +1,11 @@
-import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
-import { getCalibration } from '@/lib/data';
+import { getCalibration, getNavCounts } from '@/lib/data';
 import { snapshotAction } from '@/lib/actions';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import CalibrationView from '@/components/CalibrationView';
-import WorkspaceTabs, { ANALYTICS_TABS } from '@/components/WorkspaceTabs';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Calibration · The AI Atlas' };
@@ -20,36 +19,26 @@ export default async function CalibrationPage() {
   const { editing, txt } = await getEditContext();
 
   const data = await getCalibration();
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/map">Map</Link> / Calibration
-        </div>
-
-        <header className="pagehead" style={{ padding: '20px 0 18px' }}>
-          <Editable
-            as="h1"
-            style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}
-            k="calibration.title"
-            value={txt('calibration.title', 'Calibration')}
-            editing={editing}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            style={{ fontSize: 14, marginTop: 8 }}
-            k="calibration.lede"
-            value={txt(
-              'calibration.lede',
-              'The living record: how your confidences have moved over time, and the reason behind every move. Each confidence move writes a snapshot automatically; capture one any time to freeze the current state.'
-            )}
-            editing={editing}
-          />
-        </header>
-        <WorkspaceTabs tabs={ANALYTICS_TABS} active="/calibration" />
+        <PageTop
+          pathname="/calibration"
+          label="Calibration"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="calibration.title"
+              value={txt('calibration.title', 'Calibration')}
+              editing={editing}
+            />
+          }
+        />
 
         <form action={snapshotAction} style={{ marginBottom: 20 }}>
           <button type="submit" className="btn btn--ghost btn--sm">Capture snapshot now</button>

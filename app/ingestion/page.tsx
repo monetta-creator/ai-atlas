@@ -1,8 +1,9 @@
 import { adminGate } from '@/lib/admin-gate';
-import { getIngestionLedger } from '@/lib/data';
+import { getIngestionLedger, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 
 // Admin-only ledger of what the system reads from the outside world: today's
 // intake, the corpus retained so far, and the three engines that produce it,
@@ -12,7 +13,6 @@ import Editable from '@/components/Editable';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Ingestion · The AI Atlas' };
 
-const chip = { fontSize: 12, padding: '5px 13px' } as const;
 const panel = { background: 'var(--surface)', borderColor: 'var(--line)' } as const;
 
 function tileGrid(tiles: { label: string; value: string; sub: string }[]) {
@@ -40,6 +40,7 @@ export default async function IngestionPage() {
   const admin = true as const;
   const { editing, txt } = await getEditContext();
   const ledger = await getIngestionLedger();
+  const counts = await getNavCounts().catch(() => null);
 
   const mChars = ledger.corpus.charsTotal / 1_000_000;
 
@@ -47,32 +48,22 @@ export default async function IngestionPage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <Editable
-            as="h1"
-            style={{ marginBottom: 10 }}
-            k="ingestion.title"
-            value={txt('ingestion.title', 'Signal ingestion')}
-            editing={editing}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            style={{ marginBottom: 20 }}
-            k="ingestion.lede"
-            value={txt(
-              'ingestion.lede',
-              "The system's standing intake of the outside world, measured live, and what scaling it means."
-            )}
-            editing={editing}
-          />
-          <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
-            <a href="#today" className="touch-chip" style={chip}>Today</a>
-            <a href="#corpus" className="touch-chip" style={chip}>The corpus so far</a>
-            <a href="#engines" className="touch-chip" style={chip}>The engines</a>
-            <a href="#story" className="touch-chip" style={chip}>The 1000x question</a>
-          </nav>
-        </header>
+        <PageTop
+          pathname="/ingestion"
+          label="Signal ingestion"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="ingestion.title"
+              value={txt('ingestion.title', 'Signal ingestion')}
+              editing={editing}
+            />
+          }
+        >
+          {ledger.today.items.toLocaleString()} items today · ${ledger.today.spendUsd.toFixed(2)} spent today
+        </PageTop>
 
         <section id="today" style={{ scrollMarginTop: 80 }}>
           <div className="section-label">Today</div>

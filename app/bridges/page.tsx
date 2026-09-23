@@ -5,6 +5,7 @@ import { getEditContext } from '@/lib/content';
 import { DOMAIN_LABEL, relationColor } from '@/lib/format';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import ShareNotice from '@/components/ShareNotice';
 
@@ -21,36 +22,28 @@ export default async function BridgesPage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 900, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/map">Map</Link> / Bridges
-        </div>
-
-        {!personal && <ShareNotice asOf={asOf} />}
-
-        <header className="pagehead" style={{ padding: '24px 0 32px' }}>
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <Editable
-                as="h1"
-                k="bridges.title"
-                value={txt('bridges.title', 'Bridge-claims · the spine')}
-                editing={editing}
-              />
-              {/* lede has embedded <em> markup (between/within emphasis); Editable's value is
-                  plain text, so converting it would flatten that emphasis. Left static. */}
-              <p className="lede">
-                Bridge-claims are statements about the causal link <em>between</em> domains, not claims{' '}
-                <em>within</em> one. Each has its own test and confidence, and is fed by claims from either
-                domain.
-              </p>
-            </div>
-            {personal && (
-              <Link href="/bridge/new" className="btn btn--primary" style={{ marginTop: 6, whiteSpace: 'nowrap' }}>
+        <PageTop
+          pathname="/bridges"
+          label="Bridges"
+          viewer={{ admin: personal, portal: personal }}
+          title={
+            <Editable
+              as="h1"
+              k="bridges.title"
+              value={txt('bridges.title', 'Bridge-claims · the spine')}
+              editing={editing}
+            />
+          }
+          action={
+            personal && (
+              <Link href="/bridge/new" className="btn btn--primary">
                 Add bridge-claim
               </Link>
-            )}
-          </div>
-        </header>
+            )
+          }
+        />
+
+        {!personal && <ShareNotice asOf={asOf} />}
 
         <div className="flex flex-col gap-[var(--gap)]">
           {bridges.map(({ bridge, fedBy }) => (

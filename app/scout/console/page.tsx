@@ -1,14 +1,14 @@
-import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
 import {
   getScoutVerticals, getScoutQueue, getScoutRuns,
-  getScoutPrefs, getScoutQueueIds, getScoutAgentSummary,
+  getScoutPrefs, getScoutQueueIds, getScoutAgentSummary, getNavCounts,
 } from '@/lib/data';
 import { DEFAULT_RUBRIC } from '@/lib/scout/agent';
 import { timeAgo } from '@/lib/format';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ScoutConsole from '@/components/scout/ScoutConsole';
 import ScoutAgentPanel from '@/components/scout/ScoutAgentPanel';
 import CompanyReviewList from '@/components/scout/CompanyReviewList';
@@ -44,34 +44,28 @@ export default async function ScoutConsolePage() {
     if (oa !== ob) return oa - ob;
     return (b.agent_confidence ?? 0) - (a.agent_confidence ?? 0);
   });
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <Editable
-            as="h1"
-            style={{ marginBottom: 10 }}
-            k="scout-console.title"
-            value={txt('scout-console.title', 'Scout console')}
-            editing={editing}
-          />
-          <p className="lede" style={{ marginBottom: 20 }}>
-            The working side of Startup Scout: review discovered companies, add candidates
-            by hand, tend the verticals. The watchlist lives at <Link href="/scout">/scout</Link>.
-          </p>
-          <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
-            <a href="#run" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Run</a>
-            <a href="#agent" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>✦ Agent</a>
-            <a href="#queue" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>
-              Queue <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{queue.length}</span>
-            </a>
-            <a href="#add" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Add company</a>
-            <a href="#verticals" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>Verticals</a>
-            {runs.length > 0 && <a href="#history" className="touch-chip" style={{ fontSize: 12, padding: '5px 13px' }}>History</a>}
-          </nav>
-        </header>
+        <PageTop
+          pathname="/scout/console"
+          label="Scout console"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="scout-console.title"
+              value={txt('scout-console.title', 'Scout console')}
+              editing={editing}
+            />
+          }
+        >
+          Queue {queue.length}{runs.length > 0 ? ` · ${runs.length} runs on record` : ''}
+        </PageTop>
 
         <div id="run" style={{ scrollMarginTop: 80 }}>
           <ScoutConsole activeVerticals={verticals.filter((v) => v.active && v.search_queries.length > 0).length} />

@@ -1,7 +1,6 @@
-import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
 import {
-  getRuns, getCandidates, getTextCoverage, getPipelinePrefs, getAnalysisModelStats,
+  getRuns, getCandidates, getTextCoverage, getPipelinePrefs, getAnalysisModelStats, getNavCounts,
 } from '@/lib/data';
 import { setPipelineAnalysisModelsAction } from '@/lib/actions';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
@@ -9,6 +8,7 @@ import { timeAgo } from '@/lib/format';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import PipelineConsole from '@/components/PipelineConsole';
 import PipelineCandidates from '@/components/PipelineCandidates';
 import PipelineEnabledToggle from '@/components/PipelineEnabledToggle';
@@ -26,8 +26,9 @@ export default async function PipelinePage() {
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
-  const [runs, textCoverage, prefs, modelStats] = await Promise.all([
+  const [runs, textCoverage, prefs, modelStats, counts] = await Promise.all([
     getRuns(15), getTextCoverage(), getPipelinePrefs(), getAnalysisModelStats(30),
+    getNavCounts().catch(() => null),
   ]);
   const latest = runs[0] ?? null;
   const modelLabel = new Map(SCAN_ENRICH_MODELS.map((m) => [m.id, m.label]));
@@ -42,18 +43,22 @@ export default async function PipelinePage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <header className="pagehead">
-          <Editable
-            as="h1"
-            k="pipeline.title"
-            value={txt('pipeline.title', 'Discovery pipeline')}
-            editing={editing}
-          />
-          <p className="lede">
-            Discover → triage → analyze candidate developments into draft signals. Review and publish
-            on the <Link href="/signals">Signal Board</Link>.
-          </p>
-        </header>
+        <PageTop
+          pathname="/pipeline"
+          label="Discovery pipeline"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="pipeline.title"
+              value={txt('pipeline.title', 'Discovery pipeline')}
+              editing={editing}
+            />
+          }
+        >
+          {latest ? `${candidates.length} candidates · ${latest.approved_count} approved · ${latest.signal_count} drafts` : 'No run yet'}
+        </PageTop>
 
         {/* Pipeline 2.0 config: the daily cron leg (shares /api/cron/scan with the
             External Scan), providers, and the analysis A/B model picker. */}

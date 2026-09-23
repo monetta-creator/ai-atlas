@@ -116,6 +116,13 @@ export const NAV_ICONS: Record<string, ReactNode> = {
   ),
   // The Atlas Agent: an orbit mark, a small dot circling a fixed center,
   // reading as "something is watching and moving" at rail size.
+  // The Admin desk group: a wrench, the maintainer's tools.
+  desk: (
+    <svg {...ICON_ATTRS}>
+      <path d="M14.7 6.3a4 4 0 0 0 5 5L13 18a2.1 2.1 0 0 1-3-3l6.7-6.7Z" />
+      <path d="M5 19l2-2" />
+    </svg>
+  ),
   agent: (
     <svg {...ICON_ATTRS}>
       <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { pathwayFor, tabsFor, leafFor, groupFor, type NavViewer, type BadgeKey } from '@/lib/nav';
-import { pageInfoFor, type PageInfoContent } from '@/lib/page-info';
+import { pageInfoFor, PAGE_INFO, type PageInfoContent } from '@/lib/page-info';
 import PageInfo from './PageInfo';
 
 // The one page-top grammar (2026-09-23): a pathway row with the "i" at its
@@ -10,25 +10,27 @@ import PageInfo from './PageInfo';
 // explanatory sentence lives in the info dialog. Server component; the
 // title may be a string or a node (an Editable h1).
 export default function PageTop({
-  pathname, label, title, action, viewer, counts, info, children,
+  pathname, label, title, action, viewer, counts, info, infoKey, compact, children,
 }: {
   pathname: string;
   label: string;                       // the page's name in the pathway (plain text)
-  title?: ReactNode;                   // defaults to <h1>{label}</h1>
+  title?: ReactNode;                   // defaults to <h1>{label}</h1>; pass null when the body owns the h1 (read views)
   action?: ReactNode;                  // right-aligned primary action
   viewer: NavViewer;
   counts?: Partial<Record<BadgeKey, number>> | null;
   info?: PageInfoContent | null;       // defaults to the registry entry for the route
+  infoKey?: string;                    // explicit registry key (detail pages: '/claim', '/signals/[id]')
+  compact?: boolean;                   // statement-length titles: display face, smaller
   children?: ReactNode;                // optional status line under the tabs (cadence, counts)
 }) {
   const segs = pathwayFor(pathname, label);
   const tabs = tabsFor(pathname, viewer);
   const group = groupFor(pathname);
   const current = group ? leafFor(pathname, group) : null;
-  const content = info === undefined ? pageInfoFor(pathname) : info;
+  const content = info !== undefined ? info : infoKey ? (PAGE_INFO[infoKey] ?? null) : pageInfoFor(pathname);
 
   return (
-    <header className="pagetop">
+    <header className="pagetop" data-compact={compact ? '' : undefined}>
       <div className="pagetop-path">
         <nav aria-label="Pathway" className="pagetop-crumbs">
           {segs.map((s, i) => (
@@ -40,10 +42,12 @@ export default function PageTop({
         </nav>
         {content && <PageInfo content={content} />}
       </div>
-      <div className="pagetop-title">
-        {title ?? <h1>{label}</h1>}
-        {action && <div className="pagetop-action">{action}</div>}
-      </div>
+      {(title !== null || action) && (
+        <div className="pagetop-title">
+          {title === undefined ? <h1>{label}</h1> : title}
+          {action && <div className="pagetop-action">{action}</div>}
+        </div>
+      )}
       {tabs.length > 0 && (
         <nav className="pagetop-tabs" role="tablist" aria-label="Section pages">
           {tabs.map((t) => {

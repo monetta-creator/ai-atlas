@@ -4,6 +4,7 @@ import { isAdmin, isPreview } from '@/lib/auth';
 import { getConcept, getAsOf, getPapersForConcept } from '@/lib/data';
 import { CONCEPT_STATUS_LABEL } from '@/lib/format';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import ShareNotice from '@/components/ShareNotice';
 
@@ -35,22 +36,32 @@ export default async function ConceptPage({
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/concepts">Concepts</Link> / {concept.name}
-        </div>
-
-        <header className="qhead">
-          <div className="qcode" style={{ justifyContent: 'space-between' }}>
-            <span>Concept · {concept.slug}</span>
-            {personal && (
+        <PageTop
+          pathname={`/concepts/${concept.slug}`}
+          label={concept.name}
+          viewer={{ admin: personal, portal: personal }}
+          infoKey="/concepts/[slug]"
+          compact
+          title={
+            <div>
+              <div className="qcode">Concept · {concept.slug}</div>
+              <h1>{concept.name}</h1>
+            </div>
+          }
+          action={
+            personal && (
               <Link href={`/concepts/${concept.slug}/edit`} className="btn btn--ghost btn--sm">
                 Edit
               </Link>
-            )}
-          </div>
-          <h1>{concept.name}</h1>
-          <p className="lede">{concept.short_definition}</p>
-        </header>
+            )
+          }
+        />
+
+        {concept.short_definition && (
+          <p style={{ fontSize: 16.5, color: 'var(--dim)', maxWidth: '64ch', lineHeight: 1.6, marginBottom: 18 }}>
+            {concept.short_definition}
+          </p>
+        )}
 
         {!personal && <ShareNotice asOf={asOf} />}
 

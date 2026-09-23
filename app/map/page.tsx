@@ -11,6 +11,7 @@ import {
 import Header from '@/components/Header';
 import QuestionCard from '@/components/QuestionCard';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ShareNotice from '@/components/ShareNotice';
 import ArgumentGapPanel from '@/components/ArgumentGapPanel';
 import ThesisStrip from '@/components/ThesisStrip';
@@ -56,25 +57,19 @@ export default async function ArgumentMap() {
     <>
       <Header admin={admin} />
       <section className="wrap">
-        <header className="pagehead">
-          <Editable
-            as="h1"
-            k="home.hero.title"
-            value={txt('home.hero.title', 'Claims & Theses')}
-            editing={editing}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            multiline
-            k="home.hero.lede"
-            value={txt(
-              'home.hero.lede',
-              'The standing theses, the falsifiable claims they stand on, and the six open questions where those claims settle.'
-            )}
-            editing={editing}
-          />
-        </header>
+        <PageTop
+          pathname="/map"
+          label="Claims & Theses"
+          viewer={{ admin: personal, portal: personal }}
+          title={
+            <Editable
+              as="h1"
+              k="home.hero.title"
+              value={txt('home.hero.title', 'Claims & Theses')}
+              editing={editing}
+            />
+          }
+        />
 
         {!personal && <ShareNotice asOf={asOf} />}
 

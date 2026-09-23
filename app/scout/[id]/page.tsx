@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { isAdmin, isPortal } from '@/lib/auth';
 import { getCompany, getCompanyEvents, getScoutVerticals, getCompanyDocuments } from '@/lib/data';
@@ -7,6 +6,7 @@ import {
   SCOUT_VERDICT_LABEL, scoutVerdictColor, timeAgo,
 } from '@/lib/format';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import CompanyReviewControls from '@/components/scout/CompanyReviewControls';
 import CompanyEventForm from '@/components/scout/CompanyEventForm';
 import CompanyFactsForm from '@/components/scout/CompanyFactsForm';
@@ -41,30 +41,32 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 24 }}>
-          <p className="text-xs" style={{ color: 'var(--faint-ink)', marginBottom: 8 }}>
-            <Link href="/scout" className="hover:underline" style={{ color: 'var(--faint-ink)' }}>Startup Scout</Link>
-            {' '}· {vertical?.name ?? company.vertical}
-          </p>
-          <h1 style={{ marginBottom: 8 }}>{company.name}</h1>
-          <p className="text-sm" style={{ color: 'var(--dim)', marginBottom: 10 }}>
-            {company.one_liner ?? 'No description yet.'}
-          </p>
-          <div className="flex items-center flex-wrap gap-3 text-xs" style={{ fontFamily: 'var(--font-mono)', color: 'var(--faint-ink)' }}>
-            {company.url && (
+        <PageTop
+          pathname={`/scout/${company.id}`}
+          label={company.name.slice(0, 60)}
+          compact
+          title={<h1>{company.name}</h1>}
+          viewer={{ admin, portal: portal || admin }}
+          infoKey="/scout/[id]"
+        >
+          {vertical?.name ?? company.vertical} · {COMPANY_STAGE_LABEL[company.stage]}
+          {company.founded_year && ` · founded ${company.founded_year}`}
+          {company.hq && ` · ${company.hq}`}
+          {admin && ` · ${COMPANY_STATUS_LABEL[company.status]}`}
+          {!admin && portal && company.status === 'queued' && ' · in review: awaiting the editor'}
+        </PageTop>
+
+        <p className="text-sm" style={{ color: 'var(--dim)', marginBottom: 10 }}>
+          {company.one_liner ?? 'No description yet.'}
+          {company.url && (
+            <>
+              {' '}
               <a href={company.url} target="_blank" rel="noopener noreferrer" className="hover:underline" style={{ color: 'var(--accent)' }}>
                 {company.domain ?? company.url} ↗
               </a>
-            )}
-            <span>{COMPANY_STAGE_LABEL[company.stage]}</span>
-            {company.founded_year && <span>founded {company.founded_year}</span>}
-            {company.hq && <span>{company.hq}</span>}
-            {admin && <span>{COMPANY_STATUS_LABEL[company.status]}</span>}
-            {!admin && portal && company.status === 'queued' && (
-              <span style={{ color: 'var(--heat-2)' }}>In review: awaiting the editor</span>
-            )}
-          </div>
-        </header>
+            </>
+          )}
+        </p>
 
         {company.funding_note && (
           <section style={{ marginBottom: 22 }}>

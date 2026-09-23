@@ -4,6 +4,7 @@ import { isAdmin, isPortal } from '@/lib/auth';
 import { SIGNAL_LENSES } from '@/lib/datasets/core';
 import { getDataset } from '@/lib/datasets/registry';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import DatasetSchemaTable from '@/components/datasets/DatasetSchemaTable';
 import DatasetExplorer from '@/components/datasets/DatasetExplorer';
 import DatasetPreview from '@/components/datasets/DatasetPreview';
@@ -26,20 +27,14 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/datasets">Data Portal</Link> / {def.slug}
-        </div>
-        <header className="pagehead" style={{ padding: '24px 0 24px' }}>
-          <h1>{def.title}</h1>
-          <p className="lede">{def.description}</p>
-          <div style={{ marginTop: 10, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--faint-ink)' }}>
-            /api/datasets/{def.slug} · {def.columns.length} columns
-            {def.keyGated ? ' · team key required' : ''}
-          </div>
-        </header>
-
-        <div className="flex items-center gap-2 flex-wrap" style={{ marginBottom: 10 }}>
-          {unlocked ? (
+        <PageTop
+          pathname={`/datasets/${def.slug}`}
+          label={def.title.slice(0, 60)}
+          compact
+          title={<h1>{def.title}</h1>}
+          viewer={{ admin, portal: portal || admin }}
+          infoKey="/datasets/[slug]"
+          action={unlocked ? (
             <>
               <a className="btn btn--primary btn--sm" href={`/api/datasets/${def.slug}`}>Download CSV</a>
               <a className="btn btn--ghost btn--sm" href={`/api/datasets/${def.slug}?format=json`}>JSON</a>
@@ -49,7 +44,12 @@ export default async function DatasetPage({ params }: { params: Promise<{ slug: 
               Unlock with the team key
             </Link>
           )}
-        </div>
+        >
+          /api/datasets/{def.slug} · {def.columns.length} columns{def.keyGated ? ' · team key required' : ''}
+        </PageTop>
+
+        <p className="text-sm" style={{ color: 'var(--dim)', marginBottom: 10 }}>{def.description}</p>
+
         {def.filters?.lens && (
           <div className="flex items-center gap-2 flex-wrap" style={{ marginBottom: 10 }}>
             <span className="lbl" style={{ fontSize: 9.5 }}>lens slices</span>

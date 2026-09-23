@@ -3,6 +3,7 @@ import { listSavedReports, getLatestThesisReports, listGeneratedReports, getTarg
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import SheetConsole from '@/components/reports/SheetConsole';
 import ReportGrid from '@/components/reports/ReportGrid';
 import {
@@ -63,24 +64,19 @@ export default async function ReportPortal({
     <>
       <Header admin={admin} />
       <section className="wrap rp-wrap">
-        <header className="pagehead" style={{ paddingBottom: 26 }}>
-          <Editable
-            as="h1"
-            k="reports.title"
-            value={txt('reports.title', 'Report Portal')}
-            editing={editing}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            k="reports.lede"
-            value={txt(
-              'reports.lede',
-              'Grounded reports from the Atlas corpus at claim, lens, thesis, and whole-Atlas granularity: cited, synthesized, and downloadable as branded PDFs.'
-            )}
-            editing={editing}
-          />
-        </header>
+        <PageTop
+          pathname="/reports"
+          label="Report Portal"
+          viewer={{ admin, portal: portal || admin }}
+          title={
+            <Editable
+              as="h1"
+              k="reports.title"
+              value={txt('reports.title', 'Report Portal')}
+              editing={editing}
+            />
+          }
+        />
 
         {admin && (
           <details className="rp-console" open={!!gen}>

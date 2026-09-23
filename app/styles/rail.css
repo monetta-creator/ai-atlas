@@ -54,6 +54,12 @@
 .portal-rail[data-expanded] .portal-rail-link {
   width: 100%; padding: 0 10px; justify-content: flex-start;
 }
+/* Collapsed: the icon sits dead center of its 38px box. The label and the
+   chevron are removed from flow (not just clamped to zero width) so their
+   flex gaps cannot push the icon off center. */
+.portal-rail:not([data-expanded]) .portal-rail-link { justify-content: center; gap: 0; }
+.portal-rail:not([data-expanded]) .portal-rail-label,
+.portal-rail:not([data-expanded]) .portal-rail-chevron { display: none; }
 .portal-rail-link svg { width: 17px; height: 17px; flex: 0 0 auto; }
 .portal-rail-link:hover {
   color: var(--accent); border-color: var(--accent);

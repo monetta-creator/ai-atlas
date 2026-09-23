@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
-import { getTheses } from '@/lib/data';
+import { getTheses, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { dateLabel } from '@/lib/format';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
-import WorkspaceTabs, { REPORTS_TABS } from '@/components/WorkspaceTabs';
+import PageTop from '@/components/PageTop';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Theses · The AI Atlas' };
@@ -19,34 +19,27 @@ export default async function ThesesPage() {
   const admin = true as const;
   const { editing, txt } = await getEditContext();
   const theses = await getTheses();
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 900, paddingBottom: 100 }}>
-        <header className="pagehead">
-          <Editable
-            as="h1"
-            k="theses.title"
-            value={txt('theses.title', 'Theses')}
-            editing={editing}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            k="theses.lede"
-            value={txt(
-              'theses.lede',
-              'Standing hypotheses tracked against the signal corpus. State a thesis, confirm which Atlas claims it bears on, and generate a deterministic, cited report to share.'
-            )}
-            editing={editing}
-          />
-        </header>
-        <WorkspaceTabs tabs={REPORTS_TABS} active="/theses" />
-
-        <p style={{ margin: '0 0 18px' }}>
-          <Link href="/theses/new" className="btn btn--primary">New thesis</Link>
-        </p>
+        <PageTop
+          pathname="/theses"
+          label="Theses"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="theses.title"
+              value={txt('theses.title', 'Theses')}
+              editing={editing}
+            />
+          }
+          action={<Link href="/theses/new" className="btn btn--primary">New thesis</Link>}
+        />
 
         {theses.length === 0 ? (
           <p style={{ fontSize: 14, color: 'var(--faint-ink)' }}>

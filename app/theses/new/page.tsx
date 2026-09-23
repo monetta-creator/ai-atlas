@@ -1,8 +1,9 @@
 import { adminGate } from '@/lib/admin-gate';
-import { getTargets } from '@/lib/data';
+import { getTargets, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ThesisForm from '@/components/ThesisForm';
 
 export const dynamic = 'force-dynamic';
@@ -16,29 +17,26 @@ export default async function NewThesisPage() {
   const admin = true as const;
   const { editing, txt } = await getEditContext();
   const targets = await getTargets();
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 760, paddingBottom: 100 }}>
-        <header className="pagehead">
-          <Editable
-            as="h1"
-            k="theses-new.title"
-            value={txt('theses-new.title', 'New thesis')}
-            editing={editing}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            k="theses-new.lede"
-            value={txt(
-              'theses-new.lede',
-              'State the hypothesis in plain language, let the mapper propose the Atlas claims it bears on, and confirm the mapping. You commit; the model only recommends.'
-            )}
-            editing={editing}
-          />
-        </header>
+        <PageTop
+          pathname="/theses/new"
+          label="New thesis"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="theses-new.title"
+              value={txt('theses-new.title', 'New thesis')}
+              editing={editing}
+            />
+          }
+        />
         <ThesisForm targets={targets} />
       </section>
     </>

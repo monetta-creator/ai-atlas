@@ -5,6 +5,7 @@ import { getToolingCategories, listToolingReports } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ToolingUnlock from '@/components/tooling/ToolingUnlock';
 import ToolingReportConsole from '@/components/tooling/ToolingReportConsole';
 
@@ -26,22 +27,8 @@ export default async function ToolingReportsPage() {
   const title = (
     <Editable
       as="h1"
-      style={{ marginBottom: 10 }}
       k="tooling.reports.title"
       value={txt('tooling.reports.title', 'Tooling reports')}
-      editing={editing}
-    />
-  );
-  const lede = (
-    <Editable
-      as="p"
-      className="lede"
-      style={{ marginBottom: 20 }}
-      k="tooling.reports.lede"
-      value={txt(
-        'tooling.reports.lede',
-        'Generate a category landscape, a build-or-buy brief, the week’s new entrants, or a feature-steal sheet from the AI Tooling Monitor catalog.'
-      )}
       editing={editing}
     />
   );
@@ -54,10 +41,7 @@ export default async function ToolingReportsPage() {
       <>
         <Header admin={admin} />
         <section className="wrap" style={{ maxWidth: 760, paddingBottom: 100 }}>
-          <header className="pagehead" style={{ paddingBottom: 30 }}>
-            {title}
-            {lede}
-          </header>
+          <PageTop pathname="/tooling/reports" label="Tooling reports" viewer={{ admin, portal }} title={title} />
           {published.length > 0 && (
             <>
               <div className="section-label">Published tooling reports · {published.length}</div>
@@ -98,10 +82,7 @@ export default async function ToolingReportsPage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1000, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 30 }}>
-          {title}
-          {lede}
-        </header>
+        <PageTop pathname="/tooling/reports" label="Tooling reports" viewer={{ admin, portal }} title={title} />
         <ToolingReportConsole categories={categories} reports={reports} admin={admin} />
       </section>
     </>

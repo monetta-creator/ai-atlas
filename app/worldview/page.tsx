@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
-import { getWorldview, getNodeOptions } from '@/lib/data';
+import { getWorldview, getNodeOptions, getNavCounts } from '@/lib/data';
 import {
   createPositionAction,
   addPositionComponentAction,
@@ -11,10 +11,10 @@ import { DOMAIN_LABEL } from '@/lib/format';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import ConfidenceEditor from '@/components/ConfidenceEditor';
 import ConfidenceBadge from '@/components/ConfidenceBadge';
 import PositionStatementEditor from '@/components/PositionStatementEditor';
-import WorkspaceTabs, { MAP_EDITOR_TABS } from '@/components/WorkspaceTabs';
 import type { NodeOption } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +26,7 @@ export default async function WorldviewPage() {
   const { editing, txt } = await getEditContext();
 
   const [{ spine, positions }, nodes] = await Promise.all([getWorldview(), getNodeOptions()]);
+  const counts = await getNavCounts().catch(() => null);
 
   const optionGroup = (label: string, opts: NodeOption[]) => (
     <optgroup label={label}>
@@ -41,23 +42,15 @@ export default async function WorldviewPage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 860, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/map">Map</Link> / Worldview
-        </div>
-        <header className="pagehead" style={{ padding: '24px 0 22px' }}>
-          <Editable as="h1" k="worldview.title" value={txt('worldview.title', 'Worldview & spine')} editing={editing} />
-          <Editable
-            as="p"
-            className="lede"
-            k="worldview.lede"
-            value={txt(
-              'worldview.lede',
-              'The bridge-claims that link domains, and the cross-cutting positions that span more than one question.'
-            )}
-            editing={editing}
-          />
-        </header>
-        <WorkspaceTabs tabs={MAP_EDITOR_TABS} active="/worldview" />
+        <PageTop
+          pathname="/worldview"
+          label="Worldview & spine"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable as="h1" k="worldview.title" value={txt('worldview.title', 'Worldview & spine')} editing={editing} />
+          }
+        />
 
         <div className="wv-section">
           <h2>The spine</h2>

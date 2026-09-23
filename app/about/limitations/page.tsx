@@ -1,6 +1,8 @@
 import Prose from '@/components/Prose';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import { getEditContext } from '@/lib/content';
+import { isAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Limitations · The AI Atlas' };
@@ -52,17 +54,22 @@ const SECTIONS = [
 ];
 
 export default async function LimitationsPage() {
-  const { editing, txt } = await getEditContext();
+  const [admin, { editing, txt }] = await Promise.all([isAdmin(), getEditContext()]);
   return (
     <>
-      <header className="pagehead" style={{ paddingBottom: 16 }}>
-        <Editable
-          as="h1"
-          k="about.limitations.title"
-          value={txt('about.limitations.title', 'Limitations')}
-          editing={editing}
-        />
-      </header>
+      <PageTop
+        pathname="/about/limitations"
+        label="Limitations"
+        viewer={{ admin, portal: admin }}
+        title={
+          <Editable
+            as="h1"
+            k="about.limitations.title"
+            value={txt('about.limitations.title', 'Limitations')}
+            editing={editing}
+          />
+        }
+      />
       <Prose sections={SECTIONS} editing={editing} keyPrefix="about.limitations" txt={txt} />
     </>
   );

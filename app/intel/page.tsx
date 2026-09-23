@@ -4,7 +4,7 @@ import { adminGate } from '@/lib/admin-gate';
 import {
   getIntelPrefs, getIntelCompanies, getIntelRuns, getIntelHealth, getIntelModelStats,
   getIntelCompanyYield, getTavilyQuota, getIntelMetricsCoverage, getIntelDatasetStats,
-  getSourceTierStats, getRecentSourceTiers,
+  getSourceTierStats, getRecentSourceTiers, getNavCounts,
 } from '@/lib/data';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import { checkIntelBudget } from '@/lib/intel/budget';
@@ -26,6 +26,7 @@ import { buildIntelHandoff } from '@/lib/intel/handoff';
 import DatasetPreview from '@/components/datasets/DatasetPreview';
 import { getEditContext } from '@/lib/content';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import type { IntelTier } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,6 @@ export const maxDuration = 60;
 export const metadata = { title: 'Intel desk · The AI Atlas' };
 
 const DATASET_SLUGS = ['intel-items', 'intel-companies', 'intel-facts', 'intel-metrics'] as const;
-const chip = { fontSize: 12, padding: '5px 13px' } as const;
 const panel = {
   background: 'var(--surface)', borderColor: 'var(--line)',
 } as const;
@@ -123,39 +123,28 @@ export default async function IntelPage() {
   for (const t of TIER_ORDER) byTier.set(t, []);
   for (const c of companies) byTier.get(c.tier)?.push(c);
   const quotaWarn = quota.pctUsed > 0.85 || quota.projected > quota.cap;
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <Editable
-            as="h1"
-            style={{ marginBottom: 10 }}
-            k="intel.title"
-            value={txt('intel.title', 'Intel desk')}
-            editing={editing}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            style={{ marginBottom: 20 }}
-            k="intel.lede"
-            value={txt(
-              'intel.lede',
-              'A daily company-intelligence sweep: press feeds, rotating web search, and EDGAR filings across a curated registry, hydrated to full text and enriched into structured facts and tags. The output that matters is four key-gated datasets.'
-            )}
-            editing={editing}
-          />
-          <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
-            <a href="#downloads" className="touch-chip" style={chip}>Downloads</a>
-            <a href="#config" className="touch-chip" style={chip}>Schedule &amp; config</a>
-            <a href="#quota" className="touch-chip" style={chip}>Tavily quota</a>
-            <a href="#run" className="touch-chip" style={chip}>Run</a>
-            <a href="#registry" className="touch-chip" style={chip}>Registry</a>
-            <a href="#history" className="touch-chip" style={chip}>History &amp; health</a>
-          </nav>
-        </header>
+        <PageTop
+          pathname="/intel"
+          label="Intel desk"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="intel.title"
+              value={txt('intel.title', 'Intel desk')}
+              editing={editing}
+            />
+          }
+        >
+          {latestDay ? `Latest run ${latestDay}` : 'No completed run yet'}
+        </PageTop>
 
         <section id="downloads" style={{ scrollMarginTop: 80 }}>
           <div className="section-label">Downloads</div>

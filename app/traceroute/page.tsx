@@ -1,6 +1,6 @@
-import Link from 'next/link';
 import { isAdmin, isPreview } from '@/lib/auth';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import Traceroute from '@/components/traceroute/Traceroute';
 import { getSupplyChain } from '@/lib/supply-chain/data';
 
@@ -36,16 +36,11 @@ export default async function TraceroutePage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1180, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/map">Map</Link> / Traceroute
-        </div>
-        <header className="pagehead" style={{ padding: '24px 0 22px' }}>
-          <h1>Traceroute</h1>
-          <p className="lede">
-            Language models run locally or in a datacenter. This traces a cloud request end to
-            end: what happens between pressing enter and the first token coming back.
-          </p>
-        </header>
+        <PageTop
+          pathname="/traceroute"
+          label="Traceroute"
+          viewer={{ admin: personal, portal: personal }}
+        />
 
         <Traceroute scNodes={scNodes} />
       </section>

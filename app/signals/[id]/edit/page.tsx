@@ -1,11 +1,11 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { adminGate } from '@/lib/admin-gate';
-import { getSignal, getTargets, getSources } from '@/lib/data';
+import { getSignal, getTargets, getSources, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { updateSignalAction } from '@/lib/actions';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import SignalForm from '@/components/SignalForm';
 
 export const dynamic = 'force-dynamic';
@@ -26,24 +26,27 @@ export default async function EditSignalPage({ params }: { params: Promise<{ id:
 
   const { claims, bridges } = await getTargets();
   const sources = (await getSources()).map((s) => ({ id: s.id, title: s.title }));
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/signals">Signal Board</Link> /{' '}
-          <Link href={`/signals/${signal.id}`}>{signal.title}</Link> / Edit
-        </div>
-        <header className="pagehead" style={{ padding: '20px 0 18px' }}>
-          <Editable
-            as="h1"
-            k="signals-edit.title"
-            value={txt('signals-edit.title', 'Edit signal')}
-            editing={editing}
-            style={{ fontSize: 'clamp(22px, 3vw, 30px)' }}
-          />
-        </header>
+        <PageTop
+          pathname={`/signals/${signal.id}/edit`}
+          label="Edit signal"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          infoKey="/signals/[id]/edit"
+          title={
+            <Editable
+              as="h1"
+              k="signals-edit.title"
+              value={txt('signals-edit.title', 'Edit signal')}
+              editing={editing}
+            />
+          }
+        />
 
         <SignalForm
           mode="edit"

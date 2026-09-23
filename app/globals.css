@@ -22,6 +22,7 @@
 @import "./styles/paper-reader.css";  /* /research arXiv drawer (.pv-*) */
 @import "./styles/agent.css";         /* Atlas Agent orb + drawer + console (.ag-*) */
 @import "./styles/home.css"; /* Console Broadsheet layer — scoped to .bs (the home page) */
+@import "./styles/edition.css"; /* /blotter daily edition read view (.ed-*) */
 @import "./styles/traceroute.css"; /* Traceroute explainer — scoped to .tr (/traceroute) */
 @import "./styles/costs-deck.css"; /* /costs/deck live 16:9 presentation stage (.cdk-*) */
 @import "./styles/education.css"; /* /education hub + guides (.edu) */
@@ -191,8 +192,6 @@ body { overflow-wrap: anywhere; }
   .navlinks { flex-wrap: wrap; gap: 8px 12px; }
 
   /* Trim desktop-scale vertical spacing so pages aren't needlessly long. */
-  .pagehead { padding: 28px 0 18px; }
-  .crumbs { padding: 20px 0 14px; }
   .section-label { margin: 28px 0 14px; }
   .qhead { padding-bottom: 22px; }
   .qcard { min-height: 0; }      /* size to content; shortens the home grid */
@@ -245,12 +244,11 @@ body { overflow-wrap: anywhere; }
 
   /* ---- About sub-nav: left-align + tighten so it reads as a nav, not a
      centered, ragged word-cloud. ---- */
-  .about-nav { gap: 6px 16px; padding: 14px 0 12px; justify-content: flex-start; }
 
   /* ---- Touch targets (toward the ~44px minimum) ----
      Lift wrapped nav links, editor Save/Cancel, lens chips, and the chip-remove
      button; reveal the inline-edit pencil (there is no hover on touch). */
-  .navlinks a, .about-nav a { padding: 6px 2px; line-height: 1.1; }
+  .navlinks a { padding: 6px 2px; line-height: 1.1; }
   .toggle, .navlinks .btn--sm, .editable-actions .btn { min-height: 40px; padding-top: 9px; padding-bottom: 9px; }
   .lenschip { padding: 8px 13px; font-size: 13px; }
   .wv-chip__remove button { padding: 6px 8px; font-size: 16px; }

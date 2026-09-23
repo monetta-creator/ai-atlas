@@ -1,6 +1,8 @@
 import Prose from '@/components/Prose';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import { getEditContext } from '@/lib/content';
+import { isAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Signal ingestion · The AI Atlas' };
@@ -34,27 +36,22 @@ const SECTIONS = [
 ];
 
 export default async function IngestionPage() {
-  const { editing, txt } = await getEditContext();
+  const [admin, { editing, txt }] = await Promise.all([isAdmin(), getEditContext()]);
   return (
     <>
-      <header className="pagehead" style={{ paddingBottom: 16 }}>
-        <Editable
-          as="h1"
-          k="about.ingestion.title"
-          value={txt('about.ingestion.title', 'Signal ingestion')}
-          editing={editing}
-        />
-        <Editable
-          as="p"
-          className="lede"
-          k="about.ingestion.lede"
-          value={txt(
-            'about.ingestion.lede',
-            'The Atlas runs a continuous, large-scale intake of external signal: news, filings, and regulatory data, collected daily, structured by models under strict rules, and packaged to travel.'
-          )}
-          editing={editing}
-        />
-      </header>
+      <PageTop
+        pathname="/about/ingestion"
+        label="Signal ingestion"
+        viewer={{ admin, portal: admin }}
+        title={
+          <Editable
+            as="h1"
+            k="about.ingestion.title"
+            value={txt('about.ingestion.title', 'Signal ingestion')}
+            editing={editing}
+          />
+        }
+      />
       <Prose sections={SECTIONS} editing={editing} keyPrefix="about.ingestion" txt={txt} />
     </>
   );

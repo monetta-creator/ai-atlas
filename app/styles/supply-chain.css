@@ -168,29 +168,6 @@
 .sc-admin-err { font-size: 12px; color: var(--heat-4); margin: 4px 0 0; }
 
 /* ---- Workspace tab strip (nav collapse: two sibling admin pages, one head) ---- */
-.wstabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 0 0 18px;
-}
-.wstabs a {
-  font-size: 11.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 5px 12px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  color: var(--dim);
-  text-decoration: none;
-}
-.wstabs a:hover { border-color: color-mix(in oklab, var(--accent) 40%, var(--line)); }
-.wstabs a[data-active] {
-  color: var(--accent);
-  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
-  background: color-mix(in oklab, var(--accent) 8%, var(--surface));
-}
 
 /* ---- Nav queue badges + unvisited dots ---- */
 .nav-badge {

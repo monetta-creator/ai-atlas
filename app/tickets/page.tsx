@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
-import { getTickets } from '@/lib/data';
+import { getTickets, getNavCounts } from '@/lib/data';
 import type { TicketKind, TicketStatus } from '@/lib/types';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import TicketRow from '@/components/TicketRow';
 
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,7 @@ export default async function TicketsPage({
   const status = sp.status && STATUSES.has(sp.status) ? (sp.status as TicketStatus) : undefined;
   const tickets = await getTickets({ kind, status });
   const openCount = tickets.filter((t) => t.status === 'open').length;
+  const counts = await getNavCounts().catch(() => null);
 
   const chip = (href: string, label: string, active: boolean) => (
     <Link key={href} href={href} className="touch-chip"
@@ -41,35 +43,29 @@ export default async function TicketsPage({
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 900, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 26 }}>
-          <Editable
-            as="h1"
-            style={{ marginBottom: 10 }}
-            k="tickets.title"
-            value={txt('tickets.title', 'Tickets')}
-            editing={editing}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            style={{ marginBottom: 20 }}
-            k="tickets.lede"
-            value={txt(
-              'tickets.lede',
-              'The feedback box: bugs found and features wished for, filed from the rail dialogs.'
-            )}
-            editing={editing}
-          />
-          <nav aria-label="Filters" className="flex items-center gap-2 flex-wrap">
-            {chip('/tickets', 'All', !kind && !status)}
-            {chip('/tickets?kind=bug', 'Bugs', kind === 'bug')}
-            {chip('/tickets?kind=feature', 'Features', kind === 'feature')}
-            {chip('/tickets?status=open', 'Open', status === 'open')}
-            {chip('/tickets?status=in_progress', 'In progress', status === 'in_progress')}
-            {chip('/tickets?status=resolved', 'Resolved', status === 'resolved')}
-            {chip('/tickets?status=declined', 'Declined', status === 'declined')}
-          </nav>
-        </header>
+        <PageTop
+          pathname="/tickets"
+          label="Tickets"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="tickets.title"
+              value={txt('tickets.title', 'Tickets')}
+              editing={editing}
+            />
+          }
+        />
+        <nav aria-label="Filters" className="flex items-center gap-2 flex-wrap" style={{ marginBottom: 20 }}>
+          {chip('/tickets', 'All', !kind && !status)}
+          {chip('/tickets?kind=bug', 'Bugs', kind === 'bug')}
+          {chip('/tickets?kind=feature', 'Features', kind === 'feature')}
+          {chip('/tickets?status=open', 'Open', status === 'open')}
+          {chip('/tickets?status=in_progress', 'In progress', status === 'in_progress')}
+          {chip('/tickets?status=resolved', 'Resolved', status === 'resolved')}
+          {chip('/tickets?status=declined', 'Declined', status === 'declined')}
+        </nav>
 
         {tickets.length === 0 ? (
           <p className="text-sm" style={{ color: 'var(--faint-ink)' }}>

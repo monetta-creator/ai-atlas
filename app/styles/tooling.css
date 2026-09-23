@@ -5,26 +5,6 @@
    styles; this sheet holds only the shared chrome.
    ============================================================ */
 
-.tl-titlerow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-
-.tl-info-btn {
-  width: 26px; height: 26px; border-radius: 999px;
-  border: 1px solid var(--line); background: var(--surface); color: var(--accent);
-  font: 600 13px/1 var(--font-mono);
-  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
-  transition: border-color .15s, background .15s;
-  align-self: center;
-}
-.tl-info-btn:hover {
-  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
-  background: color-mix(in oklab, var(--accent) 8%, var(--surface));
-}
-.tl-info-card { width: min(640px, 100%); }
-.tl-info-h {
-  font-family: var(--font-mono); font-size: 11.5px; text-transform: uppercase;
-  letter-spacing: .1em; color: var(--faint-ink); margin: 16px 0 4px;
-}
-.tl-info-p { font-size: 13.5px; line-height: 1.65; color: var(--dim); margin: 0 0 6px; }
 
 /* Cadence line under the lede */
 .tl-cadence {

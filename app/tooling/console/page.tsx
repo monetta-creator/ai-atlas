@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { adminGate } from '@/lib/admin-gate';
 import {
   getToolingPrefs, getToolingCategories, getToolingRuns, getToolingHealth, getToolingModelStats,
-  getCurationQueue, getTavilyQuota, getToolingRunByKey, getLatestPullRun, getToolingRun,
+  getCurationQueue, getTavilyQuota, getToolingRunByKey, getLatestPullRun, getToolingRun, getNavCounts,
 } from '@/lib/data';
 import { weekKeyToday } from '@/lib/tooling/engine';
 import { DEFAULT_RUBRIC } from '@/lib/tooling/score';
@@ -11,6 +11,7 @@ import { checkToolingBudget } from '@/lib/tooling/budget';
 import { cronLabel } from '@/lib/scan/handoff';
 import vercelConfig from '@/vercel.json';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import ToolingConsole from '@/components/tooling/ToolingConsole';
 import ToolingPrefsForm from '@/components/tooling/ToolingPrefsForm';
 import CategoriesManager from '@/components/tooling/CategoriesManager';
@@ -29,7 +30,6 @@ export const maxDuration = 60;
 export const metadata = { title: 'Tooling console · The AI Atlas' };
 
 const DATASET_SLUGS = ['tooling-products', 'tooling-events', 'tooling-features', 'tooling-catalog'] as const;
-const chip = { fontSize: 12, padding: '5px 13px' } as const;
 const panel = { background: 'var(--surface)', borderColor: 'var(--line)' } as const;
 const WEEK_STRIP_LENGTH = 26;
 
@@ -93,27 +93,20 @@ export default async function ToolingConsolePage() {
   const weeklyCap = Number(process.env.TOOLING_WEEKLY_BUDGET_USD || 4);
   const pullCap = Number(process.env.TOOLING_PULL_BUDGET_USD || 12);
   const quotaWarn = quota.pctUsed > 0.85 || quota.projected > quota.cap;
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 30 }}>
-          <h1 style={{ marginBottom: 10 }}>Tooling console</h1>
-          <p className="lede" style={{ marginBottom: 20 }}>
-            The AI Tooling Monitor&apos;s operating surface: weekly runs, the big one-time pull, prefs, curation,
-            datasets, and history.
-          </p>
-          <nav aria-label="Page sections" className="flex items-center gap-2 flex-wrap">
-            <a href="#run" className="touch-chip" style={chip}>Run</a>
-            <a href="#config" className="touch-chip" style={chip}>Schedule &amp; config</a>
-            <a href="#prefs" className="touch-chip" style={chip}>Prefs</a>
-            <a href="#queue" className="touch-chip" style={chip}>Curation queue</a>
-            <a href="#downloads" className="touch-chip" style={chip}>Downloads</a>
-            <a href="#history" className="touch-chip" style={chip}>History &amp; health</a>
-            <a href="#categories" className="touch-chip" style={chip}>Categories</a>
-          </nav>
-        </header>
+        <PageTop
+          pathname="/tooling/console"
+          label="Tooling console"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+        >
+          Curation queue {queue.length}{runs.length > 0 ? ` · ${runs.length} runs on record` : ''}
+        </PageTop>
 
         <section id="run" style={{ scrollMarginTop: 80 }}>
           <div className="section-label">Run</div>

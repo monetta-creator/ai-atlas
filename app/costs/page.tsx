@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
-import { getCostDashboard, getMonthlyBill, FIXED_MONTHLY } from '@/lib/data';
+import { getCostDashboard, getMonthlyBill, FIXED_MONTHLY, getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import { cronLabel } from '@/lib/scan/handoff';
 import vercelConfig from '@/vercel.json';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import CostsDashboard from '@/components/CostsDashboard';
 import SpendForecast from '@/components/SpendForecast';
-import WorkspaceTabs, { ANALYTICS_TABS } from '@/components/WorkspaceTabs';
 
 // Admin-only AI cost console. force-dynamic (reads cookies + DB); no maxDuration needed —
 // the only server action it hosts (addRateCardAction) is a quick DB insert, not an AI call.
@@ -36,7 +36,7 @@ export default async function CostsPage() {
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
-  const [data, bill] = await Promise.all([getCostDashboard(), getMonthlyBill()]);
+  const [data, bill, counts] = await Promise.all([getCostDashboard(), getMonthlyBill(), getNavCounts().catch(() => null)]);
 
   const fixedTotal = FIXED_MONTHLY.reduce((s, f) => s + f.usd, 0);
   const runningCost = Math.round(fixedTotal + bill.projectedUsd);
@@ -48,29 +48,21 @@ export default async function CostsPage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1080, paddingBottom: 100 }}>
-        <header className="pagehead">
-          <Editable
-            as="h1"
-            k="costs.title"
-            value={txt('costs.title', 'AI costs')}
-            editing={editing}
-          />
-          <Editable
-            as="p"
-            className="lede"
-            multiline
-            k="costs.lede"
-            value={txt(
-              'costs.lede',
-              'The whole running cost of the system: fixed platform subscriptions plus every metered model call the app makes (Anthropic and OpenRouter alike, spend, tokens, latency, and context-window use), priced from the active rate card and frozen at call time.'
-            )}
-            editing={editing}
-          />
-          <Link href="/costs/deck" className="btn btn--primary" style={{ marginTop: 16 }}>
-            Produce cost report
-          </Link>
-        </header>
-        <WorkspaceTabs tabs={ANALYTICS_TABS} active="/costs" />
+        <PageTop
+          pathname="/costs"
+          label="AI costs"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="costs.title"
+              value={txt('costs.title', 'AI costs')}
+              editing={editing}
+            />
+          }
+          action={<Link href="/costs/deck" className="btn btn--primary">Produce cost report</Link>}
+        />
 
         <section id="monthly-bill" style={{ marginTop: 24, scrollMarginTop: 80 }}>
           <div className="section-label">Monthly bill</div>

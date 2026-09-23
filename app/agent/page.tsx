@@ -1,8 +1,9 @@
 import { adminGate } from '@/lib/admin-gate';
-import { getAgentSpendToday, listBriefs } from '@/lib/data';
+import { getAgentSpendToday, listBriefs, getNavCounts } from '@/lib/data';
 import { AGENT_CHECKS } from '@/lib/agent/checks';
 import type { CheckDomain } from '@/lib/agent/types';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import { AgentPanel } from '@/components/agent/AgentDrawer';
 
 // The console page: the same tabbed content as the drawer, full width, plus
@@ -27,7 +28,9 @@ export default async function AgentPage() {
   const gate = await adminGate('/agent', 'Atlas Agent');
   if (gate) return gate;
   const admin = true as const;
-  const [spend, briefs] = await Promise.all([getAgentSpendToday(), listBriefs(30)]);
+  const [spend, briefs, counts] = await Promise.all([
+    getAgentSpendToday(), listBriefs(30), getNavCounts().catch(() => null),
+  ]);
 
   const domains = new Map<CheckDomain, typeof AGENT_CHECKS>();
   for (const c of AGENT_CHECKS) {
@@ -40,12 +43,14 @@ export default async function AgentPage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 1180, paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 26 }}>
-          <h1 style={{ marginBottom: 10 }}>Atlas Agent</h1>
-          <p className="lede">
-            The resident operator: what is slipping, what it did, what needs your tap.
-          </p>
-        </header>
+        <PageTop
+          pathname="/agent"
+          label="Atlas Agent"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+        >
+          ${spend.usd.toFixed(4)} spent today of ${AGENT_DAILY_BUDGET_USD.toFixed(2)}
+        </PageTop>
 
         <div className="ag-page">
           <div className="ag-page-main">

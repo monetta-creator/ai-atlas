@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
+import { getNavCounts } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
 import Editable from '@/components/Editable';
+import PageTop from '@/components/PageTop';
 import SourceForm from '@/components/SourceForm';
-import WorkspaceTabs, { SOURCES_TABS } from '@/components/WorkspaceTabs';
 
 export const dynamic = 'force-dynamic';
 // The PDF auto-fill calls extractSourceMetadataAction (a Server Action on this
@@ -16,29 +17,19 @@ export default async function IngestPage() {
   if (gate) return gate;
   const admin = true as const;
   const { editing, txt } = await getEditContext();
+  const counts = await getNavCounts().catch(() => null);
 
   return (
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ maxWidth: 820, paddingBottom: 100 }}>
-        <div className="crumbs">
-          <Link href="/sources">Sources</Link> / Add
-        </div>
-
-        <header className="pagehead" style={{ padding: '24px 0 28px' }}>
-          <Editable as="h1" k="ingest.title" value={txt('ingest.title', 'Add a source')} editing={editing} />
-          <Editable
-            as="p"
-            className="lede"
-            k="ingest.lede"
-            value={txt(
-              'ingest.lede',
-              'Drop a PDF or an article and it becomes a source with an AI dossier. From its source page you can attach evidence to specific claims, or turn it into a Signal Board draft through the same triage the discovery pipeline runs. Evidence never moves a confidence on its own; each move is a separate action with a rationale.'
-            )}
-            editing={editing}
-          />
-        </header>
-        <WorkspaceTabs tabs={SOURCES_TABS} active="/ingest" />
+        <PageTop
+          pathname="/ingest"
+          label="Add a source"
+          viewer={{ admin, portal: admin }}
+          counts={counts}
+          title={<Editable as="h1" k="ingest.title" value={txt('ingest.title', 'Add a source')} editing={editing} />}
+        />
 
         <SourceForm />
 
