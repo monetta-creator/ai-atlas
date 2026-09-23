@@ -38,6 +38,7 @@ export function toSheetCard(meta: GeneratedReportMeta): ReportCard {
   const subjectLabel =
     meta.kind === 'lens' ? SIGNAL_LENS_LABEL[meta.subject as SignalLens] ?? meta.subject :
     meta.kind === 'atlas' ? 'Whole Atlas' :
+    meta.kind === 'edition' ? (meta.scope_to ? dateLabel(meta.scope_to) : 'Today') :
     meta.kind === 'roundup'
       ? (meta.scope_from && meta.scope_to
           ? `Week of ${dateLabel(meta.scope_from)} to ${dateLabel(meta.scope_to)}`
@@ -102,7 +103,8 @@ export function toSheetCard(meta: GeneratedReportMeta): ReportCard {
     chips,
     date: dateLabel(meta.generated_at) ?? meta.generated_at.slice(0, 10),
     sortDate: meta.generated_at,
-    href: `/reports/sheet/${meta.id}`,
+    // The edition reads on the blotter, not the generic sheet view.
+    href: meta.kind === 'edition' && meta.scope_to ? `/blotter/${meta.scope_to}` : `/reports/sheet/${meta.id}`,
     pdfHref: `/reports/sheet/${meta.id}/pdf`,
     isPublished: meta.is_published,
   };
@@ -201,6 +203,7 @@ export const REPORT_KIND_FILTERS: ReportKindFilter[] = [
   { key: 'lens', label: 'Lens', match: (c) => c.kind === 'lens' },
   { key: 'atlas', label: 'Executive briefing', match: (c) => c.kind === 'atlas' },
   { key: 'roundup', label: 'Research roundup', match: (c) => c.kind === 'roundup' },
+  { key: 'edition', label: 'Edition', match: (c) => c.kind === 'edition' },
   { key: 'tooling', label: 'Tooling', match: (c) => c.kind.startsWith('tooling_') },
   { key: 'period', label: 'Period', match: (c) => c.kind === 'period' },
   { key: 'thesis', label: 'Thesis', match: (c) => c.kind === 'thesis' },

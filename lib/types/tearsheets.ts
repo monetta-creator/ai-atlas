@@ -8,9 +8,17 @@ import type { ToolingMaturity, ToolingEventKind } from './tooling';
 // Packs are guest-safe by construction, like ThesisPack: a published report's
 // PDF is publicly downloadable, so nothing personal may enter a pack.
 
+// 'edition' (migration 0057) rides here for typing only: the daily edition's
+// own EditionPack/EditionNarrative shapes (lib/edition/types.ts) do NOT join
+// AnySheetPack/SheetNarrative below (no .node/.signals/.reading/.connections
+// shape, same reasoning as RoundupPack/ToolingPack) and are read back via
+// lib/data/editions.ts's SavedEdition, not getGeneratedReport/SavedSheet. The
+// kind is added here only so GeneratedReportMeta.kind (the row-metadata list
+// view every kind shares) type-checks for an edition row.
 export type SheetKind =
   | 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup'
-  | 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features';
+  | 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features'
+  | 'edition';
 
 // 'YYYY-MM-DD' bounds; both null = the full corpus.
 export interface SheetScope { from: string | null; to: string | null }

@@ -1,0 +1,171 @@
+/* ============================================================
+   AI ATLAS · EDITION — the daily edition read view (.ed-*)
+   Renders on /blotter, /blotter/[day] and (unscoped by .bs, since the
+   edition is its own public page, not the lobby front page) shares the
+   broadsheet voice of home.css's .bs layer: Anton headline face, mono
+   figures, hairline rules. Class map:
+     .ed-masthead / .ed-wordmark / .ed-dateline / .ed-rule   masthead
+     .ed-numbers / .ed-numbers-cell / -n / -l                the almanac strip
+     .ed-body / .ed-front / .ed-item                          the front page
+     .ed-column / .ed-kicker / .ed-column-title               the column
+     .ed-things / .ed-things-list                              Things happen
+     .ed-tier                                                  T1..T4 chip
+     .ed-sections / .ed-section-head                           the section shelf
+     .ed-footer                                                 the colophon line
+   ============================================================ */
+
+.ed-wrap { max-width: 1080px; }
+
+.ed-masthead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 14px; flex-wrap: wrap; padding: 18px 0 10px;
+}
+.ed-wordmark {
+  font-family: var(--font-headline); font-weight: 400;
+  font-size: clamp(20px, 2.8vw, 28px); letter-spacing: 0.01em; color: var(--ink);
+}
+.ed-dateline {
+  font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink);
+  letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
+}
+.ed-rule {
+  border-top: 3px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+  height: 3px;
+}
+
+/* ---- numbers strip (the .bs-index idea) ---- */
+.ed-numbers {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  border-bottom: 1px solid var(--ink-faint);
+  overflow: hidden;
+}
+.ed-numbers-cell {
+  display: flex; flex-direction: column; gap: 6px; align-items: center;
+  padding: 14px 6px 12px; text-align: center;
+  border-left: 1px solid var(--line); margin-left: -1px;
+}
+.ed-numbers-n {
+  font-family: var(--font-headline); font-weight: 400;
+  font-size: clamp(20px, 2.8vw, 28px); line-height: 1;
+  letter-spacing: 0.01em; font-variant-numeric: tabular-nums;
+}
+.ed-numbers-l {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--faint-ink);
+}
+
+/* ---- two-column body: the front + the column ---- */
+.ed-body { display: grid; grid-template-columns: 1.4fr 1fr; gap: 0 40px; align-items: start; margin-top: 12px; }
+@media (max-width: 900px) { .ed-body { grid-template-columns: 1fr; } }
+
+.ed-front { display: flex; flex-direction: column; }
+.ed-item { display: flex; gap: 14px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.ed-item:first-child { padding-top: 0; }
+.ed-item-n {
+  font-family: var(--font-mono); font-size: 12px; color: var(--accent);
+  min-width: 18px; flex: none; padding-top: 3px;
+}
+.ed-item-body { flex: 1; min-width: 0; }
+.ed-item-hed {
+  font-family: var(--font-headline); font-weight: 400; font-size: 20px; line-height: 1.15;
+  margin: 0 0 8px; color: var(--ink);
+}
+.ed-item-why { font-size: 14.5px; line-height: 1.55; color: var(--ink); margin: 0 0 6px; }
+.ed-item-numbers { font-family: var(--font-mono); font-size: 12px; color: var(--dim); margin: 0 0 6px; }
+.ed-coverage { font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink); margin: 0 0 6px; }
+.ed-godeeper { font-weight: 600; font-size: 13px; color: var(--accent); }
+.ed-godeeper:hover { text-decoration: underline; }
+
+.ed-column { border-left: 1px solid var(--ink-faint); padding-left: 28px; }
+@media (max-width: 900px) {
+  .ed-column {
+    border-left: none; padding-left: 0;
+    border-top: 1px solid var(--ink-faint); padding-top: 20px; margin-top: 20px;
+  }
+}
+.ed-kicker {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--accent); margin: 0 0 6px;
+}
+.ed-column-title {
+  font-family: var(--font-headline); font-weight: 400; font-size: 24px; line-height: 1.1; margin: 0 0 12px;
+}
+.ed-column-prose { font-size: 14px; line-height: 1.6; color: var(--ink); }
+.ed-column-prose p { margin: 0 0 12px; }
+.ed-column-prose a { color: var(--accent); }
+
+.ed-things { margin-top: 26px; }
+.ed-things-list { list-style: none; margin: 0; padding: 0; }
+.ed-things-list li {
+  padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; line-height: 1.4;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+}
+.ed-things-list a { color: var(--ink); font-weight: 500; }
+.ed-things-list a:hover { text-decoration: underline; }
+.ed-things-meta {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink);
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+}
+
+/* ---- source-tier chip, T1 best .. T4 junk ---- */
+.ed-tier {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; font-weight: 600;
+  padding: 1px 5px; border-radius: 3px; color: var(--dim);
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+.ed-tier[data-tier="1"] { color: var(--supports); background: color-mix(in oklab, var(--supports) 14%, transparent); }
+.ed-tier[data-tier="2"] { color: var(--heat-1); background: color-mix(in oklab, var(--heat-1) 14%, transparent); }
+.ed-tier[data-tier="3"] { color: var(--heat-2); background: color-mix(in oklab, var(--heat-2) 14%, transparent); }
+.ed-tier[data-tier="4"] { color: var(--faint-ink); background: color-mix(in oklab, var(--ink) 8%, transparent); }
+
+/* ---- the section shelf: Companies / Research / Tools / Blind spots / Sources ---- */
+.ed-sections {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px;
+  margin-top: 36px; padding-top: 22px; border-top: 4px double var(--ink-faint);
+}
+@media (max-width: 900px) { .ed-sections { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 620px) { .ed-sections { grid-template-columns: 1fr; } }
+.ed-section-head {
+  font-family: var(--font-body); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+  font-size: 11px; color: var(--dim); margin: 0 0 12px;
+}
+
+.ed-company { margin-bottom: 14px; }
+.ed-company-name { font-weight: 600; font-size: 13.5px; margin: 0 0 4px; }
+.ed-fact { font-size: 12.5px; color: var(--dim); line-height: 1.45; margin: 0 0 2px; }
+.ed-fact a { color: var(--accent); margin-left: 4px; }
+
+.ed-paper { margin-bottom: 12px; }
+.ed-paper-title { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.ed-paper-title:hover { text-decoration: underline; }
+.ed-paper-cares { font-size: 12px; color: var(--dim); margin: 2px 0 0; line-height: 1.4; }
+
+.ed-tool { margin-bottom: 12px; font-size: 13px; }
+.ed-tool-name { font-weight: 600; color: var(--ink); }
+.ed-tool-vendor { color: var(--faint-ink); font-size: 11.5px; }
+.ed-tool-line { color: var(--dim); font-size: 12.5px; margin: 2px 0 0; }
+
+.ed-blind { font-size: 13px; margin: 0 0 10px; line-height: 1.4; }
+.ed-blind a { color: var(--ink); }
+.ed-blind-empty { font-size: 13px; color: var(--faint-ink); font-style: italic; margin: 0; }
+
+.ed-sources-list { list-style: none; margin: 0; padding: 0; }
+.ed-sources-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 12.5px;
+}
+.ed-sources-domain { display: flex; align-items: center; gap: 6px; }
+.ed-sources-count { font-family: var(--font-mono); color: var(--faint-ink); }
+
+.ed-footer {
+  margin-top: 40px; padding-top: 14px; border-top: 1px solid var(--line);
+  font-size: 11.5px; color: var(--faint-ink); line-height: 1.6;
+}
+
+.ed-empty { padding: 60px 0; text-align: center; color: var(--dim); font-size: 15px; }
+
+@media print {
+  .portal-rail, .nav { display: none; }
+  .ed-body { grid-template-columns: 1fr; }
+}

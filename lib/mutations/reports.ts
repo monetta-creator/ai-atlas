@@ -66,16 +66,17 @@ export async function addRateCard(input: {
 // Insert-only like thesis reports: a re-run is a NEW row. The caller
 // (saveSheetAction) re-gates the narrative against the pack at the save boundary.
 // isPublished defaults to false (the human publish gate every other kind keeps);
-// the weekly research roundup cron (lib/research/roundup.ts) and the weekly
-// tooling entrants report (lib/tooling/reports.ts) are the two kinds that may
-// pass true (Kevin's decisions to auto-publish those, 2026-08-30 and
-// 2026-09-17 respectively; the tooling entrants pref is
-// tooling_prefs.auto_publish_entrants, default true, and the build-vs-buy
-// brief never auto-publishes regardless).
+// the weekly research roundup cron (lib/research/roundup.ts), the weekly
+// tooling entrants report (lib/tooling/reports.ts), and the daily edition
+// (lib/edition/run.ts) are the three kinds that may pass true (Kevin's
+// decisions to auto-publish those, 2026-08-30, 2026-09-17, and 2026-09-23
+// respectively; the tooling entrants pref is tooling_prefs.auto_publish_entrants,
+// default true, and the build-vs-buy brief never auto-publishes regardless).
 export async function saveGeneratedReport(input: {
   kind:
     | 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup'
-    | 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features';
+    | 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features'
+    | 'edition';
   subject: string | null;
   title: string;
   scope_from: string | null;

@@ -1,7 +1,7 @@
 // Pure tests for the daily edition's story clustering and ranking.
 // Run: node scripts/test-edition.mjs
 import assert from 'node:assert/strict';
-import { tokens, sameStory, clusterStories, itemWeight, coverageLine } from '../lib/edition/cluster.ts';
+import { tokens, sameStory, clusterStories, itemWeight, aiWeight, coverageLine } from '../lib/edition/cluster.ts';
 
 let pass = 0; let fail = 0;
 function check(name, fn) { try { fn(); pass += 1; console.log(`  ok  ${name}`); } catch (e) { fail += 1; console.error(`FAIL  ${name}\n      ${e.message}`); } }
@@ -66,5 +66,16 @@ check('coverageLine reads naturally', () => {
   const [c] = clusterStories([it('a', 'One story here today', { tier: 1 })]);
   assert.equal(coverageLine(c), '1 outlet, 1 tier 1');
 });
+check('aiWeight: finance-only items are discounted, AI items and lens items are not', () => {
+  assert.equal(aiWeight(it('a', 'Fed raises rates 25 basis points')), 0.45);
+  assert.equal(aiWeight(it('b', 'OpenAI signs data center deal with Oracle')), 1);
+  assert.equal(aiWeight(it('c', 'Bank posts record quarter', { summary: 'The bank credits its generative AI rollout.' })), 1);
+  assert.equal(aiWeight(it('d', 'Fed raises rates', { source: 'pipeline' })), 1);
+});
+check('ranking: an AI story outranks a finance story of equal relevance', () => {
+  const cs = clusterStories([it('a', 'Fed raises rates 25 basis points'), it('b', 'Nvidia unveils next GPU for inference')]);
+  assert.equal(cs[0].id, 'b');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

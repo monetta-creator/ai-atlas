@@ -19,3 +19,4 @@ export * from './home';
 export * from './readiness';
 export * from './tooling';
 export * from './agent';
+export * from './editions';

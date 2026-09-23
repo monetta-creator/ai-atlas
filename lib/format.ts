@@ -201,6 +201,8 @@ const FEATURE_LABEL: Record<string, string> = {
   tearsheet_close: 'Report Portal · bottom line',
   roundup_sections: 'Weekly roundup · sections',
   roundup_close: 'Weekly roundup · close',
+  edition_front: 'Edition front',
+  edition_column: 'Edition column',
   thesis_map: 'Thesis · claim mapping',
   thesis_gaps: 'Thesis · gap diagnosis',
   thesis_sections: 'Thesis report · sections',
@@ -275,8 +277,13 @@ export const SHEET_KIND_LABEL: Record<SheetKind, string> = {
   tooling_brief: 'Build or buy brief',
   tooling_entrants: 'New entrants',
   tooling_features: 'Feature sheet',
+  edition: 'Daily edition',
 };
 
+// edition's own section labels (front / the column / things happen) do not
+// route through this reading/connections/watch shape (its narrative is
+// EditionNarrative, not SheetNarrative) — this entry exists only so the
+// Record stays exhaustive over SheetKind; nothing renders it.
 export const SHEET_SECTION_TITLES: Record<SheetKind, { reading: string; connections: string; watch: string }> = {
   claim: { reading: 'Where the evidence stands', connections: 'How it wires into the argument', watch: 'What would move it' },
   bridge: { reading: 'Where the evidence stands', connections: 'How it wires into the argument', watch: 'What would move it' },
@@ -287,6 +294,7 @@ export const SHEET_SECTION_TITLES: Record<SheetKind, { reading: string; connecti
   tooling_brief: { reading: 'What the market offers', connections: 'Build or buy', watch: 'Risks and next steps' },
   tooling_entrants: { reading: 'New this week', connections: 'Moves on tracked products', watch: 'Watch' },
   tooling_features: { reading: 'Features worth stealing', connections: 'Who does what', watch: 'Watch' },
+  edition: { reading: 'Front', connections: 'The column', watch: 'Things happen' },
 };
 
 export function featureLabel(slug: string): string {

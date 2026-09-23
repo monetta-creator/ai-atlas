@@ -20,3 +20,4 @@ export * from './home';
 export * from './tooling';
 export * from './tooling-reports';
 export * from './agent';
+export * from './edition';

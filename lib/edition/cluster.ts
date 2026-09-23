@@ -85,10 +85,22 @@ export const CONTENT_WEIGHT: Record<string, number> = {
   news: 1.0, analysis: 0.95, data: 1.0, opinion: 0.7, press_release: 0.6, marketing: 0.3, other: 0.8,
 };
 
+// The engines' relevance is TOPIC fit (a bank-capital story scores high on a
+// banking topic). The edition is an AI paper, so an item earns full weight
+// only when its own text says AI; pipeline candidates and published signals
+// came through the AI lenses and always count as AI.
+const AI_TERMS = /\b(ai|a\.i\.|artificial intelligence|machine learning|deep learning|llm|llms|language model|foundation model|frontier model|generative|gen ai|genai|agentic|ai agent|agents?\b.*\b(model|llm|copilot)|copilot|chatbot|openai|anthropic|claude|gpt|gemini|llama|mistral|deepseek|nvidia|gpu|gpus|tpu|accelerator|inference|training run|data center|datacenter|hyperscaler|compute|semiconductor|chips?\b|hugging face|transformer|multimodal|rag\b|vector database|fine-?tun)/i;
+
+export function aiWeight(it: StoryItem): number {
+  if (it.source === 'pipeline' || it.source === 'signal') return 1;
+  const hay = `${it.headline} ${it.summary ?? ''} ${it.tags.join(' ')} ${it.entities.join(' ')}`;
+  return AI_TERMS.test(hay) ? 1 : 0.45;
+}
+
 export function itemWeight(it: StoryItem): number {
   const tier = TIER_WEIGHT[it.tier ? String(it.tier) : 'unknown'] ?? 0.7;
   const kind = CONTENT_WEIGHT[it.contentKind ?? 'other'] ?? 0.8;
-  return (it.relevance ?? 0.5) * tier * kind;
+  return (it.relevance ?? 0.5) * tier * kind * aiWeight(it);
 }
 
 export function clusterStories(items: StoryItem[]): StoryCluster[] {

@@ -55,6 +55,15 @@ check('toSheetCard: draft is not published', () => {
   assert.equal(card.isPublished, false);
 });
 
+check('toSheetCard: edition reads on the blotter, subject is the day', () => {
+  const card = toSheetCard(makeClaimMeta({
+    id: 'ed-1', kind: 'edition', subject: null, scope_from: '2026-09-22', scope_to: '2026-09-23',
+    title: 'Daily edition, Sep 23',
+  }));
+  assert.equal(card.href, '/blotter/2026-09-23');
+  assert.equal(card.subject, 'Sep 23, 2026');
+});
+
 check('toSheetCard: scope line reflects a bounded window', () => {
   const card = toSheetCard(makeClaimMeta({ scope_from: '2026-01-01', scope_to: '2026-02-01' }));
   assert.equal(card.metaLines[0], 'Scope: 2026-01-01 to 2026-02-01');
@@ -132,7 +141,7 @@ check('filterCards: drafts filter applies for an admin viewer', () => {
 check('REPORT_KIND_FILTERS / DRAFTS_FILTER: keys are stable and in order', () => {
   assert.deepEqual(
     REPORT_KIND_FILTERS.map((f) => f.key),
-    ['all', 'claim', 'bridge', 'lens', 'atlas', 'roundup', 'tooling', 'period', 'thesis', 'deck']
+    ['all', 'claim', 'bridge', 'lens', 'atlas', 'roundup', 'edition', 'tooling', 'period', 'thesis', 'deck']
   );
   assert.equal(DRAFTS_FILTER.key, 'drafts');
 });
