@@ -28,10 +28,36 @@ const POOL_OPTS = {
 // serverless. Local dev falls back to the discrete SUPABASE_DB_* (direct) vars,
 // which is also what the migrate/seed scripts use (DDL needs a session, not the
 // transaction pooler).
+// Supabase's pooler serves session mode on :5432 and transaction mode on :6543,
+// and session mode caps CLIENTS at the pool size (15): every open pg client
+// pins one. On Vercel each warm instance keeps up to DB_POOL_MAX clients, so
+// session mode fills after a handful of instances and every further connect
+// fails with EMAXCONNSESSION (2026-09-23: admin pages, which open several
+// connections for the nav counts, 500'd while guest pages still rendered).
+// On Vercel, always use transaction mode; nothing in lib/ or app/ relies on
+// session state (no SET, LISTEN, advisory locks, temp tables, named
+// statements), and withTx keeps BEGIN..COMMIT on one client, which transaction
+// mode pins for the transaction. DB_POOL_MODE=session opts out.
+const POOLER_HOST_RE = /\.pooler\.supabase\.com$/i;
+const onVercel = Boolean(process.env.VERCEL) && process.env.DB_POOL_MODE !== 'session';
+
+export function toTransactionPoolerUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    if (POOLER_HOST_RE.test(u.hostname) && (u.port === '' || u.port === '5432')) {
+      u.port = '6543';
+      return u.toString();
+    }
+  } catch {
+    // Not a parseable URL: leave it to pg to report.
+  }
+  return url;
+}
+
 function makePool(): pg.Pool {
   const url = process.env.DATABASE_URL;
   if (url) {
-    return new pg.Pool({ connectionString: url, ...POOL_OPTS });
+    return new pg.Pool({ connectionString: onVercel ? toTransactionPoolerUrl(url) : url, ...POOL_OPTS });
   }
   const {
     SUPABASE_DB_HOST,
@@ -45,9 +71,10 @@ function makePool(): pg.Pool {
       'Database config missing: set DATABASE_URL (Supabase pooler, for production) or all SUPABASE_DB_* vars (direct, for local).'
     );
   }
+  const port = onVercel && POOLER_HOST_RE.test(SUPABASE_DB_HOST) && SUPABASE_DB_PORT === '5432' ? 6543 : Number(SUPABASE_DB_PORT);
   return new pg.Pool({
     host: SUPABASE_DB_HOST,
-    port: Number(SUPABASE_DB_PORT),
+    port,
     user: SUPABASE_DB_USER,
     password: SUPABASE_DB_PASSWORD,
     database: SUPABASE_DB_NAME,
