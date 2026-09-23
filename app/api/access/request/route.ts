@@ -100,6 +100,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       html: renderAccessRequestHtml({ name, email, reason, userAgent, consoleUrl: `${base}/access` }),
     });
     emailed = result.ok;
+    // Surface the reason in the function log: the first live request went
+    // unnoticed because Resend's 403 (unverified domain, recipient not the
+    // account owner) was swallowed here.
+    if (!result.ok) console.warn('[access] notice email failed:', result.error);
   }
 
   return Response.json({ ok: true, id, emailed });
