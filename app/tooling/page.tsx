@@ -9,7 +9,7 @@ import ProductFilters from '@/components/tooling/ProductFilters';
 import ProductCard from '@/components/tooling/ProductCard';
 import NewEntrantsStrip from '@/components/tooling/NewEntrantsStrip';
 import AddProductForm from '@/components/tooling/AddProductForm';
-import ToolingInfo from '@/components/tooling/ToolingInfo';
+import PageTop from '@/components/PageTop';
 import ProductLogo from '@/components/tooling/ProductLogo';
 import type { ToolingViewer } from '@/lib/types';
 
@@ -84,49 +84,25 @@ export default async function ToolingPage({
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ paddingBottom: 100 }}>
-        <header className="pagehead" style={{ paddingBottom: 24 }}>
-          <div className="tl-titlerow" style={{ marginBottom: 10 }}>
+        <PageTop
+          pathname="/tooling"
+          label="AI Tooling Monitor"
+          viewer={{ admin, portal: viewer.portal }}
+          title={
             <Editable
               as="h1"
               k="tooling.title"
               value={txt('tooling.title', 'AI Tooling Monitor')}
               editing={editing}
             />
-            <ToolingInfo />
-          </div>
-          <Editable
-            as="p"
-            className="lede"
-            k="tooling.lede"
-            value={txt(
-              'tooling.lede',
-              'The AI tool market, cataloged weekly: what exists, how it dimensionalizes, who just entered, and what is worth building instead of buying.'
-            )}
-            editing={editing}
-            style={{ marginBottom: 16 }}
-          />
-          {run ? (
-            <p className="tl-cadence">
-              {run.status === 'running'
+          }
+        >
+          {run
+            ? (run.status === 'running'
                 ? `Scan in progress · started ${dateLabel(run.day)} · ${run.found_count} found so far`
-                : `Last scan ${dateLabel(run.day)} · ${run.found_count} found · ${run.cataloged_count} cataloged · next scan Monday 07:00 UTC`}
-            </p>
-          ) : (
-            <p className="tl-cadence">First scan runs Monday 07:00 UTC</p>
-          )}
-          {admin && (
-            <div
-              className="flex items-center flex-wrap gap-3 rounded-[var(--radius)] border p-3 text-sm"
-              style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
-            >
-              <span style={{ color: 'var(--dim)' }}>The desk: engine runs, prefs, categories, curation, datasets.</span>
-              <span className="flex items-center gap-2" style={{ marginLeft: 'auto' }}>
-                <Link href="/tooling/console" className="btn btn--ghost btn--sm">Console →</Link>
-                <Link href="/tooling/reports" className="btn btn--ghost btn--sm">Reports →</Link>
-              </span>
-            </div>
-          )}
-        </header>
+                : `Last scan ${dateLabel(run.day)} · ${run.found_count} found · ${run.cataloged_count} cataloged · next scan Monday 07:00 UTC`)
+            : 'First scan runs Monday 07:00 UTC'}
+        </PageTop>
 
         <div className="tl-filters">
           <ProductFilters

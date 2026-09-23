@@ -116,3 +116,58 @@
   display: inline-flex; align-items: center; justify-content: center;
   font-family: var(--font-mono); font-weight: 600; letter-spacing: .02em; border: none;
 }
+
+/* ============================================================
+   TOOLING TABLE (/tooling/table) — sortable spreadsheet view,
+   quick-read drawer, compare strip. See app/tooling/table/page.tsx,
+   components/tooling/ProductTable.tsx, ProductQuickRead.tsx.
+   ============================================================ */
+.tl-tbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; margin-bottom: 14px; }
+.tl-tbar .tl-details { padding: 8px 14px; }
+
+.tl-tablewrap { overflow-x: auto; border: 1px solid var(--line); margin-bottom: 14px; }
+.tl-table { min-width: 960px; }
+.tl-table th button {
+  font: inherit; font-size: inherit; font-weight: inherit; color: inherit; letter-spacing: inherit;
+  text-transform: inherit; background: none; border: none; cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; gap: 3px;
+}
+.tl-table th[aria-sort="ascending"] button,
+.tl-table th[aria-sort="descending"] button { color: var(--accent); }
+.tl-table td { vertical-align: top; }
+.tl-table td.tl-name-cell, .tl-table th:nth-child(2) { white-space: normal; min-width: 220px; }
+.tl-table td.vd-num, .tl-table th.vd-num { text-align: right; font-family: var(--font-mono); }
+.tl-table td:first-child, .tl-table th:first-child { width: 28px; text-align: center; }
+.tl-table tbody tr:hover td { background: color-mix(in oklab, var(--accent) 4%, transparent); }
+.tl-table tbody tr[data-selected] td { background: color-mix(in oklab, var(--accent) 8%, transparent); }
+
+.tl-pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 22px; }
+.tl-pager button[aria-current="page"] { color: var(--accent); border-color: var(--accent); }
+
+.tl-compare { margin-bottom: 22px; }
+.tl-compare-table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 480px; }
+.tl-compare-table th, .tl-compare-table td { padding: 6px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tl-compare-table thead th {
+  text-align: left; font-weight: 500; color: var(--faint-ink); font-family: var(--font-mono);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.tl-compare-table thead th:first-child { min-width: 160px; }
+.tl-compare-table tbody td:first-child { color: var(--ink); white-space: normal; min-width: 160px; }
+.tl-compare-table tbody tr:last-child td { border-bottom: none; }
+
+/* Quick-read drawer, cloned from the .pv-* paper-reader shell
+   (app/styles/paper-reader.css; scDrawerIn/scBackdropIn from supply-chain.css). */
+.tl-drawer-backdrop {
+  position: fixed; inset: 0; z-index: 88;
+  background: color-mix(in oklab, var(--ink) 40%, transparent);
+  animation: scBackdropIn .2s var(--ease);
+}
+.tl-drawer {
+  position: fixed; top: 0; right: 0; height: 100dvh; width: min(520px, 94vw);
+  z-index: 89; background: var(--surface); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  animation: scDrawerIn .3s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tl-drawer-backdrop, .tl-drawer { animation: none; }
+}

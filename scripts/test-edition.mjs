@@ -1,0 +1,70 @@
+// Pure tests for the daily edition's story clustering and ranking.
+// Run: node scripts/test-edition.mjs
+import assert from 'node:assert/strict';
+import { tokens, sameStory, clusterStories, itemWeight, coverageLine } from '../lib/edition/cluster.ts';
+
+let pass = 0; let fail = 0;
+function check(name, fn) { try { fn(); pass += 1; console.log(`  ok  ${name}`); } catch (e) { fail += 1; console.error(`FAIL  ${name}\n      ${e.message}`); } }
+
+const it = (id, headline, extra = {}) => ({
+  id, source: 'scan', headline, url: `https://x/${id}`, domain: `${id}.com`, tier: 2, contentKind: 'news',
+  relevance: 0.7, publishedDate: '2026-09-23', summary: null, entities: [], tags: [], href: null, ...extra,
+});
+
+console.log('edition cluster:');
+check('tokens drops stopwords and short words', () => {
+  const t = tokens('OpenAI launches a new GPT-6 model for enterprises');
+  assert.ok(t.includes('openai'));
+  assert.ok(t.includes('model'));
+  assert.ok(!t.includes('launches'));
+  assert.ok(!tokens('The AI report says more').includes('the'));
+});
+check('sameStory: heavy headline overlap', () => {
+  assert.ok(sameStory(it('a', 'Nvidia reports record data center revenue in Q3'), it('b', 'Nvidia data center revenue hits record in Q3')));
+});
+check('sameStory: different stories stay apart', () => {
+  assert.ok(!sameStory(it('a', 'Nvidia reports record data center revenue'), it('b', 'EU delays AI Act enforcement for foundation models')));
+});
+check('sameStory: two shared entities plus weak overlap', () => {
+  assert.ok(sameStory(
+    it('a', 'Microsoft and OpenAI renegotiate revenue share', { entities: ['Microsoft', 'OpenAI'] }),
+    it('b', 'OpenAI, Microsoft near new deal on Azure terms', { entities: ['OpenAI', 'Microsoft'] })
+  ));
+});
+check('clusterStories groups and counts outlets', () => {
+  const cs = clusterStories([
+    it('a', 'Nvidia reports record data center revenue in Q3'),
+    it('b', 'Nvidia data center revenue hits record in Q3', { domain: 'wire.com', tier: 1 }),
+    it('c', 'EU delays AI Act enforcement for foundation models'),
+  ]);
+  assert.equal(cs.length, 2);
+  const nv = cs.find((c) => c.items.length === 2);
+  assert.equal(nv.outlets.length, 2);
+  assert.equal(nv.tierMix['1'], 1);
+});
+check('ranking: coverage lifts a cluster above a lone higher-relevance item', () => {
+  const cs = clusterStories([
+    it('a', 'Nvidia reports record data center revenue in Q3', { relevance: 0.7 }),
+    it('b', 'Nvidia data center revenue hits record in Q3', { domain: 'wire.com', relevance: 0.7 }),
+    it('c', 'Nvidia posts record Q3 data center revenue', { domain: 'paper.com', relevance: 0.7 }),
+    it('d', 'EU delays AI Act enforcement for foundation models', { relevance: 0.8 }),
+  ]);
+  assert.equal(cs[0].items.length, 3);
+});
+check('itemWeight punishes marketing and junk tiers', () => {
+  assert.ok(itemWeight(it('a', 'x', { contentKind: 'marketing' })) < itemWeight(it('b', 'x')));
+  assert.ok(itemWeight(it('a', 'x', { tier: 4 })) < itemWeight(it('b', 'x', { tier: 1 })));
+});
+check('a published signal leads its cluster', () => {
+  const cs = clusterStories([
+    it('a', 'Nvidia reports record data center revenue in Q3', { relevance: 0.9 }),
+    it('s', 'Nvidia data center revenue hits record in Q3', { source: 'signal', relevance: 0.6, href: '/signals/s' }),
+  ]);
+  assert.equal(cs[0].lead.id, 's');
+});
+check('coverageLine reads naturally', () => {
+  const [c] = clusterStories([it('a', 'One story here today', { tier: 1 })]);
+  assert.equal(coverageLine(c), '1 outlet, 1 tier 1');
+});
+console.log(`\n${pass} passed, ${fail} failed`);
+if (fail > 0) process.exit(1);

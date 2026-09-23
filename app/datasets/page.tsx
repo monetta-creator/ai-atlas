@@ -1,9 +1,10 @@
 import Link from 'next/link';
-import { isAdmin } from '@/lib/auth';
+import { isAdmin, isPortal } from '@/lib/auth';
 import { SIGNAL_LENSES } from '@/lib/datasets/core';
 import { DATASETS } from '@/lib/datasets/registry';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import Editable from '@/components/Editable';
 
 export const dynamic = 'force-dynamic';
@@ -12,7 +13,7 @@ export const metadata = { title: 'Data Portal · The AI Atlas' };
 // The public Datasets portal hub: the catalog of downloadable, guest-safe
 // datasets plus the door to the team Ask surface. Nothing here calls a model.
 export default async function DatasetsPage() {
-  const admin = await isAdmin();
+  const [admin, portal] = await Promise.all([isAdmin(), isPortal()]);
   const { editing, txt } = await getEditContext();
   const categories: { key: string; label: string }[] = [
     { key: 'signals', label: 'Signals' },
@@ -30,32 +31,20 @@ export default async function DatasetsPage() {
     <>
       <Header admin={admin} />
       <section className="wrap" style={{ paddingBottom: 100 }}>
-        <div className="crumbs">Data Portal</div>
-        <header className="pagehead" style={{ padding: '24px 0 28px' }}>
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <Editable
-                as="h1"
-                k="datasets.title"
-                value={txt('datasets.title', 'Data Portal')}
-                editing={editing}
-              />
-              <Editable
-                as="p"
-                className="lede"
-                k="datasets.lede"
-                value={txt(
-                  'datasets.lede',
-                  'The Atlas as data: every published signal, claim, evidence row, concept, and report, downloadable as CSV or JSON with a documented schema. Built for analysts: filter and group in the browser, pull a file into Sheets or a notebook, or ask in plain language and get a cited answer with the right dataset attached.'
-                )}
-                editing={editing}
-              />
-            </div>
-            <Link href="/ask" className="btn btn--primary" style={{ marginTop: 6, whiteSpace: 'nowrap' }}>
-              Ask the Atlas
-            </Link>
-          </div>
-        </header>
+        <PageTop
+          pathname="/datasets"
+          label="Data Portal"
+          viewer={{ admin, portal }}
+          title={
+            <Editable
+              as="h1"
+              k="datasets.title"
+              value={txt('datasets.title', 'Data Portal')}
+              editing={editing}
+            />
+          }
+          action={<Link href="/ask" className="btn btn--primary">Ask the Atlas</Link>}
+        />
 
         {categories.map((cat) => {
           const list = DATASETS.filter((d) => d.category === cat.key);

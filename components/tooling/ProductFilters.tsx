@@ -16,7 +16,7 @@ export interface Filters {
   pricing?: string;
 }
 
-export function filtersHref(next: Filters): string {
+export function filtersHref(next: Filters, base = '/tooling'): string {
   const params = new URLSearchParams();
   if (next.q) params.set('q', next.q);
   if (next.category) params.set('category', next.category);
@@ -24,7 +24,7 @@ export function filtersHref(next: Filters): string {
   if (next.maturity) params.set('maturity', next.maturity);
   if (next.pricing) params.set('pricing', next.pricing);
   const qs = params.toString();
-  return `/tooling${qs ? `?${qs}` : ''}`;
+  return `${base}${qs ? `?${qs}` : ''}`;
 }
 
 // One toolbar row: the search box plus four dropdowns, one per facet. Every
@@ -33,10 +33,11 @@ export function filtersHref(next: Filters): string {
 // server does the FTS. The category headings in the grid below link to
 // ?category=, so browsing by category never depended on the old chip wall.
 export default function ProductFilters({
-  categories, current,
+  categories, current, base = '/tooling',
 }: {
   categories: { slug: string; name: string }[];
   current: Filters;
+  base?: string;
 }) {
   const router = useRouter();
   const anyActive = Boolean(current.q || current.category || current.deployment || current.maturity || current.pricing);
@@ -45,13 +46,13 @@ export default function ProductFilters({
     const next: Filters = { ...current };
     if (value) next[key] = value;
     else delete next[key];
-    router.push(filtersHref(next));
+    router.push(filtersHref(next, base));
   }
 
   return (
     <form
       className="tl-toolbar"
-      action="/tooling"
+      action={base}
       method="GET"
       onSubmit={(e) => {
         e.preventDefault();
@@ -95,7 +96,7 @@ export default function ProductFilters({
           {PRICING_OPTIONS.map((p) => <option key={p} value={p}>{PRICING_LABEL[p]}</option>)}
         </select>
       </label>
-      {anyActive && <Link href="/tooling" className="tl-clear">Clear all ×</Link>}
+      {anyActive && <Link href={base} className="tl-clear">Clear all ×</Link>}
     </form>
   );
 }

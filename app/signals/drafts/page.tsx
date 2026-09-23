@@ -1,13 +1,13 @@
-import Link from 'next/link';
-import { requireAdminPage } from '@/lib/auth';
+import { adminGate } from '@/lib/admin-gate';
 import {
   getSignalsPage, getDedupeScan, getActiveDraftIds, reconcileDedupeScan,
-  getSprintDrafts, getDraftBacklogStats, getPipelinePrefs, getTargets,
+  getSprintDrafts, getDraftBacklogStats, getPipelinePrefs, getTargets, getNavCounts,
 } from '@/lib/data';
 import DraftBacklogBar from '@/components/drafts/DraftBacklogBar';
 import DraftSprint from '@/components/drafts/DraftSprint';
 import { getEditContext } from '@/lib/content';
 import Header from '@/components/Header';
+import PageTop from '@/components/PageTop';
 import Editable from '@/components/Editable';
 import DraftQueue from '@/components/DraftQueue';
 
@@ -19,7 +19,9 @@ export const metadata = { title: 'Draft queue · The AI Atlas' };
 // Admin-only working queue of UNPUBLISHED signals, with a manual duplicate scan. Separate
 // from the public published feed at /signals so neither page is one long scroll.
 export default async function DraftsPage() {
-  const admin = await requireAdminPage();
+  const gate = await adminGate('/signals/drafts', 'Draft queue');
+  if (gate) return gate;
+  const admin = true as const;
   const { editing, txt } = await getEditContext();
 
   const prefs = await getPipelinePrefs();
@@ -33,6 +35,7 @@ export default async function DraftsPage() {
     getDraftBacklogStats(policy),
     getTargets(),
   ]);
+  const counts = await getNavCounts().catch(() => null);
   const statements: Record<string, string> = {};
   for (const t of [...targets.claims, ...targets.bridges]) statements[t.code] = t.statement;
   // Reconcile the persisted scan against live drafts so it never shows a since-removed one.
@@ -42,22 +45,20 @@ export default async function DraftsPage() {
     <>
       <Header admin={admin} />
       <section className="wrap">
-        <header className="pagehead">
-          <div className="crumbs">
-            <Link href="/signals">Signal Board</Link> / Draft queue
-          </div>
-          <Editable
-            as="h1"
-            k="signals-drafts.title"
-            value={txt('signals-drafts.title', 'Draft queue')}
-            editing={editing}
-          />
-          <p className="lede">
-            Your unpublished working queue, admin-only. Publishing a draft adds its findings to the{' '}
-            <Link href="/map">Argument Map</Link>. Archiving sets a draft aside and keeps everything:
-            the row, its source link, and its candidate all stay in the database.
-          </p>
-        </header>
+        <PageTop
+          pathname="/signals/drafts"
+          label="Draft queue"
+          viewer={{ admin, portal: true }}
+          counts={counts}
+          title={
+            <Editable
+              as="h1"
+              k="signals-drafts.title"
+              value={txt('signals-drafts.title', 'Draft queue')}
+              editing={editing}
+            />
+          }
+        />
 
         <DraftBacklogBar stats={stats} policy={policy} />
 
