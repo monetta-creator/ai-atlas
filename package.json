@@ -20,6 +20,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
     "@react-pdf/renderer": "^4.6.0",
+    "@vercel/analytics": "^2.0.1",
     "gpt-tokenizer": "^3.4.0",
     "marked": "^18.0.5",
     "next": "16.2.6",

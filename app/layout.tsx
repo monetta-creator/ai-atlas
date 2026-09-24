@@ -3,6 +3,7 @@ import { Schibsted_Grotesk, JetBrains_Mono, Anton } from "next/font/google";
 import "./globals.css";
 import ChromeGate from "@/components/ChromeGate";
 import Header from "@/components/Header";
+import { Analytics } from "@vercel/analytics/next";
 
 // Variable fonts: the design system uses non-standard display weights (620/640/660/680),
 // which only render correctly from a variable axis — so load these as variable, no fixed weight.
@@ -58,6 +59,9 @@ export default function RootLayout({
           <Header />
         </ChromeGate>
         {children}
+        {/* Vercel Web Analytics: cookieless page views into the Vercel dashboard.
+            Disclosed on /about/data-handling. */}
+        <Analytics />
       </body>
     </html>
   );
