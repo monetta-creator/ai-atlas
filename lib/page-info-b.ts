@@ -427,6 +427,24 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
     ],
   },
+  '/ops': {
+    title: 'How Operations works',
+    summary: 'Everything that runs in the background, today and over the last two weeks: what ran, what is running, what is next, what failed.',
+    sections: [
+      {
+        heading: 'One registry, every cron',
+        body: 'Every /api/cron/* entry in vercel.json is declared once in lib/ops/registry.ts, grouped into a logical job (an engine’s primary run plus its sweep siblings, a single-shot publisher, the hourly agent tick). A schedule can never go unlisted here: a test checks the registry against vercel.json directly.',
+      },
+      {
+        heading: 'Today, then the last two weeks',
+        body: 'The timeline shows every fire time for today in Eastern time, past ones with their outcome and a summary, future ones marked next. The 14-day grid below it is the same completed/failed/not-scheduled/no-run read the External Scan day grid uses, one row per job.',
+      },
+      {
+        heading: 'Background work',
+        body: 'Some work has no cron of its own: the incremental embedding hooks, the pipeline’s promotion sweep, and the Atlas Agent’s findings all run from inside another request. They get their own section rather than a fake schedule.',
+      },
+    ],
+  },
   '/reports/[id]': {
     title: 'About this period report',
     summary: 'A saved period report: a fortnight or custom-range narrative compiled from the Signal Board, public once saved.',

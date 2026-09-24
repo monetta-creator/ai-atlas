@@ -1,0 +1,186 @@
+/* ============================================================
+   OPERATIONS (.ops-*) — /ops, the one authoritative admin view of
+   everything that runs in the background. Tokens only; theme-aware
+   via the --heat-*/--supports/--accent vars already redefined for
+   dark mode in tokens.css.
+   ============================================================ */
+
+.ops-page { display: flex; flex-direction: column; gap: 8px; }
+
+.ops-status-line {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--dim);
+  margin: 4px 0 20px;
+}
+
+.ops-section { margin-bottom: 32px; }
+
+.ops-h2 {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint-ink);
+  margin: 0 0 12px;
+}
+
+.ops-empty { color: var(--faint-ink); font-size: 13px; }
+
+/* ---- status dots, shared by the timeline and the cards --------------- */
+.ops-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 999px;
+  background: var(--ink-faint);
+  flex-shrink: 0;
+}
+.ops-dot[data-state="completed"] { background: var(--supports); }
+.ops-dot[data-state="running"] { background: var(--accent); animation: ops-pulse 1.6s ease-in-out infinite; }
+.ops-dot[data-state="failed"] { background: var(--heat-4); }
+.ops-dot[data-state="paused"] { background: var(--faint-ink); }
+.ops-dot[data-state="off"] { background: transparent; border: 1px solid var(--line); }
+.ops-dot[data-state="pending"] { background: var(--heat-2); opacity: 0.6; }
+
+@keyframes ops-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* ---- today's timeline -------------------------------------------------- */
+.ops-timeline {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex; flex-direction: column;
+  border-left: 2px solid var(--line);
+}
+.ops-timeline li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 0 6px 14px;
+  margin-left: -1px;
+  font-size: 13px;
+}
+.ops-tl-future { opacity: 0.5; }
+.ops-tl-time {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint-ink);
+  min-width: 82px;
+}
+.ops-tl-label { flex: 1; color: var(--ink); }
+.ops-tl-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+
+/* ---- job cards ---------------------------------------------------------- */
+.ops-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.ops-card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color .15s var(--ease-soft, ease);
+}
+a.ops-card:hover { border-color: var(--accent); }
+.ops-card[data-state="failed"] { border-color: var(--heat-4); }
+
+.ops-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ops-card-title { font-weight: 600; font-size: 13px; flex: 1; }
+.ops-card-state {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--dim);
+}
+
+.ops-card-desc { font-size: 12px; color: var(--dim); margin: 0 0 10px; line-height: 1.4; }
+
+.ops-card-meta {
+  display: flex; flex-direction: column; gap: 2px;
+  font-size: 12px; color: var(--ink);
+  margin-bottom: 6px;
+}
+.ops-warning { color: var(--heat-3); }
+
+.ops-notes {
+  list-style: none; margin: 0 0 8px; padding: 0;
+  font-size: 11px; color: var(--faint-ink);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.ops-notes li[data-error="true"] { color: var(--heat-4); }
+
+.ops-card-foot {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint-ink);
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+/* ---- 14-day history grid ------------------------------------------------ */
+.ops-history-scroll { overflow-x: auto; }
+.ops-history-table { border-collapse: collapse; font-size: 11px; }
+.ops-history-table th, .ops-history-table td { padding: 3px 4px; text-align: center; }
+.ops-history-table thead th {
+  font-family: var(--font-mono);
+  color: var(--faint-ink);
+  font-weight: 400;
+}
+.ops-history-table tbody th {
+  text-align: left;
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 500;
+  padding-right: 12px;
+}
+
+.ops-hist-cell {
+  display: inline-block;
+  width: 13px; height: 13px;
+  border-radius: 3px;
+  background: transparent;
+  border: 1px solid var(--line);
+}
+.ops-hist-cell[data-state="completed"] { background: var(--supports); border-color: transparent; }
+.ops-hist-cell[data-state="failed"] { background: var(--heat-4); border-color: transparent; }
+.ops-hist-cell[data-state="off"] { border-style: dotted; opacity: 0.55; }
+.ops-hist-cell[data-state="none"] { border-style: solid; }
+
+.ops-history-legend {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--faint-ink);
+}
+.ops-history-legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ---- lobby widget link --------------------------------------------------- */
+.lw-ops-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+}
+.lw-ops-link:hover { text-decoration: underline; }
+
+@media (max-width: 375px) {
+  .ops-grid { grid-template-columns: 1fr; }
+  .ops-tl-time { min-width: 68px; }
+}

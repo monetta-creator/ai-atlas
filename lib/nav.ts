@@ -143,6 +143,7 @@ export const NAV_ISLAND: NavGroup[] = [
   {
     key: 'desk', href: '/agent', label: 'Admin desk', icon: 'desk', access: 'admin',
     children: [
+      { href: '/ops', label: 'Operations', access: 'admin' },
       { href: '/agent', label: 'Atlas Agent', access: 'admin', badge: 'agent' },
       { href: '/tickets', label: 'Tickets', access: 'admin', badge: 'tickets' },
       { href: '/access', label: 'Access', access: 'admin', badge: 'access' },

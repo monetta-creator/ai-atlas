@@ -101,6 +101,7 @@ export default async function CronTracker() {
           <a href={`/api/datasets/intel-facts?format=json&download=1`}>intel-facts-{status.day}.json</a>
         </div>
       )}
+      <Link href="/ops" className="lw-ops-link">Full operations view {'→'}</Link>
     </>
   );
 }
