@@ -108,7 +108,7 @@ async function loadSchemaTables(): Promise<SchemaTable[]> {
       t = {
         name: c.table_name,
         comment: tableComment.get(c.table_name) ?? null,
-        rows: stat?.n_live_tup ?? 0,
+        rows: Number(stat?.n_live_tup ?? 0), // bigint arrives as a string from pg
         lastAnalyzed: stat?.last_autoanalyze ?? null,
         columns: [],
         fks: [],
