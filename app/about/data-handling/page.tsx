@@ -58,7 +58,7 @@ const SECTIONS = [
   {
     id: 'stored',
     heading: 'What is stored and for how long',
-    body: 'The database keeps the full text of every collected article, filing, and paper; the text extracted in the browser from uploaded documents; the facts, tags, scores, and summaries the models produce; and the data packs behind every generated report, including the tooling report’s context field. Everything is kept indefinitely. There is no retention limit and no deletion job today. Archiving a signal or a draft hides it from the public surfaces; it does not delete the row. Uploaded documents are never stored as files: the browser extracts the text, sends the text, and discards the file. The one exception is the feedback box, whose screenshots are stored in the database and are visible only to the maintainer.',
+    body: 'The database keeps the full text of every collected article, filing, and paper; the text extracted in the browser from uploaded documents; the facts, tags, scores, and summaries the models produce; and the data packs behind every generated report, including the tooling report’s context field. Everything is kept indefinitely. There is no retention limit and no deletion job today. Archiving a signal or a draft hides it from the public surfaces; it does not delete the row. Uploaded documents are never stored as files: the browser extracts the text, sends the text, and discards the file. The one exception is the feedback box, whose screenshots are stored in the database and are visible only to the maintainer. The Data Portal’s schema map (/datasets/schema) shows the shape of every table this stores, grouped by subsystem, with no row of data ever shown.',
   },
   {
     id: 'personal-data',

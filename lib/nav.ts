@@ -82,7 +82,10 @@ export const NAV_TREE: NavGroup[] = [
   {
     key: 'datasets', href: '/datasets', label: 'Data Portal', icon: 'data', access: 'public',
     detailPrefixes: ['/datasets/'],
-    children: [{ href: '/datasets', label: 'Catalog', access: 'public' }],
+    children: [
+      { href: '/datasets', label: 'Catalog', access: 'public' },
+      { href: '/datasets/schema', label: 'Schema map', access: 'public' },
+    ],
   },
   {
     key: 'research', href: '/research', label: 'Research Portal', icon: 'research', access: 'public',

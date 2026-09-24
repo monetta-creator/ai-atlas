@@ -78,6 +78,27 @@ Copyright framing (also in the dataset's methodology): the full text is an inter
 corpus for research, provenance, and quotation. Not a redistribution channel; link to the
 original source when sharing outward.
 
+## Schema map (`/datasets/schema`)
+
+A live map of the whole public schema, grouped by subsystem, public and guest-safe like every
+other dataset page (names, types, row-count estimates, and comments only; never a row of
+application data). `lib/schema/introspect.ts` reads `information_schema`/`pg_catalog` (columns,
+foreign keys, `pg_stat_user_tables` row estimates, table and column comments) with a 10-minute
+module memo on top of a `React.cache()` per-request dedupe. `lib/schema/layout.ts` is the pure
+half: `SUBSYSTEMS` places every table in one of twelve groups (argument-map,
+signals-pipeline, sources-evidence, research, scout, scan, intel, tooling, portal, agent,
+reports, editions, prefs-and-meta) and throws on an ungrouped table, so a migration that adds a
+table with no placement fails `scripts/test-schema-layout.mjs` (which also greps every
+migration file for `create table` and checks the result against `SUBSYSTEMS` directly).
+`ACCESS_TIER` carries a public/key/admin tier and a one-line reason per table; `DATASET_TABLES`
+maps each registry slug to the tables its builder reads, hand-derived from `builders.ts`.
+
+The page (`components/schema/SchemaMap.tsx`, client) renders one card per subsystem on a grid,
+FK edges aggregated to group pairs as weighted curves, a dataset-chip row that highlights the
+tables a chosen dataset reads, and a table drawer (columns, enum values, foreign keys in and
+out, which datasets read it, the tier and its reason) on click. Below 900px it falls back to a
+`<details>` list per group. Nothing here calls a model or touches a row of user data.
+
 ## Query grammar (since 2026-09-23)
 
 Every download URL accepts a filter grammar, validated against the dataset's registry columns

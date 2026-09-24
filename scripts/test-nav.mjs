@@ -191,5 +191,25 @@ check("publicParentFor('/intel/deck/2026-09-23').href === '/reports'", () => {
   assert.equal(publicParentFor('/intel/deck/2026-09-23').href, '/reports');
 });
 
+check("groupFor('/datasets/schema').key === 'datasets' and the leaf beats Catalog", () => {
+  const group = groupFor('/datasets/schema');
+  assert.equal(group?.key, 'datasets');
+  const leaf = leafFor('/datasets/schema', group);
+  assert.equal(leaf?.label, 'Schema map');
+  assert.equal(leaf?.access, 'public');
+});
+
+check('tabsFor(/datasets, guest) = Catalog + Schema map', () => {
+  const tabs = tabsFor('/datasets', guest).map((l) => l.label);
+  assert.deepEqual(tabs, ['Catalog', 'Schema map']);
+});
+
+check("pathwayFor('/datasets/schema', 'Schema map') = Data Portal(link), Schema map(null)", () => {
+  assert.deepEqual(pathwayFor('/datasets/schema', 'Schema map'), [
+    { label: 'Data Portal', href: '/datasets' },
+    { label: 'Schema map', href: null },
+  ]);
+});
+
 console.log(`\n${pass} passed · ${fail} failed`);
 process.exit(fail ? 1 : 0);

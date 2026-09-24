@@ -498,6 +498,21 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
     ],
   },
+  '/datasets/schema': {
+    title: 'About the schema map',
+    summary:
+      'Every table in the live database, grouped by subsystem, with its columns, foreign keys, access tier, and the datasets that read it. Never a row of application data, only structure.',
+    sections: [
+      {
+        heading: 'What it shows',
+        body: 'One card per subsystem (the argument map, the Signal Board and discovery pipeline, each engine, the report families, and the rest), each listing its tables by row count. Foreign keys aggregate into curved lines between groups, weighted by how many columns cross that boundary. Click a table to open its column list, foreign keys, and which datasets read it.',
+      },
+      {
+        heading: 'The access-tier legend',
+        body: 'Public means the table\'s published layer is readable by guests, even if a fuller version needs a key or the admin session. Key-gated means it ships only in the key-gated datasets or portal surfaces. Admin only means it never leaves the server: working queues, run checkpoints, prefs singletons, and the personal layer (confidence, rationales, priors) all live here.',
+      },
+    ],
+  },
   '/datasets/[slug]': {
     title: 'About this dataset',
     summary: 'A downloadable dataset with a documented schema, a methodology note, and an in-browser preview.',
