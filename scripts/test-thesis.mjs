@@ -18,9 +18,10 @@ config({ path: '.env.local' });
 import assert from 'node:assert/strict';
 import pg from 'pg';
 import {
-  buildThesisPackCore, computeDelta, stanceOf,
+  buildThesisPackCore, computeDelta, stanceOf, THESIS_RELEVANCE_MIN,
 } from '../lib/thesis/pack-core.ts';
-import { quarterBuckets } from '../lib/pack-shared.ts';
+import { checkCitationEntities } from '../lib/thesis/citations.ts';
+import { quarterBuckets, quarterShare } from '../lib/pack-shared.ts';
 
 const client = process.env.DATABASE_URL
   ? new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
@@ -65,6 +66,54 @@ check('quarterBuckets: zero-fills the span', () =>
     { bucket: '2025 Q3', n: 1 },
   ]));
 check('quarterBuckets: empty in, empty out', () => assert.deepEqual(quarterBuckets([null]), []));
+check('quarterShare: share of the matching corpus bucket, null when the corpus has none', () => {
+  const subset = [{ bucket: '2025 Q1', n: 1 }, { bucket: '2025 Q2', n: 0 }, { bucket: '2025 Q3', n: 2 }];
+  const corpus = [{ bucket: '2025 Q1', n: 4 }, { bucket: '2025 Q3', n: 4 }];
+  assert.deepEqual(quarterShare(subset, corpus), [
+    { bucket: '2025 Q1', share: 0.25 },
+    { bucket: '2025 Q2', share: null },
+    { bucket: '2025 Q3', share: 0.5 },
+  ]);
+});
+
+// ---- citation entity check (pure, no DB) -------------------------------------
+const entityFixturePack = {
+  claims: [],
+  signals: [
+    {
+      id: 's8', tag: 'S8', title: 'Microsoft launches Frontier Company',
+      summary: 'Redmond unveils a new AI subsidiary focused on frontier models.',
+    },
+    {
+      id: 's9', tag: 'S9', title: 'Singapore AISI publishes red-teaming results',
+      summary: 'The agency shares its first public safety findings.',
+    },
+    {
+      id: 's10', tag: 'S10', title: 'Global chip supply update',
+      summary: 'Shipments rose 25,000 units in the quarter.',
+    },
+  ],
+};
+check('citation entity check: sentence about Singapore AISI citing an unrelated record is dropped', () => {
+  const html = '<p>Singapore’s AISI ran a red-teaming exercise this week <a href="/signals/s8">[S8]</a>.</p>';
+  const out = checkCitationEntities(html, entityFixturePack);
+  assert.equal(out.dropped.length, 1);
+  assert.match(out.dropped[0], /^S8: sentence does not mention the cited record$/);
+  assert.ok(!out.html.includes('href="/signals/s8"'));
+  assert.ok(out.html.includes('<span>[S8]</span>'));
+});
+check('citation entity check: the same sentence citing the matching Singapore AISI record survives', () => {
+  const html = '<p>Singapore’s AISI ran a red-teaming exercise this week <a href="/signals/s9">[S9]</a>.</p>';
+  const out = checkCitationEntities(html, entityFixturePack);
+  assert.equal(out.dropped.length, 0);
+  assert.ok(out.html.includes('href="/signals/s9"'));
+});
+check('citation entity check: a shared figure survives even with no proper-noun overlap', () => {
+  const html = '<p>Shipments rose 25,000 units according to new data <a href="/signals/s10">[S10]</a>.</p>';
+  const out = checkCitationEntities(html, entityFixturePack);
+  assert.equal(out.dropped.length, 0);
+  assert.ok(out.html.includes('href="/signals/s10"'));
+});
 
 // ---- pick real mapped codes deterministically --------------------------------
 const topCodes = (
@@ -167,6 +216,48 @@ if (packA.signals.length >= 2) {
   console.log('  (skipped delta arithmetic: fewer than 2 matched signals)');
 }
 
+// ---- thesis-relevance split (injected stub scorer, no network) --------------
+if (packA.signals.length >= 2) {
+  const evenRelevant = async (_statement, signals) =>
+    signals.map((s, i) => ({
+      signal_id: s.signal_id,
+      relevance: i % 2 === 0 ? 0.9 : 0.2,
+      why: i % 2 === 0 ? 'on thesis' : 'off thesis',
+    }));
+  const packSplit = await buildThesisPackCore(q, THESIS, null, { scoreRelevance: evenRelevant });
+  check('relevance split: below-threshold signals move to peripheral, none dropped', () => {
+    assert.equal(packSplit.stats.matched + packSplit.stats.peripheral, packA.signals.length);
+    assert.equal(packSplit.signals.length, packSplit.stats.matched);
+    assert.equal(packSplit.peripheral.length, packSplit.stats.peripheral);
+    for (const s of packSplit.signals) assert.ok(s.relevance === null || s.relevance >= THESIS_RELEVANCE_MIN);
+    for (const s of packSplit.peripheral) assert.ok(s.relevance !== null && s.relevance < THESIS_RELEVANCE_MIN);
+  });
+  check('relevance split: no build-time notes on a successful call', () =>
+    assert.deepEqual(packSplit.notes, []));
+  check('relevance split: corpusNote states the direct-bearing split', () =>
+    assert.match(packSplit.stats.corpusNote, /bear directly on the thesis/));
+
+  const emptyScores = async () => [];
+  const packEmpty = await buildThesisPackCore(q, THESIS, null, { scoreRelevance: emptyScores });
+  check('relevance split: a scorer returning no scores keeps every signal (null relevance)', () => {
+    assert.equal(packEmpty.stats.peripheral, 0);
+    assert.equal(packEmpty.stats.matched, packA.signals.length);
+    for (const s of packEmpty.signals) assert.equal(s.relevance, null);
+    assert.deepEqual(packEmpty.notes, []);
+  });
+
+  const throwingScorer = async () => { throw new Error('budget exhausted'); };
+  const packFailed = await buildThesisPackCore(q, THESIS, null, { scoreRelevance: throwingScorer });
+  check('relevance split: a failed call falls back to keeping every signal and notes it', () => {
+    assert.equal(packFailed.stats.peripheral, 0);
+    assert.equal(packFailed.stats.matched, packA.signals.length);
+    assert.equal(packFailed.notes.length, 1);
+    assert.doesNotMatch(packFailed.stats.corpusNote, /bear directly on the thesis/);
+  });
+} else {
+  console.log('  (skipped relevance-split checks: fewer than 2 matched signals)');
+}
+
 // ---- unmapped thesis ---------------------------------------------------------
 const unmapped = await buildThesisPackCore(q, {
   id: '00000000-0000-0000-0000-000000000000',
@@ -179,6 +270,68 @@ check('unmapped thesis: consistent and honest about the missing mapping', () => 
   assert.ok(unmapped.stats.corpusNote.includes('not yet mapped'));
   for (const s of unmapped.signals) assert.equal(s.stance, 'untyped');
 });
+
+// ---- evidence-type tally (fixture, no live DB dependency) --------------------
+// A self-contained mock of `q` returning canned rows for each query pack-core
+// issues, so the byType/measured/asserted math is exercised against a fixed
+// corpus regardless of what evidence_type values happen to be live today.
+{
+  const sigFixtures = [
+    { id: 's1', title: 'Experiment signal', summary: null, significance: 'high', lenses: [],
+      claim_touches: ['C1'], evidence_type: 'experiment', published_at: '2026-01-01',
+      origin: 'manual', source_title: null, source_url: null },
+    { id: 's2', title: 'Announcement signal', summary: null, significance: 'medium', lenses: [],
+      claim_touches: ['C1'], evidence_type: 'announcement', published_at: '2026-02-01',
+      origin: 'manual', source_title: null, source_url: null },
+    { id: 's3', title: 'Unclassified signal', summary: null, significance: 'low', lenses: [],
+      claim_touches: ['C1'], evidence_type: null, published_at: '2026-03-01',
+      origin: 'manual', source_title: null, source_url: null },
+  ];
+  const claimRowsFixture = [{ code: 'C1', type: 'claim', statement: 'Fixture claim', test: null }];
+  const evRowsFixture = [
+    { code: 'C1', direction: 'supports', excerpt: 'exp excerpt', signal_id: 's1' },
+    { code: 'C1', direction: 'supports', excerpt: 'ann excerpt', signal_id: 's2' },
+    { code: 'C1', direction: 'contradicts', excerpt: 'unc excerpt', signal_id: 's3' },
+  ];
+  const mockQ = async (sql) => {
+    if (sql.includes('count(*)::int as n from signals')) return [{ n: 3 }];
+    if (sql.includes('s.claim_touches &&')) return sigFixtures;
+    if (sql.includes('s.search_tsv @@')) return [];
+    if (sql.includes('from claims where code = any')) return claimRowsFixture;
+    if (sql.includes('from signals where is_published = true and published_at is not null')) {
+      return sigFixtures.map((r) => ({ published_at: r.published_at }));
+    }
+    if (sql.includes('from evidence e')) return evRowsFixture;
+    throw new Error(`fixture mockQ: unhandled query: ${sql.slice(0, 80)}`);
+  };
+  const fixturePack = await buildThesisPackCore(
+    mockQ, { id: 'fixture', statement: '', claim_codes: ['C1'] }, null
+  );
+  check('byType: buckets by evidence type, null -> unclassified', () => {
+    assert.deepEqual(fixturePack.stats.byType.experiment,
+      { total: 1, supports: 1, contradicts: 0, mixed: 0, neutral: 0, untyped: 0 });
+    assert.deepEqual(fixturePack.stats.byType.announcement,
+      { total: 1, supports: 1, contradicts: 0, mixed: 0, neutral: 0, untyped: 0 });
+    assert.deepEqual(fixturePack.stats.byType.unclassified,
+      { total: 1, supports: 0, contradicts: 1, mixed: 0, neutral: 0, untyped: 0 });
+    assert.equal(fixturePack.stats.byType.survey.total, 0);
+  });
+  check('byType: totals sum to matched', () => {
+    const sum = Object.values(fixturePack.stats.byType).reduce((a, b) => a + b.total, 0);
+    assert.equal(sum, fixturePack.stats.matched);
+    assert.equal(fixturePack.stats.matched, 3);
+  });
+  check('measured/asserted: restricted to their type groups', () => {
+    assert.deepEqual(fixturePack.stats.measured, { supports: 1, contradicts: 0 });
+    assert.deepEqual(fixturePack.stats.asserted, { supports: 1, contradicts: 0 });
+  });
+  check('corpusNote: states the measured-evidence clause', () => {
+    assert.match(
+      fixturePack.stats.corpusNote,
+      /Of the 3 relevant signals, 1 carr(?:y|ies) measured evidence \(experiments, primary statistics, surveys\): 1 support, 0 contradict; the rest are announcements, projections, or commentary\./
+    );
+  });
+}
 
 await client.end();
 if (failures) {

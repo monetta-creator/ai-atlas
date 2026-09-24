@@ -1,4 +1,4 @@
-import type { Direction, SignalLens, SignalOrigin, Significance } from './core';
+import type { Direction, EvidenceType, SignalLens, SignalOrigin, Significance } from './core';
 import type { ArgumentGapScan } from './concepts';
 // ---- Thesis reports (migration 0027) ----------------------------------------
 // A standing user hypothesis mapped to the argument-map claims it bears on, plus
@@ -41,6 +41,9 @@ export interface ThesisPackSignal {
   source_url: string | null;
   source_domain: string | null;     // normalized hostname (www. stripped)
   claim_touches: string[];
+  // What KIND of evidence this signal is, not what it is about (migration 0065).
+  // Null when the signal was never classified.
+  evidenceType: EvidenceType | null;
   matched_via: ('claim' | 'text')[];
   rank: number | null;              // ts_rank when text-matched
   // mapped-claim code -> direction, from the signal's materialized evidence rows.
@@ -48,6 +51,12 @@ export interface ThesisPackSignal {
   // Signal-level rollup of `directions`: mixed = supports AND contradicts;
   // untyped = no direction data toward any mapped claim (text-only matches).
   stance: 'supports' | 'contradicts' | 'mixed' | 'neutral' | 'untyped';
+  // How directly this signal bears on the THESIS STATEMENT itself, not just its
+  // mapped claim (migration-free relevance pass, lib/thesis/relevance.ts). Null
+  // when scoring was not run or failed for this signal: existing behaviour
+  // (treat as relevant) is the fallback, never a silent exclusion.
+  relevance: number | null;
+  relevanceWhy: string | null;
 }
 
 export interface ThesisPackClaim {
@@ -71,15 +80,34 @@ export interface ThesisPackEvidence {
 
 export interface ThesisStats {
   scanned: number;                  // published signals in the corpus at build time
-  matched: number;                  // pack signals
+  matched: number;                  // pack signals that pass the relevance threshold
+  // Matched signals that touch a mapped claim/bridge but scored below
+  // THESIS_RELEVANCE_MIN against the thesis statement itself (see
+  // ThesisPack.peripheral); 0 when relevance scoring did not run.
+  peripheral: number;
   byMatch: { claim: number; text: number; both: number };
   // Signal-level stance counts (see ThesisPackSignal.stance).
   stances: { supports: number; contradicts: number; mixed: number; neutral: number; untyped: number };
   // (signal, mapped-code) direction pairs — finer-grained than `stances`.
   touchDirections: { supports: number; contradicts: number; neutral: number };
   significance: { high: number; medium: number; low: number };
+  // Evidence-type tally over the relevant (non-peripheral) signals: one stance
+  // breakdown per type, plus 'unclassified' for null evidence_type rows.
+  byType: Record<EvidenceType | 'unclassified', {
+    total: number; supports: number; contradicts: number; mixed: number; neutral: number; untyped: number;
+  }>;
+  // supports/contradicts restricted to types with an OBSERVED outcome
+  // (experiment, statistics, survey).
+  measured: { supports: number; contradicts: number };
+  // supports/contradicts restricted to types that are merely asserted
+  // (projection, announcement, analysis, other).
+  asserted: { supports: number; contradicts: number };
   lenses: { lens: SignalLens; n: number }[];
   recency: { bucket: string; n: number }[];       // 'YYYY Qn' quarters, zero-filled span
+  // recency as a share of ALL published signals that quarter (lib/pack-shared.ts
+  // quarterShare), so a reader can tell recency from raw pipeline volume. null
+  // for a quarter the corpus published nothing in.
+  recencyShare: { bucket: string; share: number | null }[];
   domains: { domain: string; n: number; seen: number | null; approved: number | null }[];
   firstPublished: string | null;
   lastPublished: string | null;
@@ -103,10 +131,17 @@ export interface ThesisPack {
   statement: string;                // the thesis wording this pack was built for
   generated_at: string;             // ISO, server clock at build
   claims: ThesisPackClaim[];
-  signals: ThesisPackSignal[];
+  signals: ThesisPackSignal[];      // relevance-passing matches only (see peripheral)
+  // Matched signals that scored below THESIS_RELEVANCE_MIN: kept for the record but
+  // never fed to the narrative and never in the citation allowlist (allowlistFor
+  // only reads `signals`). Always empty when relevance scoring did not run.
+  peripheral: ThesisPackSignal[];
   evidence: ThesisPackEvidence[];
   stats: ThesisStats;
   delta: ThesisDelta | null;
+  // Build-time caveats the reader should see (e.g. a failed relevance pass);
+  // empty when the build had nothing to flag.
+  notes: string[];
 }
 
 // The narrative half: sanitized, citation-gated HTML. `citedTags`/`dropped` are the

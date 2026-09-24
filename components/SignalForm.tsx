@@ -4,8 +4,13 @@ import { useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
   SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL, SIGNAL_LENS_COLOR, SIGNIFICANCE_LABEL,
+  EVIDENCE_TYPE_LABEL,
 } from '@/lib/format';
-import type { Direction, Significance, SignalLens } from '@/lib/types';
+import type { Direction, EvidenceType, Significance, SignalLens } from '@/lib/types';
+
+const EVIDENCE_TYPE_OPTS: EvidenceType[] = [
+  'experiment', 'statistics', 'survey', 'projection', 'announcement', 'analysis', 'other',
+];
 import type { TargetOption } from '@/lib/data';
 
 const truncate = (s: string, n = 72) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
@@ -21,6 +26,7 @@ interface InitialValues {
   title?: string;
   summary?: string;
   significance?: Significance;
+  evidence_type?: EvidenceType | null;
   lenses?: SignalLens[];
   claim_touches?: string[];
   touch_details?: Record<string, TouchDetail>;
@@ -67,6 +73,7 @@ export default function SignalForm({
   const [title, setTitle] = useState(initial.title ?? '');
   const [summary, setSummary] = useState(initial.summary ?? '');
   const [significance, setSignificance] = useState<Significance>(initial.significance ?? 'medium');
+  const [evidenceType, setEvidenceType] = useState<EvidenceType | ''>(initial.evidence_type ?? '');
   const [lenses, setLenses] = useState<Set<SignalLens>>(new Set(initial.lenses ?? []));
   const [touches, setTouches] = useState<Map<string, TouchDetail>>(
     () => new Map((initial.claim_touches ?? []).map((c) => [
@@ -200,6 +207,21 @@ export default function SignalForm({
           >
             {(['high', 'medium', 'low'] as Significance[]).map((s) => (
               <option key={s} value={s}>{SIGNIFICANCE_LABEL[s]}</option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="evidence_type">Evidence type (optional)</label>
+          <select
+            id="evidence_type"
+            name="evidence_type"
+            className="input"
+            value={evidenceType}
+            onChange={(e) => setEvidenceType(e.target.value as EvidenceType | '')}
+          >
+            <option value="">(unclassified)</option>
+            {EVIDENCE_TYPE_OPTS.map((t) => (
+              <option key={t} value={t}>{EVIDENCE_TYPE_LABEL[t]}</option>
             ))}
           </select>
         </div>

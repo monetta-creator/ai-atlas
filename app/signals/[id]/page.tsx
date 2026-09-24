@@ -6,7 +6,7 @@ import { getAskClientData } from '@/lib/ask/retrieve';
 import { dateLabel, DOMAIN_LABEL, confidenceText, directionLabel, directionColor } from '@/lib/format';
 import { publishSignalAction, deleteSignalAction, archiveSignalAction, unarchiveSignalAction } from '@/lib/actions';
 import PageTop from '@/components/PageTop';
-import { LensBadges, SignificanceTag } from '@/components/SignalBadges';
+import { LensBadges, SignificanceTag, EvidenceTypeTag } from '@/components/SignalBadges';
 import RelatedSignalsTable from '@/components/RelatedSignalsTable';
 import { SignalBriefSection, SignalCounterpointSection } from '@/components/SignalBriefView';
 import GenerateSignalAnalysisButton from '@/components/GenerateSignalAnalysisButton';
@@ -58,6 +58,7 @@ export default async function SignalDetailPage({ params }: { params: Promise<{ i
               <div className="signal-top" style={{ marginBottom: 12 }}>
                 <LensBadges lenses={signal.lenses} />
                 <SignificanceTag significance={signal.significance} />
+                <EvidenceTypeTag evidenceType={signal.evidence_type} />
                 {personal && !signal.is_published && (
                   <span className="badge badge--dashed" style={{ fontSize: 11, padding: '3px 9px' }}>
                     {signal.archived_at ? 'Archived' : 'Draft'}

@@ -1,6 +1,6 @@
 import type {
   ConfidenceLabel, Domain, Resolvability, Lens, Relation, Direction,
-  SignalLens, Significance, ConceptStatus, SheetKind,
+  SignalLens, Significance, EvidenceType, ConceptStatus, SheetKind,
   CompanyStatus, CompanyStage, CompanyEventKind, ScoutVerdict,
   ToolingStatus, ToolingMaturity, ToolingEventKind,
 } from './types';
@@ -78,6 +78,17 @@ export const SIGNIFICANCE_LABEL: Record<Significance, string> = {
   high: 'High',
   medium: 'Medium',
   low: 'Low',
+};
+
+// What KIND of evidence a signal is, not what it is about (migration 0065).
+export const EVIDENCE_TYPE_LABEL: Record<EvidenceType, string> = {
+  experiment: 'Experiment',
+  statistics: 'Statistics',
+  survey: 'Survey',
+  projection: 'Projection',
+  announcement: 'Announcement',
+  analysis: 'Analysis',
+  other: 'Other',
 };
 
 // Significance reads on the warm end of the heat scale for High, neutral below.

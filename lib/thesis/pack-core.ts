@@ -1,7 +1,13 @@
 import type {
-  Direction, Significance, SignalLens, SignalOrigin,
+  Direction, EvidenceType, Significance, SignalLens, SignalOrigin,
   ThesisDelta, ThesisPack, ThesisPackClaim, ThesisPackEvidence, ThesisPackSignal, ThesisStats,
 } from '../types';
+
+// Evidence-type groupings for the by-type tally (migration 0065): types that
+// carry an OBSERVED outcome vs. types that are merely asserted. Kept as the
+// one source of truth so pack-core and the narrative prompt never drift.
+export const MEASURED_EVIDENCE_TYPES: EvidenceType[] = ['experiment', 'statistics', 'survey'];
+export const ASSERTED_EVIDENCE_TYPES: EvidenceType[] = ['projection', 'announcement', 'analysis', 'other'];
 
 // The deterministic core of a thesis report: retrieval + stats, zero AI, zero
 // randomness. Given the same corpus and the same thesis, this produces the same
@@ -18,7 +24,7 @@ import type {
 // confidence, confidence_label, rationales, evidence.note, or reliability_prior.
 // (evidence.excerpt and touch directions are public on claim pages already.)
 
-import { domainOfUrl, quarterBuckets, ORQ } from '../pack-shared.ts';
+import { domainOfUrl, quarterBuckets, quarterShare, ORQ } from '../pack-shared.ts';
 import type { Q } from '../pack-shared.ts';
 
 export interface ThesisInput {
@@ -40,7 +46,7 @@ const TEXT_LIMIT = 60;   // text-match cap; claim-matched signals are never capp
 
 const SIG_COLS = `
   s.id, s.title, s.summary, s.significance::text as significance,
-  s.lenses::text[] as lenses, s.claim_touches,
+  s.lenses::text[] as lenses, s.claim_touches, s.evidence_type,
   to_char(s.published_at, 'YYYY-MM-DD') as published_at,
   s.origin::text as origin,
   src.title as source_title, src.url as source_url`;
@@ -52,6 +58,7 @@ interface SigRow {
   significance: Significance;
   lenses: SignalLens[];
   claim_touches: string[];
+  evidence_type: EvidenceType | null;
   published_at: string | null;
   origin: SignalOrigin;
   source_title: string | null;
@@ -64,6 +71,90 @@ interface EvRow {
   direction: Direction;
   excerpt: string | null;
   signal_id: string | null;
+}
+
+// ---- Thesis-level relevance pass -------------------------------------------
+// A signal can match a thesis through a mapped claim, but the claim is often
+// broader than the thesis wording (the reviewer's call-center-headcount case:
+// 110 of 141 matches were general AI news flow via a broad claim). This pass
+// re-judges each matched signal against the THESIS STATEMENT itself, not the
+// claim, and splits the pack below THESIS_RELEVANCE_MIN into `peripheral`.
+//
+// The real caller (lib/thesis/relevance.ts, routedStructured, chunks of 25) is
+// INJECTED as `opts.scoreRelevance` rather than imported here, the same seam
+// as the injected `Q`: it keeps this module network-free so
+// scripts/test-thesis.mjs can drive it from plain Node with a stub scorer.
+export const THESIS_RELEVANCE_MIN = 0.5;
+
+export interface RelevancePromptSignal {
+  signal_id: string;
+  title: string;
+  summary: string | null;
+}
+
+export interface RelevanceScore {
+  signal_id: string;
+  relevance: number;   // 0..1
+  why: string;
+}
+
+export type RelevanceScorer = (
+  thesisStatement: string,
+  signals: RelevancePromptSignal[]
+) => Promise<RelevanceScore[]>;
+
+const RELEVANCE_SYSTEM =
+  `You judge relevance for a thesis report in The AI Atlas. You receive a THESIS ` +
+  `STATEMENT and a batch of Atlas signals that already matched it through its mapped ` +
+  `claim or a text search, but a claim can be broader than the thesis wording itself, ` +
+  `so a matched signal is not automatically on topic. Score each signal for how ` +
+  `DIRECTLY it bears on the thesis as written, not on the general subject of the claim ` +
+  `it happens to touch. A signal about a different mechanism, population, geography, ` +
+  `or timeframe than the thesis describes should score low even when it touches the ` +
+  `same claim. For every signal, return its exact signal_id, a relevance score, and a ` +
+  `short reason. Never use an em dash; use a comma or a colon instead.`;
+
+function clip(s: string | null | undefined, n: number): string {
+  const t = (s ?? '').trim().replace(/\s+/g, ' ');
+  return t.length > n ? `${t.slice(0, n)} ...` : t;
+}
+
+// Pure prompt builder: exported so both the real caller and the test suite can
+// exercise the exact request shape without a network call.
+export function relevancePrompt(
+  thesisStatement: string,
+  signals: RelevancePromptSignal[]
+): { system: string; user: string; schema: object } {
+  const schema = {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      scores: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            signal_id: { type: 'string', description: 'copy the id exactly as given' },
+            relevance: {
+              type: 'number',
+              description: '0.0 (not directly about this thesis) to 1.0 (squarely about this thesis)',
+            },
+            why: { type: 'string', description: 'one short reason, at most 120 characters' },
+          },
+          required: ['signal_id', 'relevance', 'why'],
+        },
+      },
+    },
+    required: ['scores'],
+  };
+  const user = [
+    `THESIS STATEMENT: ${thesisStatement}`,
+    '',
+    'SIGNALS TO SCORE (score every one):',
+    ...signals.map((s) => `- id ${s.signal_id}: ${s.title}${s.summary ? `. ${clip(s.summary, 200)}` : ''}`),
+  ].join('\n');
+  return { system: RELEVANCE_SYSTEM, user, schema };
 }
 
 // Signal-level rollup of its per-mapped-claim directions.
@@ -80,12 +171,22 @@ export function stanceOf(directions: Record<string, Direction>): ThesisPackSigna
 
 // The deterministic coverage statement. Plain sentences built from the numbers
 // (never an em dash: rendered UI copy).
-function corpusNoteFor(s: Omit<ThesisStats, 'corpusNote'>, hasCodes: boolean): string {
+function corpusNoteFor(
+  s: Omit<ThesisStats, 'corpusNote'>,
+  hasCodes: boolean,
+  relevanceApplied: boolean
+): string {
   const parts: string[] = [];
   parts.push(
     `${s.matched} of ${s.scanned} published signals in the Atlas matched this thesis ` +
     `(${s.byMatch.claim + s.byMatch.both} via mapped claims, ${s.byMatch.text} via text match only).`
   );
+  if (relevanceApplied) {
+    parts.push(
+      `${s.matched} of ${s.matched + s.peripheral} matched signals bear directly on the thesis; ` +
+      `${s.peripheral} touch the mapped claims but not the thesis itself.`
+    );
+  }
   if (!hasCodes) {
     parts.push(
       'This thesis is not yet mapped to any Atlas claim, so no direction data is available; matches are text-based only.'
@@ -98,6 +199,12 @@ function corpusNoteFor(s: Omit<ThesisStats, 'corpusNote'>, hasCodes: boolean): s
       `${s.stances.mixed} mixed, ${s.stances.neutral} neutral.`
     );
   }
+  const measuredCount = MEASURED_EVIDENCE_TYPES.reduce((sum, t) => sum + s.byType[t].total, 0);
+  parts.push(
+    `Of the ${s.matched} relevant signals, ${measuredCount} carry measured evidence ` +
+    `(experiments, primary statistics, surveys): ${s.measured.supports} support, ` +
+    `${s.measured.contradicts} contradict; the rest are announcements, projections, or commentary.`
+  );
   if (s.oneSided) {
     parts.push(
       'Warning: the matched evidence is one-sided. No contradicting signal is in the corpus, which may reflect coverage, not reality.'
@@ -135,15 +242,16 @@ export async function buildThesisPackCore(
   q: Q,
   thesis: ThesisInput,
   prev: PrevRun | null,
-  opts: { textLimit?: number } = {}
+  opts: { textLimit?: number; scoreRelevance?: RelevanceScorer } = {}
 ): Promise<ThesisPack> {
   const codes = [...new Set(thesis.claim_codes)];
   const statement = thesis.statement.trim();
   const textLimit = opts.textLimit ?? TEXT_LIMIT;
 
-  // 1) Corpus size + the two retrieval passes + mapped-claim resolution, all
-  //    deterministic SQL (stable tiebreakers everywhere).
-  const [scannedRow, claimMatched, textMatched, claimRows] = await Promise.all([
+  // 1) Corpus size + the two retrieval passes + mapped-claim resolution + the
+  //    corpus's own published dates (for quarterShare below), all deterministic
+  //    SQL (stable tiebreakers everywhere).
+  const [scannedRow, claimMatched, textMatched, claimRows, corpusDateRows] = await Promise.all([
     q<{ n: number }>(`select count(*)::int as n from signals where is_published = true`),
     codes.length
       ? q<SigRow>(
@@ -175,8 +283,13 @@ export async function buildThesisPackCore(
           [codes]
         )
       : Promise.resolve([] as { code: string; type: 'claim' | 'bridge_claim'; statement: string; test: string | null }[]),
+    q<{ published_at: string | null }>(
+      `select to_char(published_at, 'YYYY-MM-DD') as published_at
+         from signals where is_published = true and published_at is not null`
+    ),
   ]);
   const scanned = scannedRow[0]?.n ?? 0;
+  const corpusRecency = quarterBuckets(corpusDateRows.map((r) => r.published_at));
 
   // 2) Merge: claim-matched first (recency order), then text-only matches (rank
   //    order). Tag assignment follows this order, so tags are stable per corpus.
@@ -217,8 +330,11 @@ export async function buildThesisPackCore(
     directionsBySignal.set(e.signal_id, m);
   }
 
-  // 4) Assemble the pack signals with tags, directions, and stances.
-  const signals: ThesisPackSignal[] = merged.map(({ row, via }, i) => {
+  // 4) Assemble every matched signal with tags, directions, and stances. Tags
+  //    are assigned over this FULL merged order (before the relevance split
+  //    below) so a signal's tag never changes depending on whether it clears
+  //    the relevance bar.
+  const allMatched: ThesisPackSignal[] = merged.map(({ row, via }, i) => {
     const directions = directionsBySignal.get(row.id) ?? {};
     return {
       id: row.id,
@@ -233,13 +349,45 @@ export async function buildThesisPackCore(
       source_url: row.source_url,
       source_domain: domainOfUrl(row.source_url),
       claim_touches: row.claim_touches,
+      evidenceType: row.evidence_type ?? null,
       matched_via: via,
       rank: textRankById.get(row.id) ?? null,
       directions,
       stance: stanceOf(directions),
+      relevance: null,
+      relevanceWhy: null,
     };
   });
-  const tagBySignal = new Map(signals.map((s) => [s.id, s.tag]));
+  const tagBySignal = new Map(allMatched.map((s) => [s.id, s.tag]));
+
+  // 4b) The thesis-relevance pass. Only ever narrows (below the threshold ->
+  //     peripheral); a missing or failed call keeps every signal, matching the
+  //     pack's pre-existing behaviour exactly.
+  let relevanceApplied = false;
+  const notes: string[] = [];
+  if (opts.scoreRelevance && statement && allMatched.length) {
+    try {
+      const scores = await opts.scoreRelevance(
+        statement,
+        allMatched.map((s) => ({ signal_id: s.id, title: s.title, summary: s.summary }))
+      );
+      const byId = new Map(scores.map((s) => [s.signal_id, s]));
+      for (const s of allMatched) {
+        const scored = byId.get(s.id);
+        if (!scored) continue;
+        s.relevance = Math.min(1, Math.max(0, Number(scored.relevance) || 0));
+        s.relevanceWhy = String(scored.why ?? '').slice(0, 120) || null;
+      }
+      relevanceApplied = true;
+    } catch {
+      notes.push(
+        'Relevance scoring failed; every matched signal is shown together with no peripheral split.'
+      );
+    }
+  }
+  const signals = allMatched.filter((s) => s.relevance === null || s.relevance >= THESIS_RELEVANCE_MIN);
+  const peripheral = allMatched.filter((s) => s.relevance !== null && s.relevance < THESIS_RELEVANCE_MIN);
+  const peripheralIds = new Set(peripheral.map((s) => s.id));
 
   const claims: ThesisPackClaim[] = claimRows.map((r) => ({
     code: r.code,
@@ -250,8 +398,11 @@ export async function buildThesisPackCore(
     signal_count: signals.filter((s) => s.claim_touches.includes(r.code)).length,
   }));
 
+  // Evidence excerpts feed the narrative (lib/thesis/generate.ts), so a peripheral
+  // signal's excerpt is dropped here too, not just left uncited by the allowlist.
   const evidence: ThesisPackEvidence[] = evRows
     .filter((e): e is EvRow & { excerpt: string } => !!e.excerpt && !!e.excerpt.trim())
+    .filter((e) => !e.signal_id || !peripheralIds.has(e.signal_id))
     .slice(0, 40)
     .map((e) => ({
       code: e.code,
@@ -261,13 +412,38 @@ export async function buildThesisPackCore(
       signal_tag: e.signal_id ? tagBySignal.get(e.signal_id) ?? null : null,
     }));
 
-  // 5) Stats, all in code.
+  // 5) Stats, all in code, over the relevance-passing `signals` only.
   const stances = { supports: 0, contradicts: 0, mixed: 0, neutral: 0, untyped: 0 };
   for (const s of signals) stances[s.stance]++;
   const touchDirections = { supports: 0, contradicts: 0, neutral: 0 };
   for (const s of signals) for (const d of Object.values(s.directions)) touchDirections[d]++;
   const significance = { high: 0, medium: 0, low: 0 };
   for (const s of signals) significance[s.significance]++;
+
+  // Evidence-type tally, over the relevant (non-peripheral) signals only. A
+  // field study and a product launch stop counting the same: each bucket
+  // carries its own stance breakdown, and 'unclassified' holds the null rows.
+  const mkTypeTally = () => ({ total: 0, supports: 0, contradicts: 0, mixed: 0, neutral: 0, untyped: 0 });
+  const byType: ThesisStats['byType'] = {
+    experiment: mkTypeTally(), statistics: mkTypeTally(), survey: mkTypeTally(),
+    projection: mkTypeTally(), announcement: mkTypeTally(), analysis: mkTypeTally(),
+    other: mkTypeTally(), unclassified: mkTypeTally(),
+  };
+  for (const s of signals) {
+    const bucket = byType[s.evidenceType ?? 'unclassified'];
+    bucket.total++;
+    bucket[s.stance]++;
+  }
+  const measured = { supports: 0, contradicts: 0 };
+  for (const t of MEASURED_EVIDENCE_TYPES) {
+    measured.supports += byType[t].supports;
+    measured.contradicts += byType[t].contradicts;
+  }
+  const asserted = { supports: 0, contradicts: 0 };
+  for (const t of ASSERTED_EVIDENCE_TYPES) {
+    asserted.supports += byType[t].supports;
+    asserted.contradicts += byType[t].contradicts;
+  }
 
   const lensCounts = new Map<SignalLens, number>();
   for (const s of signals) for (const l of s.lenses) lensCounts.set(l, (lensCounts.get(l) ?? 0) + 1);
@@ -307,9 +483,11 @@ export async function buildThesisPackCore(
   }));
 
   const dates = signals.map((s) => s.published_at).filter((d): d is string => !!d).sort();
+  const recency = quarterBuckets(signals.map((s) => s.published_at));
   const withoutNote: Omit<ThesisStats, 'corpusNote'> = {
     scanned,
     matched: signals.length,
+    peripheral: peripheral.length,
     byMatch: {
       claim: signals.filter((s) => s.matched_via.length === 1 && s.matched_via[0] === 'claim').length,
       text: signals.filter((s) => s.matched_via.length === 1 && s.matched_via[0] === 'text').length,
@@ -318,15 +496,22 @@ export async function buildThesisPackCore(
     stances,
     touchDirections,
     significance,
+    byType,
+    measured,
+    asserted,
     lenses,
-    recency: quarterBuckets(signals.map((s) => s.published_at)),
+    recency,
+    recencyShare: quarterShare(recency, corpusRecency),
     domains,
     firstPublished: dates[0] ?? null,
     lastPublished: dates[dates.length - 1] ?? null,
     oneSided: stances.supports >= 3 && stances.contradicts === 0 && stances.mixed === 0,
     thin: signals.length < 5,
   };
-  const stats: ThesisStats = { ...withoutNote, corpusNote: corpusNoteFor(withoutNote, codes.length > 0) };
+  const stats: ThesisStats = {
+    ...withoutNote,
+    corpusNote: corpusNoteFor(withoutNote, codes.length > 0, relevanceApplied),
+  };
 
   return {
     thesis_id: thesis.id,
@@ -334,8 +519,10 @@ export async function buildThesisPackCore(
     generated_at: new Date().toISOString(),
     claims,
     signals,
+    peripheral,
     evidence,
     stats,
     delta: computeDelta(signals, prev),
+    notes,
   };
 }

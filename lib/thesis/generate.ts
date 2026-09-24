@@ -1,8 +1,13 @@
 import { marked } from 'marked';
 import { runStructured } from '@/lib/dossier';
-import { SIGNAL_LENS_LABEL } from '@/lib/format';
-import type { ThesisPack } from '@/lib/types';
-import { allowlistFor, enforceCitations } from './citations';
+import { SIGNAL_LENS_LABEL, EVIDENCE_TYPE_LABEL } from '@/lib/format';
+import type { ThesisPack, EvidenceType } from '@/lib/types';
+import { allowlistFor, enforceCitations, checkCitationEntities } from './citations';
+import { MEASURED_EVIDENCE_TYPES } from './pack-core';
+
+const EVIDENCE_TYPE_ORDER: EvidenceType[] = [
+  'experiment', 'statistics', 'survey', 'projection', 'announcement', 'analysis', 'other',
+];
 
 // Thesis-report narrative generation. Two decomposed forced-tool runStructured calls
 // (each bounded well under the 60s route cap, orchestrated from the client like
@@ -44,7 +49,9 @@ const VOICE =
   `hiring is contracting (4.2)](/claim/4.2); never a bare code alone. Do not link to ` +
   `anything outside the pack. Write like a senior analyst briefing a working team: ` +
   `confident where the evidence is strong, explicit where it is weak, never falsely ` +
-  `confident. Tight paragraphs, bullets where they help. Output GitHub-flavored ` +
+  `confident. Weight measured evidence (experiments, primary statistics, surveys) above ` +
+  `announcements and projections when characterizing the balance, and say plainly when the ` +
+  `balance rests mainly on announcements. Tight paragraphs, bullets where they help. Output GitHub-flavored ` +
   `MARKDOWN. Do not begin with a heading. Never use an em dash in your output; use a ` +
   `comma, a colon, or separate sentences instead.`;
 
@@ -78,6 +85,20 @@ function fmtPack(pack: ThesisPack): string {
   if (s.lenses.length) lines.push(`- Lens distribution: ${s.lenses.map((l) => `${SIGNAL_LENS_LABEL[l.lens]} ${l.n}`).join(', ')}.`);
   if (s.oneSided) lines.push('- WARNING: the evidence is one-sided (no contradicting or mixed signal in the corpus).');
   if (s.thin) lines.push('- WARNING: coverage is thin (fewer than 5 matched signals).');
+  lines.push('- Evidence type breakdown (type: total, supporting, contradicting):');
+  for (const t of EVIDENCE_TYPE_ORDER) {
+    const b = s.byType[t];
+    if (b.total) lines.push(`    ${EVIDENCE_TYPE_LABEL[t]}: ${b.total}, ${b.supports} supporting, ${b.contradicts} contradicting`);
+  }
+  if (s.byType.unclassified.total) {
+    lines.push(`    Unclassified: ${s.byType.unclassified.total}, ${s.byType.unclassified.supports} supporting, ${s.byType.unclassified.contradicts} contradicting`);
+  }
+  const measuredCount = MEASURED_EVIDENCE_TYPES.reduce((sum, t) => sum + s.byType[t].total, 0);
+  lines.push(
+    `- Measured evidence (experiments, primary statistics, surveys): ${measuredCount} signals, ` +
+    `${s.measured.supports} supporting, ${s.measured.contradicts} contradicting. Asserted evidence ` +
+    `(projections, announcements, analysis, other): ${s.asserted.supports} supporting, ${s.asserted.contradicts} contradicting.`
+  );
   lines.push(`- Coverage statement: ${s.corpusNote}`);
   if (pack.delta) {
     const d = pack.delta;
@@ -155,12 +176,19 @@ export async function generateThesisSections(pack: ThesisPack): Promise<ThesisSe
   const allow = allowlistFor(pack);
   const reading = enforceCitations(toHtml(readingMd), allow);
   const counterweight = enforceCitations(toHtml(counterweightMd), allow);
+  const readingEntity = checkCitationEntities(reading.html, pack);
+  const counterweightEntity = checkCitationEntities(counterweight.html, pack);
   return {
     readingMd,
     counterweightMd,
-    readingHtml: reading.html ?? '',
-    counterweightHtml: counterweight.html ?? '',
-    dropped: [...new Set([...reading.dropped, ...counterweight.dropped])].sort(),
+    readingHtml: readingEntity.html ?? '',
+    counterweightHtml: counterweightEntity.html ?? '',
+    dropped: [
+      ...new Set([
+        ...reading.dropped, ...counterweight.dropped,
+        ...readingEntity.dropped, ...counterweightEntity.dropped,
+      ]),
+    ].sort(),
   };
 }
 
@@ -207,9 +235,10 @@ export async function generateThesisBottomLine(
     maxRetries: 0,
   });
   const gated = enforceCitations(toHtml(String(out.bottom_line ?? '')), allowlistFor(pack));
+  const entity = checkCitationEntities(gated.html, pack);
   return {
-    bottomLineHtml: gated.html ?? '',
+    bottomLineHtml: entity.html ?? '',
     title: deDash(String(out.report_title ?? '')).trim().slice(0, 120),
-    dropped: gated.dropped,
+    dropped: [...new Set([...gated.dropped, ...entity.dropped])].sort(),
   };
 }

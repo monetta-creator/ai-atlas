@@ -16,6 +16,11 @@ export type Significance = 'high' | 'medium' | 'low';
 export type SignalLens =
   | 'market' | 'labor' | 'geopolitics' | 'regulatory' | 'capability' | 'society';
 export type SignalOrigin = 'manual' | 'pipeline';
+// What KIND of evidence a signal is, not what it is about (migration 0065).
+// Nullable: an unclassified signal stays honestly null.
+export type EvidenceType =
+  | 'experiment' | 'statistics' | 'survey' | 'projection'
+  | 'announcement' | 'analysis' | 'other';
 
 // ---- Discovery pipeline (migration 0005) ----
 export type TriageStatus = 'pending' | 'approved' | 'rejected' | 'duplicate';

@@ -114,6 +114,12 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   counterpoint: { type: 'string', nullable: true },
   atlas_url: { type: 'string', nullable: false, format: 'uri' },
   source_title: { type: 'string', nullable: true },
+  // evidence_type (0065): what KIND of evidence a signal is, not what it is about.
+  // Shared by the public `signals` dataset and the key-gated `signals-export`.
+  evidence_type: {
+    type: 'string', nullable: true,
+    enum: ['experiment', 'statistics', 'survey', 'projection', 'announcement', 'analysis', 'other'],
+  },
   // ---- intel-items extras (appended after the mirrored scan-shaped columns) ----
   doc_type: { type: 'string', nullable: false, enum: ['news', 'press', 'filing', 'transcript', 'report'] },
   company_slugs: { type: 'string', nullable: false },

@@ -41,7 +41,8 @@ export async function buildSignals(q: Q, opts: DatasetOpts = {}): Promise<Datase
             s.brief->>'what_happened'   as brief_what_happened,
             s.brief->>'why_it_matters'  as brief_why_it_matters,
             s.brief->>'whats_contested' as brief_whats_contested,
-            s.counterpoint->>'the_other_read' as counterpoint
+            s.counterpoint->>'the_other_read' as counterpoint,
+            s.evidence_type
        from signals s
        left join sources src on src.id = s.source_id
       where s.is_published = true ${lensClause}
@@ -550,6 +551,7 @@ interface SignalsExportRow {
   brief_whats_contested: string | null; counterpoint: string | null;
   source_title: string | null; source_url: string | null;
   article_text: string | null;
+  evidence_type: string | null;
 }
 
 const SIGNIFICANCE_RELEVANCE: Record<string, number> = { high: 0.9, medium: 0.6, low: 0.3 };
@@ -582,6 +584,7 @@ export async function buildSignalsExport(q: Q, opts: DatasetOpts = {}): Promise<
               s.brief->>'why_it_matters'  as brief_why_it_matters,
               s.brief->>'whats_contested' as brief_whats_contested,
               s.counterpoint->>'the_other_read' as counterpoint,
+              s.evidence_type,
               src.title as source_title, src.url as source_url,
               coalesce(src.raw_text, sc.raw_content) as article_text
          from signals s
@@ -664,6 +667,7 @@ export async function buildSignalsExport(q: Q, opts: DatasetOpts = {}): Promise<
       counterpoint: s.counterpoint,
       atlas_url: atlasUrl,
       source_title: s.source_title,
+      evidence_type: s.evidence_type,
     };
   });
 }

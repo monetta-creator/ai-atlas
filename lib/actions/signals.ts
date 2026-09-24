@@ -14,7 +14,7 @@ import { triageChunk } from '../pipeline/triage';
 import { domainOf } from '../pipeline/web';
 import { retainTextFor, refetchMissingText } from '../pipeline/hydrate';
 import type {
-  Direction, Significance, SignalLens, TriageStatus,
+  Direction, EvidenceType, Significance, SignalLens, TriageStatus,
   SignalsFeedFilters, SignalsPageResult, } from '../types';
 import { DIRECTIONS, UUID_RE, requireAdmin, safePath, str } from './shared';
 import { parseStringArray } from './shared';
@@ -22,6 +22,9 @@ import { parseStringArray } from './shared';
 // ===== Signal Board =========================================================
 
 const SIGNIFICANCES: Significance[] = ['high', 'medium', 'low'];
+const EVIDENCE_TYPES: EvidenceType[] = [
+  'experiment', 'statistics', 'survey', 'projection', 'announcement', 'analysis', 'other',
+];
 
 // Per-touch {direction, reason} keyed by code, as posted by SignalForm.
 function parseTouchDetails(raw: string): Record<string, { direction?: string; reason?: string }> {
@@ -64,10 +67,16 @@ async function readSignalFields(formData: FormData) {
   const sourceIdRaw = str(formData, 'source_id');
   if (sourceIdRaw && !UUID_RE.test(sourceIdRaw)) throw new Error('Bad source id.');
 
+  const evidenceTypeRaw = str(formData, 'evidence_type');
+  const evidence_type = (EVIDENCE_TYPES as string[]).includes(evidenceTypeRaw)
+    ? (evidenceTypeRaw as EvidenceType)
+    : null;
+
   return {
     title,
     summary: str(formData, 'summary') || null,
     significance: significance as Significance,
+    evidence_type,
     lenses,
     claim_touches,
     touch_details,

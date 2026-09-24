@@ -59,6 +59,7 @@ export default async function EditSignalPage({ params }: { params: Promise<{ id:
             title: signal.title,
             summary: signal.summary ?? '',
             significance: signal.significance,
+            evidence_type: signal.evidence_type,
             lenses: signal.lenses,
             claim_touches: signal.claim_touches,
             touch_details: signal.touch_details,

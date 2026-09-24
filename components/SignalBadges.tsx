@@ -1,7 +1,8 @@
 import {
   SIGNAL_LENS_LABEL, SIGNAL_LENS_COLOR, SIGNIFICANCE_LABEL, significanceColor,
+  EVIDENCE_TYPE_LABEL,
 } from '@/lib/format';
-import type { SignalLens, Significance } from '@/lib/types';
+import type { SignalLens, Significance, EvidenceType } from '@/lib/types';
 
 // Lens pills, tinted by each lens's identity color (a calm accent, never a fill).
 export function LensBadges({ lenses }: { lenses: SignalLens[] }) {
@@ -32,6 +33,17 @@ export function SignificanceTag({ significance }: { significance: Significance }
     <span className="sig-tag" style={{ color }} title={`Significance: ${SIGNIFICANCE_LABEL[significance]}`}>
       <span className="sig-dot" style={{ background: color }} />
       {SIGNIFICANCE_LABEL[significance]}
+    </span>
+  );
+}
+
+// A quiet, uncolored tag for what KIND of evidence a signal is (a study vs. an
+// announcement), not what it is about. Renders nothing when unclassified.
+export function EvidenceTypeTag({ evidenceType }: { evidenceType?: EvidenceType | null }) {
+  if (!evidenceType) return null;
+  return (
+    <span className="sig-tag" style={{ color: 'var(--faint-ink)' }} title="Evidence type">
+      {EVIDENCE_TYPE_LABEL[evidenceType]}
     </span>
   );
 }

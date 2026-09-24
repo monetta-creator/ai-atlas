@@ -1,11 +1,12 @@
 import { q } from '@/lib/db';
 import { buildThesisPackCore } from './pack-core';
 import type { PrevRun, ThesisInput } from './pack-core';
+import { scoreThesisRelevance } from './relevance';
 import type { ThesisPack } from '@/lib/types';
 
 // App-facing wrapper for the deterministic pack builder. The core is query-injected
 // (see pack-core.ts) so the determinism test can drive the same SQL from plain Node;
-// the app always binds the shared pool.
+// the app always binds the shared pool and the real relevance scorer.
 export async function buildThesisPack(thesis: ThesisInput, prev: PrevRun | null): Promise<ThesisPack> {
-  return buildThesisPackCore(q, thesis, prev);
+  return buildThesisPackCore(q, thesis, prev, { scoreRelevance: scoreThesisRelevance });
 }

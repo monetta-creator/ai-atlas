@@ -5,9 +5,12 @@ import { fetchCandidateText, MIN_READABLE_CHARS } from './web';
 import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL } from '../format';
 import * as m from '../mutations';
 import { getCandidate, getTargets, getSourceMeta } from '../data';
-import type { AnalyzedSignal, Direction, Significance, SignalLens } from '../types';
+import type { AnalyzedSignal, Direction, EvidenceType, Significance, SignalLens } from '../types';
 
 const DIRECTIONS: Direction[] = ['supports', 'contradicts', 'neutral'];
+const EVIDENCE_TYPES: EvidenceType[] = [
+  'experiment', 'statistics', 'survey', 'projection', 'announcement', 'analysis', 'other',
+];
 const SONNET = 'claude-sonnet-4-6';
 
 // Per-candidate analysis: fetch the page text, then a single non-web structured call
@@ -31,6 +34,7 @@ const ANALYSIS_SYSTEM = [
   'Title: short, declarative, factual (e.g. "Hyperscaler combined AI capex commitments reach $725B for 2026, up 36% YoY" — not "Big Tech makes massive AI bet").',
   'Summary: 2–4 sentences — what happened, what it means structurally, one sentence on the implication for a financial institution. No jargon.',
   'significance: high = materially moves or tests a claim on the Argument Map or is a genuine new data point on a contested question; medium = relevant context that confirms the picture; low = background. Give a one-sentence reason.',
+  'evidence_type: what KIND of evidence this is, not what it is about. experiment means a controlled or field study with measured outcomes. statistics means primary figures reported by the party that holds them, such as earnings, filings, or official data. survey means self-reported polling of people or firms. projection means a forecast or consulting estimate. announcement means a launch, deal, policy, or release with no measured outcome. analysis means commentary or a secondary synthesis. other covers everything else.',
   'lenses: one or more of the provided lens codes (the item may touch more than the one it was retrieved under).',
   'claim_touches: ONLY codes from the provided claim/bridge list that this specific development genuinely bears on — not merely thematically related. For each, set direction: "supports" (evidence FOR the claim), "contradicts" (evidence AGAINST it), or "neutral" (bears on it but does not cut either way), plus a one-sentence reason. Empty if none truly apply.',
   'proposed_reliability: 0–100, your suggested reliability prior for this SOURCE, as a suggestion only.',
@@ -47,6 +51,7 @@ function buildSchema(codes: string[]) {
       summary: { type: 'string' },
       significance: { type: 'string', enum: ['high', 'medium', 'low'] },
       significance_reason: { type: 'string' },
+      evidence_type: { type: 'string', enum: EVIDENCE_TYPES },
       lenses: { type: 'array', items: { type: 'string', enum: SIGNAL_LENS_SLUGS } },
       claim_touches: {
         type: 'array',
@@ -64,7 +69,7 @@ function buildSchema(codes: string[]) {
       proposed_reliability: { type: 'integer' },
     },
     required: [
-      'title', 'summary', 'significance', 'significance_reason',
+      'title', 'summary', 'significance', 'significance_reason', 'evidence_type',
       'lenses', 'claim_touches', 'proposed_reliability',
     ],
   };
@@ -151,6 +156,7 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
   "summary": string
   "significance": "high" | "medium" | "low"
   "significance_reason": string, one sentence
+  "evidence_type": "experiment" | "statistics" | "survey" | "projection" | "announcement" | "analysis" | "other"
   "lenses": array of lens code strings from the LENSES list
   "claim_touches": array of {"code": "<code from the claims list>", "direction": "supports" | "contradicts" | "neutral", "reason": "<one sentence>"} (empty array if none truly apply)
   "proposed_reliability": integer 0 to 100`,
@@ -214,11 +220,17 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
         }))
     : [];
   const proposed_reliability = Math.max(0, Math.min(100, Math.round(Number(out.proposed_reliability) || 0)));
+  // Coerce to the allow-list; an unknown/missing value maps to null rather than
+  // guessing, so an unclassified draft stays honestly unclassified.
+  const evidence_type: EvidenceType | null = EVIDENCE_TYPES.includes(out.evidence_type as EvidenceType)
+    ? (out.evidence_type as EvidenceType)
+    : null;
   const analysis: AnalyzedSignal = {
     title: String(out.title ?? '').slice(0, 200) || (cand.headline ?? 'Untitled signal'),
     summary: String(out.summary ?? ''),
     significance,
     significance_reason: String(out.significance_reason ?? ''),
+    evidence_type,
     lenses: lenses.length ? lenses : [cand.lens],
     claim_touches,
     proposed_reliability,
@@ -238,6 +250,7 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
       title: analysis.title,
       summary: analysis.summary,
       significance: analysis.significance,
+      evidence_type: analysis.evidence_type,
       lenses: analysis.lenses,
       claim_touches: analysis.claim_touches.map((t) => t.code),
       // Preserve the model's per-touch direction + reason; becomes evidence on publish.

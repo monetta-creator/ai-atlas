@@ -49,6 +49,23 @@ export function normalizeUrl(raw: string): string {
   }
 }
 
+// Per-quarter share of a subset (e.g. a thesis's matched signals) against the
+// full corpus for the same bucket, so a reader can tell whether a quarter's
+// count reflects the evidence or just how much the corpus published that
+// quarter. Walks `subsetBuckets` (already zero-filled across its own span by
+// quarterBuckets) and looks up the matching corpus bucket by label; a bucket
+// the corpus has no rows for at all yields a null share (0/0 is not "0%").
+export function quarterShare(
+  subsetBuckets: { bucket: string; n: number }[],
+  corpusBuckets: { bucket: string; n: number }[]
+): { bucket: string; share: number | null }[] {
+  const corpusByBucket = new Map(corpusBuckets.map((b) => [b.bucket, b.n]));
+  return subsetBuckets.map((b) => {
+    const total = corpusByBucket.get(b.bucket) ?? 0;
+    return { bucket: b.bucket, share: total > 0 ? b.n / total : null };
+  });
+}
+
 export function quarterBuckets(dates: (string | null)[]): { bucket: string; n: number }[] {
   const qs = dates
     .filter((d): d is string => !!d && /^\d{4}-\d{2}/.test(d))

@@ -1,4 +1,4 @@
-import type { AnalysisStatus, ConfidenceLabel, Direction, Domain, RunCadence, RunStatus, RunStep, SignalLens, SignalOrigin, Significance, TriageStatus } from './core';
+import type { AnalysisStatus, ConfidenceLabel, Direction, Domain, EvidenceType, RunCadence, RunStatus, RunStep, SignalLens, SignalOrigin, Significance, TriageStatus } from './core';
 // ---- Signal Board (migration 0004) ----
 // A discrete tracked development, organized by lens and tied back to the claims it
 // touches on the Argument Map. The public feed = the share view; drafts are admin-only.
@@ -7,6 +7,9 @@ export interface Signal {
   title: string;
   summary: string | null;
   significance: Significance;
+  // What KIND of evidence this is (a study vs. a launch announcement), not what it is
+  // about (migration 0065). Nullable: unclassified until the backfill or a human sets it.
+  evidence_type?: EvidenceType | null;
   lenses: SignalLens[];
   claim_touches: string[];          // stable claim/bridge codes, e.g. ['2.3','B1']
   // Per-touch {direction, reason} keyed by code — the draft-stage detail the admin
@@ -68,6 +71,9 @@ interface ProposedSignal {
   summary: string;
   significance: Significance;
   significance_reason: string;
+  // Null when the model returns an unrecognized value; the proposer coerces to
+  // the allow-list and never guesses (migration 0065).
+  evidence_type: EvidenceType | null;
   lenses: SignalLens[];
   // Each touch now carries a direction (supports/contradicts/neutral) — the model
   // judges how the development bears on the claim — plus the preserved reason.

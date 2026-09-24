@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { SavedThesisReport } from '@/lib/types';
 import ThesisStatsView from './ThesisStatsView';
+import { EvidenceTypeTag } from './SignalBadges';
 
 // Public, read-only render of a saved thesis report. Server component, no client
 // JS. The narrative HTML is re-gated against the frozen pack at the page boundary
@@ -81,10 +82,36 @@ export default function ThesisReportView({ report }: { report: SavedThesisReport
               {' · '}{s.published_at ?? 'undated'} · {s.significance}
               {' · '}{STANCE_WORD[s.stance] ?? s.stance}
               {s.source_domain ? ` · ${s.source_domain}` : ''}
+              {s.evidenceType && <> · <EvidenceTypeTag evidenceType={s.evidenceType} /></>}
             </li>
           ))}
         </ul>
       </section>
+
+      {pack.peripheral.length > 0 && (
+        <section style={{ marginTop: 18 }}>
+          <div className="section-label">Touches a mapped claim, off-thesis ({pack.peripheral.length})</div>
+          <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--faint-ink)' }}>
+            These signals touch a claim this thesis maps to, but scored below the relevance bar for the
+            thesis statement itself. Not cited by the narrative above.
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--faint-ink)', fontSize: 13, lineHeight: 1.7 }}>
+            {pack.peripheral.map((s) => (
+              <li key={s.id}>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{s.tag}</span>{' '}
+                <Link href={`/signals/${s.id}`} style={{ color: 'var(--dim)' }}>{s.title}</Link>
+                {s.relevanceWhy ? ` · ${s.relevanceWhy}` : ''}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {pack.notes.length > 0 && (
+        <p style={{ margin: '18px 0 0', fontSize: 12, color: 'var(--heat-4)', lineHeight: 1.6 }}>
+          {pack.notes.join(' ')}
+        </p>
+      )}
 
       <p style={{ margin: '18px 0 0', fontSize: 12, color: 'var(--faint-ink)', lineHeight: 1.6 }}>
         Orientation, not proof. Every statistic in this report is computed directly from the Atlas&apos;s

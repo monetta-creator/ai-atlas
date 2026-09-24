@@ -1,5 +1,11 @@
-import { SIGNAL_LENS_LABEL, signalLensColor } from '@/lib/format';
-import type { ThesisDelta, ThesisStats } from '@/lib/types';
+import { SIGNAL_LENS_LABEL, signalLensColor, EVIDENCE_TYPE_LABEL } from '@/lib/format';
+import type { EvidenceType, ThesisDelta, ThesisStats } from '@/lib/types';
+
+// Display order for the by-type table: types with an observed outcome first,
+// then merely-asserted types, unclassified last.
+const EVIDENCE_TYPE_ORDER: EvidenceType[] = [
+  'experiment', 'statistics', 'survey', 'projection', 'announcement', 'analysis', 'other',
+];
 
 // Presentational render of a thesis pack's computed stats (and, when present, the
 // since-last-run delta). Pure server-side markup, no client JS; used by both the
@@ -41,6 +47,7 @@ export default function ThesisStatsView({ stats, delta }: { stats: ThesisStats; 
     <div className="flex flex-col gap-3">
       <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>
         <Tile label="Matched" value={`${s.matched} / ${s.scanned}`} />
+        {s.peripheral > 0 && <Tile label="Off-thesis" value={String(s.peripheral)} color="var(--faint-ink)" />}
         {STANCE_META.map((m) => (
           <Tile key={m.key} label={m.label} value={String(s.stances[m.key])} color={m.color} />
         ))}
@@ -55,6 +62,39 @@ export default function ThesisStatsView({ stats, delta }: { stats: ThesisStats; 
       )}
 
       <p style={{ margin: 0, fontSize: 13, color: 'var(--dim)', lineHeight: 1.55 }}>{s.corpusNote}</p>
+
+      {s.matched > 0 && (
+        <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)' }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+            <thead>
+              <tr style={{ color: 'var(--faint-ink)', textAlign: 'left' }}>
+                <th style={{ fontWeight: 400, padding: '2px 8px 2px 0' }}>Evidence type</th>
+                <th style={{ fontWeight: 400, padding: '2px 8px', textAlign: 'right' }}>Total</th>
+                <th style={{ fontWeight: 400, padding: '2px 8px', textAlign: 'right' }}>Supports</th>
+                <th style={{ fontWeight: 400, padding: '2px 0 2px 8px', textAlign: 'right' }}>Contradicts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...EVIDENCE_TYPE_ORDER, 'unclassified' as const]
+                .filter((t) => s.byType[t].total > 0)
+                .map((t) => (
+                  <tr key={t} style={{ borderTop: '1px solid var(--line)' }}>
+                    <td style={{ padding: '2px 8px 2px 0', color: 'var(--ink)' }}>
+                      {t === 'unclassified' ? 'Unclassified' : EVIDENCE_TYPE_LABEL[t]}
+                    </td>
+                    <td style={{ padding: '2px 8px', textAlign: 'right' }}>{s.byType[t].total}</td>
+                    <td style={{ padding: '2px 8px', textAlign: 'right', color: 'var(--color-supports)' }}>{s.byType[t].supports}</td>
+                    <td style={{ padding: '2px 0 2px 8px', textAlign: 'right', color: 'var(--color-contradicts)' }}>{s.byType[t].contradicts}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 6, color: 'var(--faint-ink)' }}>
+            Measured (experiments, statistics, surveys): {s.measured.supports} supporting, {s.measured.contradicts} contradicting.{' '}
+            Asserted (projections, announcements, analysis, other): {s.asserted.supports} supporting, {s.asserted.contradicts} contradicting.
+          </div>
+        </div>
+      )}
 
       {s.lenses.length > 0 && (
         <div className="flex flex-wrap gap-2" style={{ fontSize: 12 }}>
@@ -81,6 +121,16 @@ export default function ThesisStatsView({ stats, delta }: { stats: ThesisStats; 
               {r.bucket} · <span style={{ color: r.n ? 'var(--ink)' : 'var(--faint-ink)' }}>{r.n}</span>
             </span>
           ))}
+        </div>
+      )}
+
+      {s.recencyShare.some((r) => r.share !== null) && (
+        <div style={{ fontSize: 11, color: 'var(--faint-ink)' }}>
+          Share of that quarter&apos;s published signals: {' '}
+          {s.recencyShare
+            .map((r) => `${r.bucket} ${r.share === null ? '–' : `${Math.round(r.share * 100)}%`}`)
+            .join(' · ')}
+          {' '}(the counts above follow how much the Atlas published that quarter, not just this thesis).
         </div>
       )}
 

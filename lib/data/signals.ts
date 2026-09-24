@@ -22,7 +22,7 @@ interface SignalQuery {
 // `s.lenses::text[]` — node-pg has no parser for the custom signal_lens_t[] OID, so we
 // cast to text[] (a well-known OID) to guarantee a JS string[] reaches the app.
 export const SIGNAL_COLUMNS = `
-  s.id, s.title, s.summary, s.significance,
+  s.id, s.title, s.summary, s.significance, s.evidence_type,
   s.lenses::text[] as lenses, s.claim_touches,
   s.source_id, s.published_at, s.is_published, s.archived_at, s.origin, s.created_at, s.updated_at,
   src.title as source_title, src.url as source_url`;

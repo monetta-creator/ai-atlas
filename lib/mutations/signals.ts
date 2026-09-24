@@ -1,7 +1,7 @@
 import { q, one, exec, withTx } from '../db';
 import type { PoolClient } from 'pg';
 import type {
-  Direction, Significance, SignalLens,
+  Direction, EvidenceType, Significance, SignalLens,
   SignalOrigin, DedupeRecommendation,
   } from '../types';
 
@@ -13,6 +13,8 @@ interface SignalInput {
   title: string;
   summary?: string | null;
   significance: Significance;
+  // What KIND of evidence this is, not what it is about (migration 0065). Nullable.
+  evidence_type?: EvidenceType | null;
   lenses: SignalLens[];
   claim_touches: string[];
   // Per-touch {direction, reason} keyed by code; the source of truth for the evidence
@@ -89,15 +91,16 @@ async function insertSignalRow(
   const row = (
     await c.query(
       `insert into signals
-         (title, summary, significance, lenses, claim_touches, touch_details, source_id, published_at, is_published, origin, drafted_by,
+         (title, summary, significance, evidence_type, lenses, claim_touches, touch_details, source_id, published_at, is_published, origin, drafted_by,
           first_published_at)
-       values ($1, $2, $3, $4::signal_lens_t[], $5::text[], $6::jsonb, $7, coalesce($8::timestamptz, now()), $9, $10, $11,
-               case when $9 then now() end)
+       values ($1, $2, $3, $4, $5::signal_lens_t[], $6::text[], $7::jsonb, $8, coalesce($9::timestamptz, now()), $10, $11, $12,
+               case when $10 then now() end)
        returning id`,
       [
         input.title,
         input.summary || null,
         input.significance,
+        input.evidence_type || null,
         input.lenses,
         input.claim_touches,
         JSON.stringify(input.touch_details ?? {}),
@@ -205,15 +208,16 @@ export async function updateSignal(id: string, input: SignalInput): Promise<void
   await withTx(async (c) => {
     await c.query(
       `update signals set
-         title = $1, summary = $2, significance = $3,
-         lenses = $4::signal_lens_t[], claim_touches = $5::text[], touch_details = $6::jsonb,
-         source_id = $7, published_at = coalesce($8::timestamptz, published_at),
+         title = $1, summary = $2, significance = $3, evidence_type = $4,
+         lenses = $5::signal_lens_t[], claim_touches = $6::text[], touch_details = $7::jsonb,
+         source_id = $8, published_at = coalesce($9::timestamptz, published_at),
          updated_at = now()
-       where id = $9`,
+       where id = $10`,
       [
         input.title,
         input.summary || null,
         input.significance,
+        input.evidence_type || null,
         input.lenses,
         input.claim_touches,
         JSON.stringify(input.touch_details ?? {}),
