@@ -249,6 +249,21 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
     ],
   },
+  '/about/retrieval': {
+    title: 'About: How Ask finds things',
+    summary:
+      'What happens between a question and its answer: a word search and a meaning search over the records, merged and budgeted, a lane decision, and a citation check. Plain version first, technical version underneath.',
+    sections: [
+      {
+        heading: 'Two searches, one merge',
+        body: 'Postgres full-text search finds exact words, codes and tickers; pgvector embeddings (text-embedding-3-small, 33,815 chunks over 10,922 records) find meaning. Reciprocal rank fusion merges them, with the top lexical hits guaranteed a place.',
+      },
+      {
+        heading: 'Measured, not assumed',
+        body: 'On a 40-question gold set the combined search found the right record in the top ten 86% of the time against 54% for words alone. The lane bars for similarity (0.55 / 0.45 / 0.42) come from that measurement and are re-set when the set grows.',
+      },
+    ],
+  },
   '/about/why-bespoke': {
     title: 'About: Why bespoke',
     summary:

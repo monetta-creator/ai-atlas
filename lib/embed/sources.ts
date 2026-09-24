@@ -41,7 +41,7 @@ const j = (...xs: (string | null | undefined)[]): string => xs.filter((x) => !!x
 const stripHtml = (s: string | null | undefined): string | null =>
   s ? s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : null;
 
-export async function embeddableSignals(q: Q): Promise<EmbeddableRecord[]> {
+export async function embeddableSignals(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{
     id: string; title: string; summary: string | null;
     what_happened: string | null; why_it_matters: string | null; whats_contested: string | null;
@@ -52,7 +52,9 @@ export async function embeddableSignals(q: Q): Promise<EmbeddableRecord[]> {
             brief->>'why_it_matters' as why_it_matters,
             brief->>'whats_contested' as whats_contested,
             counterpoint->>'the_other_read' as counterpoint
-       from signals where is_published = true`
+       from signals where is_published = true
+       ${ids ? 'and id = any($1::uuid[])' : ''}`,
+    ids ? [ids] : []
   );
   return rows.map((r) => ({
     record_id: r.id,
@@ -61,39 +63,47 @@ export async function embeddableSignals(q: Q): Promise<EmbeddableRecord[]> {
   }));
 }
 
-export async function embeddableCandidates(q: Q): Promise<EmbeddableRecord[]> {
+export async function embeddableCandidates(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ id: string; title: string; raw_content: string | null }>(
     `select sc.id::text as id, g.title, sc.raw_content
        from signal_candidates sc
        join signals g on g.id = sc.signal_id and g.is_published = true
-      where sc.raw_content is not null`
+      where sc.raw_content is not null
+      ${ids ? 'and sc.id = any($1::uuid[])' : ''}`,
+    ids ? [ids] : []
   );
   return rows
     .filter((r) => (r.raw_content ?? '').trim())
     .map((r) => ({ record_id: r.id, title: r.title, text: r.raw_content ?? '' }));
 }
 
-export async function embeddableScanItems(q: Q): Promise<EmbeddableRecord[]> {
+export async function embeddableScanItems(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ id: string; headline: string | null; summary: string | null; raw_content: string | null }>(
-    `select id::text as id, headline, summary, raw_content from scan_items where raw_content is not null`
+    `select id::text as id, headline, summary, raw_content from scan_items
+      where raw_content is not null ${ids ? 'and id = any($1::uuid[])' : ''}`,
+    ids ? [ids] : []
   );
   return rows
     .filter((r) => (r.raw_content ?? '').trim())
     .map((r) => ({ record_id: r.id, title: r.headline ?? 'Scan item', text: j(r.headline, r.summary, r.raw_content) }));
 }
 
-export async function embeddableIntelItems(q: Q): Promise<EmbeddableRecord[]> {
+export async function embeddableIntelItems(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ id: string; headline: string | null; summary: string | null; raw_content: string | null }>(
-    `select id::text as id, headline, summary, raw_content from intel_items where raw_content is not null`
+    `select id::text as id, headline, summary, raw_content from intel_items
+      where raw_content is not null ${ids ? 'and id = any($1::uuid[])' : ''}`,
+    ids ? [ids] : []
   );
   return rows
     .filter((r) => (r.raw_content ?? '').trim())
     .map((r) => ({ record_id: r.id, title: r.headline ?? 'Intel item', text: j(r.headline, r.summary, r.raw_content) }));
 }
 
-export async function embeddableIntelFacts(q: Q): Promise<EmbeddableRecord[]> {
+export async function embeddableIntelFacts(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ id: string; fact: string; value_text: string | null; dimension: string; company_slug: string }>(
-    `select id::text as id, fact, value_text, dimension, company_slug from intel_facts`
+    `select id::text as id, fact, value_text, dimension, company_slug from intel_facts
+      ${ids ? 'where id = any($1::uuid[])' : ''}`,
+    ids ? [ids] : []
   );
   return rows.map((r) => ({
     record_id: r.id,
@@ -102,10 +112,12 @@ export async function embeddableIntelFacts(q: Q): Promise<EmbeddableRecord[]> {
   }));
 }
 
-export async function embeddablePapers(q: Q): Promise<EmbeddableRecord[]> {
+export async function embeddablePapers(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ id: string; title: string; abstract: string | null; extraction: Record<string, unknown> | null }>(
     `select id::text as id, title, abstract, extraction
-       from papers where triage_status = 'kept' and review_status <> 'dismissed'`
+       from papers where triage_status = 'kept' and review_status <> 'dismissed'
+       ${ids ? 'and id = any($1::uuid[])' : ''}`,
+    ids ? [ids] : []
   );
   return rows.map((r) => {
     const ex = r.extraction ?? {};
@@ -122,53 +134,88 @@ export async function embeddablePapers(q: Q): Promise<EmbeddableRecord[]> {
   });
 }
 
-export async function embeddableClaims(q: Q): Promise<EmbeddableRecord[]> {
+export async function embeddableClaims(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ code: string; statement: string; test: string | null }>(
-    `select code, statement, test from claims where code is not null and is_frame = false`
+    `select code, statement, test from claims where code is not null and is_frame = false
+     ${ids ? 'and code = any($1::text[])' : ''}`,
+    ids ? [ids] : []
   );
   return rows.map((r) => ({ record_id: r.code, title: r.code, text: j(r.statement, r.test) }));
 }
 
-export async function embeddableBridges(q: Q): Promise<EmbeddableRecord[]> {
+export async function embeddableBridges(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ code: string; statement: string; test: string | null }>(
-    `select code, statement, test from bridge_claims where code is not null`
+    `select code, statement, test from bridge_claims where code is not null
+     ${ids ? 'and code = any($1::text[])' : ''}`,
+    ids ? [ids] : []
   );
   return rows.map((r) => ({ record_id: r.code, title: r.code, text: j(r.statement, r.test) }));
 }
 
-export async function embeddableStances(q: Q): Promise<EmbeddableRecord[]> {
+export async function embeddableStances(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ code: string; title: string; summary: string | null; test: string | null }>(
-    `select code, title, summary, test from stances where code is not null`
+    `select code, title, summary, test from stances where code is not null
+     ${ids ? 'and code = any($1::text[])' : ''}`,
+    ids ? [ids] : []
   );
   return rows.map((r) => ({ record_id: r.code, title: r.title, text: j(r.title, r.summary, r.test) }));
 }
 
-export async function embeddableConcepts(q: Q): Promise<EmbeddableRecord[]> {
+export async function embeddableConcepts(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ slug: string; name: string; short_definition: string; explanation: string | null }>(
-    `select slug, name, short_definition, explanation from concepts`
+    `select slug, name, short_definition, explanation from concepts
+     ${ids ? 'where slug = any($1::text[])' : ''}`,
+    ids ? [ids] : []
   );
   return rows.map((r) => ({ record_id: r.slug, title: r.name, text: j(r.short_definition, r.explanation) }));
 }
 
-export async function embeddableThreads(q: Q): Promise<EmbeddableRecord[]> {
+export async function embeddableThreads(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ slug: string; title: string; question: string; synthesis: string | null }>(
-    `select slug, title, question, synthesis from research_threads`
+    `select slug, title, question, synthesis from research_threads
+     ${ids ? 'where slug = any($1::text[])' : ''}`,
+    ids ? [ids] : []
   );
   return rows.map((r) => ({ record_id: r.slug, title: r.title, text: j(r.question, stripHtml(r.synthesis)) }));
 }
 
-export async function getEmbeddable(kind: EmbedKind, q: Q): Promise<EmbeddableRecord[]> {
+export async function getEmbeddable(kind: EmbedKind, q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   switch (kind) {
-    case 'signal': return embeddableSignals(q);
-    case 'candidate': return embeddableCandidates(q);
-    case 'scan_item': return embeddableScanItems(q);
-    case 'intel_item': return embeddableIntelItems(q);
-    case 'intel_fact': return embeddableIntelFacts(q);
-    case 'paper': return embeddablePapers(q);
-    case 'claim': return embeddableClaims(q);
-    case 'bridge': return embeddableBridges(q);
-    case 'stance': return embeddableStances(q);
-    case 'concept': return embeddableConcepts(q);
-    case 'thread': return embeddableThreads(q);
+    case 'signal': return embeddableSignals(q, ids);
+    case 'candidate': return embeddableCandidates(q, ids);
+    case 'scan_item': return embeddableScanItems(q, ids);
+    case 'intel_item': return embeddableIntelItems(q, ids);
+    case 'intel_fact': return embeddableIntelFacts(q, ids);
+    case 'paper': return embeddablePapers(q, ids);
+    case 'claim': return embeddableClaims(q, ids);
+    case 'bridge': return embeddableBridges(q, ids);
+    case 'stance': return embeddableStances(q, ids);
+    case 'concept': return embeddableConcepts(q, ids);
+    case 'thread': return embeddableThreads(q, ids);
   }
+}
+
+// Per-kind count of records satisfying the kind's predicate above but with
+// no embeddings row for the given model yet (embeddings.missing agent
+// check). Full-table diff, not a hook-time check: cheap enough at Atlas
+// scale (a few thousand rows per kind) for an hourly cron, and keeps the
+// "what counts as embeddable" logic in exactly the predicates above rather
+// than re-derived in SQL.
+export async function countMissingEmbeddings(q: Q, model: string): Promise<Record<EmbedKind, number>> {
+  const out = {} as Record<EmbedKind, number>;
+  for (const kind of EMBED_KINDS) {
+    const records = await getEmbeddable(kind, q);
+    if (!records.length) {
+      out[kind] = 0;
+      continue;
+    }
+    const ids = records.map((r) => r.record_id);
+    const existing = await q<{ record_id: string }>(
+      `select distinct record_id from embeddings where kind = $1 and model = $2 and record_id = any($3::text[])`,
+      [kind, model, ids]
+    );
+    const have = new Set(existing.map((e) => e.record_id));
+    out[kind] = ids.filter((id) => !have.has(id)).length;
+  }
+  return out;
 }

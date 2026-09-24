@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 const { chunkRecord, hashText, CHUNK_TOKENS, OVERLAP_TOKENS, MAX_CHUNKS } = await import('../lib/embed/chunk.ts');
 const { reciprocalRankFusion, fuseOrder, RRF_K } = await import('../lib/ask/fusion.ts');
+const { embedBudgetAllows } = await import('../lib/embed/budget.ts');
 
 let failures = 0;
 const check = (name, fn) => {
@@ -112,6 +113,51 @@ check('fuseOrder: default k matches RRF_K', () => {
 check('fuseOrder: empty input produces an empty order', () => {
   assert.deepEqual(fuseOrder([]), []);
   assert.deepEqual(fuseOrder([[], []]), []);
+});
+
+// ---- FTS top-3 guard (2026-09-24, the p05 regression) ----------------------------
+
+check('fuseOrder: an FTS top-3 key that plain RRF drops out of the top 10 is pulled up to position 8-10', () => {
+  // 11 "double-list" keys each rank near the top of BOTH lists, so each
+  // scores roughly 1/62 + 1/61 or better; 'target' appears only once, at
+  // rank 1 of the FTS list, scoring 1/61 alone, so plain RRF ranks it last
+  // (12th) behind all 11 doubles. It is still the FTS list's #1 hit.
+  const others = Array.from({ length: 11 }, (_, i) => `o${i + 1}`);
+  const ftsOrder = ['target', ...others];
+  const vecOrder = [...others];
+  const order = fuseOrder([ftsOrder, vecOrder]);
+  const idx = order.indexOf('target');
+  assert.ok(idx >= 7 && idx <= 9, `expected 'target' at 0-indexed 7-9 (positions 8-10), got ${idx}`);
+});
+
+check('fuseOrder: an FTS top-3 key already inside the fused top 10 keeps its natural (higher) rank', () => {
+  // Small lists where everything fits inside 10 anyway: the guard must be a
+  // no-op here, same order as plain reciprocalRankFusion sorting.
+  const ftsOrder = ['x', 'y', 'z'];
+  const vecOrder = ['y', 'x', 'w'];
+  const scores = reciprocalRankFusion([ftsOrder, vecOrder], 60);
+  const expected = [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  assert.deepEqual(fuseOrder([ftsOrder, vecOrder]), expected);
+});
+
+check('fuseOrder: an empty FTS list is a no-op for the guard', () => {
+  assert.deepEqual(fuseOrder([[], ['a', 'b']]), ['a', 'b']);
+});
+check('fuseOrder: a single-key FTS list guards only that one key', () => {
+  const order = fuseOrder([['a'], ['a', 'b']]);
+  assert.equal(order[0], 'a');
+});
+
+// ---- embedBudgetAllows (the incremental hooks' daily spend gate) ----------------
+
+check('embedBudgetAllows: allows spend strictly under the cap', () => {
+  assert.equal(embedBudgetAllows(0, 0.25), true);
+  assert.equal(embedBudgetAllows(0.24, 0.25), true);
+});
+
+check('embedBudgetAllows: refuses at or over the cap', () => {
+  assert.equal(embedBudgetAllows(0.25, 0.25), false);
+  assert.equal(embedBudgetAllows(0.5, 0.25), false);
 });
 
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) FAILED.`}`);

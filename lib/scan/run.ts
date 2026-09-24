@@ -22,6 +22,7 @@ import { lookbackDays, nextSearchTopic, withinWindow } from './core';
 import { resolveDateTokens, rotatedQueries, LOW_QUALITY_DOMAINS } from '../pipeline/config';
 import { fetchCandidateText, FetchFailure, domainOf } from '../pipeline/web';
 import { runPool } from '../pool';
+import { embedLater } from '../embed/hooks';
 import type { ScanProgress, ScanRun, ScanTopic } from '../types';
 
 // The scan's checkpointed step engine, shared by the cron route (270s budget)
@@ -407,8 +408,13 @@ async function runEnrichUnit(run: ScanRun, notes: string[], deadlineAt: number):
     Promise.all(Array.from({ length: VOTE_POOL }, voteWorker)),
   ]);
 
-  const enriched = enrichResult.results.filter((r) => r.status === 'fulfilled' && r.value === true).length;
-  if (enriched) await bumpScanRunCount(run.id, 'enriched_count', enriched);
+  const enrichedIds = enrichResult.results
+    .map((r, i) => (r.status === 'fulfilled' && r.value === true ? items[i].id : null))
+    .filter((id): id is string => id != null);
+  if (enrichedIds.length) {
+    await bumpScanRunCount(run.id, 'enriched_count', enrichedIds.length);
+    embedLater('scan_item', enrichedIds);
+  }
   if (votesSkipped) notes.push('relevance votes skipped: budget');
 }
 

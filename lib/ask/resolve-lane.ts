@@ -41,7 +41,7 @@ export async function resolveLane(
     classifyQuestion(latest, beatDescriptionFrom(ns), priorUserTurn(msgs), opts.classifyFeature, opts.classifyMetadata),
   ]);
   const lane = decideLane({
-    hitCount: ctx.hitCount, maxRank: ctx.maxRank, explicit: ctx.explicit,
+    hitCount: ctx.hitCount, maxRank: ctx.maxRank, maxSim: ctx.maxSim, explicit: ctx.explicit,
     beat: cls.beat, followUp: msgs.length > 1,
   });
   const autoWeb = cls.fresh && lane !== 'covered';

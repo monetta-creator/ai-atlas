@@ -135,6 +135,7 @@ export const NAV_ISLAND: NavGroup[] = [
       { href: '/about/limitations', label: 'Limitations', access: 'public' },
       { href: '/about/ingestion', label: 'Signal ingestion', access: 'public' },
       { href: '/about/data-handling', label: 'Data handling', access: 'public' },
+      { href: '/about/retrieval', label: 'How Ask finds things', access: 'public' },
       { href: '/about/why-bespoke', label: 'Why bespoke', access: 'public' },
       { href: '/about/architecture', label: 'Architecture', access: 'public', hidden: true },
     ],

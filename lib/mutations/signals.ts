@@ -4,6 +4,8 @@ import type {
   Direction, EvidenceType, Significance, SignalLens,
   SignalOrigin, DedupeRecommendation,
   } from '../types';
+import { embedLater } from '../embed/hooks';
+import { deleteEmbeddings } from '../embed';
 
 // ---- Signal Board ----------------------------------------------------------
 // Arrays are passed as JS arrays and cast to their Postgres types in SQL
@@ -127,6 +129,9 @@ export async function createSignal(
     // A signal created already-published materializes its evidence immediately.
     if (input.is_published) await syncSignalEvidence(c, id, true);
     return id;
+  }).then((id) => {
+    if (input.is_published) embedLater('signal', [id]);
+    return id;
   });
 }
 
@@ -168,6 +173,9 @@ export async function createDraftForCandidate(
         where id = $2`,
       [id, candidateId]
     );
+    return id;
+  }).then((id) => {
+    if (id) embedLater('candidate', [candidateId]);
     return id;
   });
 }
@@ -230,7 +238,7 @@ export async function updateSignal(id: string, input: SignalInput): Promise<void
     const pub = (await c.query(`select is_published from signals where id = $1`, [id]))
       .rows[0] as { is_published: boolean } | undefined;
     if (pub?.is_published) await syncSignalEvidence(c, id, true);
-  });
+  }).then(() => embedLater('signal', [id]));
 }
 
 // Visibility gate + the evidence commit: publishing materializes a signal's evidence
@@ -249,6 +257,8 @@ export async function setSignalPublished(id: string, published: boolean): Promis
     );
     await syncSignalEvidence(c, id, published);
   });
+  if (published) embedLater('signal', [id]);
+  else await deleteEmbeddings('signal', id);
 }
 
 // Archive / unarchive a DRAFT — set it aside (out of the active queue + dedupe) without
@@ -270,6 +280,7 @@ export async function setSignalArchived(id: string, archived: boolean, reason: s
 
 export async function deleteSignal(id: string): Promise<void> {
   await exec(`delete from signals where id = $1`, [id]);
+  await deleteEmbeddings('signal', id);
 }
 
 // ---- Backlog cuts (0055) ----------------------------------------------------
@@ -340,6 +351,7 @@ export async function publishDueDrafts(opts: {
     });
     if (ok) published.push(id);
   }
+  if (published.length) embedLater('signal', published);
   return published;
 }
 

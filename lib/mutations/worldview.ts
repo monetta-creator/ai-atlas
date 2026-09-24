@@ -1,4 +1,6 @@
 import { one, exec, withTx } from '../db';
+import { embedLater } from '../embed/hooks';
+import type { EmbedKind } from '../embed/sources';
 
 // ---- Cross-cutting positions (the worldview layer; personal, §3.3) ----
 // A position is a 1-2 sentence spanning view, linked to the stances/claims/bridges
@@ -80,6 +82,19 @@ export function isEditableDomainField(table: string, column: string): boolean {
   );
 }
 
+// The data editor's tables that also carry embeddable prose, keyed by code
+// (embed's record_id for these kinds, not the row's uuid) rather than id.
+const EMBED_KIND_BY_TABLE: Partial<Record<string, EmbedKind>> = {
+  claims: 'claim', bridge_claims: 'bridge', stances: 'stance',
+};
+
+async function embedDomainRecord(table: string, id: string): Promise<void> {
+  const kind = EMBED_KIND_BY_TABLE[table];
+  if (!kind) return;
+  const row = await one<{ code: string }>(`select code from ${table} where id = $1`, [id]);
+  if (row?.code) embedLater(kind, [row.code]);
+}
+
 export async function updateDomainField(
   table: string,
   id: string,
@@ -101,6 +116,7 @@ export async function updateDomainField(
       if (!row.is_frame && trimmed === '') throw new Error('A test is required for a non-frame claim.');
       await c.query(`update claims set test = $1 where id = $2`, [trimmed === '' ? null : trimmed, id]);
     });
+    await embedDomainRecord(table, id);
     return;
   }
 
@@ -108,4 +124,5 @@ export async function updateDomainField(
   const final = !spec.required && trimmed === '' ? null : trimmed; // nullable empties become NULL
   // table and column are registry-validated literals; value and id are parameterized.
   await exec(`update ${table} set ${column} = $1 where id = $2`, [final, id]);
+  await embedDomainRecord(table, id);
 }

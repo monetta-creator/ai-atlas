@@ -11,6 +11,7 @@ import {
   createDayResearchRun, claimResearchRun, renewResearchLease, releaseResearchLease,
   appendResearchRunNotes, updateResearchRun, pruneRejectedPapers, failStaleResearchRuns,
 } from '../mutations/research';
+import { embedLater } from '../embed/hooks';
 import type { ResearchEngineRun, ResearchProgress } from '../types';
 
 // The research library's checkpointed step engine (the intel/scan engine
@@ -256,16 +257,19 @@ export async function advanceResearchRun(runId: string, deadlineAt: number): Pro
       const results = await Promise.allSettled(
         candidates.map((c) => hydratePaper(c.id).then(() => analyzePaper(c.id)))
       );
+      const analyzedIds: string[] = [];
       for (let i = 0; i < results.length; i++) {
         const r = results[i];
         if (r.status === 'fulfilled') {
           analyzed++;
+          analyzedIds.push(candidates[i].id);
         } else {
           analyzeFailures++;
           analyzeFailedIds.push(candidates[i].id);
           notes.push(`analyze failed (paper ${candidates[i].id}): ${String((r.reason as Error)?.message ?? 'error').slice(0, 160)}`);
         }
       }
+      if (analyzedIds.length) embedLater('paper', analyzedIds);
     }
     const run = await getResearchRun(runId);
     if (!run) throw new Error('research run not found');

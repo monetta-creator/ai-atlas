@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 const {
   decideLane, splitBeyond, composeDecline, encodeDecline, extractDecline,
   laneAddendum, priorUserTurn, BEYOND_MARKER, DECLINE_MARKER, LANE_LABEL, ASK_PERSONA, SCOPE_WITH_BEYOND,
-  STRONG_RANK, MID_RANK, WEAK_RANK,
+  STRONG_RANK, MID_RANK, WEAK_RANK, STRONG_SIM, MID_SIM, WEAK_SIM,
   looksFresh, cleanTopic, parseLane, beatDescriptionFrom, questionLinksFrom,
 } = await import('../lib/ask/lanes.ts');
 
@@ -25,7 +25,7 @@ const check = (name, fn) => {
   }
 };
 
-const sig = (over) => ({ hitCount: 0, maxRank: 0, explicit: false, beat: 'atlas', followUp: false, ...over });
+const sig = (over) => ({ hitCount: 0, maxRank: 0, maxSim: 0, explicit: false, beat: 'atlas', followUp: false, ...over });
 
 // ---- decideLane ---------------------------------------------------------------
 check('decideLane: explicit code match is always covered', () =>
@@ -54,6 +54,33 @@ check('decideLane: weak hits (some, but under the strong bar) is thin', () => {
   assert.equal(decideLane(sig({ hitCount: 24, maxRank: 0.015, beat: 'unrelated' })), 'unrelated');
   assert.equal(decideLane(sig({ hitCount: 24, maxRank: 0.015, beat: 'adjacent' })), 'adjacent');
 });
+
+// ---- maxSim bars (2026-09-24 gold-set measurement) -----------------------------
+check('decideLane: a paraphrase with low rank but strong sim and atlas beat is covered', () =>
+  assert.equal(decideLane(sig({ hitCount: 1, maxRank: 0.01, maxSim: 0.6, beat: 'atlas' })), 'covered'));
+check('decideLane: strong sim alone covers whatever the beat, mirroring STRONG_RANK', () =>
+  assert.equal(decideLane(sig({ hitCount: 0, maxRank: 0, maxSim: STRONG_SIM, beat: 'unrelated', followUp: false })), 'covered'));
+check('decideLane: sim alone at MID_SIM with atlas beat covers, mirroring MID_RANK', () =>
+  assert.equal(decideLane(sig({ hitCount: 0, maxRank: 0, maxSim: 0.5, beat: 'atlas' })), 'covered'));
+check('decideLane: MID_SIM off the atlas beat does not cover on sim alone', () =>
+  assert.equal(decideLane(sig({ hitCount: 0, maxRank: 0, maxSim: 0.5, beat: 'adjacent' })), 'adjacent'));
+// On the opening turn the unrelated short-circuit's second branch checks
+// against STRONG_RANK/STRONG_SIM (not the WEAK floor), so only a sim at or
+// above STRONG_SIM escapes it on rank alone; below that, low rank + a
+// sub-STRONG sim still declines (this is intentional: an opening turn needs
+// a real signal, not just "above noise", to earn a hearing off the beat).
+check('decideLane: unrelated short-circuit needs BOTH floors on the opening turn (STRONG bar)', () => {
+  assert.equal(decideLane(sig({ hitCount: 0, maxRank: 0.01, maxSim: 0.45, beat: 'unrelated', followUp: false })), 'unrelated');
+  assert.equal(decideLane(sig({ hitCount: 0, maxRank: 0.01, maxSim: STRONG_SIM, beat: 'unrelated', followUp: false })), 'covered');
+});
+check('decideLane: rank clearing its own floor saves an unrelated-beat question from decline even with low sim', () =>
+  assert.equal(decideLane(sig({ hitCount: 20, maxRank: MID_RANK, maxSim: 0.1, beat: 'unrelated', followUp: true })), 'thin'));
+check('decideLane: unrelated needs both floors under (rank below MID, sim below WEAK) on a follow-up', () =>
+  assert.equal(decideLane(sig({ hitCount: 24, maxRank: 0.015, maxSim: 0.1, beat: 'unrelated', followUp: true })), 'unrelated'));
+check('decideLane: a follow-up with rank under its floor but sim clearing WEAK_SIM does not decline', () =>
+  assert.equal(decideLane(sig({ hitCount: 24, maxRank: 0.015, maxSim: WEAK_SIM, beat: 'unrelated', followUp: true })), 'adjacent'));
+check('decideLane: sim bars are ordered WEAK < MID < STRONG', () =>
+  assert.ok(WEAK_SIM < MID_SIM && MID_SIM < STRONG_SIM));
 
 check('decideLane: no hits + adjacent beat is adjacent', () =>
   assert.equal(decideLane(sig({ hitCount: 0, beat: 'adjacent' })), 'adjacent'));

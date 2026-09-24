@@ -296,10 +296,11 @@ export async function insertIntelFacts(rows: {
   value_text?: string | null;
   as_of?: string | null;
   item_id?: string | null;
-}[]): Promise<number> {
-  if (!rows.length) return 0;
+}[]): Promise<{ count: number; ids: string[] }> {
+  if (!rows.length) return { count: 0, ids: [] };
   return withTx(async (c) => {
     let inserted = 0;
+    const ids: string[] = [];
     const seenInBatch = new Set<string>();
     for (const r of rows) {
       const fact = sanitizeText(r.fact).trim();
@@ -310,7 +311,8 @@ export async function insertIntelFacts(rows: {
       const res = await c.query(
         `insert into intel_facts (company_slug, dimension, fact, value_text, as_of, item_id)
          values ($1, $2, $3, $4, $5::date, $6)
-         on conflict (company_slug, fact_key) do nothing`,
+         on conflict (company_slug, fact_key) do nothing
+         returning id`,
         [
           r.company_slug, r.dimension, fact.slice(0, 500),
           r.value_text ? sanitizeText(r.value_text).slice(0, 300) : null,
@@ -318,8 +320,9 @@ export async function insertIntelFacts(rows: {
         ]
       );
       inserted += res.rowCount ?? 0;
+      if (res.rows[0]) ids.push((res.rows[0] as { id: string }).id);
     }
-    return inserted;
+    return { count: inserted, ids };
   });
 }
 

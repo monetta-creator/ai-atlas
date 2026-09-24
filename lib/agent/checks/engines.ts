@@ -1,4 +1,4 @@
-import { one } from '../../db';
+import { one, q as dbQuery } from '../../db';
 import {
   getDailyJobStatus, getScanHealth, getIntelHealth, getResearchHealth, getToolingHealth,
   getTavilyQuota, getTextCoverage, getZeroYieldDomains, getRoundupForWeek, getToolingReportForWeek,
@@ -9,6 +9,8 @@ import { checkPipelineBudget } from '../../pipeline/budget';
 import { checkScanBudget } from '../../scan/budget';
 import { checkIntelBudget } from '../../intel/budget';
 import { checkResearchBudget } from '../../research/budget';
+import { countMissingEmbeddings } from '../../embed/sources';
+import { embedModel } from '../../embed/client';
 import { remedyRef } from '../remedies';
 import { daysSince, mondayUtc, lastFridayUtc } from '../time';
 import { JOB_KEYS, type AgentCheck, type FindingInput, type JobKey, type Severity } from '../types';
@@ -300,6 +302,34 @@ const notesErrors: AgentCheck = {
   },
 };
 
+// embeddings.missing: the hybrid-retrieval hooks (lib/embed/hooks.ts) are
+// fire-and-forget and can miss a record (budget skip, transient failure);
+// this is the backstop, counting per kind how many embeddable records have
+// no embeddings row for the CURRENT model yet. info under 50, warn past 200
+// (a nightly hook miss is normal noise; a few hundred means the hooks
+// stopped firing or the budget has been capped for days).
+const embeddingsMissing: AgentCheck = {
+  key: 'embeddings.missing',
+  title: 'Missing embeddings',
+  domain: 'engines',
+  run: async () => {
+    const model = embedModel();
+    const missing = await countMissingEmbeddings(dbQuery, model);
+    const total = Object.values(missing).reduce((sum, n) => sum + n, 0);
+    if (total === 0) return [];
+    const severity: Severity = total >= 200 ? 'warn' : 'info';
+    const byKind = Object.entries(missing).filter(([, n]) => n > 0)
+      .map(([kind, n]) => `${kind} ${n}`).join(', ');
+    return [{
+      key: 'embeddings.missing', checkKey: 'embeddings.missing', severity,
+      title: `${total} record(s) missing embeddings`,
+      detail: `${total} embeddable record(s) have no ${model} embedding yet: ${byKind}. The incremental hooks are fire-and-forget and can miss a record; the backfill remedy catches up.`,
+      metric: { total, ...missing }, href: '/ask',
+      remedy: remedyRef('embeddings.backfill', 'Backfill missing embeddings'),
+    }];
+  },
+};
+
 export const ENGINE_CHECKS: AgentCheck[] = [
   engineDailyStatus,
   engineMissedDays,
@@ -312,4 +342,5 @@ export const ENGINE_CHECKS: AgentCheck[] = [
   reportsEntrantsMissing,
   reportsIntelDeckMissing,
   notesErrors,
+  embeddingsMissing,
 ];

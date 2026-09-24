@@ -27,6 +27,7 @@ export const DECLINE_MARKER = '@@ASK_DECLINE@@';
 export interface LaneSignals {
   hitCount: number;      // retrieval blocks that matched
   maxRank: number;       // best ts_rank across the FTS legs, 0 when none
+  maxSim: number;        // best cosine similarity across the vector leg, 0 when unavailable
   explicit: boolean;     // the question named a claim code, concept or question slug
   beat: Beat;            // the classifier's read of the subject
   followUp: boolean;     // not the conversation's first turn (the classifier saw the prior turn)
@@ -53,6 +54,20 @@ export const STRONG_RANK = 0.06;
 export const MID_RANK = 0.03;
 export const WEAK_RANK = 0.02;
 
+// Sim bars on the vector leg's cosine similarity (migration 0066), measured
+// 2026-09-24 on the 40-question gold set (private/ask-gold/last-run.md):
+// covered questions' maxSim ranged 0.465-0.869 (mean 0.666), thin/adjacent
+// 0-0.798 (mean 0.539), unrelated topped out at 0.368 (n = 40, provisional;
+// re-measure as the gold set grows). STRONG_SIM covers on its own, whatever
+// the beat, mirroring STRONG_RANK; MID_SIM covers only with the classifier's
+// atlas beat, mirroring MID_RANK; WEAK_SIM is the unrelated-shortcircuit
+// floor, mirroring WEAK_RANK, but reused for both the follow-up and opening-
+// turn unrelated checks below (the rank floor already varies by follow-up;
+// the sim floor does not, since the 2026-09-24 run has no follow-up sim data).
+export const STRONG_SIM = 0.55;
+export const MID_SIM = 0.45;
+export const WEAK_SIM = 0.42;
+
 export function decideLane(s: LaneSignals): Lane {
   if (s.explicit) return 'covered';
   // Off the beat with only noise-level matches declines, first turn or not:
@@ -60,11 +75,13 @@ export function decideLane(s: LaneSignals): Lane {
   // follow-up that continues the thread does not land here. On a follow-up
   // the retrieval also carries the earlier turns' records (pasta ranked 0.025
   // after an export-controls question, 0.015 alone), so the noise floor rises
-  // to the MID bar there.
-  if (s.beat === 'unrelated' && s.maxRank < (s.followUp ? MID_RANK : WEAK_RANK)) return 'unrelated';
-  if (s.beat === 'unrelated' && !s.followUp && s.maxRank < STRONG_RANK) return 'unrelated';
-  if (s.maxRank >= STRONG_RANK) return 'covered';
-  if (s.beat === 'atlas' && s.maxRank >= MID_RANK) return 'covered';
+  // to the MID bar there. Since sim now also feeds the decision, the
+  // short-circuit requires BOTH signals to sit under their floor: a lexical
+  // near-miss that the vector leg still recognizes should not decline.
+  if (s.beat === 'unrelated' && s.maxRank < (s.followUp ? MID_RANK : WEAK_RANK) && s.maxSim < WEAK_SIM) return 'unrelated';
+  if (s.beat === 'unrelated' && !s.followUp && s.maxRank < STRONG_RANK && s.maxSim < STRONG_SIM) return 'unrelated';
+  if (s.maxRank >= STRONG_RANK || s.maxSim >= STRONG_SIM) return 'covered';
+  if (s.beat === 'atlas' && (s.maxRank >= MID_RANK || s.maxSim >= MID_SIM)) return 'covered';
   if (s.hitCount >= 1 && s.maxRank >= WEAK_RANK) return 'thin';
   return 'adjacent';
 }

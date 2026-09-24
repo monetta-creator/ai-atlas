@@ -69,6 +69,13 @@ export interface AskContext extends AskNamespace {
   // "scan:<uuid>" or "intel:<uuid>" prefix (scan_items and intel_items share
   // the I prefix but resolve to different datasets); a fact's id is a bare uuid.
   signalRefs: { tag: string; id: string }[];
+  // Every primary record actually retrieved (explicit, FTS, or vector legs),
+  // in final ranked order, one entry per distinct record (evidence/article/
+  // concept-link blocks excluded, since those are supporting text, not a
+  // citable record). Added for scripts/ab-retrieval-run.mts (the hybrid-
+  // retrieval plan's measurement step): recall@10 needs the ranked hit list
+  // straight from retrieval, not a re-parse of the rendered detail text.
+  retrievedKeys: { kind: string; key: string }[];
 }
 
 const MAX_DETAIL = 11000; // char budget for the deep-detail blob
@@ -168,7 +175,7 @@ export async function getAskClientData(): Promise<ValidIdsPlain> {
 }
 
 // ---------------------------------------------------------------- detail
-type Block = { key: string; text: string };
+type Block = { key: string; text: string; rank: number };
 
 // Detect citable codes/slugs literally present in the query, then trigram-correct
 // slug-shaped tokens that did not match exactly (e.g. "unit economics").
@@ -239,7 +246,7 @@ export async function buildAskContext(
   // loadNamespace's queries twice.
   const ns = opts.ns ?? await loadNamespace();
   const trimmed = query.trim();
-  if (!trimmed) return { ...ns, detail: '', hitCount: 0, maxRank: 0, maxSim: 0, explicit: false, signalRefs: [] };
+  if (!trimmed) return { ...ns, detail: '', hitCount: 0, maxRank: 0, maxSim: 0, explicit: false, signalRefs: [], retrievedKeys: [] };
 
   const seen = new Set<string>();
   const blocks: Block[] = [];
@@ -248,7 +255,7 @@ export async function buildAskContext(
     if (rank > maxRank) maxRank = rank;
     if (!text || seen.has(key)) return;
     seen.add(key);
-    blocks.push({ key, text });
+    blocks.push({ key, text, rank });
   };
   // Assign a stable per-request tag to each retrieved signal (S...) and paper
   // (P...) so the model can cite them and the client can resolve tags back to
@@ -508,26 +515,50 @@ export async function buildAskContext(
   // cosine query over every kind's chunks (joined back to the source tables
   // with the same guest-safety predicate each FTS leg above already applies),
   // reciprocal-rank-fused (k=60, lib/ask/fusion.ts) against the FTS blocks'
-  // own push order. Always run so maxSim can be measured (see AskContext);
-  // only used to REORDER/ADD context when ask_prefs.retrieval is 'hybrid'.
+  // own push order. maxSim is ALWAYS computed, explicit match or not (one
+  // cheap embedding + one index query), so it is populated in every path and
+  // can feed lib/ask/lanes.ts's decideLane (2026-09-24: it was silently 0 for
+  // every explicit question before this). The FUSION rule stays as it was:
+  // an explicit code/slug match keeps the sequential FTS/explicit-lookup
+  // order untouched (the "exact-term backstop" rule), never reordered by the
+  // vector leg. When budget remains, vector-only hits are still MATERIALIZED
+  // (pushed) after the explicit blocks for an explicit question, since a
+  // block only costs its render into the char budget and a relevant
+  // vector-only record is better included (at the tail) than dropped
+  // entirely; they are appended, never reordered ahead of an explicit hit.
   // Best-effort throughout: an embedding-API failure must never break Ask.
   let maxSim = 0;
   let fusedKeyOrder: string[] | null = null;
-  if (!explicit) {
-    try {
-      const [prefs, qvec] = await Promise.all([getAskPrefs(), embedQuery(trimmed)]);
-      if (qvec) {
-        const vecHits = await vectorSearch(qvec, mode === 'admin');
-        maxSim = vecHits[0]?.sim ?? 0;
-        if (prefs.retrieval === 'hybrid' && vecHits.length) {
+  try {
+    const [prefs, qvec] = await Promise.all([getAskPrefs(), embedQuery(trimmed)]);
+    // Measurement hook (scripts/ab-retrieval-run.mts): ASK_RETRIEVAL_OVERRIDE
+    // forces 'fts' or 'hybrid' for a call without writing ask_prefs, so the
+    // A/B script can flip modes per question without touching the DB.
+    const override = process.env.ASK_RETRIEVAL_OVERRIDE;
+    const retrievalMode = override === 'fts' || override === 'hybrid' ? override : prefs.retrieval;
+    if (qvec) {
+      const vecHits = await vectorSearch(qvec, mode === 'admin');
+      maxSim = vecHits[0]?.sim ?? 0;
+      if (retrievalMode === 'hybrid' && vecHits.length) {
+        if (!explicit) {
           const vecKeyOrder = await materializeVectorBlocks(vecHits, push, tagFor, ptagFor, itemTagFor, factTagFor);
-          const ftsKeyOrder = blocks.map((b) => b.key);
+          // Sorted by each block's own ts_rank, not push order: the fts*
+          // helpers push in rank order WITHIN one call (claims, then bridges,
+          // then stances, ...), but the FTS "order" the fusion guard needs to
+          // protect is the true cross-kind ranking, so a high-rank bridge
+          // pushed after a run of lower-rank claims still counts as an FTS
+          // top hit (the p05 fix: bridge B4 ranked 3rd by ts_rank but was
+          // pushed well past index 2 in call order).
+          const ftsKeyOrder = [...blocks].sort((a, b) => b.rank - a.rank).map((b) => b.key);
           fusedKeyOrder = fuseOrder([ftsKeyOrder, vecKeyOrder]);
+        } else {
+          // Explicit match: append vector-only material, no reordering.
+          await materializeVectorBlocks(vecHits, push, tagFor, ptagFor, itemTagFor, factTagFor);
         }
       }
-    } catch {
-      // vector leg is best-effort; fall through to FTS-only ordering below.
     }
+  } catch {
+    // vector leg is best-effort; fall through to FTS-only ordering below.
   }
 
   // 3) Assemble, bounded to the char budget. When the question named explicit
@@ -583,7 +614,44 @@ export async function buildAskContext(
   }
 
   const signalRefs = [...signalTags, ...paperTags, ...itemTags, ...factTags].map(([id, tag]) => ({ tag, id }));
-  return { ...ns, detail: detail.trim(), hitCount: blocks.length, maxRank, maxSim, explicit, signalRefs };
+
+  const retrievedKeys: { kind: string; key: string }[] = [];
+  const seenRecord = new Set<string>();
+  for (const b of ordered) {
+    const rec = keyToRecord(b.key);
+    if (!rec) continue;
+    const dk = `${rec.kind}:${rec.key}`;
+    if (seenRecord.has(dk)) continue;
+    seenRecord.add(dk);
+    retrievedKeys.push(rec);
+  }
+
+  return { ...ns, detail: detail.trim(), hitCount: blocks.length, maxRank, maxSim, explicit, signalRefs, retrievedKeys };
+}
+
+// Maps a push() block key to the primary record it represents, or null when
+// the block is supporting text (evidence excerpt, article excerpt, or a
+// concept-claim link line) rather than a citable record of its own. Kinds
+// mirror the gold set's vocabulary in private/ask-gold/questions.json.
+function keyToRecord(key: string): { kind: string; key: string } | null {
+  if (key.startsWith('ev:') || key.startsWith('art:') || key.startsWith('link:')) return null;
+  const parts = key.split(':');
+  switch (parts[0]) {
+    case 'claim': return { kind: 'claim', key: parts[1] };
+    case 'bridge': return { kind: 'bridge', key: parts[1] };
+    case 'stance': return { kind: 'stance', key: parts[1] };
+    case 'concept': return { kind: 'concept', key: parts[1] };
+    case 'thread': return { kind: 'thread', key: parts[1] };
+    case 'q': return { kind: 'question', key: parts[1] };
+    case 'sig': return { kind: 'signal', key: parts[1] };
+    case 'paper': return { kind: 'paper', key: parts[1] };
+    case 'fact': return { kind: 'intel_fact', key: parts[1] };
+    case 'item':
+      if (parts[1] === 'scan') return { kind: 'scan_item', key: parts[2] };
+      if (parts[1] === 'intel') return { kind: 'intel_item', key: parts[2] };
+      return null;
+    default: return null;
+  }
 }
 
 // ------------------------------------------------------------------ vector leg

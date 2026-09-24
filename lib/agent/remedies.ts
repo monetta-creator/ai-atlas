@@ -1,4 +1,4 @@
-import { one } from '../db';
+import { one, q } from '../db';
 import * as m from '../mutations';
 import {
   getPipelinePrefs, getDedupeScan,
@@ -30,6 +30,10 @@ import { validateGapRecommendations } from '../gaps-core';
 import { diagnoseConceptGaps } from '../concepts';
 import { recommendQueueChunk } from '../research/queue-agent';
 import { scoreScoutChunk } from '../scout/agent';
+import { countMissingEmbeddings, type EmbedKind } from '../embed/sources';
+import { embedModel } from '../embed/client';
+import { indexKind } from '../embed';
+import { checkEmbedBudget } from '../embed/hooks';
 import type { ArgumentGapScan, ConceptGapScan } from '../types';
 
 // ---- Hands: the remedy allow-list -------------------------------------------
@@ -201,6 +205,36 @@ export const REMEDIES: Record<string, Remedy> = {
       return {
         ok: true, result: { groups: value.groups.length, scanned: value.scanned, costUsd },
         summary: `Scanned ${value.scanned} drafts, found ${value.groups.length} duplicate group${value.groups.length === 1 ? '' : 's'}.`,
+      };
+    },
+  },
+
+  'embeddings.backfill': {
+    key: 'embeddings.backfill',
+    label: 'Backfill missing embeddings',
+    tier: 'auto', costsModel: true, reversible: true, createsRun: false,
+    run: async () => {
+      const model = embedModel();
+      const missing = await countMissingEmbeddings(q, model);
+      const kinds = (Object.entries(missing) as [EmbedKind, number][])
+        .filter(([, n]) => n > 0).map(([kind]) => kind);
+      if (!kinds.length) {
+        return { ok: true, result: { indexed: 0 }, summary: 'Nothing missing.' };
+      }
+      let indexed = 0;
+      let costUsd = 0;
+      for (const kind of kinds) {
+        const budget = await checkEmbedBudget();
+        if (!budget.ok) break; // daily embed budget spent; the rest waits for tomorrow
+        const { value, costUsd: c } = await measureCost(['embed_index'], () =>
+          indexKind(kind, { model, limit: 500 })
+        );
+        indexed += value.chunks;
+        costUsd += c;
+      }
+      return {
+        ok: true, result: { indexed, costUsd },
+        summary: `Embedded ${indexed} chunk${indexed === 1 ? '' : 's'} across ${kinds.length} kind${kinds.length === 1 ? '' : 's'}.`,
       };
     },
   },

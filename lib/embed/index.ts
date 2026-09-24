@@ -84,7 +84,11 @@ export async function deleteEmbeddings(kind: EmbedKind, recordId: string): Promi
 // does NOT use this (it cannot import lib/db's extensionless chain — see its
 // header note) and instead runs the same sources.ts assemblers over a raw pg
 // client.
-export async function indexKind(kind: EmbedKind, opts: { model?: string } = {}): Promise<UpsertResult> {
+export async function indexKind(
+  kind: EmbedKind,
+  opts: { model?: string; limit?: number } = {}
+): Promise<UpsertResult> {
   const records = await getEmbeddable(kind, q);
-  return upsertEmbeddings(kind, records, opts);
+  const capped = opts.limit ? records.slice(0, opts.limit) : records;
+  return upsertEmbeddings(kind, capped, opts);
 }

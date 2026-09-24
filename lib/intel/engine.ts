@@ -24,6 +24,7 @@ import { checkIntelBudget } from './budget';
 import { rateAndStampSources } from '../scan/source-rating';
 import { searchDueSlugs, nextUnsweptSlug, sweepUnit, unwrapNewsUrl } from './core';
 import { runPool } from '../pool';
+import { embedLater } from '../embed/hooks';
 import type { IntelCompany, IntelProgress, IntelRun } from '../types';
 
 // The intel desk's checkpointed step engine (the scan engine pattern), shared
@@ -404,6 +405,7 @@ async function runEnrichUnit(run: IntelRun, notes: string[], deadlineAt: number)
   const items = await getPendingIntelEnrichItems(run.id, ENRICH_PAGE);
   if (!items.length) return;
   let factsWritten = 0;
+  const factIds: string[] = [];
 
   const { results } = await runPool(
     items,
@@ -423,7 +425,9 @@ async function runEnrichUnit(run: IntelRun, notes: string[], deadlineAt: number)
           enrichedBy: m ?? 'claude-haiku-4-5',
         });
         if (e.facts.length) {
-          factsWritten += await insertIntelFacts(e.facts.map((f) => ({ ...f, item_id: item.id })));
+          const written = await insertIntelFacts(e.facts.map((f) => ({ ...f, item_id: item.id })));
+          factsWritten += written.count;
+          factIds.push(...written.ids);
         }
       };
       try {
@@ -445,7 +449,13 @@ async function runEnrichUnit(run: IntelRun, notes: string[], deadlineAt: number)
     () => Date.now() < deadlineAt
   );
 
-  const enriched = results.filter((r) => r.status === 'fulfilled' && r.value === true).length;
-  if (enriched) await bumpIntelRunCount(run.id, 'enriched_count', enriched);
+  const enrichedIds = results
+    .map((r, i) => (r.status === 'fulfilled' && r.value === true ? items[i].id : null))
+    .filter((id): id is string => id != null);
+  if (enrichedIds.length) {
+    await bumpIntelRunCount(run.id, 'enriched_count', enrichedIds.length);
+    embedLater('intel_item', enrichedIds);
+  }
   if (factsWritten) await bumpIntelRunCount(run.id, 'fact_count', factsWritten);
+  if (factIds.length) embedLater('intel_fact', factIds);
 }

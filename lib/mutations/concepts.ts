@@ -3,6 +3,7 @@ import type { PoolClient } from 'pg';
 import type {
   ConceptGapScan, Domain, Resolvability, Relation, ArgumentGapScan,
   } from '../types';
+import { embedLater } from '../embed/hooks';
 
 // ---- Concepts (the semantic scaffold; migration 0017) -----------------------
 // The AI only ever recommends prerequisite edges and claim links back to the
@@ -86,6 +87,9 @@ export async function createConcept(input: ConceptWrite): Promise<string> {
     await assertConceptAcyclic(c, row.id, input.prerequisite_ids);
     await writeConceptLinks(c, row.id, input);
     return row.id;
+  }).then((id) => {
+    embedLater('concept', [input.slug]);
+    return id;
   });
 }
 
@@ -100,6 +104,7 @@ export async function updateConcept(id: string, input: ConceptWrite): Promise<vo
     await assertConceptAcyclic(c, id, input.prerequisite_ids);
     await writeConceptLinks(c, id, input);
   });
+  embedLater('concept', [input.slug]);
 }
 
 // Edges and claim links cascade with the row.
@@ -189,6 +194,9 @@ export async function createClaimWithEdges(input: CreateClaimInput): Promise<{ i
       );
     }
     return row;
+  }).then((row) => {
+    embedLater('claim', [row.code]);
+    return row;
   });
 }
 
@@ -229,6 +237,9 @@ export async function createBridgeWithEdges(input: CreateBridgeInput): Promise<{
         [fromId, row.id, f.relation]
       );
     }
+    return row;
+  }).then((row) => {
+    embedLater('bridge', [row.code]);
     return row;
   });
 }
