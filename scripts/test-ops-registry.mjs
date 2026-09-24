@@ -92,12 +92,20 @@ check('parseCron reads a Monday-only cron ("0 7 * * 1")', () => {
   assert.deepEqual(p.dows, [1]);
 });
 
-check('parseCron reads an every-day cron ("45 * * * *")', () => {
-  // vercel.json's hourly agent tick has a "*" hour field, which this
-  // registry does not need to resolve to a single fire; only the minute and
-  // dow fields are consulted for a schedule like this one.
-  const p = parseCron('45 12 * * *');
+check('parseCron: an hourly cron ("45 * * * *") parses with hour "every"', () => {
+  const p = parseCron('45 * * * *');
+  assert.equal(p.hour, 'every');
+  assert.equal(p.minute, 45);
   assert.equal(p.dows, '*');
+});
+
+check('nextFire: hourly cron fires at the next :45 (the agent tick took /ops down with an Invalid Date)', () => {
+  const now = new Date('2026-09-24T14:50:00Z');
+  assert.equal(nextFire('45 * * * *', now).toISOString(), '2026-09-24T15:45:00.000Z');
+  const before = new Date('2026-09-24T14:10:00Z');
+  assert.equal(nextFire('45 * * * *', before).toISOString(), '2026-09-24T14:45:00.000Z');
+  assert.equal(todaysFires(['45 * * * *'], now).length, 24);
+  assert.equal(fmtEt(new Date('garbage')), '\u2013');
 });
 
 check('nextFire on a fixed clock: same-day fire still ahead', () => {

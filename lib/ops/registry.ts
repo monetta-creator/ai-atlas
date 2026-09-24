@@ -202,7 +202,9 @@ export const OPS_JOBS: OpsJob[] = [
 
 interface ParsedCron {
   minute: number;
-  hour: number;
+  // A number for a daily time, or 'every' for an hourly schedule ("45 * * * *",
+  // the agent tick). Anything else in the hour field is unsupported.
+  hour: number | 'every';
   dows: number[] | '*';
 }
 
@@ -226,7 +228,11 @@ export function parseCron(expr: string): ParsedCron {
   const parts = expr.trim().split(/\s+/);
   if (parts.length !== 5) throw new Error(`parseCron: unsupported expression "${expr}"`);
   const [minute, hour, , , dow] = parts;
-  return { minute: Number(minute), hour: Number(hour), dows: parseDowField(dow) };
+  const m = Number(minute);
+  if (!Number.isInteger(m) || m < 0 || m > 59) throw new Error(`parseCron: bad minute in "${expr}"`);
+  const h = hour === '*' ? 'every' : Number(hour);
+  if (h !== 'every' && (!Number.isInteger(h) || h < 0 || h > 23)) throw new Error(`parseCron: bad hour in "${expr}"`);
+  return { minute: m, hour: h, dows: parseDowField(dow) };
 }
 
 function matchesDow(dows: number[] | '*', dowValue: number): boolean {
@@ -239,13 +245,16 @@ function matchesDow(dows: number[] | '*', dowValue: number): boolean {
 // schedule in vercel.json is a single daily time plus a day-of-week filter.
 export function nextFire(cronExpr: string, now: Date): Date {
   const { minute, hour, dows } = parseCron(cronExpr);
+  const hours = hour === 'every' ? Array.from({ length: 24 }, (_, i) => i) : [hour];
   for (let dayOffset = 0; dayOffset <= 8; dayOffset += 1) {
     const base = new Date(now);
     base.setUTCDate(base.getUTCDate() + dayOffset);
-    const candidate = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), hour, minute, 0, 0));
-    if (candidate <= now) continue;
-    if (!matchesDow(dows, candidate.getUTCDay())) continue;
-    return candidate;
+    for (const hh of hours) {
+      const candidate = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), hh, minute, 0, 0));
+      if (candidate <= now) continue;
+      if (!matchesDow(dows, candidate.getUTCDay())) continue;
+      return candidate;
+    }
   }
   throw new Error(`nextFire: no match found for "${cronExpr}" within 8 days`);
 }
@@ -264,8 +273,11 @@ export function todaysFires(cronExprs: string[], now: Date): TodaysFire[] {
   for (const expr of cronExprs) {
     const { minute, hour, dows } = parseCron(expr);
     if (!matchesDow(dows, todayUtc.getUTCDay())) continue;
-    const whenUtc = new Date(Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth(), todayUtc.getUTCDate(), hour, minute, 0, 0));
-    fires.push({ cronExpr: expr, whenUtc, isFuture: whenUtc > now });
+    const hours = hour === 'every' ? Array.from({ length: 24 }, (_, i) => i) : [hour];
+    for (const hh of hours) {
+      const whenUtc = new Date(Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth(), todayUtc.getUTCDate(), hh, minute, 0, 0));
+      fires.push({ cronExpr: expr, whenUtc, isFuture: whenUtc > now });
+    }
   }
   fires.sort((a, b) => a.whenUtc.getTime() - b.whenUtc.getTime());
   return fires;
@@ -275,6 +287,8 @@ export function todaysFires(cronExprs: string[], now: Date): TodaysFire[] {
 // readiness.ts's RUN_TIME_COLUMNS format, but for a plain JS Date rather than
 // a SQL-formatted string).
 export function fmtEt(date: Date): string {
+  // An invalid date must never take the page down: render the null dash.
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '\u2013';
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
     hour: 'numeric',
