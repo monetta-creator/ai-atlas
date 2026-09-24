@@ -19,7 +19,9 @@ export async function GET(req: NextRequest): Promise<Response> {
   const rawDay = req.nextUrl.searchParams.get('day');
   const dayParam = rawDay && /^\d{4}-\d{2}-\d{2}$/.test(rawDay) ? rawDay : undefined;
   try {
-    const result = await runDailyEdition(dayParam);
+    // The scheduled call (no ?day=) may replace an edition built before press
+    // time (a manual preview); a backfill for a named day never replaces.
+    const result = await runDailyEdition(dayParam, { replaceEarly: !dayParam });
     // Dead-man ping: only when the run actually finished, never on error.
     pingDeadman(process.env.HC_PING_URL_EDITION);
     return Response.json(result);

@@ -1,9 +1,9 @@
 import { buildEditionPack } from './pack';
-import { deterministicFront, thingsHappenFor } from './pure';
+import { deterministicFront, thingsHappenFor, EDITION_PRESS_UTC } from './pure';
 import { generateFront, generateColumn } from './generate';
 import { checkEditionBudget } from './budget';
 import { getEditionForDay, getEditionPrefs } from '../data/editions';
-import { saveGeneratedReport } from '../mutations';
+import { saveGeneratedReport, deleteGeneratedReport } from '../mutations';
 import type { EditionNarrative } from './types';
 
 function todayUTC(): string {
@@ -17,11 +17,27 @@ function todayUTC(): string {
 // daily model budget is spent. Auto-publishes (Kevin's 2026-09-23 call:
 // /blotter/<day> must work sessionless, the third auto-publishing report
 // kind after roundup and tooling_entrants).
+// opts.replaceEarly (the scheduled cron passes it): an edition that was built
+// BEFORE the day's press time is a preview, written by a manual run while the
+// engines were still enriching (2026-09-24: a 9:59 ET run read 74 items where
+// the 12:45 ET press would have read over 100). The scheduled run replaces it
+// once press time has passed; a manual re-run still skips, so a human's
+// deliberate edition is never clobbered by another human click.
 export async function runDailyEdition(
-  day: string = todayUTC()
-): Promise<{ id: string; day: string; items: number } | { skipped: string }> {
+  day: string = todayUTC(),
+  opts: { replaceEarly?: boolean } = {}
+): Promise<{ id: string; day: string; items: number; replaced?: boolean } | { skipped: string }> {
   const existing = await getEditionForDay(day);
-  if (existing) return { skipped: `already generated for ${day}` };
+  let replaced = false;
+  if (existing) {
+    const press = new Date(`${day}T${EDITION_PRESS_UTC}Z`).getTime();
+    const builtEarly = new Date(existing.generated_at).getTime() < press;
+    if (!(opts.replaceEarly && builtEarly && Date.now() >= press)) {
+      return { skipped: `already generated for ${day}` };
+    }
+    await deleteGeneratedReport(existing.id);
+    replaced = true;
+  }
 
   const prefs = await getEditionPrefs();
   if (!prefs.enabled) return { skipped: 'edition disabled' };
@@ -89,5 +105,5 @@ export async function runDailyEdition(
     throw e;
   }
 
-  return { id: reportId, day: pack.day, items: front.length };
+  return { id: reportId, day: pack.day, items: front.length, ...(replaced ? { replaced: true } : {}) };
 }
