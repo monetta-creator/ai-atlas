@@ -20,8 +20,8 @@ export default async function SchemaMapPage() {
   const admin = adminFlag && !preview;
   const viewer = { admin, portal: portalFlag || admin };
 
-  const groups = layoutGroups(tables);
-  const edges = clusterEdges(tables);
+  const groups = layoutGroups(tables, false);
+  const edges = clusterEdges(tables, false);
   const columnCount = tables.reduce((sum, t) => sum + t.columns.length, 0);
   const datasets = DATASETS.filter((d) => d.slug !== 'catalog').map((d) => ({
     slug: d.slug, title: d.title, keyGated: Boolean(d.keyGated),

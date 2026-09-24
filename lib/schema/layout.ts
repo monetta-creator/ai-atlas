@@ -6,7 +6,7 @@ import type { SchemaTable } from './introspect';
 
 export type SubsystemGroup =
   | 'argument-map' | 'signals-pipeline' | 'sources-evidence' | 'research' | 'scout'
-  | 'scan' | 'intel' | 'tooling' | 'portal' | 'agent' | 'reports' | 'editions' | 'prefs-and-meta';
+  | 'scan' | 'intel' | 'tooling' | 'portal' | 'agent' | 'reports' | 'editions' | 'prefs-and-meta' | 'unplaced';
 
 export const GROUP_LABELS: Record<SubsystemGroup, string> = {
   'argument-map': 'Argument map',
@@ -22,6 +22,9 @@ export const GROUP_LABELS: Record<SubsystemGroup, string> = {
   reports: 'Reports',
   editions: 'Daily Edition',
   'prefs-and-meta': 'Prefs & site meta',
+  // Only ever non-empty when a migration added a table nobody placed: the test
+  // suite fails on it, the public page keeps rendering instead of 500ing.
+  unplaced: 'Not yet placed',
 };
 
 // Every table in the live schema must be placed here explicitly, so a new
@@ -86,6 +89,8 @@ export const SUBSYSTEMS: Record<string, SubsystemGroup> = {
   content_blocks: 'prefs-and-meta', home_prefs: 'prefs-and-meta',
   ai_cost_log: 'prefs-and-meta', ai_rate_cards: 'prefs-and-meta',
   tickets: 'prefs-and-meta', ticket_images: 'prefs-and-meta',
+  // ---- ask (retrieval) ------------------------------------------------------
+  embeddings: 'prefs-and-meta', ask_prefs: 'prefs-and-meta',
 };
 
 export type AccessTier = 'public' | 'key' | 'admin';
@@ -184,6 +189,8 @@ export const ACCESS_TIER: Record<string, TierInfo> = {
   agent_actions: { tier: 'admin', reason: 'the resident operator is admin-only end to end' },
   agent_briefs: { tier: 'admin', reason: 'the resident operator is admin-only end to end' },
   agent_prefs: { tier: 'admin', reason: 'the resident operator is admin-only end to end' },
+  embeddings: { tier: 'admin', reason: 'vector index over retrievable text; queried server-side by Ask, never shipped' },
+  ask_prefs: { tier: 'admin', reason: 'the Ask retrieval mode singleton' },
 
   // reports
   reports: { tier: 'public', reason: 'a saved period report is public the moment it is saved' },
@@ -231,14 +238,20 @@ export const DATASET_TABLES: Record<string, string[]> = {
   catalog: [],
 };
 
-export function groupTables(tableNames: string[]): Record<SubsystemGroup, string[]> {
+// strict (the default, what the tests use) throws on an unplaced table; the
+// page passes strict: false so a fresh migration can never take /datasets/schema
+// down, it just shows the table under "Not yet placed" until someone files it.
+export function groupFor(name: string, strict = true): SubsystemGroup {
+  const group = SUBSYSTEMS[name];
+  if (group) return group;
+  if (strict) throw new Error(`No subsystem group for table "${name}"; add it to SUBSYSTEMS in lib/schema/layout.ts.`);
+  return 'unplaced';
+}
+
+export function groupTables(tableNames: string[], strict = true): Record<SubsystemGroup, string[]> {
   const out = {} as Record<SubsystemGroup, string[]>;
   for (const g of Object.keys(GROUP_LABELS) as SubsystemGroup[]) out[g] = [];
-  for (const name of tableNames) {
-    const group = SUBSYSTEMS[name];
-    if (!group) throw new Error(`No subsystem group for table "${name}"; add it to SUBSYSTEMS in lib/schema/layout.ts.`);
-    out[group].push(name);
-  }
+  for (const name of tableNames) out[groupFor(name, strict)].push(name);
   return out;
 }
 
@@ -248,13 +261,12 @@ export interface ClusterEdge { from: SubsystemGroup; to: SubsystemGroup; count: 
 // deduped, with a count of how many underlying FKs contribute. Self-edges
 // (both endpoints in the same group) are dropped: the map draws cross-group
 // lines only.
-export function clusterEdges(tables: SchemaTable[]): ClusterEdge[] {
+export function clusterEdges(tables: SchemaTable[], strict = true): ClusterEdge[] {
   const counts = new Map<string, number>();
   for (const t of tables) {
-    const fromGroup = SUBSYSTEMS[t.name];
-    if (!fromGroup) throw new Error(`No subsystem group for table "${t.name}"; add it to SUBSYSTEMS in lib/schema/layout.ts.`);
+    const fromGroup = groupFor(t.name, strict);
     for (const fk of t.fks) {
-      const toGroup = SUBSYSTEMS[fk.refTable];
+      const toGroup = SUBSYSTEMS[fk.refTable] ?? (strict ? undefined : 'unplaced');
       if (!toGroup || toGroup === fromGroup) continue;
       const [a, b] = [fromGroup, toGroup].sort();
       const key = `${a}\u0000${b}`;
@@ -285,9 +297,9 @@ export interface LaidGroup {
 // are sorted by row count descending.
 const GRID_COLS = 4;
 
-export function layoutGroups(tables: SchemaTable[]): LaidGroup[] {
+export function layoutGroups(tables: SchemaTable[], strict = true): LaidGroup[] {
   const byName = new Map(tables.map((t) => [t.name, t]));
-  const grouped = groupTables(tables.map((t) => t.name));
+  const grouped = groupTables(tables.map((t) => t.name), strict);
   const keys = (Object.keys(GROUP_LABELS) as SubsystemGroup[]).filter((k) => grouped[k].length > 0);
   return keys.map((key, i) => {
     const groupTablesList = grouped[key]
