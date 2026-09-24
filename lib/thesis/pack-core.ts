@@ -140,7 +140,7 @@ export function relevancePrompt(
               type: 'number',
               description: '0.0 (not directly about this thesis) to 1.0 (squarely about this thesis)',
             },
-            why: { type: 'string', description: 'one short reason, at most 120 characters' },
+            why: { type: 'string', description: 'one short reason, at most 80 characters' },
           },
           required: ['signal_id', 'relevance', 'why'],
         },

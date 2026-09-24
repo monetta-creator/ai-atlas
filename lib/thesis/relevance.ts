@@ -16,7 +16,11 @@ import type { RelevancePromptSignal, RelevanceScore } from './pack-core';
 // catch can record the honest "relevance scoring failed" note instead of
 // silently pretending the whole pass succeeded.
 
-const CHUNK_SIZE = 25;
+// 10 per call: at 25 the utility model hit the 1200-token cap on every chunk
+// (verified in ai_cost_log: output_tokens = 1200 x 14), the JSON truncated,
+// every chunk failed and the pass fell back to "keep everything" on the
+// first live report. Truncation masquerading as failure, again.
+const CHUNK_SIZE = 10;
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -36,7 +40,7 @@ async function scoreChunk(
     toolName: 'submit_thesis_relevance',
     toolDescription: 'Return a relevance score from 0 to 1 for each listed signal, judged against the thesis statement.',
     schema,
-    maxTokens: 1200,
+    maxTokens: 3000,
     timeoutMs: 60_000,
     feature: 'thesis_relevance',
   });
