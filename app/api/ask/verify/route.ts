@@ -28,7 +28,7 @@ const MAX_RECORDS = 12;
 
 const KIND_TO_PEEK: Record<CitationKind, PeekKind> = {
   claim: 'claim', bridge: 'bridge', stance: 'stance', Q: 'question', concept: 'concept', signal: 'signal',
-  paper: 'paper', thread: 'thread',
+  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact',
 };
 
 export async function POST(req: Request): Promise<Response> {

@@ -101,7 +101,7 @@ export async function POST(req: Request): Promise<Response> {
         }
       };
 
-      emit(ndLane(lane, `beat ${cls.beat}${cls.fresh ? ', recent-events question' : ''}, ${ctx.hitCount} record${ctx.hitCount === 1 ? '' : 's'} matched, best rank ${ctx.maxRank.toFixed(3)}`));
+      emit(ndLane(lane, `beat ${cls.beat}${cls.fresh ? ', recent-events question' : ''}, ${ctx.hitCount} record${ctx.hitCount === 1 ? '' : 's'} matched, best rank ${ctx.maxRank.toFixed(3)}, best sim ${ctx.maxSim.toFixed(3)}`));
       if (decline) {
         emit(ndDecline(decline));
         emit(ndDone(Object.fromEntries(tagger.refs().map((r) => [r.tag, r.id]))));

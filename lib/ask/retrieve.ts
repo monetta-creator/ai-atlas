@@ -1,6 +1,9 @@
 import { q } from '@/lib/db';
 import { ORQ } from '@/lib/pack-shared';
 import type { ValidIdsPlain } from '@/lib/ask/verify';
+import { getAskPrefs } from '@/lib/data/ask';
+import { embedQuery, embedModel } from '@/lib/embed/client';
+import { fuseOrder } from './fusion';
 
 // Server-only retrieval for "Ask the Atlas". Hybrid lexical + structural, no
 // embeddings (see 0020_ask_fts.sql for the rationale). Two things are assembled:
@@ -45,15 +48,26 @@ export interface AskContext extends AskNamespace {
   // lib/ask/lanes.ts decideLane: a high hitCount of weakly-related rows should
   // not count as "covered" the way a handful of sharply on-topic rows does.
   maxRank: number;
+  // Best cosine similarity across the vector leg (migration 0066), 0 when the
+  // embedding call failed or nothing matched. ALWAYS populated, even when
+  // ask_prefs.retrieval is 'fts': it only reorders context in hybrid mode, but
+  // it is always computed so it can be measured against maxRank before the
+  // pref ever flips (see scripts/ab-retrieval.mjs, hybrid-retrieval plan step 4).
+  maxSim: number;
   // True when the question named a claim code, concept slug, question slug,
   // bridge code, or research-thread slug that detectIds resolved (the same
   // signal that already drove the explicit-match retrieval path below).
   explicit: boolean;
   // Signals and papers have no stable short code, so each retrieved one gets a
-  // per-request tag on ONE shared counter (signals S1, S2, ... and papers P3,
-  // P4, ...) the model can cite as [signal S1] / [paper P3]; the route ships
-  // the combined tag -> uuid map to the client so citations link to
-  // /signals/<uuid> or /research/<uuid> by tag prefix.
+  // per-request tag on ONE shared counter (signals S1, S2, ... papers P3,
+  // P4, ..., scan/intel items I5, I6, ..., intel facts X7, X8, ...) the model
+  // can cite as [signal S1] / [paper P3] / [item I5] / [fact X7]; the route
+  // ships the combined tag -> id map to the client so citations resolve by
+  // tag prefix (S/P to /signals or /research by uuid; I/X to the key-gated
+  // dataset that carries the row, since scan/intel items and facts have no
+  // Atlas page of their own). An item's id carries its source table as a
+  // "scan:<uuid>" or "intel:<uuid>" prefix (scan_items and intel_items share
+  // the I prefix but resolve to different datasets); a fact's id is a bare uuid.
   signalRefs: { tag: string; id: string }[];
 }
 
@@ -225,7 +239,7 @@ export async function buildAskContext(
   // loadNamespace's queries twice.
   const ns = opts.ns ?? await loadNamespace();
   const trimmed = query.trim();
-  if (!trimmed) return { ...ns, detail: '', hitCount: 0, maxRank: 0, explicit: false, signalRefs: [] };
+  if (!trimmed) return { ...ns, detail: '', hitCount: 0, maxRank: 0, maxSim: 0, explicit: false, signalRefs: [] };
 
   const seen = new Set<string>();
   const blocks: Block[] = [];
@@ -243,6 +257,8 @@ export async function buildAskContext(
   let tagCount = tagStart;
   const signalTags = new Map<string, string>(); // signal id -> tag
   const paperTags = new Map<string, string>();  // paper id -> tag
+  const itemTags = new Map<string, string>();   // "scan:<uuid>" | "intel:<uuid>" -> tag
+  const factTags = new Map<string, string>();   // intel_facts id -> tag
   const tagFor = (id: string) => {
     let t = signalTags.get(id);
     if (!t) { t = `S${++tagCount}`; signalTags.set(id, t); }
@@ -251,6 +267,16 @@ export async function buildAskContext(
   const ptagFor = (id: string) => {
     let t = paperTags.get(id);
     if (!t) { t = `P${++tagCount}`; paperTags.set(id, t); }
+    return t;
+  };
+  const itemTagFor = (compositeId: string) => {
+    let t = itemTags.get(compositeId);
+    if (!t) { t = `I${++tagCount}`; itemTags.set(compositeId, t); }
+    return t;
+  };
+  const factTagFor = (id: string) => {
+    let t = factTags.get(id);
+    if (!t) { t = `X${++tagCount}`; factTags.set(id, t); }
     return t;
   };
 
@@ -471,17 +497,57 @@ export async function buildAskContext(
   await ftsEvidence(trimmed, push, mode);
   await ftsArticles(trimmed, push, tagFor);
 
-  // 3) Assemble, bounded to the char budget. When the question named explicit
-  // codes/slugs, keep the sequential fill (explicit matches were pushed first
-  // and deserve the whole budget). A BROAD question gets a diversity pass
-  // instead: round-robin across record kinds (the push-key prefix), one block
-  // per kind per cycle, so stances, concepts, and threads survive a budget
-  // that sequential order would spend entirely on claims and signals.
+  // When the question named explicit codes/slugs, FTS/the code lookups above
+  // are the ONLY leg (the Design doc's "exact-term backstop" rule): the vector
+  // leg below never reorders or adds to an explicit match's context.
   const explicit =
     ids.claims.length + ids.bridges.length + ids.concepts.length +
     ids.questions.length + ids.threads.length > 0;
-  let ordered = blocks;
+
+  // 2.5) Vector leg (migration 0066): one embedding for the question, one
+  // cosine query over every kind's chunks (joined back to the source tables
+  // with the same guest-safety predicate each FTS leg above already applies),
+  // reciprocal-rank-fused (k=60, lib/ask/fusion.ts) against the FTS blocks'
+  // own push order. Always run so maxSim can be measured (see AskContext);
+  // only used to REORDER/ADD context when ask_prefs.retrieval is 'hybrid'.
+  // Best-effort throughout: an embedding-API failure must never break Ask.
+  let maxSim = 0;
+  let fusedKeyOrder: string[] | null = null;
   if (!explicit) {
+    try {
+      const [prefs, qvec] = await Promise.all([getAskPrefs(), embedQuery(trimmed)]);
+      if (qvec) {
+        const vecHits = await vectorSearch(qvec, mode === 'admin');
+        maxSim = vecHits[0]?.sim ?? 0;
+        if (prefs.retrieval === 'hybrid' && vecHits.length) {
+          const vecKeyOrder = await materializeVectorBlocks(vecHits, push, tagFor, ptagFor, itemTagFor, factTagFor);
+          const ftsKeyOrder = blocks.map((b) => b.key);
+          fusedKeyOrder = fuseOrder([ftsKeyOrder, vecKeyOrder]);
+        }
+      }
+    } catch {
+      // vector leg is best-effort; fall through to FTS-only ordering below.
+    }
+  }
+
+  // 3) Assemble, bounded to the char budget. When the question named explicit
+  // codes/slugs, keep the sequential fill (explicit matches were pushed first
+  // and deserve the whole budget). A fused hybrid order (above) wins next. A
+  // BROAD FTS-only question gets a diversity pass instead: round-robin across
+  // record kinds (the push-key prefix), one block per kind per cycle, so
+  // stances, concepts, and threads survive a budget that sequential order
+  // would spend entirely on claims and signals.
+  let ordered = blocks;
+  if (fusedKeyOrder) {
+    const byKey = new Map(blocks.map((b) => [b.key, b]));
+    const seen = new Set<string>();
+    ordered = [];
+    for (const k of fusedKeyOrder) {
+      const b = byKey.get(k);
+      if (b && !seen.has(k)) { seen.add(k); ordered.push(b); }
+    }
+    for (const b of blocks) if (!seen.has(b.key)) ordered.push(b);
+  } else if (!explicit) {
     // Signals and evidence carry the concrete developments and substitution
     // stories a broad question is really after, so they draw two slots per
     // cycle; every other kind draws one.
@@ -516,8 +582,210 @@ export async function buildAskContext(
     detail += b.text + '\n\n';
   }
 
-  const signalRefs = [...signalTags, ...paperTags].map(([id, tag]) => ({ tag, id }));
-  return { ...ns, detail: detail.trim(), hitCount: blocks.length, maxRank, explicit, signalRefs };
+  const signalRefs = [...signalTags, ...paperTags, ...itemTags, ...factTags].map(([id, tag]) => ({ tag, id }));
+  return { ...ns, detail: detail.trim(), hitCount: blocks.length, maxRank, maxSim, explicit, signalRefs };
+}
+
+// ------------------------------------------------------------------ vector leg
+interface VecHit { kind: string; record_id: string; sim: number }
+
+// One cosine query over every kind's chunks (aggregated to one row per
+// record: the best-matching chunk), joined back to each source table with
+// the SAME guest-safety predicate its FTS leg already applies. claim/bridge/
+// stance/concept/thread carry no personal-layer columns to begin with, so
+// they need no predicate here; scan/intel items and facts are portal/admin
+// only by construction (buildAskContext is never called for a guest).
+async function vectorSearch(qvec: number[], admin: boolean): Promise<VecHit[]> {
+  return q<VecHit>(
+    `select kind, record_id, max(1 - (vec <=> $1::vector)) as sim
+       from embeddings
+      where model = $2
+        and (
+          (kind = 'signal' and exists (
+            select 1 from signals g where g.id = record_id::uuid and (g.is_published = true or $3::boolean)))
+          or (kind = 'candidate' and exists (
+            select 1 from signal_candidates sc join signals g on g.id = sc.signal_id and g.is_published = true
+             where sc.id = record_id::uuid))
+          or (kind = 'paper' and exists (
+            select 1 from papers p where p.id = record_id::uuid and p.triage_status = 'kept' and p.review_status <> 'dismissed'))
+          or kind in ('scan_item', 'intel_item', 'intel_fact', 'claim', 'bridge', 'stance', 'concept', 'thread')
+        )
+      group by kind, record_id
+      order by sim desc
+      limit 40`,
+    [`[${qvec.join(',')}]`, embedModel(), admin]
+  );
+}
+
+// Pushes a context block for every vector hit not already covered by the FTS/
+// explicit legs above (push() dedupes on key, so a hit already present is a
+// no-op) and returns the hits' record keys IN SIMILARITY ORDER, for RRF
+// fusion against the FTS blocks' own push order.
+async function materializeVectorBlocks(
+  hits: VecHit[],
+  push: (k: string, t: string, r?: number) => void,
+  tagFor: (id: string) => string,
+  ptagFor: (id: string) => string,
+  itemTagFor: (id: string) => string,
+  factTagFor: (id: string) => string
+): Promise<string[]> {
+  const need = {
+    claim: new Set<string>(), bridge: new Set<string>(), stance: new Set<string>(),
+    concept: new Set<string>(), thread: new Set<string>(), signal: new Set<string>(),
+    paper: new Set<string>(), candidate: new Set<string>(),
+    scan_item: new Set<string>(), intel_item: new Set<string>(), intel_fact: new Set<string>(),
+  };
+  for (const h of hits) need[h.kind as keyof typeof need]?.add(h.record_id);
+
+  if (need.claim.size) {
+    const rows = await q<{ code: string; statement: string; test: string | null; is_frame: boolean }>(
+      `select code, statement, test, is_frame from claims where code = any($1::text[])`,
+      [[...need.claim]]
+    );
+    for (const r of rows) {
+      push(`claim:${r.code}`, lines(
+        `[claim ${r.code}]${r.is_frame ? ' (frame)' : ''} ${clip(r.statement)}`,
+        r.test && `  Falsifying test: ${clip(r.test)}`,
+      ));
+    }
+  }
+  if (need.bridge.size) {
+    const rows = await q<{ code: string; statement: string; test: string | null; domain_from: string; domain_to: string }>(
+      `select code, statement, test, domain_from, domain_to from bridge_claims where code = any($1::text[])`,
+      [[...need.bridge]]
+    );
+    for (const r of rows) {
+      push(`bridge:${r.code}`, lines(
+        `[bridge ${r.code}] ${clip(r.statement)} (${r.domain_from} -> ${r.domain_to})`,
+        r.test && `  Falsifying test: ${clip(r.test)}`,
+      ));
+    }
+  }
+  if (need.stance.size) {
+    const rows = await q<{ code: string; title: string; summary: string | null; q_slug: string }>(
+      `select s.code, s.title, s.summary, qn.slug as q_slug
+         from stances s join questions qn on qn.id = s.question_id
+        where s.code = any($1::text[])`,
+      [[...need.stance]]
+    );
+    for (const r of rows) {
+      push(`stance:${r.code}`, lines(
+        `[stance ${r.code}] ${r.title} (under Q ${r.q_slug})`,
+        r.summary && `  ${clip(r.summary)}`,
+      ));
+    }
+  }
+  if (need.concept.size) {
+    const rows = await q<{ slug: string; name: string; short_definition: string; status: string }>(
+      `select slug, name, short_definition, status from concepts where slug = any($1::text[])`,
+      [[...need.concept]]
+    );
+    for (const r of rows) push(`concept:${r.slug}`, `[concept ${r.slug}] ${r.name} (${r.status}): ${clip(r.short_definition)}`);
+  }
+  if (need.thread.size) {
+    const rows = await q<{ slug: string; title: string; question: string; synthesis: string | null; status: string }>(
+      `select slug, title, question, synthesis, status::text as status
+         from research_threads where slug = any($1::text[])`,
+      [[...need.thread]]
+    );
+    for (const r of rows) {
+      push(`thread:${r.slug}`, lines(
+        `[thread ${r.slug}]${r.status !== 'open' ? ` (${r.status})` : ''} ${r.title}: ${clip(r.question, 200)}`,
+        r.synthesis && `  Synthesis: ${clip(r.synthesis.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' '), 400)}`,
+      ));
+    }
+  }
+  if (need.signal.size) {
+    const rows = await q<{ id: string; title: string; summary: string | null; claim_touches: string[]; is_published: boolean }>(
+      `select id, title, summary, claim_touches, is_published from signals where id = any($1::uuid[])`,
+      [[...need.signal]]
+    );
+    for (const r of rows) {
+      const touches = r.claim_touches.length ? ` (touches ${r.claim_touches.join(', ')})` : '';
+      push(`sig:${r.id}`, `[signal ${tagFor(r.id)}] "${r.title}"${r.is_published ? '' : ' (draft)'} ${clip(r.summary, 300)}${touches}`);
+    }
+  }
+  if (need.paper.size) {
+    const rows = await q<{ id: string; title: string; arxiv_id: string | null; published_at: string | null; headline: string | null; summary: string | null; claim_touches: string[] }>(
+      `select id::text as id, title, arxiv_id, to_char(published_at, 'YYYY-MM-DD') as published_at,
+              extraction->>'headline_claim' as headline, triage_summary as summary, claim_touches
+         from papers where id = any($1::uuid[])`,
+      [[...need.paper]]
+    );
+    for (const r of rows) {
+      const touches = r.claim_touches.length ? ` (touches ${r.claim_touches.join(', ')})` : '';
+      push(`paper:${r.id}`,
+        `[paper ${ptagFor(r.id)}] "${clip(r.title, 150)}"${r.arxiv_id ? ` (arXiv ${r.arxiv_id}${r.published_at ? `, ${r.published_at}` : ''})` : ''}: ${clip(r.headline ?? r.summary, 300)}${touches}`);
+    }
+  }
+  // Candidate hits key by signal_candidates.id, but the block they materialize
+  // shares the article-excerpt leg's key (the signal's id) — map candidate id
+  // -> block key here so the fusion order can find it below.
+  const candKeyByRecordId = new Map<string, string>();
+  if (need.candidate.size) {
+    const rows = await q<{ id: string; sig_id: string; sig_title: string; raw_content: string | null }>(
+      `select sc.id, g.id as sig_id, g.title as sig_title, sc.raw_content
+         from signal_candidates sc join signals g on g.id = sc.signal_id and g.is_published = true
+        where sc.id = any($1::uuid[])`,
+      [[...need.candidate]]
+    );
+    for (const r of rows) {
+      const key = `art:sig:${r.sig_id}`;
+      candKeyByRecordId.set(r.id, key);
+      push(key, `Article excerpt behind [signal ${tagFor(r.sig_id)}] "${r.sig_title}": ${clip(r.raw_content, 400)}`);
+    }
+  }
+  if (need.scan_item.size) {
+    const rows = await q<{ id: string; headline: string | null; summary: string | null; source_domain: string | null; published_date: string | null }>(
+      `select id::text as id, headline, summary, source_domain, to_char(published_date, 'YYYY-MM-DD') as published_date
+         from scan_items where id = any($1::uuid[])`,
+      [[...need.scan_item]]
+    );
+    for (const r of rows) {
+      const anchor = r.source_domain ? ` (${r.source_domain}${r.published_date ? `, ${r.published_date}` : ''})` : '';
+      push(`item:scan:${r.id}`, `[item ${itemTagFor(`scan:${r.id}`)}] "${clip(r.headline ?? 'Scan item', 150)}"${anchor}: ${clip(r.summary, 300)}`);
+    }
+  }
+  if (need.intel_item.size) {
+    const rows = await q<{ id: string; headline: string | null; summary: string | null; source_domain: string | null; company_slug: string | null; published_date: string | null }>(
+      `select id::text as id, headline, summary, source_domain, company_slug, to_char(published_date, 'YYYY-MM-DD') as published_date
+         from intel_items where id = any($1::uuid[])`,
+      [[...need.intel_item]]
+    );
+    for (const r of rows) {
+      const bits = [r.company_slug, r.source_domain, r.published_date].filter(Boolean).join(' · ');
+      push(`item:intel:${r.id}`, `[item ${itemTagFor(`intel:${r.id}`)}] "${clip(r.headline ?? 'Intel item', 150)}"${bits ? ` (${bits})` : ''}: ${clip(r.summary, 300)}`);
+    }
+  }
+  if (need.intel_fact.size) {
+    const rows = await q<{ id: string; fact: string; value_text: string | null; dimension: string; company_slug: string; as_of: string | null }>(
+      `select id::text as id, fact, value_text, dimension, company_slug, to_char(as_of, 'YYYY-MM-DD') as as_of
+         from intel_facts where id = any($1::uuid[])`,
+      [[...need.intel_fact]]
+    );
+    for (const r of rows) {
+      push(`fact:${r.id}`,
+        `[fact ${factTagFor(r.id)}] ${r.company_slug} · ${r.dimension}: ${clip(r.fact, 300)}${r.value_text ? ` (${clip(r.value_text, 80)})` : ''}${r.as_of ? ` as of ${r.as_of}` : ''}`);
+    }
+  }
+
+  const order: string[] = [];
+  for (const h of hits) {
+    switch (h.kind) {
+      case 'claim': order.push(`claim:${h.record_id}`); break;
+      case 'bridge': order.push(`bridge:${h.record_id}`); break;
+      case 'stance': order.push(`stance:${h.record_id}`); break;
+      case 'concept': order.push(`concept:${h.record_id}`); break;
+      case 'thread': order.push(`thread:${h.record_id}`); break;
+      case 'signal': order.push(`sig:${h.record_id}`); break;
+      case 'paper': order.push(`paper:${h.record_id}`); break;
+      case 'candidate': { const k = candKeyByRecordId.get(h.record_id); if (k) order.push(k); break; }
+      case 'scan_item': order.push(`item:scan:${h.record_id}`); break;
+      case 'intel_item': order.push(`item:intel:${h.record_id}`); break;
+      case 'intel_fact': order.push(`fact:${h.record_id}`); break;
+    }
+  }
+  return order;
 }
 
 // ---------------------------------------------------------------- FTS helpers

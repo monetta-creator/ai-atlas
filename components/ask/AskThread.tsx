@@ -28,7 +28,7 @@ function hostOf(url: string): string {
 // uuids through the message's own frozen map before the peek opens.
 const KIND_TO_PEEK: Record<CitationKind, PeekKind> = {
   claim: 'claim', bridge: 'bridge', stance: 'stance', Q: 'question', concept: 'concept', signal: 'signal',
-  paper: 'paper', thread: 'thread',
+  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact',
 };
 
 // The message thread. Auto-scroll stays pinned to the bottom while streaming

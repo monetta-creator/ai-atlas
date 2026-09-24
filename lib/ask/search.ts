@@ -12,7 +12,12 @@ import { ORQ } from '../pack-shared.ts';
 
 export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 
-export type PeekKind = 'claim' | 'bridge' | 'stance' | 'question' | 'concept' | 'signal' | 'paper' | 'thread';
+// 'item' covers both scan_items and intel_items (its id carries a "scan:" or
+// "intel:" prefix, since the two live in different tables and datasets); both
+// it and 'fact' (intel_facts) are portal/admin only (see fetchRecord below):
+// the datasets that carry them are key-gated, so a guest must get null even
+// with a well-formed id, never a 404 that would confirm the id's shape.
+export type PeekKind = 'claim' | 'bridge' | 'stance' | 'question' | 'concept' | 'signal' | 'paper' | 'thread' | 'item' | 'fact';
 
 interface PeekEvidence {
   direction: string;
@@ -84,7 +89,7 @@ export async function fetchRecord(
   q: Q,
   kind: PeekKind,
   id: string,
-  opts: { admin?: boolean } = {}
+  opts: { admin?: boolean; portal?: boolean } = {}
 ): Promise<PeekPayload | null> {
   if (kind === 'claim') {
     const rows = await q<{ code: string; statement: string; test: string | null; domain: string | null; is_frame: boolean }>(
@@ -237,6 +242,64 @@ export async function fetchRecord(
         order by p.published_at desc nulls last, p.id limit 10`,
       [r.id]
     );
+    return p;
+  }
+
+  // item: scan_items or intel_items, portal/admin only (their datasets are
+  // key-gated; a guest must get null, never a row). The id carries which
+  // table: "scan:<uuid>" or "intel:<uuid>" (lib/ask/retrieve.ts mints these,
+  // since scan and intel items share the "I" citation prefix but resolve to
+  // different key-gated datasets).
+  if (kind === 'item') {
+    if (!opts.admin && !opts.portal) return null;
+    const [src, uuid] = id.split(':');
+    if (src === 'scan') {
+      const rows = await q<{ id: string; headline: string | null; summary: string | null; source_domain: string | null; url: string; published_date: string | null }>(
+        `select id::text as id, headline, summary, source_domain, url, to_char(published_date, 'YYYY-MM-DD') as published_date
+           from scan_items where id = $1::uuid`,
+        [uuid]
+      );
+      const r = rows[0];
+      if (!r) return null;
+      const p = empty('item', r.headline ?? 'Scan item', `/datasets/external-scan?where=item_id:eq:${encodeURIComponent(r.id)}`);
+      p.subtitle = `External scan item${r.source_domain ? ` · ${r.source_domain}` : ''}`;
+      p.body = r.summary;
+      p.published_on = r.published_date;
+      p.source = { title: r.headline, url: r.url, outlet: r.source_domain, published_on: r.published_date };
+      return p;
+    }
+    if (src === 'intel') {
+      const rows = await q<{ id: string; headline: string | null; summary: string | null; source_domain: string | null; url: string; company_slug: string | null; published_date: string | null }>(
+        `select id::text as id, headline, summary, source_domain, url, company_slug, to_char(published_date, 'YYYY-MM-DD') as published_date
+           from intel_items where id = $1::uuid`,
+        [uuid]
+      );
+      const r = rows[0];
+      if (!r) return null;
+      const p = empty('item', r.headline ?? 'Intel item', `/datasets/intel-items?where=item_id:eq:${encodeURIComponent(r.id)}`);
+      p.subtitle = `Intel Desk item${r.company_slug ? ` · ${r.company_slug}` : ''}${r.source_domain ? ` · ${r.source_domain}` : ''}`;
+      p.body = r.summary;
+      p.published_on = r.published_date;
+      p.source = { title: r.headline, url: r.url, outlet: r.source_domain, published_on: r.published_date };
+      return p;
+    }
+    return null;
+  }
+
+  // fact: intel_facts, portal/admin only (same reasoning as 'item' above).
+  if (kind === 'fact') {
+    if (!opts.admin && !opts.portal) return null;
+    const rows = await q<{ id: string; fact: string; value_text: string | null; dimension: string; company_slug: string; as_of: string | null }>(
+      `select id::text as id, fact, value_text, dimension, company_slug, to_char(as_of, 'YYYY-MM-DD') as as_of
+         from intel_facts where id = $1::uuid`,
+      [id]
+    );
+    const r = rows[0];
+    if (!r) return null;
+    const p = empty('fact', r.fact, `/datasets/intel-facts?where=fact_id:eq:${encodeURIComponent(r.id)}`);
+    p.subtitle = `Intel Desk fact · ${r.company_slug} · ${r.dimension}`;
+    p.body = r.value_text;
+    p.published_on = r.as_of;
     return p;
   }
 

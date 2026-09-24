@@ -10,7 +10,12 @@
 // into individual codes and classify each by namespace membership (robust to a
 // wrong or absent kind word), so every real code still links.
 
-export type CitationKind = 'claim' | 'bridge' | 'stance' | 'Q' | 'concept' | 'signal' | 'paper' | 'thread';
+// 'item' (scan_items / intel_items, tagged I<n>) and 'fact' (intel_facts,
+// tagged X<n>) share the retrieval layer's per-request tag counter with
+// signal/paper (migration 0066's vector leg); they never get a claim code's
+// "F<n>" shorthand (F1 is already a real frame-claim code — see 'claims.code'
+// seeding — so facts had to take a different letter).
+export type CitationKind = 'claim' | 'bridge' | 'stance' | 'Q' | 'concept' | 'signal' | 'paper' | 'thread' | 'item' | 'fact';
 
 // The serializable, static namespace passed from the server page to the client.
 // (Signals are not here: they are per-request and arrive via the SignalMap below.)
@@ -45,12 +50,12 @@ interface CitationSpan {
 
 const KIND_WORDS: Record<string, CitationKind> = {
   claim: 'claim', bridge: 'bridge', stance: 'stance', q: 'Q', concept: 'concept', signal: 'signal',
-  paper: 'paper', thread: 'thread',
+  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact',
 };
 // A token that is unambiguously a code, so a bracket without a kind word (e.g.
 // [3.3], [B1, S2]) is recognized as a citation while ordinary prose like [note]
 // is left alone. Slugs are intentionally excluded here (too word-like).
-const STRONG = /^(S\d+|P\d+|B\d+|F\d+|\d+(?:\.\d+)?|Q\d+-S\d+[A-Za-z]?)$/i;
+const STRONG = /^(S\d+|P\d+|I\d+|X\d+|B\d+|F\d+|\d+(?:\.\d+)?|Q\d+-S\d+[A-Za-z]?)$/i;
 const BRACKET = /\[([^\]]+)\]/g;
 
 function hrefFor(kind: CitationKind, id: string, ids: ValidIdsPlain, sig: SignalMap): string | null {
@@ -72,6 +77,22 @@ function hrefFor(kind: CitationKind, id: string, ids: ValidIdsPlain, sig: Signal
       return uuid ? `/research/${encodeURIComponent(uuid)}` : null;
     }
     case 'thread': return `/research/threads/${encodeURIComponent(id)}`;
+    // Scan/intel items and intel facts have no Atlas page of their own; the
+    // sig map's value carries the source composite id (retrieve.ts mints
+    // "scan:<uuid>" / "intel:<uuid>" for items, a bare uuid for facts) and the
+    // href points at the key-gated dataset row.
+    case 'item': {
+      const raw = sig[id];
+      if (!raw) return null;
+      const [src, uuid] = raw.split(':');
+      if (src === 'scan') return `/datasets/external-scan?where=item_id:eq:${encodeURIComponent(uuid)}`;
+      if (src === 'intel') return `/datasets/intel-items?where=item_id:eq:${encodeURIComponent(uuid)}`;
+      return null;
+    }
+    case 'fact': {
+      const uuid = sig[id];
+      return uuid ? `/datasets/intel-facts?where=fact_id:eq:${encodeURIComponent(uuid)}` : null;
+    }
   }
 }
 
@@ -80,9 +101,13 @@ function hrefFor(kind: CitationKind, id: string, ids: ValidIdsPlain, sig: Signal
 // inferred by shape, for display) but marked invalid so the UI flags them.
 function classify(token: string, ids: ValidIdsPlain, sig: SignalMap): ParsedCode {
   let kind: CitationKind | null = null;
-  // The tag map holds both S-tags (signals) and P-tags (papers); the prefix
-  // says which record kind the uuid belongs to.
-  if (token in sig) kind = token.toUpperCase().startsWith('P') ? 'paper' : 'signal';
+  // The tag map holds S-tags (signals), P-tags (papers), I-tags (scan/intel
+  // items) and X-tags (intel facts); the prefix says which record kind the
+  // id belongs to.
+  if (token in sig) {
+    const t = token.toUpperCase();
+    kind = t.startsWith('P') ? 'paper' : t.startsWith('I') ? 'item' : t.startsWith('X') ? 'fact' : 'signal';
+  }
   else if (ids.claims.includes(token)) kind = 'claim';
   else if (ids.bridges.includes(token)) kind = 'bridge';
   else if (ids.stances.includes(token)) kind = 'stance';
@@ -95,10 +120,12 @@ function classify(token: string, ids: ValidIdsPlain, sig: SignalMap): ParsedCode
   const inferred: CitationKind =
     /^S\d+$/i.test(token) ? 'signal'
       : /^P\d+$/i.test(token) ? 'paper'
-        : /^B\d+$/i.test(token) ? 'bridge'
-          : /-S\d+/i.test(token) ? 'stance'
-            : /^(F\d+|\d+(?:\.\d+)?)$/i.test(token) ? 'claim'
-              : 'concept';
+        : /^I\d+$/i.test(token) ? 'item'
+          : /^X\d+$/i.test(token) ? 'fact'
+            : /^B\d+$/i.test(token) ? 'bridge'
+              : /-S\d+/i.test(token) ? 'stance'
+                : /^(F\d+|\d+(?:\.\d+)?)$/i.test(token) ? 'claim'
+                  : 'concept';
   return { kind: inferred, id: token, valid: false, href: null };
 }
 

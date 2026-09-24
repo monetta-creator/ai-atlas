@@ -18,5 +18,6 @@ export * from './home';
 export * from './tooling';
 export * from './agent';
 export * from './editions';
+export * from './ask';
 export * from './portal';
 export * from './portal-views';
