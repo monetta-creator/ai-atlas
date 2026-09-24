@@ -7,6 +7,8 @@
 // Run: node scripts/test-ask.mjs
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 // localStorage shim BEFORE the store module loads.
 const backing = new Map();
@@ -345,6 +347,23 @@ check('example questions: non-empty, no em dash anywhere', () => {
   for (const s of EXAMPLE_QUESTIONS) {
     assert.ok(typeof s === 'string' && !s.includes('—'), s);
   }
+});
+
+// ---- prompt.ts source: intel items/facts are in the model's vocabulary -------
+// lib/ask/prompt.ts imports via the "@/" alias, which plain Node type-stripping
+// cannot resolve, so this checks the source text directly rather than importing
+// the module (mirrors the house-style checks above, which check strings, not
+// behavior).
+check('prompt.ts: system text teaches item/fact citation syntax', () => {
+  const src = readFileSync(
+    fileURLToPath(new URL('../lib/ask/prompt.ts', import.meta.url)),
+    'utf8'
+  );
+  assert.ok(src.includes('[item I3]'), 'citation example list should include [item I3]');
+  assert.ok(src.includes('[fact X31]'), 'citation example list should include [fact X31]');
+  assert.ok(/labeled I<n>|item.*labeled I/i.test(src), 'should describe the item tag');
+  assert.ok(/labeled X<n>|fact.*labeled X/i.test(src), 'should describe the fact tag');
+  assert.ok(!src.includes('—'), 'no em dash in prompt.ts');
 });
 
 if (failures) {

@@ -122,6 +122,7 @@ export async function POST(req: Request): Promise<Response> {
           const hits = await searchAtlas(q, p.query, {
             kinds: p.kinds, limit: p.limit, admin: true,
             tagFor: tagger.tagFor, paperTagFor: tagger.paperTagFor,
+            itemTagFor: tagger.itemTagFor, factTagFor: tagger.factTagFor,
           });
           emit(ndStatus(deDash(statusSearch(p.query, hits.length))));
           return { text: renderSearchHits(hits) };
@@ -130,7 +131,7 @@ export async function POST(req: Request): Promise<Response> {
           const p = parseFetchRecordInput(input);
           if (typeof p === 'string') return { text: p, isError: true };
           let dbId = p.id;
-          if (p.kind === 'signal' || p.kind === 'paper') {
+          if (p.kind === 'signal' || p.kind === 'paper' || p.kind === 'item' || p.kind === 'fact') {
             const uuid = tagger.idFor(p.id);
             if (!uuid) {
               return { text: `Unknown ${p.kind} tag ${p.id}. Use a tag from a result in this conversation.`, isError: true };

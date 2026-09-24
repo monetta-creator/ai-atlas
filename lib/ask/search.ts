@@ -378,16 +378,27 @@ export async function searchAtlas(
   q: Q,
   query: string,
   opts: {
-    kinds: PeekKind[]; limit: number; admin?: boolean;
+    kinds: PeekKind[]; limit: number; admin?: boolean; portal?: boolean;
     tagFor: (id: string) => string;
     // Papers mint P-tags on the shared counter; without a minter the paper
     // kind is skipped (callers that predate the research corpus).
     paperTagFor?: (id: string) => string;
+    // Company intelligence items (scan_items/intel_items) mint I-tags, facts
+    // (intel_facts) mint X-tags, both on the shared counter. Without a minter
+    // the kind is skipped. Guest-unsafe: only searched when admin or portal.
+    itemTagFor?: (id: string) => string;
+    factTagFor?: (id: string) => string;
   }
 ): Promise<AtlasSearchHit[]> {
   const want = new Set(opts.kinds);
   const lim = Math.min(8, Math.max(1, Math.floor(opts.limit) || 5));
   const hits: AtlasSearchHit[] = [];
+  // scan_items/intel_items/intel_facts carry no search_tsv (no FTS index), so
+  // this leg matches on plain word ILIKE across their text columns: at least
+  // one query word must appear. Guest-unsafe by construction (never called
+  // for a guest), gated again here as a second line of defense.
+  const canSeeIntel = (opts.admin || opts.portal) === true;
+  const words = query.toLowerCase().match(/[a-z0-9]{3,}/g)?.slice(0, 6) ?? [];
 
   if (want.has('claim')) {
     const rows = await q<{ code: string; statement: string; is_frame: boolean }>(
@@ -485,6 +496,58 @@ export async function searchAtlas(
         kind: 'signal',
         id: opts.tagFor(r.id),
         snippet: `"${r.title}"${r.is_published ? '' : ' (draft)'} ${snip(r.summary, 220)}${touches}`,
+      });
+    }
+  }
+
+  if (want.has('item') && canSeeIntel && opts.itemTagFor && words.length) {
+    const itag = opts.itemTagFor;
+    const scanRows = await q<{ id: string; headline: string | null; summary: string | null; source_domain: string | null; published_date: string | null }>(
+      `select id::text as id, headline, summary, source_domain, to_char(published_date, 'YYYY-MM-DD') as published_date
+         from scan_items
+        where headline ilike any($1::text[]) or summary ilike any($1::text[])
+        order by published_date desc nulls last limit ${lim}`,
+      [words.map((w) => `%${w}%`)]
+    );
+    for (const r of scanRows) {
+      const anchor = r.source_domain ? ` (${r.source_domain}${r.published_date ? `, ${r.published_date}` : ''})` : '';
+      hits.push({
+        kind: 'item',
+        id: itag(`scan:${r.id}`),
+        snippet: `"${snip(r.headline ?? 'Scan item', 150)}"${anchor}: ${snip(r.summary, 220)}`,
+      });
+    }
+    const intelRows = await q<{ id: string; headline: string | null; summary: string | null; source_domain: string | null; company_slug: string | null; published_date: string | null }>(
+      `select id::text as id, headline, summary, source_domain, company_slug, to_char(published_date, 'YYYY-MM-DD') as published_date
+         from intel_items
+        where headline ilike any($1::text[]) or summary ilike any($1::text[]) or company_slug ilike any($1::text[])
+        order by published_date desc nulls last limit ${lim}`,
+      [words.map((w) => `%${w}%`)]
+    );
+    for (const r of intelRows) {
+      const bits = [r.company_slug, r.source_domain, r.published_date].filter(Boolean).join(' · ');
+      hits.push({
+        kind: 'item',
+        id: itag(`intel:${r.id}`),
+        snippet: `"${snip(r.headline ?? 'Intel item', 150)}"${bits ? ` (${bits})` : ''}: ${snip(r.summary, 220)}`,
+      });
+    }
+  }
+
+  if (want.has('fact') && canSeeIntel && opts.factTagFor && words.length) {
+    const ftag = opts.factTagFor;
+    const rows = await q<{ id: string; fact: string; value_text: string | null; dimension: string; company_slug: string; as_of: string | null }>(
+      `select id::text as id, fact, value_text, dimension, company_slug, to_char(as_of, 'YYYY-MM-DD') as as_of
+         from intel_facts
+        where fact ilike any($1::text[]) or company_slug ilike any($1::text[]) or dimension ilike any($1::text[])
+        order by as_of desc nulls last limit ${lim}`,
+      [words.map((w) => `%${w}%`)]
+    );
+    for (const r of rows) {
+      hits.push({
+        kind: 'fact',
+        id: ftag(r.id),
+        snippet: `${r.company_slug} · ${r.dimension}: ${snip(r.fact, 220)}${r.value_text ? ` (${snip(r.value_text, 80)})` : ''}${r.as_of ? ` as of ${r.as_of}` : ''}`,
       });
     }
   }

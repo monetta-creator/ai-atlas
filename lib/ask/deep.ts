@@ -19,8 +19,9 @@ export const MAX_CALLS_PER_ROUND = 6;
 export const RESULT_CAP = 1500;
 export const INPUT_TOKEN_CAP = 40_000;
 
-// S = signal tags, P = paper tags; one shared counter mints both (see retrieve.ts).
-const TAG_RE = /^[SP]\d{1,4}$/i;
+// S = signal tags, P = paper tags, I = scan/intel item tags, X = intel fact
+// tags; one shared counter mints all four (see retrieve.ts).
+const TAG_RE = /^[SPIX]\d{1,4}$/i;
 const CODE_RE = /^[A-Za-z0-9.\-]{1,20}$/;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,79}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,6 +34,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 interface SignalTagger {
   tagFor(id: string): string;
   paperTagFor(id: string): string;
+  itemTagFor(id: string): string;
+  factTagFor(id: string): string;
   idFor(tag: string): string | null;
   refs(): { tag: string; id: string }[];
 }
@@ -40,20 +43,23 @@ interface SignalTagger {
 export function createTagger(seed: Record<string, string>, offset: number): SignalTagger {
   // One byId map per kind (a signal uuid and a paper uuid can never collide,
   // but keeping them separate keeps each mint idempotent per kind); one shared
-  // byTag map and ONE shared counter so S and P sequences never reuse a number.
+  // byTag map and ONE shared counter so S/P/I/X sequences never reuse a number.
   const sById = new Map<string, string>();
   const pById = new Map<string, string>();
+  const iById = new Map<string, string>(); // item ids are composite "scan:<uuid>" / "intel:<uuid>"
+  const xById = new Map<string, string>(); // intel_facts ids are bare uuids
   const byTag = new Map<string, string>();
+  const byIdMap = (t: string) => (t.startsWith('P') ? pById : t.startsWith('I') ? iById : t.startsWith('X') ? xById : sById);
   let max = Number.isFinite(offset) ? Math.max(0, Math.floor(offset)) : 0;
   for (const [tag, id] of Object.entries(seed)) {
     const t = tag.toUpperCase();
     if (!TAG_RE.test(t) || byTag.has(t)) continue;
-    (t.startsWith('P') ? pById : sById).set(id, t);
+    byIdMap(t).set(id, t);
     byTag.set(t, id);
     const n = Number(t.slice(1));
     if (n > max) max = n;
   }
-  const mint = (byId: Map<string, string>, prefix: 'S' | 'P') => (id: string): string => {
+  const mint = (byId: Map<string, string>, prefix: 'S' | 'P' | 'I' | 'X') => (id: string): string => {
     let t = byId.get(id);
     if (!t) {
       t = `${prefix}${++max}`;
@@ -65,14 +71,20 @@ export function createTagger(seed: Record<string, string>, offset: number): Sign
   return {
     tagFor: mint(sById, 'S'),
     paperTagFor: mint(pById, 'P'),
+    itemTagFor: mint(iById, 'I'),
+    factTagFor: mint(xById, 'X'),
     idFor(tag: string): string | null {
       return byTag.get(tag.trim().toUpperCase()) ?? null;
     },
     refs(): { tag: string; id: string }[] {
-      return [...sById, ...pById].map(([id, tag]) => ({ tag, id }));
+      return [...sById, ...pById, ...iById, ...xById].map(([id, tag]) => ({ tag, id }));
     },
   };
 }
+
+// Item ids are composite ("scan:<uuid>" / "intel:<uuid>", see retrieve.ts);
+// every other tagged kind is a bare uuid.
+const COMPOSITE_ITEM_RE = /^(scan|intel):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // The client's stored tag -> uuid map, sent alongside signalOffset. Untrusted
 // input: keep only well-shaped entries, bounded.
@@ -82,8 +94,11 @@ export function parseSignalMap(v: unknown): Record<string, string> {
   let kept = 0;
   for (const [tag, id] of Object.entries(v as Record<string, unknown>)) {
     if (kept >= 200) break;
-    if (TAG_RE.test(tag) && typeof id === 'string' && UUID_RE.test(id)) {
-      out[tag.toUpperCase()] = id;
+    if (!TAG_RE.test(tag) || typeof id !== 'string') continue;
+    const t = tag.toUpperCase();
+    const validId = t.startsWith('I') ? (UUID_RE.test(id) || COMPOSITE_ITEM_RE.test(id)) : UUID_RE.test(id);
+    if (validId) {
+      out[t] = id;
       kept++;
     }
   }
@@ -93,15 +108,15 @@ export function parseSignalMap(v: unknown): Record<string, string> {
 // ---------------------------------------------------------------- tools
 // Questions are absent from search_atlas on purpose: they have no search_tsv
 // column (0020 skipped them) and all seven are always in the skeleton.
-const SEARCH_KINDS = ['claim', 'bridge', 'stance', 'concept', 'signal', 'paper', 'thread'] as const;
-const FETCH_KINDS = ['claim', 'bridge', 'stance', 'question', 'concept', 'signal', 'paper', 'thread'] as const;
+const SEARCH_KINDS = ['claim', 'bridge', 'stance', 'concept', 'signal', 'paper', 'thread', 'item', 'fact'] as const;
+const FETCH_KINDS = ['claim', 'bridge', 'stance', 'question', 'concept', 'signal', 'paper', 'thread', 'item', 'fact'] as const;
 type FetchKind = (typeof FETCH_KINDS)[number];
 
 export const DEEP_TOOLS: Anthropic.Tool[] = [
   {
     name: 'search_atlas',
     description:
-      'Full-text search over the Atlas records: claims, bridge claims, stances, concepts, signals, research papers, and research threads. Returns matching records labeled with the exact bracketed IDs to cite. Questions are not searchable here; all seven are already in the map you were given.',
+      'Full-text search over the Atlas records: claims, bridge claims, stances, concepts, signals, research papers, research threads, and, for tracked companies, company intelligence items and extracted facts. Returns matching records labeled with the exact bracketed IDs to cite. Questions are not searchable here; all seven are already in the map you were given.',
     input_schema: {
       type: 'object',
       properties: {
@@ -122,12 +137,12 @@ export const DEEP_TOOLS: Anthropic.Tool[] = [
   {
     name: 'fetch_record',
     description:
-      'Fetch one record in full detail: a claim or bridge with its falsifying test, evidence rows, and touching signals; a stance, question, or concept in full; a signal with its brief, counterpoint, and source; a research paper with its structured finding; or a research thread with its synthesis and member papers. Use the ID exactly as labeled: a claim or bridge code like 2.3 or B1, a stance code like Q1-S1A, a question, concept, or thread slug, a signal tag like S3, or a paper tag like P4 from earlier results.',
+      'Fetch one record in full detail: a claim or bridge with its falsifying test, evidence rows, and touching signals; a stance, question, or concept in full; a signal with its brief, counterpoint, and source; a research paper with its structured finding; a research thread with its synthesis and member papers; a company intelligence item; or an extracted fact. Use the ID exactly as labeled: a claim or bridge code like 2.3 or B1, a stance code like Q1-S1A, a question, concept, or thread slug, a signal tag like S3, a paper tag like P4, an item tag like I3, or a fact tag like X31 from earlier results.',
     input_schema: {
       type: 'object',
       properties: {
         kind: { type: 'string', enum: [...FETCH_KINDS] },
-        id: { type: 'string', description: 'The record ID: a code, a slug, or a signal tag.' },
+        id: { type: 'string', description: 'The record ID: a code, a slug, or a tag.' },
       },
       required: ['kind', 'id'],
     },
@@ -192,6 +207,14 @@ export function parseFetchRecordInput(v: unknown): FetchRecordInput | string {
   }
   if (kind === 'paper') {
     if (!/^P\d{1,4}$/i.test(raw)) return 'For papers, id must be a tag like P4 from an earlier result in this conversation.';
+    return { kind, id: raw.toUpperCase() };
+  }
+  if (kind === 'item') {
+    if (!/^I\d{1,4}$/i.test(raw)) return 'For items, id must be a tag like I3 from an earlier result in this conversation.';
+    return { kind, id: raw.toUpperCase() };
+  }
+  if (kind === 'fact') {
+    if (!/^X\d{1,4}$/i.test(raw)) return 'For facts, id must be a tag like X31 from an earlier result in this conversation.';
     return { kind, id: raw.toUpperCase() };
   }
   if (kind === 'question' || kind === 'concept' || kind === 'thread') {
@@ -483,11 +506,11 @@ export function parseVerifyOutput(
 // rework is the DEFAULT admin chat, not a toggle). Never an em dash in any of
 // this.
 export const DEEP_ADDENDUM = `You research every question before answering. Your tools:
-- search_atlas finds records by topic across claims, bridges, stances, concepts, and signals.
-- fetch_record pulls one record in full: evidence rows, falsifying tests, touching signals, the article source behind a signal.
+- search_atlas finds records by topic across claims, bridges, stances, concepts, signals, and, for tracked companies, company intelligence items and extracted facts.
+- fetch_record pulls one record in full: evidence rows, falsifying tests, touching signals, the article source behind a signal, or the full text of a company intelligence item or fact.
 - search_articles searches the retained full text of the articles behind published signals, for primary-source language.
 
-Work in rounds: search broadly first, then fetch the records that look load-bearing, then check article text when the exact wording matters. Results are capped, so make each call count; a handful of well-chosen calls beats many shallow ones. When you have enough, stop calling tools and write the final answer following every rule above. Cite only IDs that appear in the map or in your tool results, exactly as labeled there. Signal tags like S3 stay valid across the whole conversation. When a claim's story runs through tracked developments, cite the touching signals by tag alongside the claim, not just the claim.
+Work in rounds: search broadly first, then fetch the records that look load-bearing, then check article text when the exact wording matters. Results are capped, so make each call count; a handful of well-chosen calls beats many shallow ones. When you have enough, stop calling tools and write the final answer following every rule above. Cite only IDs that appear in the map or in your tool results, exactly as labeled there. Signal tags like S3, item tags like I3, and fact tags like X31 all stay valid across the whole conversation. When a claim's story runs through tracked developments, cite the touching signals by tag alongside the claim, not just the claim. A question about a specific tracked company (its financial results, a filing, a product, a deal) is best answered from its intel items and facts: search_atlas with kinds ["item","fact"] and cite the facts directly.
 
 The reader asks one question and expects the full picture in one answer. Write it comprehensive, pinpoint, and self-contained: never ask a follow-up question, never defer material to a next turn, and never pad. If you state which way the records lean, open that sentence with "One reading:" and name the strongest record on the other side in the same paragraph; never present a lean as the Atlas's verdict.
 

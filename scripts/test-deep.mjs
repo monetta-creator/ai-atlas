@@ -92,7 +92,7 @@ check('search input: defaults and clamps', () => {
   const p = parseSearchAtlasInput({ query: '  capex  ' });
   assert.equal(p.query, 'capex');
   assert.equal(p.limit, 5);
-  assert.equal(p.kinds.length, 7);
+  assert.equal(p.kinds.length, 9); // claim, bridge, stance, concept, signal, paper, thread, item, fact
   assert.equal(parseSearchAtlasInput({ query: 'x', limit: 99 }).limit, 8);
 });
 check('search input: kind filtering', () => {
@@ -108,12 +108,16 @@ check('fetch input: codes, slugs, tags', () => {
   assert.deepEqual(parseFetchRecordInput({ kind: 'claim', id: '2.3' }), { kind: 'claim', id: '2.3' });
   assert.deepEqual(parseFetchRecordInput({ kind: 'concept', id: 'Unit-Economics' }), { kind: 'concept', id: 'unit-economics' });
   assert.deepEqual(parseFetchRecordInput({ kind: 'signal', id: 's3' }), { kind: 'signal', id: 'S3' });
+  assert.deepEqual(parseFetchRecordInput({ kind: 'item', id: 'i3' }), { kind: 'item', id: 'I3' });
+  assert.deepEqual(parseFetchRecordInput({ kind: 'fact', id: 'x31' }), { kind: 'fact', id: 'X31' });
 });
 check('fetch input: bad shapes rejected as strings', () => {
   assert.equal(typeof parseFetchRecordInput({ kind: 'signal', id: '2.3' }), 'string');
   assert.equal(typeof parseFetchRecordInput({ kind: 'evidence', id: 'x' }), 'string');
   assert.equal(typeof parseFetchRecordInput({ kind: 'claim', id: 'a b c' }), 'string');
   assert.equal(typeof parseFetchRecordInput({ kind: 'claim' }), 'string');
+  assert.equal(typeof parseFetchRecordInput({ kind: 'item', id: '2.3' }), 'string');
+  assert.equal(typeof parseFetchRecordInput({ kind: 'fact', id: 'S3' }), 'string');
 });
 check('articles input: query required', () => {
   assert.deepEqual(parseSearchArticlesInput({ query: 'tokens' }), { query: 'tokens' });
@@ -192,6 +196,45 @@ await acheck('searchAtlas: only asked-for kinds hit the DB', async () => {
   const q = async () => { calls++; return []; };
   await searchAtlas(q, 'q', { kinds: ['claim', 'concept'], limit: 5, tagFor: () => 'S1' });
   assert.equal(calls, 2);
+});
+await acheck('searchAtlas: item/fact kinds skipped without admin/portal or a minter', async () => {
+  let calls = 0;
+  const q = async () => { calls++; return []; };
+  await searchAtlas(q, 'upstart profitability', { kinds: ['item', 'fact'], limit: 5, tagFor: () => 'S1' });
+  assert.equal(calls, 0, 'no minter, no admin/portal: guest-unsafe, must not query');
+  await searchAtlas(q, 'upstart profitability', {
+    kinds: ['item', 'fact'], limit: 5, tagFor: () => 'S1',
+    itemTagFor: () => 'I1', factTagFor: () => 'X1',
+  });
+  assert.equal(calls, 0, 'minters present but neither admin nor portal: still must not query');
+});
+await acheck('searchAtlas: item/fact kinds hit scan_items/intel_items/intel_facts for admin', async () => {
+  const rows = [
+    [{ id: 'a1', headline: 'Upstart headline', summary: 'sum', source_domain: 'wire.com', published_date: '2026-09-01' }], // scan_items
+    [{ id: 'a2', headline: 'Upstart intel headline', summary: 'sum2', source_domain: 'sec.gov', company_slug: 'upstart', published_date: '2026-09-02' }], // intel_items
+    [{ id: 'a3', fact: 'Q2 revenue rose', value_text: '$100M', dimension: 'financials', company_slug: 'upstart', as_of: '2026-08-15' }], // intel_facts
+  ];
+  const hits = await searchAtlas(fakeQ(rows), 'upstart profitability', {
+    kinds: ['item', 'fact'], limit: 5, admin: true, tagFor: () => 'S1',
+    itemTagFor: (id) => `I:${id}`, factTagFor: (id) => `X:${id}`,
+  });
+  assert.equal(hits.length, 3);
+  assert.equal(hits[0].kind, 'item');
+  assert.equal(hits[0].id, 'I:scan:a1');
+  assert.ok(hits[0].snippet.includes('Upstart headline'));
+  assert.equal(hits[1].id, 'I:intel:a2');
+  assert.equal(hits[2].kind, 'fact');
+  assert.equal(hits[2].id, 'X:a3');
+  assert.ok(hits[2].snippet.includes('upstart · financials'));
+});
+await acheck('searchAtlas: item/fact skip the DB when the query has no word-shaped terms', async () => {
+  let calls = 0;
+  const q = async () => { calls++; return []; };
+  await searchAtlas(q, '??', {
+    kinds: ['item', 'fact'], limit: 5, admin: true, tagFor: () => 'S1',
+    itemTagFor: () => 'I1', factTagFor: () => 'X1',
+  });
+  assert.equal(calls, 0);
 });
 await acheck('searchArticles: both legs, tags anchored', async () => {
   const t = createTagger({}, 0);
