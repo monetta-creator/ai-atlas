@@ -1,4 +1,5 @@
 import { one, q } from '../db';
+import { checkSavantBudget } from '../savant/budget';
 import { OPS_JOBS, type OpsJob, todaysFires, nextFire, fmtEt } from '../ops/registry';
 import { PIPELINE_DAY_START_SQL } from '../pipeline/config';
 import { getDailyJobStatus, type DailyJobStatus } from './readiness';
@@ -202,9 +203,36 @@ async function snapshotFor(job: OpsJob, now: Date): Promise<{ snap: RawSnapshot 
         spentUsd: null, capUsd: null,
       };
     }
+    case 'savant': {
+      // The notebook has no run row; a day "ran" when it wrote entries. Spend
+      // is per issue week (savant_* features stamped with week_end).
+      const row = await one<{ day: string; n: number; kinds: string[]; last: string }>(
+        `select day::text as day, count(*)::int as n, array_agg(distinct kind order by kind) as kinds, max(created_at)::text as last
+           from savant_notebook where day = $1::date group by day`,
+        [day]
+      );
+      const weekEnd = fridayOnOrAfterUTC(now);
+      const budget = await checkSavantBudget(weekEnd);
+      return {
+        snap: row && {
+          status: 'completed', step: null, error: null, notes: [], day: row.day, startedAt: null, finishedAt: row.last,
+          summary: `${row.n} notebook entries · ${row.kinds.join(', ')}`,
+        },
+        spentUsd: budget.spentUsd, capUsd: budget.capUsd,
+      };
+    }
     default:
       return { snap: null, spentUsd: null, capUsd: null };
   }
+}
+
+// The Friday on or after `now` (UTC): Savant's issue week for today.
+function fridayOnOrAfterUTC(now: Date): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const dow = d.getUTCDay();
+  const ahead = (5 - dow + 7) % 7;
+  d.setUTCDate(d.getUTCDate() + ahead);
+  return d.toISOString().slice(0, 10);
 }
 
 // The most recent Friday on or before `now` (UTC): the roundup's natural key
@@ -422,6 +450,14 @@ export async function getOpsHistory(days = 14, now: Date = new Date()): Promise<
         const rowsB = await q<{ day: string }>(`select day::text as day from agent_briefs where day >= $1::date`, [dayList[0]]);
         const present = new Set(rowsB.map((r) => r.day));
         cells = new Map(dayList.map((day) => [day, present.has(day) ? 'completed' as const : 'none' as const]));
+        break;
+      }
+      case 'savant': {
+        const rowsS = await q<{ day: string }>(`select distinct day::text as day from savant_notebook where day >= $1::date`, [dayList[0]]);
+        const present = new Set(rowsS.map((r) => r.day));
+        cells = new Map(
+          dayList.map((day) => [day, present.has(day) ? 'completed' as const : isWeekendUTC(day) ? 'off' as const : 'none' as const])
+        );
         break;
       }
       default:

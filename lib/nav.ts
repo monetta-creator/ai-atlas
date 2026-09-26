@@ -77,6 +77,7 @@ export const NAV_TREE: NavGroup[] = [
       { href: '/reports', label: 'Portal', access: 'public' },
       { href: '/intel/deck', label: 'Intel deck', access: 'portal' },
       { href: '/reports/period', label: 'Period generator', access: 'admin' },
+      { href: '/savant/desk', label: 'Savant desk', access: 'admin' },
     ],
   },
   {

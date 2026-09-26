@@ -84,6 +84,9 @@ export const SUBSYSTEMS: Record<string, SubsystemGroup> = {
 
   // ---- editions -------------------------------------------------------------
   edition_prefs: 'editions',
+  // Savant, the autonomous weekly research report (0068): its notebook,
+  // hypotheses ledger and prefs sit with the editions.
+  savant_notebook: 'editions', savant_hypotheses: 'editions', savant_prefs: 'editions',
 
   // ---- prefs & site meta ------------------------------------------------
   content_blocks: 'prefs-and-meta', home_prefs: 'prefs-and-meta',
@@ -198,6 +201,9 @@ export const ACCESS_TIER: Record<string, TierInfo> = {
 
   // editions
   edition_prefs: { tier: 'admin', reason: 'the Daily Edition config singleton' },
+  savant_notebook: { tier: 'admin', reason: 'Savant’s working notebook; the issue renders a curated appendix from it, the rows themselves stay admin' },
+  savant_hypotheses: { tier: 'key', reason: 'the hypotheses ledger is printed in every key-gated Savant issue' },
+  savant_prefs: { tier: 'admin', reason: 'the Savant config singleton' },
 
   // prefs-and-meta
   content_blocks: { tier: 'admin', reason: 'edited only in edit mode; treated as admin working content' },

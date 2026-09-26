@@ -194,6 +194,18 @@ export const OPS_JOBS: OpsJob[] = [
     dayBoundary: 'utc-midnight',
     readLatest: 'agent-brief',
   }),
+  job({
+    key: 'savant',
+    label: 'Savant Notebook',
+    family: 'agent',
+    paths: ['/api/cron/savant'],
+    describe: 'Weekdays 17:15 UTC: Savant’s research notebook for the week’s issue: cross-store connections through the embeddings table, metric and volume anomalies, misses, the Monday plan and hypothesis, one diary note.',
+    consoleHref: '/savant/desk',
+    pausePref: { table: 'savant_prefs', column: 'enabled' },
+    deadmanEnv: 'HC_PING_URL_SAVANT',
+    dayBoundary: 'utc-midnight',
+    readLatest: 'savant',
+  }),
 ];
 
 // ---- Pure cron-expression helpers ------------------------------------------

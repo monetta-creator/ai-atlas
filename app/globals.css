@@ -23,6 +23,7 @@
 @import "./styles/agent.css";         /* Atlas Agent orb + drawer + console (.ag-*) */
 @import "./styles/home.css"; /* Console Broadsheet layer — scoped to .bs (the home page) */
 @import "./styles/edition.css"; /* /blotter daily edition read view (.ed-*) */
+@import "./styles/savant.css"; /* /savant/desk weekly notebook + hypotheses ledger (.sv-*) */
 @import "./styles/traceroute.css"; /* Traceroute explainer — scoped to .tr (/traceroute) */
 @import "./styles/costs-deck.css"; /* /costs/deck live 16:9 presentation stage (.cdk-*) */
 @import "./styles/education.css"; /* /education hub + guides (.edu) */

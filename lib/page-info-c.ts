@@ -76,4 +76,16 @@ export const PAGE_INFO_C: Record<string, PageInfoContent> = {
       },
     ],
   },
+  '/savant/desk': {
+    title: 'Savant desk',
+    summary:
+      'Savant is the Atlas\'s autonomous weekly research report. This desk shows the week\'s notebook ' +
+      '(connections, anomalies, misses, the Monday plan, daily notes), the hypotheses ledger, and the prefs.',
+    sections: [
+      {
+        heading: 'How the week runs',
+        body: 'A weekday pass writes to the notebook at 17:15 UTC: it plans a lead for Monday, and every day adds notes, connections, echoes, anomalies, and misses as it finds them. Friday\'s issue reads the week\'s notebook and closes or moves each open hypothesis.',
+      },
+    ],
+  },
 };

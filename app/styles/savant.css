@@ -1,0 +1,145 @@
+/* ============================================================
+   AI ATLAS · SAVANT DESK (.sv-*) — /savant/desk, the admin console over
+   the weekly notebook the weekday pass writes and the hypotheses ledger
+   the Friday issue keeps. Tokens only, theme-aware via the vars already
+   redefined for dark mode in tokens.css. Class map:
+     .sv-desk                the page's vertical stack of sections
+     .sv-weekpick            the last-12-weeks + current-week link strip
+     .sv-day / .sv-day-head  one weekday's rows, mono caps head
+     .sv-row                 one notebook row
+     .sv-kind                small-caps kind chip, cobalt for plan
+     .sv-sim                 mono similarity / clipped-payload text
+     .sv-chip                a small outlined tag (watch item, fallback, z)
+     .sv-status[data-status] the hypothesis status word
+     .sv-table                the hypotheses ledger
+   ============================================================ */
+
+.sv-desk { display: flex; flex-direction: column; gap: 8px; }
+
+.sv-section { margin-bottom: 32px; }
+
+.sv-h2 {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint-ink);
+  margin: 0 0 12px;
+}
+
+.sv-empty { color: var(--faint-ink); font-size: 13px; }
+
+.sv-weekpick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 20px;
+}
+
+.sv-weekpick a, .sv-weekpick span {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  text-decoration: none;
+}
+
+.sv-weekpick a[data-active], .sv-weekpick span[data-active] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.sv-day { margin-bottom: 18px; }
+
+.sv-day-head {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint-ink);
+  padding-top: 10px;
+  margin: 0 0 8px;
+  border-top: 1px solid var(--line);
+}
+
+.sv-row {
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.sv-row p { margin: 6px 0; }
+.sv-row ul { margin: 4px 0 4px 18px; padding: 0; }
+
+.sv-kind {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--line);
+  color: var(--dim);
+  margin-right: 8px;
+}
+
+.sv-kind[data-kind="plan"] {
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+
+.sv-sim {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--faint-ink);
+}
+
+.sv-chip {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  margin: 2px 4px 2px 0;
+}
+
+.sv-status[data-status="open"] { color: var(--dim); }
+.sv-status[data-status="strengthened"] { color: var(--supports); }
+.sv-status[data-status="weakened"] { color: var(--contradicts); }
+.sv-status[data-status="closed"] { color: var(--faint-ink); }
+
+.sv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+.sv-table th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint-ink);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sv-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.sv-prefs {
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: var(--card-pad);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 640px;
+}

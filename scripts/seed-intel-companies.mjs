@@ -27,6 +27,8 @@ import pg from 'pg';
 //   "feed_urls": ["https://..."],           // optional; defaults to one Google News RSS URL
 //   "search_queries": ["Example Bancorp strategy announcement {month} {year}"],  // optional; defaults to []
 //   "ats": { "provider": "greenhouse", "board": "example" },  // optional; "greenhouse" | "lever"
+//   "public_blurb": "A short public-facing description written from public sources; the ONE
+//                    registry field Savant (lib/savant) may quote as reader context.", // optional
 //   "cfpb_name": "EXAMPLE BANCORP, N.A."   // optional; the exact CFPB-registered name to
 //                                          // query when the automatic _suggest_company pick
 //                                          // is wrong or empty. Omit or null keeps the
@@ -175,8 +177,8 @@ await client.connect();
 let upserted = 0;
 for (const c of companies) {
   await client.query(
-    `insert into intel_companies (slug, name, tier, niche, ticker, cik, rssd_id, fdic_cert, lei, domain, aliases, feed_urls, search_queries, ats, cfpb_name)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text[], $12::text[], $13::text[], $14::jsonb, $15)
+    `insert into intel_companies (slug, name, tier, niche, ticker, cik, rssd_id, fdic_cert, lei, domain, aliases, feed_urls, search_queries, ats, cfpb_name, public_blurb)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text[], $12::text[], $13::text[], $14::jsonb, $15, $16)
      on conflict (slug) do update set
        name = excluded.name,
        tier = excluded.tier,
@@ -191,13 +193,15 @@ for (const c of companies) {
        feed_urls = excluded.feed_urls,
        search_queries = excluded.search_queries,
        ats = excluded.ats,
-       cfpb_name = excluded.cfpb_name`,
+       cfpb_name = excluded.cfpb_name,
+       public_blurb = coalesce(excluded.public_blurb, intel_companies.public_blurb)`,
     [
       c.slug, c.name, c.tier, c.niche?.trim() || null, c.ticker?.trim() || null, c.cik ?? null,
       c.rssd_id?.trim() || null, c.fdic_cert?.trim() || null, c.lei?.trim() || null, c.domain?.trim() || null,
       c.aliases, c.feed_urls, c.search_queries ?? [],
       c.ats ? JSON.stringify({ provider: c.ats.provider, board: c.ats.board.trim() }) : null,
       c.cfpb_name,
+      typeof c.public_blurb === 'string' && c.public_blurb.trim() ? c.public_blurb.trim() : null,
     ]
   );
   upserted += 1;

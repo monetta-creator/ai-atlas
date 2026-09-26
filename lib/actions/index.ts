@@ -22,3 +22,4 @@ export * from './tooling-reports';
 export * from './agent';
 export * from './edition';
 export * from './portal';
+export * from './savant';
