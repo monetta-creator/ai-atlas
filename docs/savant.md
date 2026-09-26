@@ -62,6 +62,10 @@ Fallbacks: past the weekly budget or on a failed leg, the lead falls back to the
 
 `email.ts sendSavantIssue` sends the executive summary, the table of contents and a link, one Resend send per recipient: the admin (`AGENT_EMAIL_TO`, else `agent_prefs.email_to`) and every active key with `savant_email` set, toggled per key on `/access`. `savant_prefs.email_enabled` gates it (default off). Without a verified Resend sending domain only the account owner receives mail; the run records failures rather than failing.
 
+## Model picks and cost (2026-09-26)
+
+The desk's prefs form offers each role (writer, editor, notebook) a picker over `SAVANT_MODEL_OPTIONS` in `lib/savant/cost-model.ts`: Claude Sonnet 4.6 and Haiku 4.5 plus the six OpenRouter models of the scan registry (every one has an `ai_rate_cards` row; a model without one is offered with a "(no rate card)" note and its spend would not count against the weekly budget). The panel under the pickers estimates the week live: `SAVANT_TOKEN_PROFILE` (per leg: calls, input, cached input, output, measured on the 09-25 review runs) priced on the live rate cards (`getModelRates`), per leg and per role, with the delta against the saved picks. The lead research loop is Anthropic tool use plus web search, so a non-Anthropic writer hands that one leg to `LEAD_FALLBACK_MODEL` (Sonnet 4.6); the estimate shows it. Reference points on the measured profile: Sonnet everywhere about $0.41 a week; GLM writer + Haiku editor about $0.15 (the lead stays on Sonnet, $0.13 of it); Haiku everywhere about $0.15. Quality has not been measured for anything but Sonnet; Kevin's read of an issue written on a cheaper writer is the test.
+
 ## Tuning notes
 
 - Echoes need a paper or fact on one side; two news items at 0.99 are the scan and intel engines storing the same article.

@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import { allowlistForSavant } from '../lib/savant/allowlist.ts';
 import { deterministicChecks, stripTags, revisionKeepsFigures, numbersIn } from '../lib/savant/editor-core.ts';
 import { SAVANT_TOC, SAVANT_STRAPLINE } from '../lib/savant/types.ts';
+import { estimateSavantWeek, SAVANT_MODEL_OPTIONS, isAnthropicId, LEAD_FALLBACK_MODEL } from '../lib/savant/cost-model.ts';
+import { SCAN_ENRICH_MODELS } from '../lib/scan/models.ts';
 
 let pass = 0; let fail = 0;
 function check(name, fn) { try { fn(); pass += 1; console.log(`  ok  ${name}`); } catch (e) { fail += 1; console.error(`FAIL  ${name}\n      ${e.message}`); } }
@@ -95,6 +97,32 @@ check('the TOC has the fixed departments in order and the strapline names the pr
   assert.equal(SAVANT_TOC.length, 13);
   assert.ok(SAVANT_STRAPLINE.endsWith('Produced by The AI Atlas.'));
   assert.ok(!SAVANT_STRAPLINE.includes('—'));
+});
+
+const RATES = {
+  'claude-sonnet-4-6': { input: 3, output: 15, cacheRead: 0.3 },
+  'claude-haiku-4-5': { input: 1, output: 5, cacheRead: 0.1 },
+  'z-ai/glm-5.3-flash': { input: 0.075, output: 0.25, cacheRead: 0 },
+};
+
+check('the cost model prices a Sonnet week near the measured issue and a GLM writer hands only the lead to the fallback', () => {
+  const sonnet = estimateSavantWeek({ writer: 'claude-sonnet-4-6', editor: 'claude-sonnet-4-6', notebook: 'z-ai/glm-5.3-flash' }, RATES);
+  assert.ok(sonnet.total > 0.35 && sonnet.total < 0.6, `sonnet week ${sonnet.total}`);
+  assert.equal(sonnet.missingRates.length, 0);
+  const glm = estimateSavantWeek({ writer: 'z-ai/glm-5.3-flash', editor: 'claude-haiku-4-5', notebook: 'z-ai/glm-5.3-flash' }, RATES);
+  const lead = glm.legs.find((l) => l.leg.startsWith('Lead'));
+  assert.equal(lead.model, LEAD_FALLBACK_MODEL);
+  assert.equal(lead.fallback, true);
+  assert.equal(glm.legs.filter((l) => l.fallback).length, 1);
+  assert.ok(glm.total < sonnet.total);
+  const unknown = estimateSavantWeek({ writer: 'claude-sonnet-4-6', editor: 'vendor/unpriced', notebook: 'z-ai/glm-5.3-flash' }, RATES);
+  assert.deepEqual(unknown.missingRates, ['vendor/unpriced']);
+  assert.ok(SAVANT_MODEL_OPTIONS.some((m) => m.id === 'claude-sonnet-4-6' && m.anthropic));
+  assert.equal(isAnthropicId('z-ai/glm-5.3-flash'), false);
+  // The OpenRouter picks mirror the scan registry, whose rate cards test-scan.mjs checks live.
+  const scanIds = new Set(SCAN_ENRICH_MODELS.filter((m) => !m.anthropic).map((m) => m.id));
+  for (const m of SAVANT_MODEL_OPTIONS.filter((m) => !m.anthropic)) assert.ok(scanIds.has(m.id), `${m.id} is not in SCAN_ENRICH_MODELS`);
+  assert.equal(SAVANT_MODEL_OPTIONS.filter((m) => !m.anthropic).length, scanIds.size);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

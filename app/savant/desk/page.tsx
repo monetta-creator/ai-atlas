@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { adminGate } from '@/lib/admin-gate';
-import { getSavantPrefs, getNotebookWeeks, getNotebook, getHypotheses } from '@/lib/data/savant';
+import { getSavantPrefs, getNotebookWeeks, getNotebook, getHypotheses, getModelRates } from '@/lib/data/savant';
 import { listSavantIssues } from '@/lib/data/savant-issues';
 import { getNavCounts } from '@/lib/data';
 import { weekEndFor, isoDay } from '@/lib/savant/week';
@@ -39,13 +39,14 @@ export default async function SavantDeskPage({
   const currentWeek = weekEndFor(isoDay(new Date()));
   const week = sp.week && WEEK_RE.test(sp.week) ? sp.week : currentWeek;
 
-  const [prefs, weeks, rows, hypotheses, counts, issues] = await Promise.all([
+  const [prefs, weeks, rows, hypotheses, counts, issues, rates] = await Promise.all([
     getSavantPrefs(),
     getNotebookWeeks(12),
     getNotebook(week),
     getHypotheses(40),
     getNavCounts().catch(() => null),
     listSavantIssues(20, false),
+    getModelRates().catch(() => ({})),
   ]);
   const weekIssue = issues.find((i) => i.week_end === week) ?? null;
 
@@ -138,7 +139,7 @@ export default async function SavantDeskPage({
 
         <section className="sv-section">
           <h2 className="sv-h2">Prefs</h2>
-          <SavantPrefsForm prefs={prefs} />
+          <SavantPrefsForm prefs={prefs} rates={rates} />
         </section>
       </div>
     </section>

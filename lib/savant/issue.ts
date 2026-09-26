@@ -9,6 +9,7 @@ import type { LeadResult } from './lead';
 import { writeSummaryAndHypotheses, writeDepartments, writePeers, md2html } from './write';
 import { deterministicChecks, editorReview, reviseSection } from './editor';
 import { planFigures } from './figures';
+import { isAnthropicId, LEAD_FALLBACK_MODEL } from './cost-model';
 import type { SavantFigure } from './figures-core';
 import { revisionKeepsFigures } from './editor-core';
 import type { Draft } from './editor';
@@ -99,7 +100,9 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
   const budget = await checkSavantBudget(weekEnd);
   const done: Leg[] = [];
 
-  // 2. Lead research.
+  // 2. Lead research. The loop is Anthropic tool use + web search, so a
+  // non-Anthropic writer hands this one leg to the fallback.
+  const leadModel = isAnthropicId(prefs.writer_model) ? prefs.writer_model : LEAD_FALLBACK_MODEL;
   let lead: LeadResult;
   const leadParked = await parked<LeadParked>(weekEnd, 'lead');
   if (leadParked) {
@@ -107,7 +110,7 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
   } else {
     if (timeLeft() < 150_000) return { partial: true, weekEnd, done, next: 'lead' };
     lead = budget.ok
-      ? await researchLead(pack, { model: prefs.writer_model, deadlineMs: Math.min(timeLeft() - 30_000, 200_000), weekEnd }).catch(() => deterministicLead(pack))
+      ? await researchLead(pack, { model: leadModel, deadlineMs: Math.min(timeLeft() - 30_000, 200_000), weekEnd }).catch(() => deterministicLead(pack))
       : deterministicLead(pack);
     await park<LeadParked>(weekEnd, 'lead', { ...lead, tagHrefs: [...lead.tagHrefs.entries()] });
   }
@@ -249,7 +252,7 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
     research: { queries: lead.queries, roundsUsed: lead.rounds, webSearches: lead.webSearches, dropped: [...revisionRejected.map((s) => `revision discarded for ${s}: it introduced a figure the original did not state`), ...figures.dropped.map((d) => `figure dropped: ${d}`)] },
     citedTags: [],
     dropped: [...new Set(dropped)],
-    models: { writer: prefs.writer_model, editor: prefs.editor_model, lead: prefs.writer_model },
+    models: { writer: prefs.writer_model, editor: prefs.editor_model, lead: leadModel },
     revised,
     figures: figures.figures,
   };

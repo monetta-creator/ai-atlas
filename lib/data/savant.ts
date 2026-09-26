@@ -1,5 +1,6 @@
 import { q, one } from '../db';
 import type { Hypothesis, NotebookKind, NotebookRow, SavantPrefs, SelfCompany } from '../savant/types';
+import type { RateTable } from '../savant/cost-model';
 
 // ---- Savant (migration 0068) ------------------------------------------------
 // Reads for the notebook, the hypotheses ledger, the prefs singleton and the
@@ -84,4 +85,15 @@ export async function getSelfCompany(): Promise<SelfCompany | null> {
 export async function getCompanyNameMap(): Promise<Map<string, string>> {
   const rows = await q<{ slug: string; name: string }>(`select slug, name from intel_companies where active`);
   return new Map(rows.map((r) => [r.slug, r.name]));
+}
+
+// The live rate cards for the prefs form's cost estimate: USD per million
+// tokens by model id (numeric arrives as a number via lib/db's type parser).
+export async function getModelRates(): Promise<RateTable> {
+  const rows = await q<{ model: string; input: number; output: number; cache_read: number }>(
+    `select model, input_per_mtok as input, output_per_mtok as output, cache_read_per_mtok as cache_read from ai_rate_cards`
+  );
+  const out: RateTable = {};
+  for (const r of rows) out[r.model] = { input: Number(r.input), output: Number(r.output), cacheRead: Number(r.cache_read) };
+  return out;
 }

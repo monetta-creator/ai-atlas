@@ -141,8 +141,21 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 640px;
+  max-width: 760px;
 }
+.sv-cost { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; background: color-mix(in oklab, var(--accent) 4%, var(--surface)); }
+.sv-cost-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.sv-cost-kicker { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint-ink); }
+.sv-cost-total { font-family: var(--font-headline); font-size: 22px; color: var(--ink); }
+.sv-cost-delta { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.sv-cost-delta[data-sign="up"] { color: var(--contradicts); }
+.sv-cost-delta[data-sign="down"] { color: var(--supports); }
+.sv-cost-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.sv-cost-table th { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint-ink); text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.sv-cost-table td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.sv-cost-table tfoot td { border-bottom: none; font-weight: 700; color: var(--ink); padding-top: 8px; }
+.sv-cost-model { font-family: var(--font-mono); font-size: 11px; color: var(--dim); }
+.sv-cost-note { font-size: 12px; line-height: 1.5; color: var(--dim); margin: 10px 0 0; }
 
 /* ============================================================
    AI ATLAS · SAVANT — the weekly issue's reader-facing view (/savant, the
