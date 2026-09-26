@@ -4,6 +4,7 @@ import { adminGate } from '@/lib/admin-gate';
 import {
   getTargets, getThesis, getThesisReportsMeta, getThesisTreeData,
   resolvePeriodTouches, reconcileArgumentGapScan, getNavCounts,
+  getFeatureStats, getRecentJobOfKind,
 } from '@/lib/data';
 import {
   diagnoseThesisGapsAction, dismissThesisGapAction, clearThesisGapScanAction,
@@ -32,11 +33,13 @@ export default async function ThesisPage({ params }: { params: Promise<{ id: str
 
   const thesis = await getThesis(id);
   if (!thesis) notFound();
-  const [reports, targets, touches, treeNodes] = await Promise.all([
+  const [reports, targets, touches, treeNodes, runStats, lastRun] = await Promise.all([
     getThesisReportsMeta(id),
     getTargets(),
     resolvePeriodTouches(new Map(thesis.claim_codes.map((c) => [c, 0])), true),
     getThesisTreeData(thesis.claim_codes),
+    getFeatureStats().catch(() => null),
+    getRecentJobOfKind('thesis', { admin: true, keyId: null }, { subject: id }).catch(() => null),
   ]);
 
   // The per-thesis gap scan (migration 0036), reconciled so a recommendation whose
@@ -141,6 +144,8 @@ export default async function ThesisPage({ params }: { params: Promise<{ id: str
         <ThesisConsole
           thesis={{ id: thesis.id, statement: thesis.statement, status: thesis.status }}
           initialReports={reports}
+          stats={runStats}
+          initialJob={lastRun}
         />
       </section>
     </>

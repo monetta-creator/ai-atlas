@@ -1,0 +1,103 @@
+/* ============================================================
+   Model runs (2026-09-27): the one panel every model-call button uses
+   (components/jobs/ModelRunPanel.tsx), its compact single-call form
+   (ModelCallButton), and the rail's run indicator + completion toasts
+   (JobsIndicator, JobToasts). Class map:
+     .mr-panel[data-status] / .mr-steps / .mr-step[data-state]   the chained panel
+     .mr-line / .mr-now / .mr-clock / .mr-bar                     running line + progress
+     .mr-retry / .mr-leave / .mr-paused / .mr-done / .mr-fail     states
+     .mr-log                                                      the run log
+     .mr-call / .mr-inline[--done|--fail|--hint]                  the single-call button
+     .jobs-*                                                      rail indicator + popover
+   ============================================================ */
+
+.mr-idle { margin: 8px 0 0; font-size: 12.5px; color: var(--faint-ink); }
+
+.mr-panel {
+  margin-top: 12px; padding: 12px 14px; border-radius: 8px;
+  background: color-mix(in oklab, var(--accent) 5%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--accent) 24%, var(--line));
+  display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: var(--ink);
+}
+.mr-panel[data-status="failed"] {
+  background: color-mix(in oklab, var(--heat-4) 6%, var(--surface));
+  border-color: color-mix(in oklab, var(--heat-4) 30%, var(--line));
+}
+.mr-panel[data-status="done"] {
+  background: color-mix(in oklab, var(--supports) 6%, var(--surface));
+  border-color: color-mix(in oklab, var(--supports) 30%, var(--line));
+}
+
+.mr-steps { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; padding: 0; list-style: none; font-size: 12.5px; }
+.mr-step { display: inline-flex; align-items: center; gap: 6px; color: var(--faint-ink); }
+.mr-step[data-state="running"] { color: var(--ink); font-weight: 600; }
+.mr-step[data-state="done"] { color: var(--accent); }
+.mr-step[data-state="failed"] { color: var(--heat-4); }
+.mr-step + .mr-step::before { content: "→"; color: var(--faint-ink); margin-right: 8px; font-weight: 400; }
+.mr-glyph { font-family: var(--font-mono); font-size: 11px; }
+.mr-step[data-state="running"] .mr-glyph { animation: mr-pulse 1.2s ease-in-out infinite; }
+@keyframes mr-pulse { 50% { opacity: .35; } }
+
+.mr-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mr-now { font-weight: 500; }
+.mr-clock {
+  margin-left: auto; font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.mr-bar { height: 3px; border-radius: 3px; background: color-mix(in oklab, var(--accent) 14%, transparent); overflow: hidden; }
+.mr-bar > i { display: block; height: 100%; background: var(--accent); transition: width .9s linear; }
+
+.mr-retry { margin: 0; font-size: 12.5px; color: #a7651b; }
+.mr-leave { margin: 0; font-size: 11.5px; color: var(--faint-ink); }
+.mr-paused { margin: 0; color: var(--dim); }
+.mr-done { margin: 0; font-weight: 500; }
+.mr-done > span { color: var(--supports); margin-right: 2px; }
+.mr-link { color: var(--accent); font-weight: 600; text-decoration: none; }
+.mr-link:hover { text-decoration: underline; }
+.mr-fail { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mr-fail p { margin: 0; color: var(--heat-4); flex: 1 1 260px; }
+
+.mr-log summary { cursor: pointer; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint-ink); }
+.mr-log pre {
+  margin: 6px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap;
+  font-family: var(--font-mono); font-size: 11.5px; line-height: 1.5; color: var(--dim);
+}
+
+/* ---- the single-call button ---- */
+.mr-call { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mr-btn-spin { width: 11px; height: 11px; margin-right: 7px; vertical-align: -1px; }
+.mr-inline { font-size: 12.5px; color: var(--dim); }
+.mr-inline .mr-clock { margin-left: 4px; }
+.mr-inline-retry { color: #a7651b; }
+.mr-inline--done { color: var(--supports); }
+.mr-inline--fail { color: var(--heat-4); }
+.mr-inline--hint { color: var(--faint-ink); font-size: 12px; }
+.mr-inline-btn {
+  background: none; border: none; padding: 0; font: inherit; color: var(--accent);
+  text-decoration: underline; cursor: pointer;
+}
+
+/* ---- the rail indicator ---- */
+.jobs-badge {
+  position: absolute; top: 3px; right: 3px; min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 999px; background: var(--accent); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+}
+.jobs-spin { width: 16px; height: 16px; border-width: 2px; }
+.jobs-pop {
+  position: fixed; left: 64px; bottom: 120px; z-index: 70; width: 320px; max-height: 60vh; overflow: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 16px 40px -18px color-mix(in oklab, var(--ink) 45%, transparent);
+  padding: 10px; display: flex; flex-direction: column; gap: 6px;
+  animation: navmenu-in .14s var(--ease-soft);
+}
+.portal-rail[data-expanded] ~ .jobs-pop, .jobs-pop[data-wide] { left: 272px; }
+.jobs-pop-head { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint-ink); margin: 2px 4px 4px; }
+.jobs-row { display: flex; flex-direction: column; gap: 2px; padding: 7px 8px; border-radius: 8px; text-decoration: none; color: var(--ink); }
+.jobs-row:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); }
+.jobs-row-label { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.jobs-row-sub { font-size: 12px; color: var(--dim); display: flex; gap: 8px; }
+.jobs-row-sub .mr-clock { margin-left: auto; }
+.jobs-empty { font-size: 12.5px; color: var(--faint-ink); margin: 4px; }
+.ag-toast[data-tone="done"] { border-left: 3px solid var(--supports); }
+.ag-toast[data-tone="failed"] { border-left: 3px solid var(--heat-4); }

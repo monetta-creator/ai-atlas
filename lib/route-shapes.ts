@@ -95,6 +95,9 @@ export const PUBLIC_API_PREFIXES: readonly string[] = [
   // route under it gates in-route on identityFromRequest (scripts/test-api-gates.mjs).
   '/api/portal/',
   '/api/cron/',
+  // The model-run registry (lib/jobs): admin and keyholders poll their own
+  // running jobs; both routes gate in-route on identityFromRequest.
+  '/api/jobs/',
 ];
 
 export function isPublicApiPath(pathname: string): boolean {

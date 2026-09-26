@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NAV_ICONS, PORTAL_ICONS } from '@/components/portal-icons';
 import FeedbackButtons from '@/components/feedback/FeedbackButtons';
 import AgentOrb from '@/components/agent/AgentOrb';
+import JobsIndicator from '@/components/jobs/JobsIndicator';
 import { useLiveNavCounts } from '@/lib/nav-counts-client';
 import { useValueChange } from '@/lib/use-route-change';
 import type { AgentPulse } from '@/lib/agent/types';
@@ -238,6 +239,7 @@ export default function PortalRail({
 
       <div className="portal-rail-bottom">
         {NAV_ISLAND.map(renderGroup)}
+        <JobsIndicator enabled={!!admin || !!portal} />
         <div className="portal-rail-item">
           {admin && <AgentOrb variant="rail" initialPulse={agentPulse ?? null} />}
         </div>

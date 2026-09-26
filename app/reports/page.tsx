@@ -1,5 +1,5 @@
 import { isAdmin, isPortal } from '@/lib/auth';
-import { listSavedReports, getLatestThesisReports, listGeneratedReports, getTargets } from '@/lib/data';
+import { listSavedReports, getLatestThesisReports, listGeneratedReports, getTargets, getFeatureStats, getRecentJobOfKind } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
@@ -33,11 +33,15 @@ export default async function ReportPortal({
   const [admin, sp] = await Promise.all([isAdmin(), searchParams]);
   const portal = await isPortal();
   const { editing, txt } = await getEditContext();
-  const [reports, theses, generated, targets] = await Promise.all([
+  const [reports, theses, generated, targets, runStats, lastRun] = await Promise.all([
     listSavedReports(),
     getLatestThesisReports(50),
     listGeneratedReports(!admin, { portal }),
     admin ? getTargets() : Promise.resolve({ claims: [], bridges: [] }),
+    // The generator's run panel: the usual time and cost per step, and a run
+    // still going (or just ended) when the admin comes back to this page.
+    admin ? getFeatureStats().catch(() => null) : Promise.resolve(null),
+    admin ? getRecentJobOfKind('sheet', { admin: true, keyId: null }).catch(() => null) : Promise.resolve(null),
   ]);
 
   const cards = sortCards([
@@ -77,13 +81,15 @@ export default async function ReportPortal({
         />
 
         {admin && (
-          <details className="rp-console" open={!!gen}>
+          <details className="rp-console" open={!!gen || lastRun?.status === 'running'}>
             <summary>Generate a report</summary>
             <SheetConsole
               claims={targets.claims.map((t) => ({ code: t.code, statement: t.statement }))}
               bridges={targets.bridges.map((t) => ({ code: t.code, statement: t.statement }))}
               initialKind={initialKind}
               initialCode={initialCode}
+              stats={runStats}
+              initialJob={lastRun}
             />
           </details>
         )}

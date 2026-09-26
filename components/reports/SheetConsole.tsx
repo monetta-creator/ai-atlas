@@ -9,6 +9,9 @@ import {
 import type { SheetSectionsOut } from '@/lib/tearsheet/generate';
 import type { SheetPack } from '@/lib/types';
 import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL } from '@/lib/format';
+import { useModelRun } from '@/lib/jobs/use-model-run';
+import type { FeatureStats, StepSpec, UiJob } from '@/lib/jobs/core';
+import ModelRunPanel from '@/components/jobs/ModelRunPanel';
 
 // The Report Portal's generator console (admin): pick a pre-ready report kind
 // (the AlphaSense-agents card grid), a subject, and a scope; ONE button chains
@@ -16,23 +19,6 @@ import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL } from '@/lib/format';
 // client retries (the ThesisConsole discipline). Completion AUTO-SAVES a DRAFT:
 // saving a draft is not publication, the publish toggle on the drafts list is
 // the human gate that makes a report and its PDF public.
-
-const MAX_ATTEMPTS = 3;
-const backoff = (attempt: number) => new Promise((r) => setTimeout(r, attempt * 1500));
-
-async function withRetry<T extends { ok: boolean }>(fn: () => Promise<T>): Promise<T> {
-  let last: T | null = null;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      last = await fn();
-      if (last.ok) return last;
-    } catch (e) {
-      last = { ok: false, error: e instanceof Error ? e.message : 'error' } as unknown as T;
-    }
-    if (attempt < MAX_ATTEMPTS) await backoff(attempt);
-  }
-  return last as T;
-}
 
 type Kind = 'claim' | 'lens' | 'atlas';
 
@@ -44,22 +30,26 @@ const CARDS: { kind: Kind | 'period' | 'thesis'; name: string; desc: string; hre
   { kind: 'thesis', name: 'Thesis report', desc: 'A standing thesis re-run against the corpus. Generated from the Theses console.', href: '/theses', cta: 'Open the theses console' },
 ];
 
-const STEPS = [
-  { key: 'pack', running: 'Building the evidence pack…' },
-  { key: 'sections', running: 'Writing the cited narrative…' },
-  { key: 'close', running: 'Writing the bottom line…' },
-  { key: 'save', running: 'Saving the draft…' },
-] as const;
+// The chain, declared once: the panel's stepper, its running sentences, and
+// the ai_cost_log features whose history gives the usual time and cost.
+const STEPS: StepSpec[] = [
+  { key: 'pack', label: 'Evidence pack', running: 'Gathering the evidence, signals and connections from the Atlas…' },
+  { key: 'sections', label: 'Cited narrative', running: 'Writing the cited narrative (the longest step)…', features: ['tearsheet_sections'] },
+  { key: 'close', label: 'Bottom line', running: 'Writing the bottom line and the title…', features: ['tearsheet_close'] },
+  { key: 'save', label: 'Saved as a draft', running: 'Saving the draft…' },
+];
 
 export interface SheetTargetOption { code: string; statement: string }
 
 export default function SheetConsole({
-  claims, bridges, initialKind, initialCode,
+  claims, bridges, initialKind, initialCode, stats, initialJob,
 }: {
   claims: SheetTargetOption[];
   bridges: SheetTargetOption[];
   initialKind?: Kind;
   initialCode?: string;
+  stats?: FeatureStats | null;
+  initialJob?: UiJob | null;
 }) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>(initialKind ?? 'claim');
@@ -68,58 +58,68 @@ export default function SheetConsole({
   const [scopeMode, setScopeMode] = useState<'all' | 'window'>('all');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [running, setRunning] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<{ id: string; title: string; dropped: string[] } | null>(null);
+  // What a resumed run may reuse: the pack and sections built for these same
+  // inputs (a retry from the narrative never rebuilds the pack).
+  const [cache, setCache] = useState<{ key: string; pack?: SheetPack; sections?: SheetSectionsOut } | null>(null);
 
   const subject = kind === 'claim' ? code : kind === 'lens' ? lens : null;
-  const canRun = !running && (kind !== 'claim' || !!code);
+  const scope = scopeMode === 'window' ? { from: from || null, to: to || null } : { from: null, to: null };
+  const runKey = JSON.stringify([kind, subject, scope]);
+  const kindName = kind === 'claim' ? 'Claim tear sheet' : kind === 'lens' ? 'Lens report' : 'Executive briefing';
 
-  async function generate() {
-    if (!canRun) return;
-    setError(null);
-    setSaved(null);
-    const scope = scopeMode === 'window' ? { from: from || null, to: to || null } : { from: null, to: null };
-    try {
-      setRunning(STEPS[0].running);
-      const packRes = await withRetry(() => buildSheetPackAction(kind, subject, scope));
-      if (!packRes.ok) throw new Error(packRes.error);
-      const pack: SheetPack = packRes.pack;
-
-      setRunning(STEPS[1].running);
-      const secRes = await withRetry(() => generateSheetSectionsAction(pack));
-      if (!secRes.ok) throw new Error(secRes.error);
-      const sections: SheetSectionsOut = secRes.sections;
-
-      setRunning(STEPS[2].running);
-      const closeRes = await withRetry(() => generateSheetCloseAction(pack, {
-        readingMd: sections.readingMd, connectionsMd: sections.connectionsMd, watchMd: sections.watchMd,
+  const run = useModelRun({
+    kind: 'sheet',
+    subject: `${kind}:${subject ?? 'atlas'}`,
+    label: `${kindName}${subject ? `, ${kind === 'lens' ? SIGNAL_LENS_LABEL[subject as keyof typeof SIGNAL_LENS_LABEL] ?? subject : subject}` : ''}`,
+    steps: STEPS,
+    stats,
+    initialJob,
+    run: async (ctx, resumeFrom) => {
+      setSaved(null);
+      const reuse = resumeFrom && cache?.key === runKey ? cache : null;
+      let pack = resumeFrom === 'pack' ? undefined : reuse?.pack;
+      if (!pack) {
+        const r = await ctx.step('pack', () => buildSheetPackAction(kind, subject, scope));
+        if (!r.ok) throw new Error(r.error);
+        pack = r.pack;
+        const p = pack;
+        setCache({ key: runKey, pack: p });
+        ctx.note(`✓ Evidence pack built`);
+      }
+      let sections = resumeFrom === 'close' || resumeFrom === 'save' ? reuse?.sections : undefined;
+      if (!sections) {
+        const p = pack;
+        const r = await ctx.step('sections', () => generateSheetSectionsAction(p));
+        if (!r.ok) throw new Error(r.error);
+        sections = r.sections;
+        const s = sections;
+        setCache({ key: runKey, pack: p, sections: s });
+        ctx.note('✓ Narrative written');
+      }
+      const p = pack; const s = sections;
+      const closeRes = await ctx.step('close', () => generateSheetCloseAction(p, {
+        readingMd: s.readingMd, connectionsMd: s.connectionsMd, watchMd: s.watchMd,
       }));
       if (!closeRes.ok) throw new Error(closeRes.error);
-
-      setRunning(STEPS[3].running);
-      const { id } = await saveSheetAction({
+      const { id } = await ctx.step('save', () => saveSheetAction({
         title: closeRes.title,
-        pack,
+        pack: p,
         narrative: {
-          reading: sections.readingHtml || null,
-          connections: sections.connectionsHtml || null,
-          watch: sections.watchHtml || null,
+          reading: s.readingHtml || null,
+          connections: s.connectionsHtml || null,
+          watch: s.watchHtml || null,
           bottomLine: closeRes.bottomLineHtml || null,
         },
-      });
-      setSaved({
-        id,
-        title: closeRes.title,
-        dropped: [...new Set([...sections.dropped, ...closeRes.dropped])],
-      });
+      }));
+      setSaved({ id, title: closeRes.title, dropped: [...new Set([...s.dropped, ...closeRes.dropped])] });
       router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Generation failed.');
-    } finally {
-      setRunning(null);
-    }
-  }
+      return { href: `/reports/sheet/${id}`, note: `✓ Saved as a draft: ${closeRes.title}` };
+    },
+  });
+
+  const busy = run.status === 'running';
+  const canRun = !busy && (kind !== 'claim' || !!code);
 
   return (
     <div>
@@ -141,7 +141,7 @@ export default function SheetConsole({
                 borderColor: kind === c.kind ? 'var(--accent)' : undefined,
               }}
               aria-pressed={kind === c.kind}
-              onClick={() => { setKind(c.kind as Kind); setSaved(null); setError(null); }}
+              onClick={() => { setKind(c.kind as Kind); setSaved(null); }}
             >
               <span className="lobby-tile-name">{c.name}</span>
               <span className="lobby-tile-desc">{c.desc}</span>
@@ -202,34 +202,21 @@ export default function SheetConsole({
             </div>
           </>
         )}
-        <button type="button" className="btn btn--primary" disabled={!canRun} onClick={() => void generate()}>
-          {running ? 'Generating…' : 'Generate report'}
+        <button type="button" className="btn btn--primary" disabled={!canRun} onClick={() => void run.start()}>
+          {busy ? <><span className="spinner mr-btn-spin" aria-hidden="true" />Generating</> : 'Generate report'}
         </button>
       </div>
 
-      {running && (
-        <p className="text-sm" style={{ color: 'var(--dim)', marginTop: 10 }}>
-          <span className="spinner" style={{ marginRight: 8, verticalAlign: -2 }} />{running}
-        </p>
-      )}
-      {error && (
-        <p className="text-sm" style={{ color: 'var(--heat-4)', marginTop: 10 }}>
-          {error} <button type="button" className="btn btn--quiet btn--sm" onClick={() => void generate()}>Retry</button>
-        </p>
-      )}
-      {saved && (
-        <p className="text-sm" style={{ color: 'var(--ink)', marginTop: 10 }}>
-          Draft saved: <Link href={`/reports/sheet/${saved.id}`} className="hover:underline" style={{ color: 'var(--accent)', fontWeight: 600 }}>
-            {saved.title || 'view the report'}
-          </Link>
-          {' '}· review it, then publish from the drafts list below.
-          {saved.dropped.length > 0 && (
-            <span style={{ color: 'var(--faint-ink)' }}>
-              {' '}The citation gate stripped {saved.dropped.length} link{saved.dropped.length === 1 ? '' : 's'} the pack could not vouch for.
-            </span>
-          )}
-        </p>
-      )}
+      <ModelRunPanel run={run} doneLabel="Open the draft">
+        {saved && (
+          <p className="text-sm" style={{ color: 'var(--dim)', margin: 0 }}>
+            Review it, then publish it from the drafts list below.
+            {saved.dropped.length > 0 && (
+              <> The citation gate stripped {saved.dropped.length} link{saved.dropped.length === 1 ? '' : 's'} the pack could not vouch for.</>
+            )}
+          </p>
+        )}
+      </ModelRunPanel>
     </div>
   );
 }

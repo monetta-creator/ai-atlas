@@ -5,6 +5,7 @@ import { getAgentPulse, getNavCounts } from '@/lib/data';
 import SiteNav from './SiteNav';
 import PortalRail from './PortalRail';
 import Brand from './Brand';
+import JobToasts from './jobs/JobToasts';
 
 // Rendered ONCE by the root layout (inside ChromeGate) since 2026-09-23, so the
 // rail and bar persist across client navigation; pages no longer render it.
@@ -34,6 +35,8 @@ export default async function Header() {
         rail to the header box instead of the viewport. */}
     <ViewerSync viewer={key} />
     <PortalRail admin={showAdmin} portal={portal} agentPulse={agentPulse} counts={counts} />
+    {/* Completion notes for long model runs; outside the rail so phones get them too. */}
+    <JobToasts enabled={showAdmin || portal} />
     <nav className="nav">
       <Brand />
 

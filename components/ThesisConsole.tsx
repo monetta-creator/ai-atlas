@@ -10,6 +10,9 @@ import {
 import type { ThesisSectionsOut } from '@/lib/thesis/generate';
 import type { ThesisPack, ThesisReportMeta } from '@/lib/types';
 import { dateLabel } from '@/lib/format';
+import { useModelRun } from '@/lib/jobs/use-model-run';
+import type { FeatureStats, StepSpec, UiJob } from '@/lib/jobs/core';
+import ModelRunPanel from '@/components/jobs/ModelRunPanel';
 import ThesisStatsView from './ThesisStatsView';
 
 // The run console for one thesis. ONE primary action ("Generate report") chains the
@@ -20,28 +23,12 @@ import ThesisStatsView from './ThesisStatsView';
 // deliberate separate act (freezing an immutable public run is the human gate).
 // The zero-AI floor lives on as a small ghost button: build + save the pack only.
 
-const MAX_ATTEMPTS = 3;
-const backoff = (attempt: number) => new Promise((r) => setTimeout(r, attempt * 1500));
-
-async function withRetry<T extends { ok: boolean }>(fn: () => Promise<T>): Promise<T> {
-  let last: T | null = null;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      last = await fn();
-      if (last.ok) return last;
-    } catch (e) {
-      last = { ok: false, error: e instanceof Error ? e.message : 'error' } as unknown as T;
-    }
-    if (attempt < MAX_ATTEMPTS) await backoff(attempt);
-  }
-  return last as T;
-}
-
-type StepKey = 'pack' | 'sections' | 'bottom';
-const STEPS: { key: StepKey; label: string; running: string }[] = [
-  { key: 'pack', label: 'Evidence pack', running: 'Building evidence pack…' },
-  { key: 'sections', label: 'Cited narrative', running: 'Writing cited narrative…' },
-  { key: 'bottom', label: 'Bottom line', running: 'Writing bottom line…' },
+// The chain, declared once: the shared run panel's stepper, its running
+// sentences, and the ai_cost_log features behind the usual time and cost.
+const STEPS: StepSpec[] = [
+  { key: 'pack', label: 'Evidence pack', running: 'Matching signals to the thesis (deterministic, no AI)…' },
+  { key: 'sections', label: 'Cited narrative', running: 'Writing the cited narrative and the counterweight…', features: ['thesis_sections'] },
+  { key: 'bottom', label: 'Bottom line', running: 'Writing the bottom line and the title…', features: ['thesis_bottom_line'] },
 ];
 
 function Prose({ html }: { html: string }) {
@@ -52,113 +39,85 @@ function Prose({ html }: { html: string }) {
 export default function ThesisConsole({
   thesis,
   initialReports,
+  stats,
+  initialJob,
 }: {
   thesis: { id: string; statement: string; status: string };
   initialReports: ThesisReportMeta[];
+  stats?: FeatureStats | null;
+  initialJob?: UiJob | null;
 }) {
   const router = useRouter();
   const [pack, setPack] = useState<ThesisPack | null>(null);
   const [sections, setSections] = useState<ThesisSectionsOut | null>(null);
   const [bottom, setBottom] = useState<{ bottomLineHtml: string; dropped: string[] } | null>(null);
   const [title, setTitle] = useState('');
-  const [log, setLog] = useState<string[]>([]);
-  const [runningStep, setRunningStep] = useState<StepKey | null>(null);
-  const [failedAt, setFailedAt] = useState<StepKey | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
   const [reports, setReports] = useState<ThesisReportMeta[]>(initialReports);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [statusBusy, setStatusBusy] = useState(false);
 
-  const busy = runningStep !== null || saving;
-  const say = (line: string) => setLog((l) => [...l, line]);
-
-  // The one pipeline. `from` lets a failed run resume at the broken leg; a fresh
-  // run (from 'pack') clears everything downstream first.
-  async function run(from: StepKey) {
-    if (busy) return;
-    setFailedAt(null);
-    if (from === 'pack') {
-      setPack(null);
-      setSections(null);
-      setBottom(null);
-      setSavedId(null);
-      setLog([]);
-    }
-    let p = pack;
-    try {
-      if (from === 'pack' || !p) {
-        setRunningStep('pack');
-        say('Building evidence pack (deterministic, no AI)…');
-        const r = await buildThesisPackAction(thesis.id);
-        if (!r.ok) {
-          say(`✗ pack: ${r.error}`);
-          setFailedAt('pack');
-          return;
-        }
+  // The one pipeline, on the shared run hook: a retry resumes at the step
+  // that failed with the pack and narrative already built kept (they live in
+  // this component's state), never from scratch.
+  const run = useModelRun({
+    kind: 'thesis',
+    subject: thesis.id,
+    label: `Thesis report: ${thesis.statement.slice(0, 80)}`,
+    steps: STEPS,
+    stats,
+    initialJob,
+    run: async (ctx, from) => {
+      if (!from || from === 'pack') {
+        setPack(null); setSections(null); setBottom(null); setSavedId(null); setSaveNote(null);
+      }
+      let p = from && from !== 'pack' ? pack : null;
+      if (!p) {
+        const r = await ctx.step('pack', () => buildThesisPackAction(thesis.id));
+        if (!r.ok) throw new Error(r.error);
         p = r.pack;
         setPack(p);
-        say(`✓ pack: ${p.stats.matched} of ${p.stats.scanned} signals matched`);
+        ctx.note(`✓ Pack: ${p.stats.matched} of ${p.stats.scanned} signals matched`);
       }
-
-      let sec = sections;
-      if (from !== 'bottom' || !sec) {
-        setRunningStep('sections');
-        say('Writing cited narrative…');
-        const r = await withRetry(() => generateThesisSectionsAction(thesis.id, p!));
-        if (!r.ok) {
-          say(`✗ narrative: ${r.error}`);
-          setFailedAt('sections');
-          return;
-        }
+      const packNow = p;
+      let sec = from === 'bottom' ? sections : null;
+      if (!sec) {
+        const r = await ctx.step('sections', () => generateThesisSectionsAction(thesis.id, packNow));
+        if (!r.ok) throw new Error(r.error);
         sec = r.sections;
         setSections(sec);
-        if (sec.dropped.length) say(`· citation gate stripped: ${sec.dropped.join(', ')}`);
-        say('✓ narrative');
+        if (sec.dropped.length) ctx.note(`· The citation gate stripped: ${sec.dropped.join(', ')}`);
       }
-
-      setRunningStep('bottom');
-      say('Writing bottom line + title…');
-      const bl = await withRetry(() =>
-        generateThesisBottomLineAction(thesis.id, p!, {
-          readingMd: sec!.readingMd,
-          counterweightMd: sec!.counterweightMd,
-        })
+      const secNow = sec;
+      const bl = await ctx.step('bottom', () =>
+        generateThesisBottomLineAction(thesis.id, packNow, { readingMd: secNow.readingMd, counterweightMd: secNow.counterweightMd })
       );
-      if (!bl.ok) {
-        say(`✗ bottom line: ${bl.error}`);
-        setFailedAt('bottom');
-        return;
-      }
+      if (!bl.ok) throw new Error(bl.error);
       setBottom({ bottomLineHtml: bl.bottomLineHtml, dropped: bl.dropped });
-      if (bl.dropped.length) say(`· citation gate stripped: ${bl.dropped.join(', ')}`);
+      if (bl.dropped.length) ctx.note(`· The citation gate stripped: ${bl.dropped.join(', ')}`);
       setTitle(bl.title || 'Thesis report');
-      say('✓ done. Review below, then save to mint the public link.');
-    } finally {
-      setRunningStep(null);
-    }
-  }
+      return { note: '✓ Done. Review the report below, then save it to mint the public link.' };
+    },
+  });
+
+  const busy = run.status === 'running' || saving;
 
   // The zero-AI floor: just the deterministic pack, previewed for saving as-is.
   async function buildPackOnly() {
     if (busy) return;
-    setFailedAt(null);
     setSections(null);
     setBottom(null);
     setSavedId(null);
-    setLog([]);
-    setRunningStep('pack');
-    say('Building evidence pack (deterministic, no AI)…');
+    setSaveNote(null);
+    setSaving(true);
     try {
       const r = await buildThesisPackAction(thesis.id);
-      if (!r.ok) {
-        say(`✗ pack: ${r.error}`);
-        setFailedAt('pack');
-        return;
-      }
+      if (!r.ok) { setSaveNote(`✗ Pack: ${r.error}`); return; }
       setPack(r.pack);
-      say(`✓ pack: ${r.pack.stats.matched} of ${r.pack.stats.scanned} signals matched. Save to publish it without narrative.`);
+      setSaveNote(`✓ Pack: ${r.pack.stats.matched} of ${r.pack.stats.scanned} signals matched. Save to publish it without narrative.`);
     } finally {
-      setRunningStep(null);
+      setSaving(false);
     }
   }
 
@@ -181,10 +140,10 @@ export default function ThesisConsole({
         { id: r.id, thesis_id: thesis.id, title: title || 'Thesis report', generated_at: pack.generated_at, matched: pack.stats.matched },
         ...prev,
       ]);
-      say(`✓ saved: /thesis-report/${r.id}`);
+      setSaveNote(`✓ Saved: /thesis-report/${r.id}`);
       router.refresh();
     } catch (e) {
-      say(`✗ save: ${e instanceof Error ? e.message : 'error'}`);
+      setSaveNote(`✗ Save: ${e instanceof Error ? e.message : 'error'}`);
     } finally {
       setSaving(false);
     }
@@ -198,7 +157,7 @@ export default function ThesisConsole({
       if (savedId === id) setSavedId(null);
       router.refresh();
     } catch (e) {
-      say(`✗ delete: ${e instanceof Error ? e.message : 'error'}`);
+      setSaveNote(`✗ Delete: ${e instanceof Error ? e.message : 'error'}`);
     }
   }
 
@@ -219,27 +178,10 @@ export default function ThesisConsole({
     router.push('/theses');
   }
 
-  const stepState = (key: StepKey): 'done' | 'running' | 'failed' | 'todo' => {
-    if (runningStep === key) return 'running';
-    if (failedAt === key) return 'failed';
-    if (key === 'pack' && pack) return 'done';
-    if (key === 'sections' && sections) return 'done';
-    if (key === 'bottom' && bottom) return 'done';
-    return 'todo';
-  };
-  const STEP_GLYPH = { done: '✓', running: '●', failed: '✗', todo: '○' } as const;
-  const STEP_COLOR = {
-    done: 'var(--accent)',
-    running: 'var(--ink)',
-    failed: 'var(--heat-4)',
-    todo: 'var(--faint-ink)',
-  } as const;
-
-  const currentStep = runningStep ? STEPS.find((s) => s.key === runningStep) : null;
-  const primaryLabel = currentStep
-    ? currentStep.running
-    : failedAt
-      ? `Retry from ${STEPS.find((s) => s.key === failedAt)?.label.toLowerCase()}`
+  const primaryLabel = run.status === 'running'
+    ? 'Generating'
+    : run.status === 'failed'
+      ? `Retry from ${(STEPS.find((s) => s.key === run.failedKey)?.label ?? 'the failed step').toLowerCase()}`
       : bottom
         ? 'Regenerate report'
         : 'Generate report';
@@ -251,44 +193,21 @@ export default function ThesisConsole({
         className="rounded-[var(--radius)] border p-[var(--card-pad)] flex flex-col gap-3"
         style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
       >
-        {/* Stepper: one pipeline, visible progress. */}
-        <div className="flex items-center gap-2 flex-wrap" style={{ fontSize: 13 }}>
-          {STEPS.map((s, i) => {
-            const st = stepState(s.key);
-            return (
-              <span key={s.key} className="flex items-center gap-2">
-                {i > 0 && <span style={{ color: 'var(--faint-ink)' }}>→</span>}
-                <span style={{ color: STEP_COLOR[st] }}>
-                  <span aria-hidden="true" style={{ fontFamily: 'var(--font-mono)' }}>{STEP_GLYPH[st]}</span>{' '}
-                  {s.label}
-                </span>
-              </span>
-            );
-          })}
-          <span className="flex items-center gap-2">
-            <span style={{ color: 'var(--faint-ink)' }}>→</span>
-            <span style={{ color: savedId ? 'var(--accent)' : 'var(--faint-ink)' }}>
-              <span aria-hidden="true" style={{ fontFamily: 'var(--font-mono)' }}>{savedId ? '✓' : '○'}</span>{' '}
-              Saved
-            </span>
-          </span>
-        </div>
-
         <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
             className="btn btn--primary"
-            onClick={() => run(failedAt && pack ? failedAt : 'pack')}
+            onClick={() => void (run.status === 'failed' ? run.retry() : run.start())}
             disabled={busy}
-            style={busy ? { opacity: 0.6, cursor: 'wait' } : undefined}
           >
+            {run.status === 'running' && <span className="spinner mr-btn-spin" aria-hidden="true" />}
             {primaryLabel}
           </button>
           {sections ? (
             <button type="button" className="btn" onClick={save} disabled={busy || !pack}>
               {saving ? 'Saving…' : savedId ? 'Save again as a new run' : 'Save report · mint public link'}
             </button>
-          ) : pack && !runningStep ? (
+          ) : pack && run.status !== 'running' ? (
             <button type="button" className="btn" onClick={save} disabled={busy}>
               {saving ? 'Saving…' : 'Save evidence pack only'}
             </button>
@@ -302,20 +221,8 @@ export default function ThesisConsole({
           </span>
         </div>
 
-        {log.length > 0 && (
-          <pre
-            role="status"
-            aria-live="polite"
-            className="text-xs"
-            style={{
-              margin: 0, padding: 10, whiteSpace: 'pre-wrap',
-              background: 'var(--surface)', border: '1px solid var(--line)',
-              borderRadius: 'var(--radius)', color: 'var(--dim)', fontFamily: 'var(--font-mono)',
-            }}
-          >
-            {log.join('\n')}
-          </pre>
-        )}
+        <ModelRunPanel run={run} />
+        {saveNote && <p className="text-sm" style={{ margin: 0, color: 'var(--dim)' }}>{saveNote}</p>}
 
         {publicUrl && (
           <p style={{ margin: 0, fontSize: 13 }}>
