@@ -11,7 +11,7 @@ export const metadata = { title: 'Data handling · The AI Atlas' };
 
 // The surfaces and dataset counts are derived from their registries so this page
 // cannot drift from the nav or the Data Portal. Both modules are pure (no DB).
-const PORTAL_LABELS = NAV_TREE.filter((g) => g.key !== 'home').map((g) => g.label);
+const PORTAL_LABELS = NAV_TREE.filter((g) => g.key !== 'home' && g.key !== 'portals').map((g) => g.label);
 const PORTAL_LIST = `${PORTAL_LABELS.slice(0, -1).join(', ')}, and ${PORTAL_LABELS[PORTAL_LABELS.length - 1]}`;
 const DATASET_COUNT = DATASETS.length;
 const KEY_GATED_COUNT = DATASETS.filter((d) => d.keyGated).length;

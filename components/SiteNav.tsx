@@ -7,8 +7,8 @@ import { toggleEditModeAction, togglePreviewAction } from '@/lib/actions';
 import { logout } from '@/app/login/actions';
 import type { AgentPulse } from '@/lib/agent/types';
 import {
-  NAV_ISLAND, NAV_TREE, canSee, isActiveGroup, leafFor,
-  type NavCounts, type NavGroup, type NavLeaf, type NavViewer,
+  NAV_ISLAND, canSee, isActiveGroup, isPortalGroupKey, leafFor, railEntries, groupFor,
+  type NavCounts, type NavGroup, type NavLeaf, type NavViewer, type RailEntry,
 } from '@/lib/nav';
 import ThemeToggle from './ThemeToggle';
 import ShareLinkButton from './ShareLinkButton';
@@ -20,7 +20,7 @@ import { useValueChange } from '@/lib/use-route-change';
 export type { NavCounts };
 
 // The nav, rebuilt on lib/nav's ONE tree (2026-09-23): the rail (desktop)
-// and this file's mobile sheet both walk NAV_TREE + NAV_ISLAND, so a page
+// and this file's mobile sheet both walk railEntries() + NAV_ISLAND, so a page
 // moves in exactly one place. What lives here:
 //  - The mobile hamburger sheet: the same tree as <details> accordions.
 //  - The account menu (desktop dropdown + the mobile sheet's tail): session
@@ -157,6 +157,24 @@ export default function SiteNav({
     );
   }
 
+  // The Portals folder on mobile: one <details> listing every portal hub;
+  // a portal's sub-pages are the page's tabs, so the sheet stays one level.
+  function MobileFolderRow({ f }: { f: Extract<RailEntry, { kind: 'folder' }> }) {
+    const groups = f.groups.filter((g) => canSee(g.access, viewer));
+    const active = isPortalGroupKey(groupFor(path)?.key) || path === f.href;
+    return (
+      <details className="nav-acc" open={active || undefined}>
+        <summary>{f.label}</summary>
+        {groups.map((g) => (
+          <Link key={g.key} href={g.href} className="navmenu-item" data-active={isActiveGroup(path, g) ? '' : undefined}>
+            {g.label}
+          </Link>
+        ))}
+        <Link href={f.href} className="navmenu-item" data-active={path === f.href ? '' : undefined}>All portals</Link>
+      </details>
+    );
+  }
+
   const accountRows = (
     <>
       <div className="navmenu-label">Account</div>
@@ -222,7 +240,7 @@ export default function SiteNav({
             setTimeout(() => setMobileOpen(false), 0);
           }}
         >
-          {NAV_TREE.map((g) => <MobileGroupRow key={g.key} group={g} />)}
+          {railEntries().map((e) => (e.kind === 'folder' ? <MobileFolderRow key={e.key} f={e} /> : <MobileGroupRow key={e.group.key} group={e.group} />))}
           {NAV_ISLAND.map((g) => <MobileGroupRow key={g.key} group={g} />)}
           {showAdmin && <AgentOrb variant="menu" initialPulse={agentPulse ?? null} />}
           <FeedbackButtons variant="menu" />

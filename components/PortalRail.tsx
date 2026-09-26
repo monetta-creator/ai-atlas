@@ -10,16 +10,17 @@ import { useLiveNavCounts } from '@/lib/nav-counts-client';
 import { useValueChange } from '@/lib/use-route-change';
 import type { AgentPulse } from '@/lib/agent/types';
 import {
-  NAV_ISLAND, NAV_TREE, canSee, groupFor, isActiveGroup, leafFor,
-  type NavCounts, type NavGroup, type NavLeaf, type NavViewer,
+  NAV_ISLAND, canSee, groupFor, isActiveGroup, isPortalGroupKey, leafFor, railEntries,
+  type NavCounts, type NavGroup, type NavLeaf, type NavViewer, type RailEntry,
 } from '@/lib/nav';
 
 // The left sidebar: 56px icon column at rest, widening to a 232px overlay on
 // hover/focus-within (no layout shift, content keeps padding-left:56px via
 // body:has in rail.css) or when pinned open. Driven entirely by lib/nav's
-// NAV_TREE + NAV_ISLAND: a group with more than one visible leaf (beyond the
-// leaf that IS its own hub, e.g. Data Portal's lone "Catalog") is a toggling
-// accordion; everything else is a plain Link. Admin-only groups/leaves are
+// railEntries() + NAV_ISLAND (2026-09-26): Home, then ONE Portals folder
+// whose accordion lists every portal hub (a portal's sub-pages are the
+// page's own tabs, never rail rows), then Education and Ask; the island's
+// About and Admin desk stay leaf accordions. Admin-only groups/leaves are
 // filtered out of the tree entirely for non-admin viewers, never dimmed.
 export default function PortalRail({
   admin, portal, agentPulse, counts,
@@ -35,13 +36,15 @@ export default function PortalRail({
 
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const [openKey, setOpenKey] = useState<string | null>(activeGroup?.key ?? null);
+  // A portal page opens the Portals folder, not a group of its own.
+  const folderKeyFor = (k: string | null) => (isPortalGroupKey(k) ? 'portals' : k);
+  const [openKey, setOpenKey] = useState<string | null>(folderKeyFor(activeGroup?.key ?? null));
   const railRef = useRef<HTMLElement>(null);
   // When the page moves into a different group, open that accordion; moving
   // within a group leaves a manually opened accordion alone
   // (lib/use-route-change.ts).
   const activeKey = activeGroup?.key ?? null;
-  useValueChange(activeKey, (k) => { if (k) setOpenKey(k); });
+  useValueChange(activeKey, (k) => { if (k) setOpenKey(folderKeyFor(k)); });
   // Hover/focus expansion must not carry over to the next page when the
   // pointer has left (the old per-page remount reset it): after a keyboard
   // Enter or a touch tap the rail would stay open over the new page. A rail
@@ -158,6 +161,54 @@ export default function PortalRail({
     );
   }
 
+  // The Portals folder: one rail entry, its accordion listing every portal
+  // hub the viewer may see, each with its icon; active when the page sits in
+  // any portal.
+  function renderFolder(f: Extract<RailEntry, { kind: 'folder' }>) {
+    const groups = f.groups.filter((g) => canSee(g.access, viewer));
+    const active = isPortalGroupKey(activeGroup?.key) || path === f.href;
+    const open = expanded && openKey === f.key;
+    return (
+      <div className="portal-rail-item" key={f.key} data-open={open ? '' : undefined}>
+        <button
+          type="button"
+          className="portal-rail-link portal-rail-group"
+          data-active={active ? '' : undefined}
+          data-tip={f.label}
+          aria-label={f.label}
+          aria-expanded={open}
+          onClick={() => setOpenKey((k) => (k === f.key ? null : f.key))}
+        >
+          {icon(f.icon)}
+          <span className="portal-rail-label">{f.label}</span>
+          <span className="portal-rail-chevron" data-open={open ? '' : undefined} aria-hidden="true">›</span>
+        </button>
+        {open && (
+          <div className="portal-rail-sub" role="menu">
+            {groups.map((g) => (
+              <Link
+                key={g.key}
+                href={g.href}
+                className="navmenu-item portal-rail-hub"
+                data-active={isActiveGroup(path, g) ? '' : undefined}
+              >
+                {icon(g.icon)}
+                <span>{g.label}</span>
+              </Link>
+            ))}
+            <Link href={f.href} className="navmenu-item portal-rail-hub portal-rail-hub--all" data-active={path === f.href ? '' : undefined}>
+              <span>All portals</span>
+            </Link>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderEntry(e: RailEntry) {
+    return e.kind === 'folder' ? renderFolder(e) : renderGroup(e.group);
+  }
+
   return (
     <nav
       className="portal-rail"
@@ -183,7 +234,7 @@ export default function PortalRail({
         {pinned ? '✕' : '☰'}
       </button>
 
-      {NAV_TREE.map(renderGroup)}
+      {railEntries().map(renderEntry)}
 
       <div className="portal-rail-bottom">
         {NAV_ISLAND.map(renderGroup)}

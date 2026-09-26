@@ -347,3 +347,17 @@
   .modal-actions .btn { flex: 1; justify-content: center; }
 }
 
+
+/* ---- /portals: the directory page (one card per portal) ---- */
+.pd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin-top: 8px; }
+.pd-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 16px 18px 14px; display: flex; flex-direction: column; gap: 10px; }
+.pd-head { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--ink); }
+.pd-head:hover .pd-name { color: var(--accent); }
+.pd-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: color-mix(in oklab, var(--accent) 10%, transparent); color: var(--accent); }
+.pd-icon svg { width: 18px; height: 18px; }
+.pd-name { font-family: var(--font-headline); font-size: 22px; line-height: 1; letter-spacing: .01em; }
+.pd-summary { margin: 0; font-size: 13.5px; line-height: 1.55; color: var(--dim); }
+.pd-pages { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 4px; }
+.pd-page { font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; }
+.pd-page:hover { border-color: var(--accent); color: var(--accent); }
+.pd-page[data-access="admin"] { color: var(--faint-ink); border-style: dashed; }

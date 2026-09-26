@@ -126,6 +126,11 @@
   animation: navmenu-in .14s var(--ease-soft);
 }
 .portal-rail-sub .navmenu-item { font-size: 12.5px; padding: 6px 9px; }
+/* the Portals folder's hub rows carry their portal icon */
+.portal-rail-hub { display: flex; align-items: center; gap: 8px; }
+.portal-rail-hub svg { width: 14px; height: 14px; flex: none; opacity: .75; }
+.portal-rail-hub[data-active] svg { opacity: 1; }
+.portal-rail-hub--all { margin-top: 3px; padding-top: 7px; border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; color: var(--faint-ink); }
 .portal-rail-sub .navmenu-sep { margin: 4px 9px; }
 
 /* the bottom island: About + (admin) the Admin desk group, each its own

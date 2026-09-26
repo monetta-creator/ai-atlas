@@ -32,6 +32,11 @@ export interface NavGroup {
 
 export const NAV_TREE: NavGroup[] = [
   { key: 'home', href: '/', label: 'Home', icon: 'home', access: 'public', children: [] },
+  // The portals directory (2026-09-26): the rail shows ONE "Portals" entry
+  // whose accordion lists every portal hub; each portal's sub-pages appear as
+  // the page's own tabs (PageTop), not in the rail. /portals is the page form
+  // of that list. Not a portal itself: PORTAL_GROUP_KEYS below names those.
+  { key: 'portals', href: '/portals', label: 'Portals', icon: 'portals', access: 'public', children: [] },
   {
     key: 'signals', href: '/signals', label: 'Signal Board', icon: 'signals', access: 'public',
     detailPrefixes: ['/signals/'],
@@ -165,6 +170,37 @@ export const NAV_ISLAND: NavGroup[] = [
 ];
 
 export const ALL_GROUPS: NavGroup[] = [...NAV_TREE, ...NAV_ISLAND];
+
+// The groups that ARE portals (the product surfaces), in rail order. The
+// lobby's tiles, /about/data-handling's list, the /portals directory and the
+// rail's Portals folder all read this; a new portal registers here.
+export const PORTAL_GROUP_KEYS = ['signals', 'blotter', 'savant', 'map', 'reports', 'datasets', 'research', 'scout', 'tooling'] as const;
+
+export function portalGroups(): NavGroup[] {
+  return PORTAL_GROUP_KEYS.map((k) => NAV_TREE.find((g) => g.key === k)).filter((g): g is NavGroup => Boolean(g));
+}
+
+export function isPortalGroupKey(key: string | null | undefined): boolean {
+  return !!key && (PORTAL_GROUP_KEYS as readonly string[]).includes(key);
+}
+
+// What the rail and the mobile sheet render, top to bottom: Home, the
+// Portals folder (every portal hub in one accordion), Education, Ask. A
+// portal's own leaves never appear in the rail; the page's tabs carry them.
+export type RailEntry =
+  | { kind: 'group'; group: NavGroup }
+  | { kind: 'folder'; key: 'portals'; label: string; icon: string; href: string; groups: NavGroup[] };
+
+export function railEntries(): RailEntry[] {
+  const g = (key: string) => NAV_TREE.find((x) => x.key === key);
+  const home = g('home'); const portals = g('portals'); const education = g('education'); const ask = g('ask');
+  const out: RailEntry[] = [];
+  if (home) out.push({ kind: 'group', group: home });
+  if (portals) out.push({ kind: 'folder', key: 'portals', label: portals.label, icon: portals.icon, href: portals.href, groups: portalGroups() });
+  if (education) out.push({ kind: 'group', group: education });
+  if (ask) out.push({ kind: 'group', group: ask });
+  return out;
+}
 
 export function canSee(access: Access, viewer: NavViewer): boolean {
   if (access === 'public') return true;

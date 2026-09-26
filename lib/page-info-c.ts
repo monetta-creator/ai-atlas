@@ -63,6 +63,18 @@ export const PAGE_INFO_C: Record<string, PageInfoContent> = {
   // '/blotter/desk' retired 2026-09-26: the map-health/pipeline dashboard is
   // gone and the route now redirects to '/savant/desk', which renders no
   // PageTop of its own (it never reaches a page body), so no entry is needed.
+  '/portals': {
+    title: 'The portals',
+    summary:
+      'Every public surface of the Atlas in one place: what each portal is for and the pages inside it. ' +
+      'The left rail lists the same portals under one entry; a portal\'s own pages appear as tabs at the top of that portal.',
+    sections: [
+      {
+        heading: 'How to read this page',
+        body: 'Each card is one portal: its name, a sentence on what it does, and its pages. Pages marked for access-key holders or the admin show only when you can open them.',
+      },
+    ],
+  },
   '/savant': {
     title: 'How Savant works',
     summary:

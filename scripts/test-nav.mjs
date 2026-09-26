@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import {
   groupFor, tabsFor, pathwayFor, publicParentFor, canSee, leafFor, isActiveGroup, isChromeless,
+  railEntries, portalGroups, isPortalGroupKey, PORTAL_GROUP_KEYS,
 } from '../lib/nav.ts';
 
 let pass = 0;
@@ -201,6 +202,18 @@ check("Savant is its own group: /savant/<week> belongs to it, tabs are Latest is
   assert.equal(publicParentFor('/savant/desk').href, '/savant');
   assert.ok(!tabsFor('/reports', admin).some((l) => l.href === '/savant'), 'the Report Portal no longer carries a Savant tab');
   assert.ok(!tabsFor('/blotter', admin).some((l) => l.href === '/savant/desk'), 'the News Blotter no longer carries the desk');
+});
+
+check('the rail is Home, one Portals folder holding every portal, Education, Ask; /portals is its own page', () => {
+  const entries = railEntries();
+  assert.deepEqual(entries.map((e) => (e.kind === 'folder' ? 'folder:' + e.key : e.group.key)), ['home', 'folder:portals', 'education', 'ask']);
+  const folder = entries.find((e) => e.kind === 'folder');
+  assert.deepEqual(folder.groups.map((g) => g.key), [...PORTAL_GROUP_KEYS]);
+  assert.equal(portalGroups().length, PORTAL_GROUP_KEYS.length, 'every portal key resolves to a group');
+  assert.ok(isPortalGroupKey('savant') && !isPortalGroupKey('education') && !isPortalGroupKey('portals'));
+  assert.equal(groupFor('/portals')?.key, 'portals');
+  assert.deepEqual(tabsFor('/portals', admin), []);
+  assert.equal(groupFor('/tooling/table')?.key, 'tooling', 'portal pages still resolve to their own group for tabs');
 });
 
 check("groupFor('/datasets/schema').key === 'datasets' and the leaf beats Catalog", () => {

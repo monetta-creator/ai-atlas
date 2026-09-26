@@ -88,6 +88,15 @@ export const PORTAL_ICONS: Record<string, ReactNode> = {
 // spark (a four-point AI star, deliberately a few degrees off symmetric with
 // a satellite dot so it is ours, not Gemini's), and the About info mark.
 export const NAV_ICONS: Record<string, ReactNode> = {
+  portals: (
+    // Four tiles: the directory of portals.
+    <svg {...ICON_ATTRS}>
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1.2" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.2" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.2" />
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.2" />
+    </svg>
+  ),
   home: (
     <svg {...ICON_ATTRS}>
       <path d="M4 10.5 12 4l8 6.5" />
