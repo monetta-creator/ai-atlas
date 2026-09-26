@@ -22,6 +22,14 @@ export const PORTAL_ICONS: Record<string, ReactNode> = {
       <circle cx="5.2" cy="18.8" r="1.4" fill="currentColor" stroke="none" />
     </svg>
   ),
+  savant: (
+    // A fountain-pen nib: the imprint's signature, drawn not typed.
+    <svg {...ICON_ATTRS}>
+      <path d="M12 3.5c3.2 2.6 5 6 5 9.6L12 20.5 7 13.1c0-3.6 1.8-7 5-9.6z" />
+      <path d="M12 9.5v6" />
+      <circle cx="12" cy="9.5" r="1.1" />
+    </svg>
+  ),
   blotter: (
     <svg {...ICON_ATTRS}>
       <rect x="3.5" y="4.5" width="13.5" height="15" rx="1" />

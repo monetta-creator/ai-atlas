@@ -56,15 +56,9 @@ export default async function SavantDeskPage({
     <section className="wrap" style={{ maxWidth: 1080, paddingBottom: 100 }}>
       <PageTop
         pathname="/savant/desk"
-        label="Savant desk"
+        label="Desk"
         viewer={{ admin: true, portal: true }}
         counts={counts}
-        action={
-          <div className="flex items-center gap-2 flex-wrap">
-            <Link href="/savant" className="btn btn--sm">Read the latest issue</Link>
-            <Link href="/savant/archive" className="btn btn--ghost btn--sm">Archive</Link>
-          </div>
-        }
       >
         Week ending {dateLabel(week) ?? week} · {rows.length} notebook rows · {openCount} open hypotheses · {issues.length} issue{issues.length === 1 ? '' : 's'} published
       </PageTop>

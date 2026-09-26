@@ -5,7 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { saveSavantPrefsAction } from '@/lib/actions';
 import type { SavantPrefs } from '@/lib/savant/types';
 import {
-  SAVANT_MODEL_OPTIONS, estimateSavantWeek, fmtUsd, isAnthropicId, LEAD_FALLBACK_MODEL,
+  SAVANT_MODEL_OPTIONS, TIER_LABEL, estimateSavantWeek, fmtUsd, isAnthropicId, LEAD_FALLBACK_MODEL,
   type RateTable, type SavantRole,
 } from '@/lib/savant/cost-model';
 
@@ -23,22 +23,23 @@ function SubmitRow() {
 
 const ROLE_LABEL: Record<SavantRole, string> = { writer: 'Writer', editor: 'Editor', notebook: 'Notebook' };
 
-// One model picker: the catalog grouped by vendor (Anthropic first), plus
+// One model picker: the catalog grouped by tier (Anthropic, open-weight
+// reasoning, open-weight flash), plus
 // the saved id as a lone option when it is not in the catalog, so an id set
 // by SQL never disappears on save.
 function ModelSelect({ id, name, value, rates, onChange }: {
   id: string; name: string; value: string; rates: RateTable; onChange: (v: string) => void;
 }) {
-  const vendors = [...new Set(SAVANT_MODEL_OPTIONS.map((m) => m.vendor))];
+  const tiers = [...new Set(SAVANT_MODEL_OPTIONS.map((m) => m.tier))];
   const known = SAVANT_MODEL_OPTIONS.some((m) => m.id === value);
   return (
     <select id={id} name={name} className="input" value={value} onChange={(e) => onChange(e.target.value)}>
       {!known && <option value={value}>{value} (not in the catalog)</option>}
-      {vendors.map((vendor) => (
-        <optgroup key={vendor} label={vendor}>
-          {SAVANT_MODEL_OPTIONS.filter((m) => m.vendor === vendor).map((m) => (
+      {tiers.map((tier) => (
+        <optgroup key={tier} label={TIER_LABEL[tier]}>
+          {SAVANT_MODEL_OPTIONS.filter((m) => m.tier === tier).map((m) => (
             <option key={m.id} value={m.id}>
-              {m.label}{rates[m.id] ? '' : ' (no rate card)'}
+              {m.label}{m.tier !== 'anthropic' ? ` · ${m.vendor}` : ''}{rates[m.id] ? '' : ' (no rate card)'}
             </option>
           ))}
         </optgroup>

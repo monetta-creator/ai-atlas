@@ -48,11 +48,22 @@ export const NAV_TREE: NavGroup[] = [
     children: [
       { href: '/blotter', label: "Today's edition", access: 'public' },
       { href: '/blotter/archive', label: 'Archive', access: 'public' },
-      { href: '/savant/desk', label: 'Savant', access: 'admin' },
       { href: '/pipeline', label: 'Pipeline', access: 'admin', badge: 'pipeline' },
       { href: '/scan', label: 'Scan', access: 'admin' },
       { href: '/intel', label: 'Intel', access: 'admin' },
       { href: '/ingestion', label: 'Ingestion', access: 'admin', also: ['/ingestion/'] },
+    ],
+  },
+  {
+    // Savant, the autonomous weekly research report, is its own imprint and
+    // its own group (2026-09-26): the issue for keyholders, the archive, and
+    // the admin desk that runs it. Guests see the group and the teaser.
+    key: 'savant', href: '/savant', label: 'Savant', icon: 'savant', access: 'public',
+    detailPrefixes: ['/savant/'],
+    children: [
+      { href: '/savant', label: 'Latest issue', access: 'portal' },
+      { href: '/savant/archive', label: 'Archive', access: 'portal' },
+      { href: '/savant/desk', label: 'Desk', access: 'admin' },
     ],
   },
   {
@@ -76,7 +87,6 @@ export const NAV_TREE: NavGroup[] = [
     children: [
       { href: '/reports', label: 'Portal', access: 'public' },
       { href: '/intel/deck', label: 'Intel deck', access: 'portal' },
-      { href: '/savant', label: 'Savant', access: 'portal' },
       { href: '/reports/period', label: 'Period generator', access: 'admin' },
     ],
   },

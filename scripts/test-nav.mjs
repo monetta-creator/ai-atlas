@@ -191,6 +191,18 @@ check("publicParentFor('/intel/deck/2026-09-23').href === '/reports'", () => {
   assert.equal(publicParentFor('/intel/deck/2026-09-23').href, '/reports');
 });
 
+check("Savant is its own group: /savant/<week> belongs to it, tabs are Latest issue / Archive (+ Desk for admin), guests see none", () => {
+  const group = groupFor('/savant/2026-09-25');
+  assert.equal(group?.key, 'savant');
+  assert.equal(groupFor('/savant/desk')?.key, 'savant');
+  assert.deepEqual(tabsFor('/savant', guest), []);
+  assert.deepEqual(tabsFor('/savant', holder).map((l) => l.label), ['Latest issue', 'Archive']);
+  assert.deepEqual(tabsFor('/savant/desk', admin).map((l) => l.label), ['Latest issue', 'Archive', 'Desk']);
+  assert.equal(publicParentFor('/savant/desk').href, '/savant');
+  assert.ok(!tabsFor('/reports', admin).some((l) => l.href === '/savant'), 'the Report Portal no longer carries a Savant tab');
+  assert.ok(!tabsFor('/blotter', admin).some((l) => l.href === '/savant/desk'), 'the News Blotter no longer carries the desk');
+});
+
 check("groupFor('/datasets/schema').key === 'datasets' and the leaf beats Catalog", () => {
   const group = groupFor('/datasets/schema');
   assert.equal(group?.key, 'datasets');

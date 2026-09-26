@@ -103,6 +103,8 @@ const RATES = {
   'claude-sonnet-4-6': { input: 3, output: 15, cacheRead: 0.3 },
   'claude-haiku-4-5': { input: 1, output: 5, cacheRead: 0.1 },
   'z-ai/glm-5.3-flash': { input: 0.075, output: 0.25, cacheRead: 0 },
+  'claude-sonnet-5': { input: 2, output: 10, cacheRead: 0.2 },
+  'claude-opus-5-5': { input: 4, output: 20, cacheRead: 0.2 },
 };
 
 check('the cost model prices a Sonnet week near the measured issue and a GLM writer hands only the lead to the fallback', () => {
@@ -119,10 +121,18 @@ check('the cost model prices a Sonnet week near the measured issue and a GLM wri
   assert.deepEqual(unknown.missingRates, ['vendor/unpriced']);
   assert.ok(SAVANT_MODEL_OPTIONS.some((m) => m.id === 'claude-sonnet-4-6' && m.anthropic));
   assert.equal(isAnthropicId('z-ai/glm-5.3-flash'), false);
+  // Sonnet 5 is cheaper per token than 4.6 but tokenizes ~30% longer: the week still lands under 4.6's.
+  const s5 = estimateSavantWeek({ writer: 'claude-sonnet-5', editor: 'claude-sonnet-5', notebook: 'z-ai/glm-5.3-flash' }, RATES);
+  assert.ok(s5.total < sonnet.total && s5.total > sonnet.total * 0.7, `sonnet 5 week ${s5.total} vs ${sonnet.total}`);
+  const opus = estimateSavantWeek({ writer: 'claude-opus-5-5', editor: 'claude-opus-5-5', notebook: 'z-ai/glm-5.3-flash' }, RATES);
+  assert.ok(opus.total > sonnet.total, `opus week ${opus.total}`);
   // The OpenRouter picks mirror the scan registry, whose rate cards test-scan.mjs checks live.
   const scanIds = new Set(SCAN_ENRICH_MODELS.filter((m) => !m.anthropic).map((m) => m.id));
-  for (const m of SAVANT_MODEL_OPTIONS.filter((m) => !m.anthropic)) assert.ok(scanIds.has(m.id), `${m.id} is not in SCAN_ENRICH_MODELS`);
-  assert.equal(SAVANT_MODEL_OPTIONS.filter((m) => !m.anthropic).length, scanIds.size);
+  const flash = SAVANT_MODEL_OPTIONS.filter((m) => m.tier === 'flash');
+  for (const m of flash) assert.ok(scanIds.has(m.id), `${m.id} is not in SCAN_ENRICH_MODELS`);
+  assert.equal(flash.length, scanIds.size);
+  assert.ok(SAVANT_MODEL_OPTIONS.filter((m) => m.tier === 'reasoning').length >= 5);
+  assert.equal(new Set(SAVANT_MODEL_OPTIONS.map((m) => m.id)).size, SAVANT_MODEL_OPTIONS.length, 'ids are unique');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

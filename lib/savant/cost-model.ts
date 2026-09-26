@@ -4,8 +4,9 @@
 // Dependency-free (no import of lib/scan/models: an extensionless lib import
 // does not load under plain Node), so a client component and
 // scripts/test-savant-issue.mjs can both load it; the test asserts the
-// OpenRouter entries here mirror SCAN_ENRICH_MODELS, whose rate cards
-// test-scan.mjs checks against the live table.
+// flash entries here mirror SCAN_ENRICH_MODELS, whose rate cards
+// test-scan.mjs checks against the live table; the reasoning tier's cards
+// are migration 0071.
 //
 // Roles: the WRITER writes the lead (its own Anthropic tool loop), the front,
 // the departments, the peer watch, the revisions and the figures; the EDITOR
@@ -18,19 +19,41 @@ export interface SavantModelOption {
   label: string;
   vendor: string;
   anthropic: boolean;
+  tier: 'anthropic' | 'reasoning' | 'flash';   // the optgroup in the picker
+  tokenFactor?: number;   // models from Claude 4.7 on tokenize the same text into ~30% more tokens
 }
+
+export const TIER_LABEL: Record<SavantModelOption['tier'], string> = {
+  anthropic: 'Anthropic',
+  reasoning: 'Open-weight reasoning (OpenRouter)',
+  flash: 'Open-weight flash (OpenRouter)',
+};
+
+const NEW_TOKENIZER = 1.3;
 
 export const LEAD_FALLBACK_MODEL = 'claude-sonnet-4-6';
 
 export const SAVANT_MODEL_OPTIONS: SavantModelOption[] = [
-  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', vendor: 'Anthropic', anthropic: true },
-  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', vendor: 'Anthropic', anthropic: true },
-  { id: 'qwen/qwen3.7-flash', label: 'Qwen3.7 Flash', vendor: 'Alibaba', anthropic: false },
-  { id: 'qwen/qwen3-30b-a3b-instruct-2507', label: 'Qwen3 30B A3B', vendor: 'Alibaba', anthropic: false },
-  { id: 'z-ai/glm-5.3-flash', label: 'GLM-5.3 Flash', vendor: 'Zhipu', anthropic: false },
-  { id: 'mistralai/mistral-small-3.2-24b-instruct', label: 'Mistral Small 3.2', vendor: 'Mistral', anthropic: false },
-  { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash', vendor: 'DeepSeek', anthropic: false },
-  { id: 'meta-llama/llama-4-scout', label: 'Llama 4 Scout', vendor: 'Meta', anthropic: false },
+  { id: 'claude-fable-5-1', label: 'Claude Fable 5.1', vendor: 'Anthropic', anthropic: true, tier: 'anthropic', tokenFactor: NEW_TOKENIZER },
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', vendor: 'Anthropic', anthropic: true, tier: 'anthropic', tokenFactor: NEW_TOKENIZER },
+  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', vendor: 'Anthropic', anthropic: true, tier: 'anthropic', tokenFactor: NEW_TOKENIZER },
+  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', vendor: 'Anthropic', anthropic: true, tier: 'anthropic' },
+  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', vendor: 'Anthropic', anthropic: true, tier: 'anthropic' },
+  // The open-weight reasoning tier (mig 0071): the frontier-class open models
+  // on OpenRouter, comparable to Sonnet/Opus in role, priced far below.
+  { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro', vendor: 'DeepSeek', anthropic: false, tier: 'reasoning' },
+  { id: 'z-ai/glm-5.3', label: 'GLM-5.3', vendor: 'Zhipu', anthropic: false, tier: 'reasoning' },
+  { id: 'qwen/qwen3.8-max-0902', label: 'Qwen3.8 Max', vendor: 'Alibaba', anthropic: false, tier: 'reasoning' },
+  { id: 'moonshotai/kimi-k3', label: 'Kimi K3', vendor: 'Moonshot', anthropic: false, tier: 'reasoning' },
+  { id: 'minimax/minimax-m3', label: 'MiniMax M3', vendor: 'MiniMax', anthropic: false, tier: 'reasoning' },
+  { id: 'nvidia/nemotron-3-ultra-550b-a55b', label: 'Nemotron 3 Ultra', vendor: 'NVIDIA', anthropic: false, tier: 'reasoning' },
+  // The scan's flash shortlist (mig 0041), mirrored from SCAN_ENRICH_MODELS.
+  { id: 'qwen/qwen3.7-flash', label: 'Qwen3.7 Flash', vendor: 'Alibaba', anthropic: false, tier: 'flash' },
+  { id: 'qwen/qwen3-30b-a3b-instruct-2507', label: 'Qwen3 30B A3B', vendor: 'Alibaba', anthropic: false, tier: 'flash' },
+  { id: 'z-ai/glm-5.3-flash', label: 'GLM-5.3 Flash', vendor: 'Zhipu', anthropic: false, tier: 'flash' },
+  { id: 'mistralai/mistral-small-3.2-24b-instruct', label: 'Mistral Small 3.2', vendor: 'Mistral', anthropic: false, tier: 'flash' },
+  { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash', vendor: 'DeepSeek', anthropic: false, tier: 'flash' },
+  { id: 'meta-llama/llama-4-scout', label: 'Llama 4 Scout', vendor: 'Meta', anthropic: false, tier: 'flash' },
 ];
 
 export function isAnthropicId(id: string): boolean {
@@ -73,8 +96,14 @@ export interface WeekEstimate {
   missingRates: string[];    // picked models with no rate card (their legs count as 0)
 }
 
-export function legCost(p: LegProfile, rate: ModelRate): number {
-  return (p.input * rate.input + p.cacheRead * rate.cacheRead + p.output * rate.output) / 1_000_000;
+export function tokenFactorFor(model: string): number {
+  return SAVANT_MODEL_OPTIONS.find((m) => m.id === model)?.tokenFactor ?? 1;
+}
+
+// The profile was measured on Sonnet 4.6's tokenizer; a model on the newer
+// tokenizer sees the same text as more tokens, so its factor scales all three.
+export function legCost(p: LegProfile, rate: ModelRate, factor = 1): number {
+  return ((p.input * rate.input + p.cacheRead * rate.cacheRead + p.output * rate.output) * factor) / 1_000_000;
 }
 
 export function estimateSavantWeek(
@@ -90,7 +119,7 @@ export function estimateSavantWeek(
     if (p.anthropicOnly && !isAnthropicId(model)) { model = LEAD_FALLBACK_MODEL; fallback = true; }
     const rate = rates[model];
     if (!rate) missing.add(model);
-    const usd = rate ? legCost(p, rate) : 0;
+    const usd = rate ? legCost(p, rate, tokenFactorFor(model)) : 0;
     legs.push({ leg: p.leg, role: p.role, model, usd, fallback });
     byRole[p.role] += usd;
   }
