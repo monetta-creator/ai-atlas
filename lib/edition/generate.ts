@@ -176,8 +176,12 @@ const COLUMN_SYSTEM =
   `never write "this claim" or "the claim that". Link AT LEAST TWO positions to their pages by ` +
   `wrapping a natural phrase of your own sentence, the position itself, in a markdown link using the ` +
   `EXACT href you were given, e.g. [inference is getting cheaper faster than demand grows](/claim/1.2); ` +
-  `never invent an href or link outside what you were given. 350 to 550 words. End with one wry but ` +
-  `factual closing line, never sarcasm that undercuts a fact. The reader should feel they are reading ` +
+  `never invent an href or link outside what you were given. Every front-page story you discuss must ` +
+  `link its source the first time you mention it, again on a natural phrase of your sentence (the ` +
+  `report, the announcement, the ruling), using the EXACT href shown for that item: a reader should be ` +
+  `able to click through to every document you are reasoning from. 350 to 550 words. End with one wry but ` +
+  `factual closing line written as an ordinary final sentence, never labeled (no "Closing line:"), never ` +
+  `sarcasm that undercuts a fact. The reader should feel they are reading ` +
   `a columnist, not a system. No fluff, no praise, no throat-clearing. Never use an em dash; use a ` +
   `comma, a colon, or separate sentences instead. Output GitHub-flavored MARKDOWN in "body_md", no ` +
   `heading at the top (the title is separate). "title" is a short editorial title for today's column, ` +
@@ -209,7 +213,7 @@ export async function generateColumn(
   const lines = [
     `DAY: ${pack.day} (issue No. ${pack.issueNumber})`,
     '',
-    "TODAY'S FRONT ITEMS:",
+    "TODAY'S FRONT ITEMS (link each one you discuss on first mention, exact href):",
     ...front.map((f) => `- "${f.headline}" (href ${f.goDeeperHref}): ${f.why}`),
     '',
     'POSITIONS YOU MAY LINK (exact href, statement):',
@@ -251,6 +255,13 @@ export async function generateColumn(
   const claimHrefs = new Set(pack.claimsTouched.map((c) => c.href));
   const claimLinks = extractHrefs(gated.html ?? '').filter((h) => claimHrefs.has(h)).length;
   if (claimLinks < 2) dropped.push(`fewer than 2 claim links (${claimLinks})`);
+  // Gate 3, advisory like gate 2: a front story the column reasons from
+  // should be one click away. Count the front hrefs that survived the gate.
+  const linked = new Set(extractHrefs(gated.html ?? ''));
+  const unlinked = front.filter((f) => !linked.has(f.goDeeperHref)).map((f) => f.headline);
+  if (front.length && unlinked.length > Math.floor(front.length / 2)) {
+    dropped.push(`front items without a source link: ${unlinked.length} of ${front.length}`);
+  }
 
   return {
     title: deDash(String(out.title ?? '')).trim().slice(0, 120) || `Daily edition, ${pack.day}`,

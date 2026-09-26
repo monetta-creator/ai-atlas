@@ -88,21 +88,35 @@ export function industryFor(clusters: StoryCluster[], exclude: Set<string>, limi
 // Every url/href the front + column legs may cite: every story item's
 // external url, every signal/paper/tool/claim in-app href. Pure, DB-free —
 // safe for scripts/test-edition-pack.mjs.
+// A stored source URL and its query-less twin both pass the gate: the model
+// copies "…/eu-warns" from a stored "…/eu-warns?amp=1" often enough that the
+// 09-25 column lost its EU link to the stripped tracking parameter. Same
+// page, so the twin is allowed; a different path still is not.
+export function urlForms(url: string): string[] {
+  const out = [url];
+  if (/^https?:\/\//i.test(url)) {
+    const bare = url.replace(/[?#].*$/, '');
+    if (bare !== url) out.push(bare);
+  }
+  return out;
+}
+
 export function allowlistForEdition(pack: EditionPack): CitationAllowlist {
   const hrefs = new Set<string>();
   const tagByHref = new Map<string, string>();
+  const addUrl = (u: string) => { for (const f of urlForms(u)) hrefs.add(f); };
   for (const c of pack.clusters) {
     for (const it of c.items) {
-      hrefs.add(it.url);
+      addUrl(it.url);
       if (it.href) hrefs.add(it.href);
     }
   }
   for (const t of pack.thingsHappen) {
-    hrefs.add(t.url);
+    addUrl(t.url);
     if (t.href) hrefs.add(t.href);
   }
   for (const t of pack.industry ?? []) {
-    hrefs.add(t.url);
+    addUrl(t.url);
     if (t.href) hrefs.add(t.href);
   }
   for (const p of pack.papers) hrefs.add(p.href);
@@ -112,8 +126,8 @@ export function allowlistForEdition(pack: EditionPack): CitationAllowlist {
     for (const h of c.signalHrefs) hrefs.add(h);
     tagByHref.set(c.href, c.code);
   }
-  for (const co of pack.companies ?? []) for (const f of co.facts) if (f.url) hrefs.add(f.url);
-  for (const b of pack.blindSpots) if (b.url) hrefs.add(b.url);
+  for (const co of pack.companies ?? []) for (const f of co.facts) if (f.url) addUrl(f.url);
+  for (const b of pack.blindSpots) if (b.url) addUrl(b.url);
   return { hrefs, tagByHref };
 }
 

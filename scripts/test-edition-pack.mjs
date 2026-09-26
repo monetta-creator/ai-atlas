@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import {
   windowFor, allowlistForEdition, deDash, validateFrontItems, goDeeperLabel, thingsHappenFor, industryFor,
-  deterministicFront,
+  deterministicFront, urlForms,
 } from '../lib/edition/pure.ts';
 import { clusterStories, coverageLine } from '../lib/edition/cluster.ts';
 import { deskFor, cleanBlindSpots, groupByDesk, balanceColumns, DESK_KEYS } from '../lib/edition/desks.ts';
@@ -335,6 +335,17 @@ check('balanceColumns: returns min(n, groups.length) columns', () => {
   assert.equal(balanceColumns(groups, 2, (g) => g.n).length, 2);
   assert.equal(balanceColumns(groups, 10, (g) => g.n).length, groups.length);
   assert.equal(balanceColumns(groups, 1, (g) => g.n).length, 1);
+});
+
+
+check('allowlist admits the query-stripped twin of a stored source url, never a different path', () => {
+  assert.deepEqual(urlForms('https://decrypt.co/379167/q-day?amp=1'), ['https://decrypt.co/379167/q-day?amp=1', 'https://decrypt.co/379167/q-day']);
+  assert.deepEqual(urlForms('/signals/abc'), ['/signals/abc']);
+  const pack = fixturePack();
+  const withQuery = { ...pack, clusters: [{ ...pack.clusters[0], items: [{ ...pack.clusters[0].items[0], url: 'https://decrypt.co/379167/q-day?amp=1' }] }] };
+  const allow = allowlistForEdition(withQuery);
+  assert.ok(allow.hrefs.has('https://decrypt.co/379167/q-day'));
+  assert.ok(!allow.hrefs.has('https://decrypt.co/379167/other'));
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

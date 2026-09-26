@@ -108,3 +108,26 @@ export async function setGeneratedReportPublished(id: string, on: boolean): Prom
 export async function deleteGeneratedReport(id: string): Promise<void> {
   await exec(`delete from generated_reports where id = $1`, [id]);
 }
+
+// The second mutable piece, edition-only: re-run the column leg over a saved
+// edition (lib/edition/generate.ts generateColumn) and swap the narrative's
+// column, cited tags, drop notes and model in place. The pack and the front
+// stay frozen, so the paper's facts never change under a reader; only the
+// one piece of free-form prose does, and the citation gate ran before the
+// caller got here. Added 2026-09-26 when the column voice changed and the
+// stored editions still read in the old one.
+export async function rewriteEditionColumn(
+  id: string,
+  column: { title: string; html: string },
+  citedTags: string[],
+  dropped: string[],
+  model: string | null
+): Promise<void> {
+  await exec(
+    `update generated_reports
+        set narrative = narrative
+          || jsonb_build_object('column', $2::jsonb, 'citedTags', $3::jsonb, 'dropped', $4::jsonb, 'model', $5::jsonb)
+      where id = $1 and kind = 'edition'`,
+    [id, JSON.stringify(column), JSON.stringify(citedTags), JSON.stringify(dropped), JSON.stringify(model)]
+  );
+}
