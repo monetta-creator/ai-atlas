@@ -276,3 +276,8 @@
 .sv-lock-head { font-weight: 700; font-size: 15px; margin: 0 0 8px; }
 .sv-lock-body { font-size: 13.5px; color: var(--dim); line-height: 1.55; margin: 0 0 16px; }
 .sv-lock-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ---- desk: issues + run control ---- */
+.sv-run { margin-top: 10px; }
+.sv-run-lede { font-family: var(--font-mono); font-size: 11.5px; color: var(--dim); margin: 12px 0 6px; }
+.sv-run-msg { font-size: 13px; color: var(--dim); margin: 8px 0 0; }

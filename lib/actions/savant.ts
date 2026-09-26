@@ -50,3 +50,22 @@ export async function saveSavantPrefsAction(formData: FormData): Promise<void> {
 
   revalidatePath('/savant/desk');
 }
+
+// Run (or resume, or rebuild) a week's issue from the desk. The run parks
+// each finished leg in the notebook and returns `partial` when the call's
+// wall-clock budget is short, so a second click resumes; the page declares
+// maxDuration 300 to match the cron routes.
+export async function runSavantIssueAction(weekEnd: string, force: boolean): Promise<string> {
+  await requireAdmin();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekEnd)) throw new Error('week must be YYYY-MM-DD');
+  const { runSavantIssue } = await import('../savant/issue');
+  const { weekEndFor } = await import('../savant/week');
+  const week = weekEndFor(weekEnd);
+  const result = await runSavantIssue(week, { deadlineMs: 270_000, force, origin: process.env.APP_BASE_URL });
+  revalidatePath('/savant/desk');
+  revalidatePath('/savant');
+  revalidatePath('/savant/archive');
+  if ('skipped' in result) return `Skipped: ${result.skipped}`;
+  if ('partial' in result) return `Parked after ${result.done.join(', ')}; next leg ${result.next}. Click Run again to resume.`;
+  return `Published issue No. ${result.issueNumber} for the week ending ${week}: "${result.title}".`;
+}
