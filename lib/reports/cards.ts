@@ -109,7 +109,10 @@ export function toSheetCard(meta: GeneratedReportMeta): ReportCard {
     kindLabel: SHEET_KIND_LABEL[meta.kind],
     title: meta.title,
     subject: subjectLabel ?? null,
-    metaLines: [scopeLine, `Generated ${meta.generated_at.slice(0, 10)}`],
+    // Savant's cover card reads its first meta line as the issue number.
+    metaLines: meta.kind === 'savant'
+      ? [meta.issue_number ? `Issue No. ${meta.issue_number}` : 'Issue', scopeLine]
+      : [scopeLine, `Generated ${meta.generated_at.slice(0, 10)}`],
     abstract: meta.abstract ?? null,
     chips,
     date: dateLabel(meta.generated_at) ?? meta.generated_at.slice(0, 10),

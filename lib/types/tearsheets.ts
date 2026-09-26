@@ -411,6 +411,7 @@ export interface GeneratedReportMeta {
   // to plain text (no links, so no citation-gate pass needed) plus the pack's
   // deterministic stats. Guest-safe by construction, like the pack itself.
   abstract?: string | null;
+  issue_number?: number | null;     // Savant only: pack.issueNumber, for the cover card
   stats?: {
     evidence?: { total: number; supports: number; contradicts: number; neutral: number; oneSided: boolean };
     signals?: SheetSignalStats;

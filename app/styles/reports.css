@@ -122,6 +122,39 @@
   font-family: var(--font-mono); font-size: 3.4cqw; letter-spacing: .18em; text-transform: uppercase;
   padding: .8cqw 18cqw;
 }
+/* ---- Savant: the cobalt cover of the weekly issue (lib/pdf/savant-doc.tsx) ---- */
+.rp-cover--savant {
+  background: #2d5bff; color: #fff; border-color: #2d5bff;
+  background-image: radial-gradient(rgba(255,255,255,.22) .55cqw, transparent .6cqw);
+  background-size: 4cqw 4cqw; background-position: 38cqw 6cqw;
+}
+.rp-sv { padding: 10cqw 9cqw 0; gap: 0; }
+.rp-sv-arc {
+  position: absolute; border-radius: 50%; border: .25cqw solid rgba(255,255,255,.3); pointer-events: none;
+}
+.rp-sv-arc-1 { width: 108cqw; height: 108cqw; right: -46cqw; top: -34cqw; }
+.rp-sv-arc-2 { width: 82cqw; height: 82cqw; right: -33cqw; top: -21cqw; border-color: rgba(255,255,255,.24); }
+.rp-sv-arc-3 { width: 56cqw; height: 56cqw; right: -20cqw; top: -8cqw; background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.36); }
+.rp-sv-wordmark { position: relative; font-family: var(--font-headline); font-size: 4.2cqw; letter-spacing: .2em; }
+.rp-sv-signature { position: relative; font-size: 18cqw; line-height: 1; margin-top: .5cqw; }
+.rp-sv-strap { position: relative; font-size: 3.2cqw; line-height: 1.45; color: rgba(255,255,255,.78); max-width: 58cqw; margin-top: .5cqw; }
+.rp-sv-issue { position: absolute; left: 9cqw; right: 9cqw; top: 46cqw; display: flex; flex-direction: column; }
+.rp-sv-kicker { font-family: var(--font-mono); font-size: 2.7cqw; letter-spacing: .22em; color: rgba(255,255,255,.8); }
+.rp-sv-kicker::before { content: ""; display: block; width: 6cqw; height: .8cqw; background: #fff; margin-bottom: 1.6cqw; }
+.rp-sv-no { font-family: var(--font-headline); font-size: 24cqw; line-height: 1; letter-spacing: -.01em; margin-top: 1cqw; }
+.rp-sv-week { font-family: var(--font-headline); font-size: 7.4cqw; line-height: 1.15; margin-top: 1.5cqw; }
+.rp-sv-lead { position: absolute; left: 9cqw; right: 9cqw; top: 92cqw; border-top: .25cqw solid rgba(255,255,255,.45); padding-top: 2.4cqw; display: flex; flex-direction: column; }
+.rp-sv-lead .rp-sv-kicker::before { display: none; }
+.rp-sv-title {
+  font-family: var(--font-headline); font-size: 6.2cqw; line-height: 1.16; margin-top: 1.2cqw;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; text-wrap: balance;
+}
+.rp-sv-band {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 14cqw; background: #1a3fd1;
+  padding: 3cqw 9cqw 0; font-size: 2.7cqw; line-height: 1.5; color: rgba(255,255,255,.78);
+}
+.rp-cover--savant .rp-cover-ribbon { top: 9cqw; }
+
 /* ---- Decks: a landscape 16:9 title slide on a dark stage frame ---- */
 .rp-cover--deck {
   aspect-ratio: 16 / 9;
@@ -152,6 +185,24 @@
   font-family: var(--font-mono); font-size: 2.2cqw; letter-spacing: .12em; color: #95a0b1;
 }
 .rp-deck-foot span:first-child { font-family: var(--font-headline); letter-spacing: .18em; color: #0f172a; }
+/* The company intel deck: the same stage, an inverted slide so it reads as
+   its own product beside the white guide decks and the paper sheets. */
+.rp-cover--intel { background: #2d5bff; border-color: #2d5bff; }
+.rp-intel-slide { background: #0b1120; color: #fff; justify-content: flex-start; padding-top: 6cqw; }
+.rp-intel-slide .rp-deck-kicker { color: #9fb3ff; }
+.rp-intel-date { font-family: var(--font-headline); font-size: 9cqw; line-height: 1; letter-spacing: -.01em; margin-top: .5cqw; }
+.rp-intel-title {
+  font-size: 3.1cqw; line-height: 1.4; color: rgba(255,255,255,.82); margin-top: 1.5cqw; max-width: 86%;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.rp-intel-chips { display: flex; gap: 1.5cqw; margin-top: 2cqw; }
+.rp-intel-chips span {
+  font-family: var(--font-mono); font-size: 2.2cqw; letter-spacing: .1em; text-transform: uppercase;
+  color: #fff; border: .2cqw solid rgba(255,255,255,.35); border-radius: 999px; padding: .6cqw 1.8cqw;
+}
+.rp-intel-slide .rp-deck-foot { color: rgba(255,255,255,.6); }
+.rp-intel-slide .rp-deck-foot span:first-child { color: #fff; }
+.rp-cover--intel .rp-deck-tag { background: #2d5bff; color: #fff; }
 .rp-deck-tag {
   position: absolute; top: 0; left: 0;
   background: #0b1120; color: rgba(255,255,255,.85);

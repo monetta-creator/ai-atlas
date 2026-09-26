@@ -204,7 +204,8 @@ export async function listGeneratedReports(
             narrative->>'bottomLine' as bottom_line,
             pack->'stats' as stats,
             pack->'health' as health,
-            pack->'numbers' as numbers
+            pack->'numbers' as numbers,
+            (pack->>'issueNumber')::int as issue_number
        from generated_reports
        ${where}
       order by generated_at desc, id`,
