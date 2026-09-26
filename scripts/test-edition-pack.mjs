@@ -11,6 +11,7 @@ import {
 } from '../lib/edition/pure.ts';
 import { clusterStories, coverageLine } from '../lib/edition/cluster.ts';
 import { deskFor, cleanBlindSpots, groupByDesk, balanceColumns, DESK_KEYS } from '../lib/edition/desks.ts';
+import { paperWeight, rigorBandOf, sortPapersByWeight } from '../lib/edition/research-weight.ts';
 
 let pass = 0; let fail = 0;
 function check(name, fn) { try { fn(); pass += 1; console.log(`  ok  ${name}`); } catch (e) { fail += 1; console.error(`FAIL  ${name}\n      ${e.message}`); } }
@@ -346,6 +347,61 @@ check('allowlist admits the query-stripped twin of a stored source url, never a 
   const allow = allowlistForEdition(withQuery);
   assert.ok(allow.hrefs.has('https://decrypt.co/379167/q-day'));
   assert.ok(!allow.hrefs.has('https://decrypt.co/379167/other'));
+});
+
+// ---------------------------------------------------------------- research-weight
+
+console.log('edition research weight:');
+
+check('paperWeight: tracked, 2 touches and a supporting thread, high rigor gets every mark', () => {
+  const w = paperWeight({ reviewStatus: 'tracked', claimTouches: 2, threadRelations: ['supports'], proposedRigor: 80 });
+  assert.equal(w.marks, 3);
+  assert.equal(w.kicker, 'TRACKED · BEARS ON 2 · RIGOR HIGH');
+  assert.equal(w.contradicts, false);
+});
+
+check('paperWeight: pending with only a contradicting thread and medium rigor scores reach alone', () => {
+  const w = paperWeight({ reviewStatus: 'pending', claimTouches: 0, threadRelations: ['contradicts'], proposedRigor: 60 });
+  assert.equal(w.marks, 1);
+  assert.equal(w.kicker, 'ON A THREAD · RIGOR MEDIUM · CONTRADICTS');
+  assert.equal(w.contradicts, true);
+});
+
+check('paperWeight: nothing set gives zero marks and an empty kicker', () => {
+  const w = paperWeight({ reviewStatus: null, claimTouches: 0, threadRelations: [], proposedRigor: null });
+  assert.equal(w.marks, 0);
+  assert.equal(w.kicker, '');
+});
+
+check('paperWeight: a noted paper kickers off with NOTED, not TRACKED', () => {
+  const w = paperWeight({ reviewStatus: 'noted', claimTouches: 0, threadRelations: [], proposedRigor: null });
+  assert.ok(w.kicker.startsWith('NOTED'), w.kicker);
+});
+
+check('rigorBandOf: the band thresholds are 70 (high) and 55 (medium), null passes through', () => {
+  assert.equal(rigorBandOf(69), 'medium');
+  assert.equal(rigorBandOf(70), 'high');
+  assert.equal(rigorBandOf(44), 'low');
+  assert.equal(rigorBandOf(null), null);
+});
+
+check('sortPapersByWeight: orders by marks desc, confirmed first on a tie, then original order', () => {
+  const papers = [
+    { id: 'a', weight: { marks: 1, confirmed: false } },
+    { id: 'b', weight: { marks: 2, confirmed: true } },
+    { id: 'c', weight: { marks: 2, confirmed: false } },
+    { id: 'd', weight: undefined },
+    { id: 'e', weight: { marks: 1, confirmed: true } },
+  ];
+  assert.deepEqual(sortPapersByWeight(papers).map((p) => p.id), ['b', 'c', 'e', 'a', 'd']);
+});
+
+check('sortPapersByWeight: equal marks and confirmed keep their original order (stable)', () => {
+  const papers = [
+    { id: 'x', weight: { marks: 1, confirmed: true } },
+    { id: 'y', weight: { marks: 1, confirmed: true } },
+  ];
+  assert.deepEqual(sortPapersByWeight(papers).map((p) => p.id), ['x', 'y']);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

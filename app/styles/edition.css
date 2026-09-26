@@ -11,8 +11,13 @@
      .ed-industry / .ed-brief-row                              The industry
      .ed-desks / .ed-deskgrid / .ed-desk / .ed-desk-head       Things happen by desk
      .ed-brief / .ed-brief-hed / .ed-brief-meta                 shared brief row
-     .ed-research / .ed-papergrid                              Research (full width)
+     .ed-research / .ed-papergrid / .ed-paper-head / .ed-weight /
+       .ed-dot / .ed-paper-kicker / .ed-kicker-contra           Research + weight dots
      .ed-tier                                                  T1..T4 chip
+     .ed-builders / .ed-builders-grid / .ed-builders-reads /
+       .ed-builders-releases / .ed-release-product / .ed-chip /
+       .ed-builders-note                                       What builders are reading
+     .ed-hn / .ed-cardgrid / .ed-card                          older HN fallback grid
      .ed-sections / .ed-section-head                           the section shelf
      .ed-footer                                                 the colophon line
    ============================================================ */
@@ -120,12 +125,30 @@
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
 }
 a.ed-brief-hed:hover { color: var(--accent); text-decoration: none; }
-.ed-brief-meta { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink); }
+.ed-brief-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink); }
 .ed-brief-domain { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-brief-line { font-size: 12.5px; color: var(--dim); line-height: 1.4; margin: 0; }
 .ed-inatlas {
   font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 3px;
   color: var(--accent); background: color-mix(in oklab, var(--accent) 12%, transparent);
 }
+.ed-chip {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 3px;
+  color: var(--dim); background: color-mix(in oklab, var(--ink) 8%, transparent);
+}
+
+/* ---- What builders are reading (grouped HN reads + vendor releases) ---- */
+.ed-builders { margin-top: 34px; padding-top: 22px; border-top: 4px double var(--ink-faint); }
+.ed-builders-note {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink); margin: -6px 0 12px;
+}
+.ed-builders-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 0 36px; }
+.ed-builders-grid[data-solo] { grid-template-columns: 1fr; }
+@media (max-width: 900px) { .ed-builders-grid { grid-template-columns: 1fr; } }
+.ed-builders-reads > div { margin-bottom: 20px; }
+.ed-builders-releases .ed-brief-hed { font-size: 13px; font-weight: 500; }
+.ed-release-product { display: block; font-size: 13px; font-weight: 700; color: var(--ink); }
+.ed-release-product:hover { color: var(--accent); }
 
 /* ---- source-tier chip, T1 best .. T4 junk ---- */
 .ed-tier {
@@ -155,12 +178,26 @@ a.ed-brief-hed:hover { color: var(--accent); text-decoration: none; }
 @media (max-width: 700px) { .ed-papergrid { grid-template-columns: 1fr; } }
 
 .ed-paper { margin-bottom: 12px; }
-.ed-paper-title { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.ed-paper-head { display: flex; align-items: baseline; gap: 8px; }
+.ed-paper-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
 .ed-paper-title:hover { text-decoration: underline; }
 .ed-paper-cares {
   font-size: 12px; color: var(--dim); margin: 2px 0 0; line-height: 1.4;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
 }
+.ed-paper-kicker {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--faint-ink); margin: 4px 0 0;
+}
+.ed-kicker-contra { color: var(--contradicts); }
+
+/* ---- research weight dots, three per paper ---- */
+.ed-weight { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+.ed-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  border: 1px solid var(--ink-faint); background: transparent;
+}
+.ed-dot[data-on] { background: var(--ink); border-color: var(--ink); }
 
 .ed-tool { margin-bottom: 12px; font-size: 13px; }
 .ed-tool-name { font-weight: 600; color: var(--ink); }

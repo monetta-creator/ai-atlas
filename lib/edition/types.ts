@@ -4,6 +4,8 @@
 
 import type { StoryCluster } from './cluster';
 import type { DeskKey } from './desks';
+import type { BuilderTag, CatalogRow } from './builders-core';
+import type { PaperWeight } from './research-weight';
 
 export interface EditionNumbers {
   itemsRead: number;        // scan + intel + pipeline candidates in the window
@@ -37,8 +39,45 @@ export interface EditionPaper {
   id: string;
   title: string;
   href: string;             // /research/<id>
-  whoCares: string | null;
+  whoCares: string | null;  // the audience note (the dek before 2026-09-26; now the fallback)
   headlineClaim: string | null;
+  finding?: string | null;  // headline_claim, deDashed: the dek since 2026-09-26
+  weight?: PaperWeight;     // the quiet importance marks (research-weight.ts); absent on older rows
+}
+
+// What builders are reading (2026-09-26): Hacker News front-page stories a
+// cheap model judged useful for an AI builders pod inside a large regulated
+// company, each with a one-line why, plus the tooling monitor's vendor
+// release events in the window. Guest-safe: titles, urls, counts, tags.
+export interface EditionBuilderRead {
+  title: string;
+  url: string | null;
+  hnUrl: string;
+  points: number;
+  comments: number;
+  tag: BuilderTag;
+  line: string | null;      // the one-line why, ≤140 chars, null on the no-model fallback
+  showHn: boolean;
+  repo: boolean;            // github / gitlab / hugging face host
+  debate: boolean;          // comments outrun points
+  catalogHref: string | null; // /tooling/<slug> when the story names a cataloged product
+}
+
+export interface EditionRelease {
+  productName: string;
+  productHref: string;      // /tooling/<slug>
+  title: string;
+  url: string | null;
+  kind: string;             // launch | feature | pricing | changelog
+  date: string;             // YYYY-MM-DD
+}
+
+export interface EditionBuilders {
+  reads: EditionBuilderRead[];
+  releases: EditionRelease[];
+  judged: boolean;          // false = the no-model fallback (budget spent or the leg failed)
+  candidates?: EditionHnItem[]; // the wide HN candidate list the judge saw; pack-internal, views ignore it
+  products?: CatalogRow[];      // the catalog matcher rows (public columns); pack-internal, views ignore it
 }
 
 export interface EditionTool {
@@ -98,6 +137,7 @@ export interface EditionPack {
   sources: EditionSourceRow[];
   claimsTouched: { code: string; statement: string; href: string; signalHrefs: string[] }[];
   hn?: EditionHnItem[];
+  builders?: EditionBuilders;        // 2026-09-26; absent on older rows, the view falls back to hn
   markets?: { asOf: string; rows: EditionMarketRow[] } | null;
   priorFront?: { day: string; headlines: string[] }[]; // the last 2 published editions' front headlines, for the repeat penalty
   generatedAt: string;
@@ -137,4 +177,5 @@ export interface EditionPrefs {
   enabled: boolean;
   model: string;
   front_items: number;
+  builders_steering: string | null; // 0067; null = DEFAULT_BUILDERS_STEERING in lib/edition/builders.ts
 }

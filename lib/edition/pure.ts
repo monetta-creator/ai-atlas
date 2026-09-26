@@ -120,6 +120,15 @@ export function allowlistForEdition(pack: EditionPack): CitationAllowlist {
     if (t.href) hrefs.add(t.href);
   }
   for (const p of pack.papers) hrefs.add(p.href);
+  for (const r of pack.builders?.reads ?? []) {
+    if (r.url) addUrl(r.url);
+    addUrl(r.hnUrl);
+    if (r.catalogHref) hrefs.add(r.catalogHref);
+  }
+  for (const r of pack.builders?.releases ?? []) {
+    if (r.url) addUrl(r.url);
+    hrefs.add(r.productHref);
+  }
   for (const t of pack.tools) hrefs.add(t.href);
   for (const c of pack.claimsTouched) {
     hrefs.add(c.href);

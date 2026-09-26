@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { SavedEdition, EditionThing } from '@/lib/edition/types';
 import { allowlistForEdition } from '@/lib/edition/pure';
 import { groupByDesk, cleanBlindSpots } from '@/lib/edition/desks';
+import { groupReadsByTag } from '@/lib/edition/builders-core';
 import { fmtChange } from '@/lib/edition/markets';
 import { enforceCitations } from '@/lib/citations';
 import { dateLabel } from '@/lib/format';
@@ -10,12 +11,14 @@ import { dateLabel } from '@/lib/format';
 // The daily edition's read view (2026-09-26): masthead, a numbers strip, the
 // market strip, a two-column body (the front + Matt Levine-style column),
 // The industry (non-AI financial-services briefs), Things happen grouped by
-// desk, Research (full width), Hacker News, Sources, then the section shelf
-// (Tools on Mondays / Blind spots). Renders one SavedEdition; used by
-// /blotter (latest) and /blotter/[day] (archive). Guest-safe by construction:
-// every field it reads comes off the pack or the gated narrative, never an
-// admin column. The `admin` prop only toggles the model-name line in the
-// footer.
+// desk, Research (full width, with the quiet weight dots + kicker), What
+// builders are reading (grouped Hacker News reads + vendor releases when
+// `pack.builders` exists, else the older bare HN card grid), Sources, then
+// the section shelf (Tools on Mondays / Blind spots). Renders one
+// SavedEdition; used by /blotter (latest) and /blotter/[day] (archive).
+// Guest-safe by construction: every field it reads comes off the pack or the
+// gated narrative, never an admin column. The `admin` prop only toggles the
+// model-name line in the footer.
 //
 // The column is the one piece of free-form model prose here, so it is
 // re-gated at render, belt and braces, exactly like SheetReadView: the same
@@ -172,15 +175,88 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
           <div className="ed-papergrid">
             {pack.papers.map((p) => (
               <div key={p.id} className="ed-paper">
-                <Link href={p.href} className="ed-paper-title">{p.title}</Link>
-                {p.whoCares && <p className="ed-paper-cares">{p.whoCares}</p>}
+                <div className="ed-paper-head">
+                  {p.weight && (
+                    <span
+                      className="ed-weight"
+                      title={p.weight.kicker}
+                      aria-label={`weight ${p.weight.marks} of 3${p.weight.kicker ? `: ${p.weight.kicker}` : ''}`}
+                    >
+                      {[0, 1, 2].map((i) => (
+                        <span key={i} className="ed-dot" data-on={i < p.weight!.marks ? '' : undefined} />
+                      ))}
+                    </span>
+                  )}
+                  <Link href={p.href} className="ed-paper-title">{p.title}</Link>
+                </div>
+                {(p.finding ?? p.whoCares) && <p className="ed-paper-cares">{p.finding ?? p.whoCares}</p>}
+                {p.weight?.kicker && (
+                  <p className="ed-paper-kicker">
+                    {p.weight.kicker.split(' · ').map((part, i) => (
+                      <span key={i}>
+                        {i > 0 && ' · '}
+                        {part === 'CONTRADICTS' ? <span className="ed-kicker-contra">{part}</span> : part}
+                      </span>
+                    ))}
+                  </p>
+                )}
               </div>
             ))}
           </div>
         </section>
       )}
 
-      {(pack.hn?.length ?? 0) > 0 && (
+      {pack.builders ? (
+        <section className="ed-builders">
+          <p className="ed-section-head">
+            What builders are reading · {pack.builders.reads.length} reads
+            {pack.builders.releases.length > 0 ? ` · ${pack.builders.releases.length} releases` : ''}
+          </p>
+          {!pack.builders.judged && (
+            <p className="ed-builders-note">Unjudged today: top stories by points.</p>
+          )}
+          <div className="ed-builders-grid" data-solo={pack.builders.releases.length === 0 ? '' : undefined}>
+            <div className="ed-builders-reads">
+              {groupReadsByTag(pack.builders.reads).map((g) => (
+                <div key={g.tag}>
+                  <p className="ed-desk-head">{g.label} <span className="ed-desk-count">{g.items.length}</span></p>
+                  {g.items.map((r) => (
+                    <div key={r.hnUrl} className="ed-brief">
+                      <GoTo href={r.url ?? r.hnUrl} className="ed-brief-hed">{r.title}</GoTo>
+                      {r.line && <p className="ed-brief-line">{r.line}</p>}
+                      <span className="ed-brief-meta">
+                        <a href={r.hnUrl} target="_blank" rel="noopener noreferrer" className="ed-brief-domain">
+                          HN · {r.points} points · {r.comments} comments
+                        </a>
+                        {r.showHn && <span className="ed-chip">Show HN</span>}
+                        {r.repo && <span className="ed-chip">Repo</span>}
+                        {r.debate && <span className="ed-chip">Debate</span>}
+                        {r.catalogHref && <Link href={r.catalogHref} className="ed-inatlas">in the catalog</Link>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            {pack.builders.releases.length > 0 && (
+              <div className="ed-builders-releases">
+                <p className="ed-desk-head">Vendor releases <span className="ed-desk-count">{pack.builders.releases.length}</span></p>
+                {pack.builders.releases.map((r) => (
+                  <div key={`${r.productHref}-${r.title}`} className="ed-brief">
+                    <Link href={r.productHref} className="ed-release-product">{r.productName}</Link>
+                    {r.url ? (
+                      <GoTo href={r.url} className="ed-brief-hed">{r.title}</GoTo>
+                    ) : (
+                      <span className="ed-brief-hed">{r.title}</span>
+                    )}
+                    <span className="ed-brief-meta">{r.kind} · {dateLabel(r.date)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      ) : (pack.hn?.length ?? 0) > 0 ? (
         <section className="ed-hn">
           <p className="ed-section-head">What builders are reading · Hacker News front page</p>
           <div className="ed-cardgrid">
@@ -195,7 +271,7 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
             ))}
           </div>
         </section>
-      )}
+      ) : null}
 
       {pack.sources.length > 0 && (
         <section className="ed-sources">

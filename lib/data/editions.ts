@@ -63,8 +63,8 @@ export async function countEditions(): Promise<number> {
 }
 
 export async function getEditionPrefs(): Promise<EditionPrefs> {
-  const row = await one<{ enabled: boolean; model: string; front_items: number }>(
-    `select enabled, model, front_items from edition_prefs where id = true`
+  const row = await one<EditionPrefs>(
+    `select enabled, model, front_items, builders_steering from edition_prefs where id = true`
   );
-  return row ?? { enabled: true, model: 'z-ai/glm-5.3-flash', front_items: 6 };
+  return row ?? { enabled: true, model: 'z-ai/glm-5.3-flash', front_items: 6, builders_steering: null };
 }

@@ -37,6 +37,14 @@ export const PAGE_INFO_C: Record<string, PageInfoContent> = {
         body: 'An archived edition never changes after it runs: the items, the column, and every link on the page are fixed to what the engines had stored that day.',
       },
       {
+        heading: 'Reading the research marks',
+        body: 'Each paper carries up to three dots: a human confirmed it, it bears on a standing position or thread, and the model-rated rigor is high. The line under the title is the paper\'s own finding in one sentence; the small caps line spells the marks out, and CONTRADICTS flags a paper that pushes back on a position.',
+      },
+      {
+        heading: 'What builders are reading',
+        body: 'Hacker News front-page stories a model judged useful for people building with AI inside a large regulated company, each with a one-line why and a tag, beside the vendor releases the tooling monitor caught in the window.',
+      },
+      {
         heading: 'Two downloads',
         body: 'Newspaper PDF is the edition as a two or three page paper, US Letter, every link live. Deck is the same edition as 16:9 slides.',
       },

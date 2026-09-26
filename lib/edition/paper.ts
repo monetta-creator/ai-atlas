@@ -5,7 +5,8 @@ import { dateLabel } from '../format.ts';
 import { fmtChange } from './markets.ts';
 import { allowlistForEdition, deDash } from './pure.ts';
 import { balanceColumns, cleanBlindSpots, groupByDesk } from './desks.ts';
-import type { SavedEdition, EditionThing } from './types';
+import { groupReadsByTag } from './builders-core.ts';
+import type { SavedEdition, EditionThing, EditionBuilderRead, EditionRelease } from './types';
 
 // The Daily Edition's newspaper PDF, data half (2026-09-26). buildEditionPaper
 // turns a SavedEdition into a flat, print-ready view model that
@@ -38,6 +39,40 @@ export interface PaperDesk {
   items: PaperBrief[];
 }
 
+export interface PaperBuilderRead {
+  title: string;
+  href: string;              // absolute: url ?? hnUrl
+  line: string | null;
+  meta: string;
+}
+
+export interface PaperBuilderGroup {
+  label: string;
+  items: PaperBuilderRead[];
+}
+
+export interface PaperBuilderRelease {
+  productName: string;
+  productHref: string;       // absolute
+  title: string;
+  href: string | null;       // absolute
+  meta: string;
+}
+
+export interface PaperBuilders {
+  groups: PaperBuilderGroup[];
+  releases: PaperBuilderRelease[];
+}
+
+export interface PaperResearch {
+  title: string;
+  href: string;
+  dek: string | null;
+  marks: 0 | 1 | 2 | 3;
+  kicker: string;
+  contradicts: boolean;
+}
+
 export interface PaperModel {
   day: string;
   masthead: { wordmark: string; dateLabel: string; issue: string; onlineUrl: string };
@@ -50,8 +85,9 @@ export interface PaperModel {
   thingsCount: number;
   deskColumns: PaperDesk[][];      // columns of desk blocks, balanced by item count
   researchHead: string;
-  research: { title: string; href: string; whoCares: string | null }[];
+  research: PaperResearch[];
   hn: { title: string; href: string; meta: string }[];
+  builders: PaperBuilders | null;
   sourcesHead: string;
   sourcesLine: string;             // "domain 12 · domain 9 · ..."
   blindSpots: { headline: string; href: string | null }[];
@@ -105,6 +141,33 @@ export function splitColumnHtml(html: string): [string, string] {
   return [ser(blocks.slice(0, cut)), ser(blocks.slice(cut))];
 }
 
+// What builders are reading: HN reads carry a base "HN · N points · M
+// comments" meta plus a flag chip per set boolean, in showHn/repo/debate/
+// catalogHref order; a release's meta is "kind · date label".
+function builderReadItem(origin: string, r: EditionBuilderRead): PaperBuilderRead {
+  const parts = [`HN · ${r.points} points · ${r.comments} comments`];
+  if (r.showHn) parts.push('Show HN');
+  if (r.repo) parts.push('repo');
+  if (r.debate) parts.push('debate');
+  if (r.catalogHref) parts.push('in the catalog');
+  return {
+    title: deDash(r.title),
+    href: absolute(origin, r.url ?? r.hnUrl),
+    line: r.line ? deDash(r.line) : null,
+    meta: parts.join(' · '),
+  };
+}
+
+function builderReleaseItem(origin: string, rel: EditionRelease): PaperBuilderRelease {
+  return {
+    productName: deDash(rel.productName),
+    productHref: absolute(origin, rel.productHref),
+    title: deDash(rel.title),
+    href: rel.url ? absolute(origin, rel.url) : null,
+    meta: `${rel.kind} · ${dateLabel(rel.date) ?? rel.date}`,
+  };
+}
+
 // ---------------------------------------------------------------- builder
 
 export function buildEditionPaper(edition: SavedEdition, origin: string): PaperModel {
@@ -155,11 +218,17 @@ export function buildEditionPaper(edition: SavedEdition, origin: string): PaperM
   }
   const deskColumns = balanceColumns(blocks, 3, (b) => 1.5 + b.items.length);
 
-  const research = pack.papers.map((p) => ({
-    title: deDash(p.title),
-    href: absolute(origin, p.href),
-    whoCares: p.whoCares ? clip(deDash(p.whoCares), 220) : null,
-  }));
+  const research: PaperResearch[] = pack.papers.map((p) => {
+    const dekSource = p.finding ?? p.whoCares;
+    return {
+      title: deDash(p.title),
+      href: absolute(origin, p.href),
+      dek: dekSource ? clip(deDash(dekSource), 220) : null,
+      marks: p.weight?.marks ?? 0,
+      kicker: p.weight?.kicker ?? '',
+      contradicts: p.weight?.contradicts ?? false,
+    };
+  });
   const researchHead =
     pack.numbers.papersKept > research.length
       ? `Research · ${pack.numbers.papersKept} analyzed, top ${research.length}`
@@ -170,6 +239,16 @@ export function buildEditionPaper(edition: SavedEdition, origin: string): PaperM
     href: h.url ?? h.hnUrl,
     meta: `${h.points} points · ${h.comments} comments`,
   }));
+
+  const builders: PaperBuilders | null = pack.builders
+    ? {
+        groups: groupReadsByTag(pack.builders.reads).map((g) => ({
+          label: g.label,
+          items: g.items.map((r) => builderReadItem(origin, r)),
+        })),
+        releases: pack.builders.releases.map((rel) => builderReleaseItem(origin, rel)),
+      }
+    : null;
 
   const sourcesLine = pack.sources.map((src) => `${src.domain} ${src.count}`).join(' · ');
   const sourcesHead = `Sources · ${pack.numbers.outlets} outlets across ${pack.numbers.itemsRead} items`;
@@ -202,6 +281,7 @@ export function buildEditionPaper(edition: SavedEdition, origin: string): PaperM
     researchHead,
     research,
     hn,
+    builders,
     sourcesHead,
     sourcesLine,
     blindSpots,

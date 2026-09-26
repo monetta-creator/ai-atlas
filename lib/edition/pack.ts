@@ -10,13 +10,16 @@
 import { q, one } from '../db.ts';
 import { clusterStories } from './cluster.ts';
 import { isAiStory, cleanBlindSpots } from './desks.ts';
-import { fetchHnAiFront } from './hn.ts';
+import { fetchHnFrontViews } from './hn.ts';
+import { fallbackReads } from './builders-core.ts';
+import type { CatalogRow } from './builders-core';
+import { paperWeight, sortPapersByWeight } from './research-weight.ts';
 import { fetchMarketStrip } from './markets.ts';
-import { windowFor, thingsHappenFor, industryFor, priorFrontFrom, penalizeRepeats } from './pure.ts';
+import { windowFor, thingsHappenFor, industryFor, priorFrontFrom, penalizeRepeats, deDash } from './pure.ts';
 import { rateDomainByRule } from '../scan/source-tiers.ts';
 import type { StoryItem } from './cluster';
 import type {
-  EditionPack, EditionNumbers, EditionPaper, EditionTool, EditionSourceRow,
+  EditionPack, EditionNumbers, EditionBuilders, EditionRelease, EditionHnItem, EditionPaper, EditionTool, EditionSourceRow,
 } from './types';
 
 function domainOf(url: string | null | undefined): string | null {
@@ -176,24 +179,10 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
   const w = windowFor(day);
   const isMonday = new Date(`${day}T00:00:00Z`).getUTCDay() === 1;
 
-  const [{ items: allItems, scanRows, intelRows, candidateRows, signalRows }, paperRows, coverageRow, countRow, papersKeptRow] =
+  const [{ items: allItems, scanRows, intelRows, candidateRows, signalRows }, papers, coverageRow, countRow, papersKeptRow] =
     await Promise.all([
       loadStoryItems(day),
-      // The research engine's analyze step extracts findings from agent-positive
-      // kept papers the same day they arrive; a human review_status lands days
-      // later, so a same-day tracked/noted predicate read 0 every edition. Read
-      // the engine-analyzed papers in the window instead, human-confirmed first,
-      // and never one a human dismissed (an explicit "no" recorded with a why).
-      q<{ id: string; title: string; headline_claim: string | null; who_cares: { lens: string; note: string }[] | null }>(
-        `select p.id, p.title, p.extraction->>'headline_claim' as headline_claim, p.extraction->'who_cares' as who_cares
-           from papers p
-          where p.triage_status = 'kept' and p.extraction is not null
-            and p.review_status <> 'dismissed'
-            and p.created_at >= $1::timestamptz and p.created_at < $2::timestamptz
-          order by (p.review_status in ('tracked','noted')) desc, p.created_at desc
-          limit 8`,
-        [w.from, w.to]
-      ),
+      loadEditionPapers(w),
       one<{ coverage: { developments: { headline: string; url: string | null; covered: boolean }[] } | null }>(
         `select coverage from pipeline_runs
           where status = 'completed' and coverage is not null
@@ -203,9 +192,9 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
         [w.from, w.to]
       ),
       one<{ n: number }>(`select count(*)::int as n from generated_reports where kind = 'edition'`),
-      // The unpaginated twin of the 8-row paperRows query above: `numbers`
-      // reports every paper the engine analyzed in the window, not just the
-      // 8 the strip has room to list.
+      // The unpaginated twin of loadEditionPapers's query: `numbers` reports
+      // every paper the engine analyzed in the window, not just the 8 the
+      // strip has room to list.
       one<{ n: number }>(
         `select count(*)::int as n from papers p
           where p.triage_status = 'kept' and p.extraction is not null
@@ -234,14 +223,6 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
   const frontExclude = new Set(clustersFull.slice(0, 7).map((c) => c.id));
   const thingsHappen = thingsHappenFor(clustersFull, frontExclude);
   const industry = industryFor(clustersFull, frontExclude);
-
-  // ---- papers -------------------------------------------------------------
-
-  const papers: EditionPaper[] = paperRows.map((p) => ({
-    id: p.id, title: p.title, href: `/research/${p.id}`,
-    whoCares: p.who_cares && p.who_cares.length ? p.who_cares.map((w) => w.note).join(' ') : null,
-    headlineClaim: p.headline_claim,
-  }));
 
   // ---- tools (Mondays only) -----------------------------------------------
 
@@ -318,9 +299,12 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
   // ---- numbers --------------------------------------------------------
 
   // Two free strips fetched at build time (no cron, no table): the Hacker
-  // News front page filtered to AI, and the market basket. Either may come
-  // back empty; the view omits what is missing.
-  const [hn, markets] = await Promise.all([fetchHnAiFront(8), fetchMarketStrip()]);
+  // News front page (the AI strip of 8 the deck keeps, plus the wider
+  // builder candidate list the judge in run.ts reads), and the market
+  // basket. Either may come back empty; the view omits what is missing.
+  const [hnViews, markets] = await Promise.all([fetchHnFrontViews(), fetchMarketStrip()]);
+  const hn = hnViews.hn;
+  const builders = await loadBuilders(w, hnViews.candidates, hn);
 
   const outletSet = new Set(allItems.map((it) => it.domain).filter(Boolean));
   // Counted over clustersFull (every cluster, before the 40-cap slice) so a
@@ -333,7 +317,7 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
     itemsRead: scanRows.length + intelRows.length + candidateRows.length,
     outlets: outletSet.size,
     signalsPublished: signalRows.length,
-    papersKept: papersKeptRow?.n ?? paperRows.length,
+    papersKept: papersKeptRow?.n ?? papers.length,
     newTools: isMonday ? tools.length : 0,
     clusters: aiClusterCount,
   };
@@ -353,10 +337,108 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
     sources,
     claimsTouched,
     hn,
+    builders,
     markets,
     priorFront: recentEditions.map((e) => ({ day: e.day, headlines: e.narrative.front.map((f) => f.headline) })),
     generatedAt: new Date().toISOString(),
   };
+}
+
+// ---------------------------------------------------------------- papers
+
+interface PaperRow {
+  id: string; title: string; headline_claim: string | null; who_cares: { lens: string; note: string }[] | null;
+  proposed_rigor: number | null; review_status: string | null; touch_count: number; relations: string[] | null;
+}
+
+// The research engine's analyze step extracts findings from agent-positive
+// kept papers the same day they arrive; a human review_status lands days
+// later, so a same-day tracked/noted predicate read 0 every edition. Read
+// the engine-analyzed papers in the window instead and never one a human
+// dismissed (an explicit "no" recorded with a why). Each paper carries its
+// quiet weight (research-weight.ts): the human stamp, the positions and
+// confirmed threads it reaches, the BAND of the model-proposed rigor. Never
+// select rigor_prior (the maintainer's personal prior), review_note,
+// agent_* or raw_content: this pack is public. Reads 12, keeps the 8
+// heaviest; the refresh script (scripts/refresh-edition.mts) calls it too.
+export async function loadEditionPapers(w: { from: string; to: string }, limit = 8): Promise<EditionPaper[]> {
+  const rows = await q<PaperRow>(
+    `select p.id, p.title, p.extraction->>'headline_claim' as headline_claim, p.extraction->'who_cares' as who_cares,
+            case when jsonb_typeof(p.extraction->'proposed_rigor') = 'number'
+                 then round((p.extraction->'proposed_rigor')::numeric)::int end as proposed_rigor,
+            p.review_status::text as review_status,
+            coalesce(array_length(p.claim_touches, 1), 0) as touch_count,
+            (select array_agg(tp.relation::text) from thread_papers tp
+              where tp.paper_id = p.id and tp.status = 'confirmed') as relations
+       from papers p
+      where p.triage_status = 'kept' and p.extraction is not null
+        and p.review_status <> 'dismissed'
+        and p.created_at >= $1::timestamptz and p.created_at < $2::timestamptz
+      order by (p.review_status in ('tracked','noted')) desc, p.created_at desc
+      limit $3`,
+    [w.from, w.to, Math.max(limit, 12)]
+  );
+  const papers: EditionPaper[] = rows.map((p) => ({
+    id: p.id, title: p.title, href: `/research/${p.id}`,
+    whoCares: p.who_cares && p.who_cares.length ? p.who_cares.map((x) => x.note).join(' ') : null,
+    headlineClaim: p.headline_claim,
+    finding: p.headline_claim ? deDash(p.headline_claim).trim() : null,
+    weight: paperWeight({
+      reviewStatus: p.review_status,
+      claimTouches: p.touch_count,
+      threadRelations: p.relations ?? [],
+      proposedRigor: p.proposed_rigor,
+    }),
+  }));
+  return sortPapersByWeight(papers).slice(0, limit);
+}
+
+// ---------------------------------------------------------------- builders
+
+// The builders strip's data half: the tooling monitor's vendor release
+// events in the window (cataloged products only; title/url/kind/date are
+// what the public /tooling/<slug> page already shows, never the working
+// `note`), the catalog rows the matcher needs (public columns only), and
+// the no-model reads over the stored AI strip. run.ts swaps the reads for
+// the judge's picks when the budget allows.
+export async function loadBuilders(
+  w: { from: string; to: string },
+  candidates: EditionHnItem[],
+  hn: EditionHnItem[]
+): Promise<EditionBuilders> {
+  const [releaseRows, productRows] = await Promise.all([
+    q<{ title: string; url: string | null; kind: string; date: string; name: string; slug: string }>(
+      `select e.title, e.url, e.kind::text as kind, to_char(e.event_date, 'YYYY-MM-DD') as date, p.name, p.slug
+         from tooling_events e
+         join tooling_products p on p.id = e.product_id
+        where p.status = 'cataloged'
+          and e.kind in ('launch', 'feature', 'pricing', 'changelog')
+          and e.created_at >= $1::timestamptz and e.created_at < $2::timestamptz
+        order by e.event_date desc, e.created_at desc
+        limit 24`,
+      [w.from, w.to]
+    ),
+    q<{ slug: string; name: string; vendor_domain: string | null; url: string | null }>(
+      `select slug, name, vendor_domain, url from tooling_products where status = 'cataloged'`
+    ),
+  ]);
+  const perProduct = new Map<string, number>();
+  const releases: EditionRelease[] = [];
+  for (const r of releaseRows) {
+    const n = perProduct.get(r.slug) ?? 0;
+    if (n >= 2) continue;
+    perProduct.set(r.slug, n + 1);
+    releases.push({
+      productName: r.name, productHref: `/tooling/${r.slug}`, title: deDash(r.title), url: r.url, kind: r.kind, date: r.date,
+    });
+    if (releases.length >= 8) break;
+  }
+  const products: CatalogRow[] = productRows.map((p) => {
+    let urlPath: string | null = null;
+    try { urlPath = p.url ? new URL(p.url).pathname.toLowerCase() : null; } catch { urlPath = null; }
+    return { slug: p.slug, name: p.name, vendorDomain: p.vendor_domain, urlHost: domainOf(p.url), urlPath };
+  });
+  return { reads: fallbackReads(hn, products), releases, judged: false, candidates, products };
 }
 
 // Resolve claim/bridge-claim codes touched by this window's signals into

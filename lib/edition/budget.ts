@@ -1,14 +1,15 @@
 import { one } from '../db';
 
 // The daily edition's model-spend guard (the research/scan/pipeline budget
-// pattern): sums today's UTC spend across the two edition features and
-// compares against EDITION_DAILY_BUDGET_USD (default 0.10; two GLM calls
-// cost about a cent, so the cap is generous headroom, not a tight ceiling).
+// pattern): sums today's UTC spend across the edition features (front,
+// column, and since 2026-09-26 the builders judge) and compares against
+// EDITION_DAILY_BUDGET_USD (default 0.10; three GLM calls cost about two
+// cents, so the cap is generous headroom, not a tight ceiling).
 // Checked once per run, before either leg; past the cap lib/edition/run.ts
 // skips the model entirely and falls back to a deterministic front + no
 // column rather than partially spending the budget on one leg.
 
-const EDITION_FEATURES = ['edition_front', 'edition_column'];
+const EDITION_FEATURES = ['edition_front', 'edition_column', 'edition_builders'];
 
 export async function checkEditionBudget(): Promise<{ ok: boolean; spentUsd: number; capUsd: number }> {
   const capUsd = Number(process.env.EDITION_DAILY_BUDGET_USD || 0.1);

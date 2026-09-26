@@ -131,3 +131,27 @@ export async function rewriteEditionColumn(
     [id, JSON.stringify(column), JSON.stringify(citedTags), JSON.stringify(dropped), JSON.stringify(model)]
   );
 }
+
+// Additive sections over a frozen edition (2026-09-26): merge `builders`
+// and/or `papers` (and the papersKept count they imply) into a saved
+// edition's pack. The front, clusters, Things happen, sources and the rest
+// of `numbers` never change through here; this exists so a section the
+// paper did not have when it ran (the builders strip, the research weight)
+// can be filled in for a stored day without regenerating the day.
+export async function rewriteEditionPackSections(
+  id: string,
+  patch: { builders?: unknown; papers?: unknown; papersKept?: number }
+): Promise<void> {
+  const sections: Record<string, unknown> = {};
+  if (patch.builders !== undefined) sections.builders = patch.builders;
+  if (patch.papers !== undefined) sections.papers = patch.papers;
+  if (!Object.keys(sections).length && patch.papersKept === undefined) return;
+  await exec(
+    `update generated_reports
+        set pack = (pack || $2::jsonb)
+                   || case when $3::int is null then '{}'::jsonb
+                           else jsonb_build_object('numbers', coalesce(pack->'numbers', '{}'::jsonb) || jsonb_build_object('papersKept', $3::int)) end
+      where id = $1 and kind = 'edition'`,
+    [id, JSON.stringify(sections), patch.papersKept ?? null]
+  );
+}

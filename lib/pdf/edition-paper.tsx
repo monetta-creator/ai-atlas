@@ -10,12 +10,18 @@ import type { PaperModel, PaperBrief, PaperFront, PaperDesk } from '../edition/p
 // content. Blocks that must stay whole carry wrap={false} and are each well
 // under a third of a page, so the white space at a page end stays small. The
 // column is two side-by-side text columns balanced by character count and
-// allowed to wrap across pages: react-pdf splits both columns at the same y
-// and continues them at the top of the next page (uneven bottoms on the jump
-// page are a newspaper look). Every scraped or model-written string is set in
-// Schibsted or Anton, never JetBrains Mono (the fontkit ligature crash noted
-// in shell.tsx); the mono face carries only the date, the issue number and
-// the footer label.
+// kept whole: at the 550-word cap it is ~60% of a Letter page, well under
+// react-pdf's clip threshold, so it moves whole to the next page when it does
+// not fit under the front, rather than splitting mid-column. Section order
+// is chosen for packing, not only editorially: the two blocks kept whole (the
+// column, ~55% of a page; Things happen, ~40-60%) cannot share a page, so the
+// flowing sections (research, builders: small wrap={false} rows) follow each
+// of them and fill the remainder. Measured on the four September editions:
+// front, research, column, builders, Things happen, sources = 3 pages each;
+// any order with the two whole blocks adjacent = 4 pages. Every scraped
+// or model-written string is set in Schibsted or Anton, never JetBrains Mono
+// (the fontkit ligature crash noted in shell.tsx); the mono face carries only
+// the date, the issue number and the footer label.
 
 const FAINT = '#95a0b1';
 const UP = '#2e7d32';
@@ -76,8 +82,8 @@ const p = StyleSheet.create({
   columnHalf: { flex: 1, fontSize: 8.5, lineHeight: 1.38 },
   columnGap: { width: 14 },
 
-  deskRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  deskCol: { flex: 1 },
+  deskGrid: { flexDirection: 'row', alignItems: 'flex-start' },
+  deskCell: { flex: 1 },
   deskGap: { width: 12 },
   desk: { marginBottom: 7 },
   deskHead: { fontSize: 6.5, fontWeight: 'bold', letterSpacing: 1.2, textTransform: 'uppercase', color: COBALT, paddingBottom: 2, marginBottom: 1, borderBottomWidth: 0.5, borderBottomColor: INK },
@@ -88,10 +94,24 @@ const p = StyleSheet.create({
   paper: { width: '50%', paddingVertical: 4 },
   paperTitle: { fontSize: 8.5, fontWeight: 'bold', lineHeight: 1.3, color: INK },
   paperCares: { fontSize: 7.5, color: DIM, lineHeight: 1.35, marginTop: 1 },
+  paperKicker: { fontSize: 6.3, letterSpacing: 0.8, color: FAINT, textTransform: 'uppercase', marginTop: 1.5 },
+  marksRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 1 },
+  markSq: { width: 4, height: 4, marginRight: 2, backgroundColor: INK },
+  markSqEmpty: { width: 4, height: 4, marginRight: 2, borderWidth: 0.5, borderColor: FAINT },
 
   hnRow: { flexDirection: 'row', alignItems: 'baseline', paddingVertical: 1.5 },
   hnTitle: { fontSize: 8, color: INK, flex: 1 },
   hnMeta: { fontSize: 6.3, color: FAINT, marginLeft: 6 },
+
+  buildersRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  buildersReads: { flex: 3 },
+  buildersReleases: { flex: 2 },
+  buildersGap: { width: 14 },
+  buildersLine: { fontSize: 7.5, color: DIM, lineHeight: 1.3, marginTop: 1 },
+  releaseRow: { paddingVertical: 3, borderBottomWidth: 0.5, borderBottomColor: LINE },
+  releaseProduct: { fontSize: 8, fontWeight: 'bold', color: INK },
+  releaseTitle: { fontSize: 8, color: INK, marginTop: 1 },
+  releaseMeta: { fontSize: 6.3, color: FAINT, marginTop: 1 },
 
   sourcesLine: { fontSize: 7.2, color: DIM, lineHeight: 1.5 },
   blind: { fontSize: 8, marginBottom: 2 },
@@ -137,10 +157,25 @@ function BriefRow({ b }: { b: PaperBrief }): ReactNode {
 
 function DeskBlock({ desk }: { desk: PaperDesk }): ReactNode {
   return (
-    <View wrap={false} style={p.desk}>
+    <View style={p.desk}>
       <Text style={p.deskHead}>{`${desk.label} · ${desk.items.length}`}</Text>
       {desk.items.map((b) => <BriefRow key={b.href + b.headline} b={b} />)}
     </View>
+  );
+}
+
+// The kicker is a mono-case " · "-joined line; CONTRADICTS, when present, is
+// the one part rendered in the down red rather than the line's faint tone.
+function KickerLine({ kicker }: { kicker: string }): ReactNode {
+  const parts = kicker.split(' · ');
+  return (
+    <Text style={p.paperKicker}>
+      {parts.map((part, i) => (
+        <Text key={i} style={part === 'CONTRADICTS' ? { color: DOWN } : undefined}>
+          {i > 0 ? ` · ${part}` : part}
+        </Text>
+      ))}
+    </Text>
   );
 }
 
@@ -209,8 +244,28 @@ function Paper({ m, docTitle }: { m: PaperModel; docTitle: string }): ReactNode 
           </View>
         )}
 
+        {m.research.length > 0 && (
+          <View>
+            <Text style={p.sectionHead}>{m.researchHead}</Text>
+            <View style={p.grid}>
+              {m.research.map((r, i) => (
+                <View key={r.href} wrap={false} style={[p.paper, i % 2 === 0 ? p.cellLeft : { paddingLeft: 9 }]}>
+                  <View style={p.marksRow}>
+                    {[0, 1, 2].map((idx) => (
+                      <View key={idx} style={idx < r.marks ? p.markSq : p.markSqEmpty} />
+                    ))}
+                  </View>
+                  <Link src={r.href} style={p.paperTitle}>{r.title}</Link>
+                  {r.dek && <Text style={p.paperCares}>{r.dek}</Text>}
+                  {r.kicker && <KickerLine kicker={r.kicker} />}
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         {m.column && (
-          <View style={p.columnWrap}>
+          <View wrap={false} style={p.columnWrap}>
             <Text style={p.kicker}>The column</Text>
             <Text style={p.columnTitle}>{m.column.title}</Text>
             <View style={p.columnRow}>
@@ -225,42 +280,72 @@ function Paper({ m, docTitle }: { m: PaperModel; docTitle: string }): ReactNode 
           </View>
         )}
 
-        {m.deskColumns.length > 0 && (
+        {m.builders ? (
           <View>
+            <Text style={p.sectionHead}>What builders are reading</Text>
+            <View style={p.buildersRow}>
+              <View style={p.buildersReads}>
+                {m.builders.groups.map((g) => (
+                  <View key={g.label} wrap={false} style={p.desk}>
+                    <Text style={p.deskHead}>{g.label}</Text>
+                    {g.items.map((it) => (
+                      <View key={it.href + it.title} style={p.brief}>
+                        <Link src={it.href} style={p.briefHed}>{it.title}</Link>
+                        {it.line && <Text style={p.buildersLine}>{it.line}</Text>}
+                        <Text style={p.briefMeta}>{it.meta}</Text>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+              {m.builders.releases.length > 0 && (
+                <>
+                  <View style={p.buildersGap} />
+                  <View style={p.buildersReleases}>
+                    <Text style={p.deskHead}>Vendor releases</Text>
+                    {m.builders.releases.map((rel, i) => (
+                      <View key={rel.productHref + i} wrap={false} style={p.releaseRow}>
+                        <Link src={rel.productHref} style={p.releaseProduct}>{rel.productName}</Link>
+                        {rel.href
+                          ? <Link src={rel.href} style={p.releaseTitle}>{rel.title}</Link>
+                          : <Text style={p.releaseTitle}>{rel.title}</Text>}
+                        <Text style={p.releaseMeta}>{rel.meta}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        ) : (
+          m.hn.length > 0 && (
+            <View wrap={false}>
+              <Text style={p.sectionHead}>What builders are reading · Hacker News front page</Text>
+              {m.hn.map((h) => (
+                <View key={h.href} style={p.hnRow}>
+                  <Link src={h.href} style={p.hnTitle}>{h.title}</Link>
+                  <Text style={p.hnMeta}>{h.meta}</Text>
+                </View>
+              ))}
+            </View>
+          )
+        )}
+
+        {m.deskColumns.length > 0 && (
+          // The whole section is one block kept whole, heading included: 23
+          // briefs balanced into three columns are ~40% of a Letter page, so
+          // it moves to the next page as a unit instead of splitting (a flex
+          // row of columns that starts mid-page strands columns; a wrap grid
+          // strands cells; whole rows of three waste height under a tall desk).
+          <View wrap={false}>
             <Text style={p.sectionHead}>{`Things happen · ${m.thingsCount}`}</Text>
-            <View style={p.deskRow}>
+            <View style={p.deskGrid}>
               {m.deskColumns.map((col, i) => (
-                <View key={i} style={[p.deskCol, i > 0 ? { marginLeft: 12 } : {}]}>
+                <View key={i} style={[p.deskCell, i > 0 ? { paddingLeft: 12 } : {}]}>
                   {col.map((d) => <DeskBlock key={d.label} desk={d} />)}
                 </View>
               ))}
             </View>
-          </View>
-        )}
-
-        {m.research.length > 0 && (
-          <View>
-            <Text style={p.sectionHead}>{m.researchHead}</Text>
-            <View style={p.grid}>
-              {m.research.map((r, i) => (
-                <View key={r.href} wrap={false} style={[p.paper, i % 2 === 0 ? p.cellLeft : { paddingLeft: 9 }]}>
-                  <Link src={r.href} style={p.paperTitle}>{r.title}</Link>
-                  {r.whoCares && <Text style={p.paperCares}>{r.whoCares}</Text>}
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {m.hn.length > 0 && (
-          <View wrap={false}>
-            <Text style={p.sectionHead}>What builders are reading · Hacker News front page</Text>
-            {m.hn.map((h) => (
-              <View key={h.href} style={p.hnRow}>
-                <Link src={h.href} style={p.hnTitle}>{h.title}</Link>
-                <Text style={p.hnMeta}>{h.meta}</Text>
-              </View>
-            ))}
           </View>
         )}
 

@@ -1,7 +1,9 @@
 // Pure tests for the Daily Edition's newspaper PDF view model
 // (lib/edition/paper.ts): masthead + online link, absolute hrefs, the
 // column split into two gated halves with <code> unwrapped, desks balanced
-// into columns, blind-spot cleaning, the no-em-dash backstop.
+// into columns, blind-spot cleaning, the "What builders are reading" groups +
+// vendor releases, the research section's quiet-importance marks/kicker, the
+// no-em-dash backstop.
 // READ-ONLY, no DB, no model call, no PDF render.
 // Run: node scripts/test-edition-paper.mjs
 
@@ -49,8 +51,30 @@ function fixture({ frontCount = 3, code = true } = {}) {
     numbers: { itemsRead: 65, outlets: 62, signalsPublished: 19, papersKept: 11, newTools: 0, clusters: 31 },
     clusters, thingsHappen,
     industry: [{ headline: 'Ally launches a rewards program', url: 'https://ally.example.com/loyally', domain: 'ally.example.com', tier: 2, href: null }],
-    papers: [{ id: 'p1', title: 'A paper — on agents', href: '/research/p1', whoCares: 'x'.repeat(300), headlineClaim: null }],
+    papers: [{
+      id: 'p1', title: 'A paper — on agents', href: '/research/p1', whoCares: 'x'.repeat(300), headlineClaim: null,
+      finding: 'Agents cut latency by half — the paper argues.',
+      weight: { marks: 2, confirmed: true, reach: 1, rigorBand: null, contradicts: true, kicker: 'TRACKED · CONTRADICTS' },
+    }],
     tools: [],
+    builders: {
+      judged: true,
+      reads: [
+        {
+          title: 'Cursor ships a big autocomplete upgrade', url: 'https://cursor.com/blog/autocomplete',
+          hnUrl: 'https://news.ycombinator.com/item?id=901', points: 320, comments: 210, tag: 'tooling',
+          line: 'Why builders should care about this shift.', showHn: false, repo: false, debate: true, catalogHref: '/tooling/cursor',
+        },
+        {
+          title: 'A team postmortems a failed agent rollout', url: null,
+          hnUrl: 'https://news.ycombinator.com/item?id=902', points: 88, comments: 12, tag: 'field',
+          line: null, showHn: false, repo: false, debate: false, catalogHref: null,
+        },
+      ],
+      releases: [
+        { productName: 'Cursor', productHref: '/tooling/cursor', title: 'Cursor 2.0 launches with background agents', url: 'https://cursor.com/changelog/2-0', kind: 'launch', date: '2026-09-24' },
+      ],
+    },
     blindSpots: [
       { headline: 'Fortune', url: 'https://fortune.com/' },
       { headline: 'Cheniere Energy (LNG) Q4 2025 Earnings Call Transcript', url: 'https://fool.com/t' },
@@ -130,14 +154,44 @@ check('desks: stamps trusted only when valid, headline fallback otherwise, colum
   assert.ok(labs.items.find((i) => i.inAtlas));
 });
 
-check('industry, research (clipped), hn and sources project through', () => {
+check('industry, research (clipped dek from finding, marks/kicker/contradicts), hn and sources project through', () => {
   assert.equal(m.industry.length, 1);
   assert.equal(m.research.length, 1);
   assert.equal(m.research[0].href, `${ORIGIN}/research/p1`);
-  assert.ok(m.research[0].whoCares.length <= 220);
+  assert.ok(m.research[0].dek.length <= 220);
+  assert.equal(m.research[0].dek, 'Agents cut latency by half, the paper argues.');
+  assert.equal(m.research[0].marks, 2);
+  assert.equal(m.research[0].kicker, 'TRACKED · CONTRADICTS');
+  assert.equal(m.research[0].contradicts, true);
   assert.equal(m.researchHead, 'Research · 11 analyzed, top 1');
   assert.equal(m.hn[0].meta, '100 points · 20 comments');
   assert.equal(m.sourcesLine, 'wire.com 5 · outlet-a.com 3');
+});
+
+check('builders: groups in BUILDER_TAGS order, hrefs absolute (url ?? hnUrl), catalog + debate meta present', () => {
+  assert.ok(m.builders);
+  assert.deepEqual(m.builders.groups.map((g) => g.label), ['Tooling & models', 'Field notes']);
+  const toolingGroup = m.builders.groups.find((g) => g.label === 'Tooling & models');
+  const toolingItem = toolingGroup.items[0];
+  assert.equal(toolingItem.href, 'https://cursor.com/blog/autocomplete');
+  assert.ok(toolingItem.meta.includes('debate'));
+  assert.ok(toolingItem.meta.includes('in the catalog'));
+  const fieldGroup = m.builders.groups.find((g) => g.label === 'Field notes');
+  const fieldItem = fieldGroup.items[0];
+  assert.equal(fieldItem.href, 'https://news.ycombinator.com/item?id=902'); // no url, falls back to hnUrl
+});
+
+check('builders: release productHref is absolute, meta carries kind and date', () => {
+  const release = m.builders.releases[0];
+  assert.equal(release.productHref, `${ORIGIN}/tooling/cursor`);
+  assert.equal(release.href, 'https://cursor.com/changelog/2-0');
+  assert.ok(release.meta.includes('launch'));
+});
+
+check('builders is null when the pack omits it (an older stored edition)', () => {
+  const ed = fixture();
+  delete ed.pack.builders;
+  assert.equal(buildEditionPaper(ed, ORIGIN).builders, null);
 });
 
 check('blind spots are cleaned at render: junk titles drop, the AI headline stays', () => {

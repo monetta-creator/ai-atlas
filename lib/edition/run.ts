@@ -1,6 +1,7 @@
 import { buildEditionPack } from './pack';
 import { deterministicFront, thingsHappenFor, industryFor, EDITION_PRESS_UTC } from './pure';
 import { generateFront, generateColumn, headsFrom } from './generate';
+import { judgeBuilderReads } from './builders';
 import { checkEditionBudget } from './budget';
 import { getEditionForDay, getEditionPrefs, getRecentEditions } from '../data/editions';
 import { saveGeneratedReport, deleteGeneratedReport } from '../mutations';
@@ -74,6 +75,16 @@ export async function runDailyEdition(
       front = deterministicFront(pack, prefs.front_items);
       dropped = [`front leg failed: ${e instanceof Error ? e.message : 'model error'}`];
     }
+    // The builders judge: the wide HN candidate list the pack fetched, the
+    // catalog matcher rows, and the stored AI strip as the fallback pool.
+    if (pack.builders) {
+      const b = await judgeBuilderReads(
+        pack.builders.candidates ?? [], prefs.model, prefs.builders_steering,
+        pack.builders.products ?? [], pack.hn ?? []
+      );
+      pack.builders = { ...pack.builders, reads: b.reads, judged: b.judged };
+      if (b.error) dropped = [...dropped, `builders leg failed: ${b.error}`];
+    }
     try {
       const columnOut = await generateColumn(pack, front, prefs.model, { recentColumns, weekday });
       column = { title: columnOut.title, html: columnOut.html };
@@ -90,6 +101,14 @@ export async function runDailyEdition(
   }
 
   const narrative: EditionNarrative = { front, column, citedTags, dropped, model };
+
+  // The judge's inputs never reach the stored row (25 titles the strip does
+  // not show, and the whole catalog's matcher rows).
+  if (pack.builders) {
+    const { candidates: _c, products: _p, ...rest } = pack.builders;
+    void _c; void _p;
+    pack.builders = rest;
+  }
 
   // Things happen = every ranked cluster the front did not take, so a story
   // the model picked from past the default tail start never renders twice.
