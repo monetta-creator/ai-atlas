@@ -47,7 +47,7 @@ Measured on the first live pass (Friday 2026-09-25): 81 raw connections, 15 kept
 | revise | `editor.ts` | writer model | one round over the sections the editor named |
 | save | `issue.ts` | none | citation gate over every fragment, `generated_reports` kind `savant` (published), the ledger update, the email |
 
-Departments, in order: executive summary; lead analysis; Savant's hypotheses (the new one, then the standing ones with this week's reading) and what moved on the map; peer and market watch; regulation and policy; research desk; tools and builders; missed and blind spots; the week ahead; Appendix A (how this issue was researched: the plan, the diary, the queries, the editor's cuts, what the gate removed); Appendix B (numbers and the peer tables); Appendix C (every link, by host); the editor's note; the colophon.
+Departments, in order: executive summary; lead analysis; Savant's hypotheses (the new one, then the standing ones with this week's reading) and what moved on the map; peer and market watch; regulation and policy; research desk; tools and builders; missed and blind spots; the week ahead; Appendix A (how this issue was researched: the plan, the diary, the queries, the editor's cuts, what the gate removed); Appendix B (every link, by host); the editor's note; the colophon.
 
 Surfaces: `/savant` (latest), `/savant/[week]`, `/savant/archive` (the Report Portal's cover-page cards, one per issue), `/savant/[week]/pdf`. Guests see the title and the table of contents only; access-key holders and the admin read the issue. The `/reports` portal lists it as a portal-only card.
 

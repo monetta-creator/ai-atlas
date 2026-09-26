@@ -303,8 +303,7 @@ export const SAVANT_TOC: { key: string; title: string }[] = [
   { key: 'missed', title: 'Missed and blind spots' },
   { key: 'ahead', title: 'The week ahead' },
   { key: 'appendix-a', title: 'Appendix A: how this issue was researched' },
-  { key: 'appendix-b', title: 'Appendix B: numbers' },
-  { key: 'appendix-c', title: 'Appendix C: sources' },
+  { key: 'appendix-b', title: 'Appendix B: sources' },
   { key: 'editor', title: "Editor's note" },
 ];
 

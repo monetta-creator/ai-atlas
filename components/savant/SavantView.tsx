@@ -1,8 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import type {
-  SavedSavantIssue, SavantDepartment, HypothesisReading, PeerRow, PeerMetricCell, SavantPeers,
-} from '@/lib/savant/types';
+import type { SavedSavantIssue, SavantDepartment, HypothesisReading } from '@/lib/savant/types';
 import { SAVANT_STRAPLINE } from '@/lib/savant/types';
 import { allowlistForSavant } from '@/lib/savant/allowlist';
 import { enforceCitations, type CitationAllowlist } from '@/lib/citations';
@@ -65,95 +63,7 @@ function DepartmentSection({ d, allow }: { d: SavantDepartment; allow: CitationA
   );
 }
 
-// ---------------------------------------------------------------- Appendix B: numbers/peers
-
-function fmtMetric(cell: PeerMetricCell | undefined): { text: string; delta: string | null; tone: 'good' | 'bad' | null } {
-  if (!cell || cell.latest == null) return { text: '–', delta: null, tone: null };
-  let text: string;
-  switch (cell.unit) {
-    case 'usd_thousands': text = `$${((cell.latest * 1000) / 1e9).toFixed(1)}B`; break;
-    case 'usd': text = `$${(cell.latest / 1e9).toFixed(1)}B`; break;
-    case 'percent': text = `${cell.latest.toFixed(2)}%`; break;
-    case 'per_share': text = `$${cell.latest.toFixed(2)}`; break;
-    case 'count': text = Math.round(cell.latest).toLocaleString('en-US'); break;
-    default: text = String(cell.latest);
-  }
-  if (cell.delta == null || cell.delta === 0) return { text, delta: null, tone: null };
-  const up = cell.delta > 0;
-  const arrow = up ? '▲' : '▼';
-  const pct = cell.pct != null ? ` ${(Math.abs(cell.pct) * 100).toFixed(1)}%` : '';
-  const good = cell.goodWhen === 'neutral' ? null : (up && cell.goodWhen === 'up') || (!up && cell.goodWhen === 'down');
-  return { text, delta: `${arrow}${pct}`, tone: good === null ? null : good ? 'good' : 'bad' };
-}
-
-function metricFor(row: PeerRow, code: string): PeerMetricCell | undefined {
-  return row.metrics.find((m) => m.code === code);
-}
-
-function PeerTable({ tier, codes, allow }: { tier: SavantPeers['tiers'][number]; codes: SavantPeers['codes']; allow: CitationAllowlist }) {
-  if (!tier.rows.length) return null;
-  const sourceLabels = new Map<string, string>();
-  return (
-    <div className="sv-peer-tier">
-      <p className="sv-peer-tierhead">{tier.label}</p>
-      <table className="sv-peer-table">
-        <thead>
-          <tr>
-            <th>Company</th>
-            {codes.map((c) => <th key={c.code}>{c.label}</th>)}
-            <th>AI items</th>
-            <th>Facts</th>
-            <th>CFPB complaints</th>
-            <th>Open AI/ML roles</th>
-          </tr>
-        </thead>
-        <tbody>
-          {tier.rows.map((row) => (
-            <tr key={row.slug} className={row.isSelf ? 'sv-self' : undefined}>
-              <td>{row.name}</td>
-              {codes.map((c) => {
-                const cell = metricFor(row, c.code);
-                if (cell?.sourceUrl && !sourceLabels.has(c.label)) sourceLabels.set(c.label, cell.sourceUrl);
-                const { text, delta, tone } = fmtMetric(cell);
-                return (
-                  <td key={c.code}>
-                    {text}
-                    {delta && <span className={`sv-delta${tone ? ` sv-delta-${tone}` : ''}`}> {delta}</span>}
-                  </td>
-                );
-              })}
-              <td>{row.aiItems}<span className="sv-trailing"> (avg {row.aiItemsTrailing.toFixed(1)})</span></td>
-              <td>{row.facts}</td>
-              <td>
-                {row.cfpb.latest ?? '–'}
-                {row.cfpb.prev != null && row.cfpb.latest != null && (
-                  <span className="sv-trailing"> (prev {row.cfpb.prev})</span>
-                )}
-              </td>
-              <td>
-                {row.hiring.total ?? '–'}
-                {row.hiring.aiMl != null && <span className="sv-trailing"> ({row.hiring.aiMl} AI/ML)</span>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {sourceLabels.size > 0 && (
-        <p className="sv-source-line">
-          Sources:{' '}
-          {[...sourceLabels.entries()].map(([label, url], i) => (
-            <span key={label}>
-              {i > 0 && ', '}
-              {allow.hrefs.has(url) ? <GoTo href={url} className="sv-source-link">{label}</GoTo> : label}
-            </span>
-          ))}
-        </p>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------- Appendix C: sources
+// ---------------------------------------------------------------- Appendix B: sources
 
 function collectHrefs(html: string | null): string[] {
   if (!html) return [];
@@ -299,31 +209,7 @@ export default function SavantView({ saved }: { saved: SavedSavantIssue }) {
       </section>
 
       <section className="sv-section" id="appendix-b">
-        <h2 className="sv-h2">Appendix B: numbers</h2>
-        <div className="sv-numbers">
-          {[
-            { n: pack.numbers.itemsRead, l: 'Items read' },
-            { n: pack.numbers.outlets, l: 'Outlets' },
-            { n: pack.numbers.signals, l: 'Signals' },
-            { n: pack.numbers.papers, l: 'Papers' },
-            { n: pack.numbers.evidence, l: 'Evidence rows' },
-            { n: pack.numbers.connections, l: 'Connections' },
-            { n: pack.numbers.anomalies, l: 'Anomalies' },
-            { n: pack.numbers.companies, l: 'Companies' },
-          ].map((it) => (
-            <div key={it.l} className="sv-numbers-cell">
-              <span className="sv-numbers-n">{it.n}</span>
-              <span className="sv-numbers-l">{it.l}</span>
-            </div>
-          ))}
-        </div>
-        {pack.peers.tiers.map((tier) => (
-          <PeerTable key={tier.tier} tier={tier} codes={pack.peers.codes} allow={allow} />
-        ))}
-      </section>
-
-      <section className="sv-section" id="appendix-c">
-        <h2 className="sv-h2">Appendix C: sources</h2>
+        <h2 className="sv-h2">Appendix B: sources</h2>
         {[...hostGroups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([host, hrefs]) => (
           <div key={host} className="sv-source-group">
             <p className="sv-source-host">{host}</p>

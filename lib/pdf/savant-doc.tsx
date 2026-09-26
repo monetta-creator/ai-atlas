@@ -1,15 +1,17 @@
-import { renderToBuffer, StyleSheet } from '@react-pdf/renderer';
+import { renderToBuffer, StyleSheet, Svg, Circle, Rect } from '@react-pdf/renderer';
 import {
   registerFonts, Html, PdfFooter, Callout, Disclaimer, Document, Page, View, Text, Link,
   COBALT, INK, DIM, LINE, s,
 } from './shell';
-import type { SavedSavantIssue, PeerMetricCell, PeerRow } from '../savant/types';
+import { SAVANT_TOC, type SavedSavantIssue } from '../savant/types';
 import { allowlistForSavant } from '../savant/allowlist';
 import { enforceCitations } from '../citations';
 import { dateLabel } from '../format';
 
-// Savant's branded weekly PDF: a cover with the script signature, then one
-// flowing Letter page carrying every TOC section. Every scraped or
+// Savant's branded weekly PDF: a full-bleed cobalt cover (the signature, the
+// issue number and week, the lead's title as the need-to-know line), a
+// contents page whose rows link to the section anchors, then one flowing
+// Letter page carrying every TOC section. Every scraped or
 // model-written string renders in Schibsted; only dates, the issue number,
 // and the footer label carry JetBrains Mono (the fontkit ligature-crash
 // landmine in shell.tsx). The narrative is re-gated at render time with the
@@ -24,52 +26,78 @@ const p = StyleSheet.create({
     paddingTop: 40, paddingHorizontal: 44, paddingBottom: 48,
     fontFamily: 'Schibsted', fontSize: 9.5, color: INK, lineHeight: 1.45,
   },
-  cover: {
-    paddingTop: 96, paddingHorizontal: 56, paddingBottom: 56, fontFamily: 'Schibsted', color: INK,
+  cover: { backgroundColor: COBALT, padding: 0, fontFamily: 'Schibsted', color: '#ffffff' },
+  coverMast: { position: 'absolute', top: 64, left: 56, right: 56 },
+  coverArt: { position: 'absolute', top: 0, left: 0 },
+  coverWordmark: { fontFamily: 'Anton', fontSize: 13, letterSpacing: 2.5, color: '#ffffff' },
+  signature: { fontFamily: 'Savant', fontSize: 64, color: '#ffffff', marginTop: 2, marginBottom: 4 },
+  coverStrap: { fontSize: 10.5, color: 'rgba(255,255,255,0.78)', lineHeight: 1.5, maxWidth: 330 },
+  coverIssueBlock: { position: 'absolute', top: 290, left: 56, right: 56 },
+  coverIssueKicker: { fontFamily: 'JetBrains', fontSize: 9, letterSpacing: 2, color: 'rgba(255,255,255,0.8)', marginBottom: 8 },
+  coverIssueNo: { fontFamily: 'Anton', fontSize: 88, lineHeight: 1.05, color: '#ffffff', letterSpacing: -1, marginBottom: 14 },
+  coverWeek: { fontFamily: 'Anton', fontSize: 28, lineHeight: 1.15, color: '#ffffff' },
+  coverWindow: { fontFamily: 'JetBrains', fontSize: 8.5, letterSpacing: 1, color: 'rgba(255,255,255,0.75)', marginTop: 8 },
+  coverNeedBlock: { position: 'absolute', top: 530, left: 56, right: 56, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.45)', paddingTop: 14 },
+  coverNeedKicker: { fontFamily: 'JetBrains', fontSize: 7.5, letterSpacing: 1.5, color: 'rgba(255,255,255,0.75)', marginBottom: 6 },
+  coverLeadTitle: { fontFamily: 'Anton', fontSize: 20, lineHeight: 1.18, color: '#ffffff', maxWidth: 440 },
+  coverHypo: { fontSize: 10, lineHeight: 1.5, color: 'rgba(255,255,255,0.85)', marginTop: 10, maxWidth: 440 },
+  coverBand: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, height: 92, backgroundColor: '#1a3fd1',
+    paddingHorizontal: 56, paddingTop: 16, flexDirection: 'row', justifyContent: 'space-between',
   },
-  coverWordmark: { fontFamily: 'Anton', fontSize: 14, letterSpacing: 2, color: INK },
-  signature: { fontFamily: 'Savant', fontSize: 54, color: COBALT, marginTop: 4, marginBottom: 18 },
-  coverIssueLine: { fontFamily: 'JetBrains', fontSize: 8.5, color: DIM, marginBottom: 10 },
-  coverStrap: { fontSize: 11, color: DIM, lineHeight: 1.5, marginBottom: 22, maxWidth: 400 },
-  coverRule: { borderTopWidth: 2, borderTopColor: INK, marginBottom: 18 },
-  coverSummaryItem: { flexDirection: 'row', marginBottom: 8 },
-  coverSummaryN: { width: 18, fontFamily: 'JetBrains', fontSize: 9, color: COBALT },
-  coverSummaryText: { flex: 1, fontSize: 10, lineHeight: 1.5 },
-  coverFoot: {
-    position: 'absolute', bottom: 48, left: 56, right: 56,
-    borderTopWidth: 1, borderTopColor: LINE, paddingTop: 10, fontSize: 8, color: FAINT, lineHeight: 1.6,
-  },
+  coverBandText: { fontSize: 7.5, lineHeight: 1.55, color: 'rgba(255,255,255,0.78)', width: 330 },
+  coverBandMeta: { fontFamily: 'JetBrains', fontSize: 7.5, letterSpacing: 1, color: 'rgba(255,255,255,0.78)', textAlign: 'right', lineHeight: 1.7 },
+  tocPage: { paddingTop: 60, paddingHorizontal: 64, paddingBottom: 44, fontFamily: 'Schibsted', color: INK },
+  tocHead: { fontFamily: 'Anton', fontSize: 26, marginBottom: 4 },
+  tocSub: { fontFamily: 'JetBrains', fontSize: 8, letterSpacing: 1.2, color: DIM, textTransform: 'uppercase', marginBottom: 14 },
+  tocRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 5.5, borderBottomWidth: 0.5, borderBottomColor: LINE },
+  tocN: { width: 34, fontFamily: 'JetBrains', fontSize: 9, color: COBALT, paddingTop: 2 },
+  tocTitle: { fontSize: 12, fontWeight: 'bold', color: INK },
+  tocDetail: { fontSize: 9, color: DIM, lineHeight: 1.4, marginTop: 1 },
+  summaryItem: { flexDirection: 'row', marginBottom: 7 },
+  summaryN: { width: 18, fontFamily: 'JetBrains', fontSize: 9, color: COBALT, paddingTop: 1 },
+  summaryText: { flex: 1 },
   byline: { fontFamily: 'JetBrains', fontSize: 7.5, letterSpacing: 1, textTransform: 'uppercase', color: FAINT, marginBottom: 4 },
   leadTitle: { fontFamily: 'Anton', fontSize: 17, lineHeight: 1.15, marginBottom: 8 },
   hypoStatement: { fontWeight: 'bold', fontSize: 10 },
   hypoDirection: { fontFamily: 'JetBrains', fontSize: 7.5, letterSpacing: 0.6, textTransform: 'uppercase', marginLeft: 6 },
   hypoRow: { marginBottom: 10, paddingBottom: 8, borderBottomWidth: 0.5, borderBottomColor: LINE },
-  numbers: { flexDirection: 'row', flexWrap: 'wrap', borderTopWidth: 1.5, borderTopColor: INK, borderBottomWidth: 0.75, borderBottomColor: FAINT, marginBottom: 12 },
-  numCell: { width: '25%', alignItems: 'center', paddingVertical: 6, borderLeftWidth: 0.5, borderLeftColor: LINE },
-  numN: { fontFamily: 'Anton', fontSize: 14 },
-  numL: { fontFamily: 'JetBrains', fontSize: 6, letterSpacing: 0.8, color: FAINT, textTransform: 'uppercase', marginTop: 2 },
-  tierHead: { fontFamily: 'JetBrains', fontSize: 7.5, letterSpacing: 1, textTransform: 'uppercase', color: COBALT, marginTop: 8, marginBottom: 3 },
-  peerCell: { fontSize: 7.5 },
   sourcesCol: { width: '50%', paddingRight: 10, marginBottom: 3 },
   sourcesHost: { fontSize: 7, fontWeight: 'bold', color: DIM, marginBottom: 1 },
 });
 
 const direction = (d: string) => (d === 'strengthened' ? UP : d === 'weakened' ? DOWN : DIM);
 
-function fmtMetric(cell: PeerMetricCell | undefined): string {
-  if (!cell || cell.latest == null) return '–';
-  switch (cell.unit) {
-    case 'usd_thousands': return `$${((cell.latest * 1000) / 1e9).toFixed(1)}B`;
-    case 'usd': return `$${(cell.latest / 1e9).toFixed(1)}B`;
-    case 'percent': return `${cell.latest.toFixed(2)}%`;
-    case 'per_share': return `$${cell.latest.toFixed(2)}`;
-    case 'count': return String(Math.round(cell.latest));
-    default: return String(cell.latest);
-  }
+const PAGE_W = 612;
+const PAGE_H = 792;
+
+function longDate(iso: string): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
-function metricFor(row: PeerRow, code: string): PeerMetricCell | undefined {
-  return row.metrics.find((m) => m.code === code);
+// The cover's abstract field: a dot grid over the right two thirds, three
+// concentric arcs anchored off the top-right corner, and one thin diagonal.
+// Geometry only, no imagery: the kind of restrained mark an enterprise design
+// system ships. Drawn once per render, deterministic.
+function CoverArt() {
+  const dots: { x: number; y: number }[] = [];
+  for (let x = 236; x <= PAGE_W - 20; x += 22) {
+    for (let y = 40; y <= 690; y += 22) dots.push({ x, y });
+  }
+  return (
+    <Svg width={PAGE_W} height={PAGE_H} style={p.coverArt}>
+      {dots.map((d) => <Circle key={`${d.x}-${d.y}`} cx={d.x} cy={d.y} r={0.9} fill="#ffffff" fillOpacity={0.22} />)}
+      <Circle cx={560} cy={120} r={330} fill="none" stroke="#ffffff" strokeOpacity={0.28} strokeWidth={1.2} />
+      <Circle cx={560} cy={120} r={250} fill="none" stroke="#ffffff" strokeOpacity={0.22} strokeWidth={1.2} />
+      <Circle cx={560} cy={120} r={170} fill="#ffffff" fillOpacity={0.07} stroke="#ffffff" strokeOpacity={0.35} strokeWidth={1.2} />
+      <Circle cx={560} cy={120} r={6} fill="#ffffff" fillOpacity={0.9} />
+      <Circle cx={30} cy={PAGE_H - 30} r={150} fill="none" stroke="#ffffff" strokeOpacity={0.18} strokeWidth={1} />
+      <Circle cx={30} cy={PAGE_H - 30} r={95} fill="none" stroke="#ffffff" strokeOpacity={0.14} strokeWidth={1} />
+      <Rect x={56} y={286} width={36} height={4} fill="#ffffff" />
+    </Svg>
+  );
 }
 
 export async function renderSavantPdf(saved: SavedSavantIssue, origin: string): Promise<Buffer> {
@@ -77,42 +105,100 @@ export async function renderSavantPdf(saved: SavedSavantIssue, origin: string): 
   const { pack, narrative } = saved;
   const allow = allowlistForSavant(pack);
   const dateLine = `Issue No. ${pack.issueNumber} · Week ending ${dateLabel(pack.weekEnd)}`;
-  const codes = pack.peers.codes.slice(0, 7);
 
   const gate = (html: string | null) => enforceCitations(html, allow).html;
+  const sourceCount = [...allow.hrefs].filter((h) => /^https?:\/\//.test(h)).length;
+  const deptDetail = new Map(narrative.departments.map((d) => [d.key, d.html] as const));
+  const firstSentence = (html: string | null | undefined): string | undefined => {
+    if (!html) return undefined;
+    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!text) return undefined;
+    const m = text.match(/^.{20,150}?[.!?](?=\s|$)/);
+    if (m) return m[0].trim();
+    const cut = text.slice(0, 140);
+    return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), 60)).trim()}...`;
+  };
+  const tocDetail: Record<string, string | undefined> = {
+    summary: `${narrative.summary.length} points, each linked to its record`,
+    lead: narrative.lead.title,
+    hypotheses: narrative.hypotheses.fresh
+      ? `New this week: ${narrative.hypotheses.fresh.statement}`
+      : `${narrative.hypotheses.readings.length} standing hypotheses revisited`,
+    'appendix-a': 'The Monday plan, the daily diary, every query the desk ran, and what the editor cut',
+    'appendix-b': `${sourceCount} public links, grouped by host`,
+    editor: narrative.editor ? `Signed by ${narrative.editor.name}` : undefined,
+  };
+  for (const [key, html] of deptDetail) if (!(key in tocDetail)) tocDetail[key] = firstSentence(html);
 
   return renderToBuffer(
     <Document title={`Savant, week ending ${dateLabel(pack.weekEnd)}`} author="The AI Atlas">
       <Page size="LETTER" style={p.cover}>
-        <Text style={p.coverWordmark}>THE AI ATLAS</Text>
-        <Text style={p.signature}>Savant</Text>
-        <Text style={p.coverIssueLine}>{dateLine}</Text>
-        <View style={p.coverRule} />
-        <Text style={p.coverStrap}>
-          An autonomous research agent with an editorial point of view. Produced by The AI Atlas.
-        </Text>
-        {narrative.summary.slice(0, 5).map((html, i) => (
-          <View key={i} style={p.coverSummaryItem}>
-            <Text style={p.coverSummaryN}>{`${i + 1}.`}</Text>
-            <View style={p.coverSummaryText}><Html html={gate(html) ?? ''} origin={origin} /></View>
-          </View>
-        ))}
-        <View style={p.coverFoot}>
-          <Text>
-            Issue No. {pack.issueNumber} researched {dateLabel(pack.windowFrom)} to {dateLabel(pack.windowTo)}, written by
-            Savant ({narrative.models.writer}), reviewed by {narrative.editor?.name ?? 'the editor'} ({narrative.models.editor}).
-            Produced by The AI Atlas.
+        <CoverArt />
+        <View style={p.coverMast}>
+          <Text style={p.coverWordmark}>THE AI ATLAS</Text>
+          <Text style={p.signature}>Savant</Text>
+          <Text style={p.coverStrap}>An autonomous research agent with an editorial point of view. Produced by The AI Atlas.</Text>
+        </View>
+
+        <View style={p.coverIssueBlock}>
+          <Text style={p.coverIssueKicker}>ISSUE</Text>
+          <Text style={p.coverIssueNo}>{`No. ${pack.issueNumber}`}</Text>
+          <Text style={p.coverWeek}>{`Week ending ${longDate(pack.weekEnd)}`}</Text>
+          <Text style={p.coverWindow}>{`RESEARCHED ${(dateLabel(pack.windowFrom) ?? '').toUpperCase()} TO ${(dateLabel(pack.windowTo) ?? '').toUpperCase()}`}</Text>
+        </View>
+
+        <View style={p.coverNeedBlock}>
+          <Text style={p.coverNeedKicker}>THIS WEEK&apos;S LEAD</Text>
+          <Text style={p.coverLeadTitle}>{narrative.lead.title}</Text>
+          {narrative.hypotheses.fresh && (
+            <Text style={p.coverHypo}>{`The question Savant poses this week: ${narrative.hypotheses.fresh.statement}`}</Text>
+          )}
+        </View>
+
+        <View style={p.coverBand}>
+          <Text style={p.coverBandText}>
+            Written by Savant ({narrative.models.writer}), reviewed by {narrative.editor?.name ?? 'the editor'} ({narrative.models.editor}),
+            no human in the loop. Every figure links to a public record or a stored Atlas record. For access-key holders.
           </Text>
+          <View>
+            <Text style={p.coverBandMeta}>{`${sourceCount} SOURCES`}</Text>
+            <Text style={p.coverBandMeta}>{`${pack.numbers.itemsRead} ITEMS READ`}</Text>
+            <Text style={p.coverBandMeta}>{`${SAVANT_TOC.length} SECTIONS`}</Text>
+          </View>
         </View>
       </Page>
 
+      <Page size="LETTER" style={p.tocPage}>
+        <Text style={p.tocHead}>Contents</Text>
+        <Text style={p.tocSub}>{dateLine}</Text>
+        {SAVANT_TOC.map((entry, i) => (
+          <Link key={entry.key} src={`#${entry.key}`} style={{ textDecoration: 'none', color: INK }}>
+            <View style={p.tocRow} wrap={false}>
+              <Text style={p.tocN}>{String(i + 1)}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={p.tocTitle}>{entry.title}</Text>
+                {tocDetail[entry.key] && <Text style={p.tocDetail}>{tocDetail[entry.key]}</Text>}
+              </View>
+            </View>
+          </Link>
+        ))}
+      </Page>
+
       <Page size="LETTER" style={p.page}>
-        <Text style={s.sectionHead}>Lead analysis</Text>
+        <Text id="summary" style={s.sectionHead}>Executive summary</Text>
+        {narrative.summary.map((html, i) => (
+          <View key={i} style={p.summaryItem}>
+            <Text style={p.summaryN}>{`${i + 1}.`}</Text>
+            <View style={p.summaryText}><Html html={gate(html) ?? ''} origin={origin} /></View>
+          </View>
+        ))}
+
+        <Text id="lead" style={s.sectionHead}>Lead analysis</Text>
         <Text style={p.byline}>By Savant</Text>
         <Text style={p.leadTitle}>{narrative.lead.title}</Text>
         <Html html={gate(narrative.lead.html) ?? ''} origin={origin} />
 
-        <Text style={s.sectionHead}>Savant&apos;s hypotheses</Text>
+        <Text id="hypotheses" style={s.sectionHead}>Savant&apos;s hypotheses</Text>
         {narrative.hypotheses.fresh && (
           <Callout>
             <Text style={p.hypoStatement}>{narrative.hypotheses.fresh.statement}</Text>
@@ -132,12 +218,12 @@ export async function renderSavantPdf(saved: SavedSavantIssue, origin: string): 
 
         {narrative.departments.map((d) => (
           <View key={d.key}>
-            <Text style={s.sectionHead}>{d.title}</Text>
+            <Text id={d.key} style={s.sectionHead}>{d.title}</Text>
             <Html html={gate(d.html) ?? ''} origin={origin} />
           </View>
         ))}
 
-        <Text style={s.sectionHead}>Appendix A: how this issue was researched</Text>
+        <Text id="appendix-a" style={s.sectionHead}>Appendix A: how this issue was researched</Text>
         {pack.plan && (
           <View wrap={false} style={{ marginBottom: 8 }}>
             <Text style={[s.small, s.bold]}>{pack.plan.topic}</Text>
@@ -176,45 +262,7 @@ export async function renderSavantPdf(saved: SavedSavantIssue, origin: string): 
           </View>
         )}
 
-        <Text style={s.sectionHead}>Appendix B: numbers</Text>
-        <View style={p.numbers}>
-          {[
-            { n: pack.numbers.itemsRead, l: 'Items' },
-            { n: pack.numbers.outlets, l: 'Outlets' },
-            { n: pack.numbers.signals, l: 'Signals' },
-            { n: pack.numbers.papers, l: 'Papers' },
-            { n: pack.numbers.evidence, l: 'Evidence' },
-            { n: pack.numbers.connections, l: 'Connections' },
-            { n: pack.numbers.anomalies, l: 'Anomalies' },
-            { n: pack.numbers.companies, l: 'Companies' },
-          ].map((c) => (
-            <View key={c.l} style={p.numCell}>
-              <Text style={p.numN}>{String(c.n)}</Text>
-              <Text style={p.numL}>{c.l}</Text>
-            </View>
-          ))}
-        </View>
-        {pack.peers.tiers.map((tier) => (
-          tier.rows.length > 0 && (
-            <View key={tier.tier} wrap={false}>
-              <Text style={p.tierHead}>{tier.label}</Text>
-              <View style={s.rowHead}>
-                <Text style={[s.cellHead, { flex: 1.2 }]}>Company</Text>
-                {codes.map((c) => <Text key={c.code} style={[s.cellHead, { flex: 0.8 }]}>{c.label}</Text>)}
-              </View>
-              {tier.rows.map((row) => (
-                <View key={row.slug} style={s.row}>
-                  <Text style={[p.peerCell, { flex: 1.2 }, row.isSelf ? s.bold : undefined]}>{row.name}</Text>
-                  {codes.map((c) => (
-                    <Text key={c.code} style={[p.peerCell, { flex: 0.8 }]}>{fmtMetric(metricFor(row, c.code))}</Text>
-                  ))}
-                </View>
-              ))}
-            </View>
-          )
-        ))}
-
-        <Text style={s.sectionHead}>Appendix C: sources</Text>
+        <Text id="appendix-b" style={s.sectionHead}>Appendix B: sources</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
           {[...allow.hrefs].filter((h) => /^https?:\/\//.test(h)).slice(0, 60).map((href) => (
             <View key={href} style={p.sourcesCol}>
@@ -228,7 +276,7 @@ export async function renderSavantPdf(saved: SavedSavantIssue, origin: string): 
 
         {narrative.editor && (
           <View wrap={false} style={{ marginTop: 10 }}>
-            <Text style={s.sectionHead}>Editor&apos;s note</Text>
+            <Text id="editor" style={s.sectionHead}>Editor&apos;s note</Text>
             <Text style={s.note}>{narrative.editor.note}</Text>
             <Text style={s.small}>{`Signed, ${narrative.editor.name}`}</Text>
           </View>

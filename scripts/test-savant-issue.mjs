@@ -92,7 +92,7 @@ check('stripTags removes links and tags but keeps text', () => {
 check('the TOC has the fixed departments in order and the strapline names the producer', () => {
   assert.equal(SAVANT_TOC[0].key, 'summary');
   assert.equal(SAVANT_TOC[SAVANT_TOC.length - 1].key, 'editor');
-  assert.equal(SAVANT_TOC.length, 14);
+  assert.equal(SAVANT_TOC.length, 13);
   assert.ok(SAVANT_STRAPLINE.endsWith('Produced by The AI Atlas.'));
   assert.ok(!SAVANT_STRAPLINE.includes('—'));
 });
