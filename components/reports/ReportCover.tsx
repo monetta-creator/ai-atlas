@@ -99,25 +99,33 @@ function SavantCover({ card }: { card: ReportCard }) {
   );
 }
 
-// The company intel deck is a 16:9 deck, not a sheet, so its card is the
-// deck stage: a dark slide (the deck's own chrome, inverted from the guide
-// decks' white slide) with the date large and the front's headline under it.
+// The company intel deck is a 16:9 deck, not a sheet, but it shares the
+// grid with portrait covers, so its card keeps the portrait footprint: a
+// dark stage holding the deck's title slide on a stack of slides (the deck
+// metaphor), the date large, the front's headline and the count chips.
 function IntelDeckCover({ card }: { card: ReportCard }) {
   return (
-    <div className="rp-cover rp-cover--deck rp-cover--intel" data-kind="intel_deck" data-draft={!card.isPublished || undefined} aria-hidden="true">
-      <div className="rp-cover-page rp-deck-slide rp-intel-slide">
-        <div className="rp-deck-kicker">Company intel deck</div>
-        <div className="rp-intel-date">{card.subject}</div>
-        <div className="rp-intel-title">{card.title}</div>
-        <div className="rp-intel-chips">
-          {card.chips.slice(0, 3).map((c) => <span key={c}>{c}</span>)}
+    <div className="rp-cover rp-cover--intel" data-kind="intel_deck" data-draft={!card.isPublished || undefined} aria-hidden="true">
+      <div className="rp-cover-page rp-intel">
+        <div className="rp-intel-tag">16:9 deck · keyholders</div>
+        <div className="rp-intel-stack">
+          <i className="rp-intel-ghost rp-intel-ghost-2" />
+          <i className="rp-intel-ghost rp-intel-ghost-1" />
+          <div className="rp-intel-slide">
+            <div className="rp-intel-kicker">Company intel deck</div>
+            <div className="rp-intel-date">{card.subject}</div>
+            <div className="rp-intel-title">{card.title}</div>
+            <div className="rp-intel-chips">
+              {card.chips.slice(0, 3).map((c) => <span key={c}>{c}</span>)}
+            </div>
+          </div>
         </div>
-        <div className="rp-deck-foot">
+        <div className="rp-intel-foot">
           <span>THE AI ATLAS</span>
-          <span>WEEKDAY · KEYHOLDERS</span>
+          <span>Weekday deck</span>
         </div>
+        {!card.isPublished && <div className="rp-cover-ribbon">Draft</div>}
       </div>
-      <div className="rp-deck-tag">16:9 deck · keyholders</div>
     </div>
   );
 }

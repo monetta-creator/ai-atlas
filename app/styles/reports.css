@@ -185,24 +185,45 @@
   font-family: var(--font-mono); font-size: 2.2cqw; letter-spacing: .12em; color: #95a0b1;
 }
 .rp-deck-foot span:first-child { font-family: var(--font-headline); letter-spacing: .18em; color: #0f172a; }
-/* The company intel deck: the same stage, an inverted slide so it reads as
-   its own product beside the white guide decks and the paper sheets. */
-.rp-cover--intel { background: #2d5bff; border-color: #2d5bff; }
-.rp-intel-slide { background: #0b1120; color: #fff; justify-content: flex-start; padding-top: 6cqw; }
-.rp-intel-slide .rp-deck-kicker { color: #9fb3ff; }
-.rp-intel-date { font-family: var(--font-headline); font-size: 9cqw; line-height: 1; letter-spacing: -.01em; margin-top: .5cqw; }
+/* The company intel deck: a portrait card like its neighbors, holding the
+   deck's dark 16:9 title slide on a stack, so it reads as a deck without
+   breaking the grid's row rhythm. */
+.rp-cover--intel { background: #0b1120; color: #fff; border-color: #0b1120; }
+.rp-intel { padding: 0; gap: 0; }
+.rp-intel-tag {
+  position: absolute; top: 0; left: 0; background: #2d5bff; color: #fff;
+  font-family: var(--font-mono); font-size: 2.6cqw; letter-spacing: .16em; text-transform: uppercase;
+  padding: 1.2cqw 2.6cqw 1.4cqw;
+}
+.rp-intel-stack { position: absolute; left: 8cqw; right: 11cqw; top: 34cqw; aspect-ratio: 16 / 9; }
+.rp-intel-ghost { position: absolute; inset: 0; border-radius: .6cqw; background: #182238; border: .25cqw solid rgba(255,255,255,.08); }
+.rp-intel-ghost-1 { transform: translate(3.2cqw, 3.2cqw); }
+.rp-intel-ghost-2 { transform: translate(6.4cqw, 6.4cqw); opacity: .55; }
+.rp-intel-slide {
+  position: absolute; inset: 0; border-radius: .6cqw; background: #111a2c; border: .25cqw solid rgba(255,255,255,.14);
+  padding: 4.5cqw 5cqw; display: flex; flex-direction: column; overflow: hidden;
+}
+.rp-intel-kicker { font-family: var(--font-mono); font-size: 2.5cqw; letter-spacing: .16em; text-transform: uppercase; color: #9fb3ff; }
+.rp-intel-date { font-family: var(--font-headline); font-size: 9.5cqw; line-height: 1; letter-spacing: -.01em; margin-top: 1.2cqw; }
 .rp-intel-title {
-  font-size: 3.1cqw; line-height: 1.4; color: rgba(255,255,255,.82); margin-top: 1.5cqw; max-width: 86%;
+  font-size: 3cqw; line-height: 1.4; color: rgba(255,255,255,.8); margin-top: 1.6cqw;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
 }
-.rp-intel-chips { display: flex; gap: 1.5cqw; margin-top: 2cqw; }
+.rp-intel-chips { display: flex; flex-wrap: wrap; gap: 1.2cqw; margin-top: auto; padding-top: 2cqw; }
 .rp-intel-chips span {
-  font-family: var(--font-mono); font-size: 2.2cqw; letter-spacing: .1em; text-transform: uppercase;
-  color: #fff; border: .2cqw solid rgba(255,255,255,.35); border-radius: 999px; padding: .6cqw 1.8cqw;
+  font-family: var(--font-mono); font-size: 2.1cqw; letter-spacing: .1em; text-transform: uppercase;
+  color: #fff; border: .2cqw solid rgba(255,255,255,.35); border-radius: 999px; padding: .5cqw 1.7cqw; white-space: nowrap;
 }
-.rp-intel-slide .rp-deck-foot { color: rgba(255,255,255,.6); }
-.rp-intel-slide .rp-deck-foot span:first-child { color: #fff; }
-.rp-cover--intel .rp-deck-tag { background: #2d5bff; color: #fff; }
+.rp-intel-foot {
+  position: absolute; left: 8cqw; right: 8cqw; bottom: 7cqw;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 2cqw;
+  border-top: .25cqw solid rgba(255,255,255,.14); padding-top: 3cqw;
+  font-family: var(--font-mono); font-size: 2.4cqw; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.55);
+  white-space: nowrap;
+}
+.rp-intel-foot span:first-child { font-family: var(--font-headline); font-size: 3.8cqw; letter-spacing: .18em; color: #fff; }
+
+.rp-deck-tag { background: #2d5bff; color: #fff; }
 .rp-deck-tag {
   position: absolute; top: 0; left: 0;
   background: #0b1120; color: rgba(255,255,255,.85);
