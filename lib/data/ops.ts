@@ -203,6 +203,18 @@ async function snapshotFor(job: OpsJob, now: Date): Promise<{ snap: RawSnapshot 
         spentUsd: null, capUsd: null,
       };
     }
+    case 'savant-issue': {
+      const weekEnd = fridayOfWeekUTC(now);
+      const row = await one<{ day: string; title: string; generated_at: string }>(
+        `select scope_to::text as day, title, generated_at::text as generated_at from generated_reports where kind = 'savant' and scope_to = $1::date`,
+        [weekEnd]
+      );
+      const budget = await checkSavantBudget(weekEnd);
+      return {
+        snap: row && { status: 'completed', step: null, error: null, notes: [], day: row.day, startedAt: null, finishedAt: row.generated_at, summary: row.title },
+        spentUsd: budget.spentUsd, capUsd: budget.capUsd,
+      };
+    }
     case 'savant': {
       // The notebook has no run row; a day "ran" when it wrote entries. Spend
       // is per issue week (savant_* features stamped with week_end).
@@ -450,6 +462,18 @@ export async function getOpsHistory(days = 14, now: Date = new Date()): Promise<
         const rowsB = await q<{ day: string }>(`select day::text as day from agent_briefs where day >= $1::date`, [dayList[0]]);
         const present = new Set(rowsB.map((r) => r.day));
         cells = new Map(dayList.map((day) => [day, present.has(day) ? 'completed' as const : 'none' as const]));
+        break;
+      }
+      case 'savant-issue': {
+        const rowsI = await q<{ day: string }>(`select scope_to::text as day from generated_reports where kind = 'savant' and scope_to >= $1::date`, [dayList[0]]);
+        const present = new Set(rowsI.map((r) => r.day));
+        cells = new Map(
+          dayList.map((day) => {
+            const dow = new Date(`${day}T00:00:00Z`).getUTCDay();
+            if (dow !== 5) return [day, 'off' as const];
+            return [day, present.has(day) ? 'completed' as const : 'none' as const];
+          })
+        );
         break;
       }
       case 'savant': {

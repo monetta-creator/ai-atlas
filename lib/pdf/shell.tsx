@@ -36,6 +36,8 @@ export function registerFonts(): void {
     ],
   });
   Font.register({ family: 'JetBrains', src: path.join(FONT_DIR, 'JetBrainsMono-Regular.ttf') });
+  // Savant's script signature (masthead only, cover of the weekly PDF).
+  Font.register({ family: 'Savant', src: path.join(FONT_DIR, 'Sacramento-Regular.ttf') });
   // Broadsheet: no hyphenation, ragged right.
   Font.registerHyphenationCallback((word) => [word]);
 }

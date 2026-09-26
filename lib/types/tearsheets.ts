@@ -15,11 +15,18 @@ import type { ToolingMaturity, ToolingEventKind } from './tooling';
 // lib/data/editions.ts's SavedEdition, not getGeneratedReport/SavedSheet. The
 // kind is added here only so GeneratedReportMeta.kind (the row-metadata list
 // view every kind shares) type-checks for an edition row.
+// 'savant' (migration 0069) rides here for typing only, exactly like
+// 'edition' above: the weekly Savant issue's own SavantPack/SavantNarrative
+// shapes (lib/savant/types.ts) do NOT join AnySheetPack below and are read
+// back via lib/data/savant-issues.ts's SavedSavantIssue, not
+// getGeneratedReport/SavedSheet. The kind is added here only so
+// GeneratedReportMeta.kind type-checks for a savant row.
 export type SheetKind =
   | 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup'
   | 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features'
   | 'edition'
-  | 'intel_deck';
+  | 'intel_deck'
+  | 'savant';
 
 // 'YYYY-MM-DD' bounds; both null = the full corpus.
 export interface SheetScope { from: string | null; to: string | null }
@@ -427,6 +434,19 @@ export interface GeneratedReportMeta {
     facts?: number;
   } | null;
   health?: AtlasSheetPack['health'] | null;   // atlas briefings carry health, not stats
+  // Savant's own pack has no `.stats` key (it carries `.numbers` at the top
+  // level of SavantPack); listGeneratedReports projects that bag separately
+  // rather than widening `stats`, so a savant row's chips read from here.
+  numbers?: {
+    signals?: number;
+    papers?: number;
+    connections?: number;
+    evidence?: number;
+    anomalies?: number;
+    itemsRead?: number;
+    outlets?: number;
+    companies?: number;
+  } | null;
 }
 
 export interface SavedSheet extends GeneratedReportMeta {

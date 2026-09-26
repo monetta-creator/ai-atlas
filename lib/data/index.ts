@@ -25,3 +25,4 @@ export * from './portal';
 export * from './portal-views';
 export * from './ops';
 export * from './savant';
+export * from './savant-issues';

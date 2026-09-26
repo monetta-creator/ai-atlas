@@ -2,8 +2,10 @@
 // and the plain-Node tests). Portal-only kinds name tracked companies, so they
 // are listed for access-key holders and the admin and excluded for guests in
 // SQL (lib/data/reports.ts listGeneratedReports), and the single-sheet read
-// view + its PDF route (app/reports/sheet/[id]) 404 a guest on them.
-export const PORTAL_ONLY_KINDS: readonly string[] = ['intel_deck'];
+// view + its PDF route (app/reports/sheet/[id]) 404 a guest on them. Savant
+// joins the list for the same reason it is key-gated in the first place: it
+// names the reader organization and its peers by tier.
+export const PORTAL_ONLY_KINDS: readonly string[] = ['intel_deck', 'savant'];
 
 export type ReportViewer = { admin: boolean; portal: boolean };
 

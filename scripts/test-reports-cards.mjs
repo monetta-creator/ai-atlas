@@ -174,9 +174,25 @@ check('toSheetCard: the company intel deck reads on /intel/deck/<day>, is portal
 check('REPORT_KIND_FILTERS / DRAFTS_FILTER: keys are stable and in order', () => {
   assert.deepEqual(
     REPORT_KIND_FILTERS.map((f) => f.key),
-    ['all', 'claim', 'bridge', 'lens', 'atlas', 'roundup', 'edition', 'intel_deck', 'tooling', 'period', 'thesis', 'deck']
+    ['all', 'claim', 'bridge', 'lens', 'atlas', 'roundup', 'edition', 'intel_deck', 'savant', 'tooling', 'period', 'thesis', 'deck']
   );
   assert.equal(DRAFTS_FILTER.key, 'drafts');
+});
+
+check('toSheetCard: the Savant weekly issue reads on /savant/<week>, is portal-only, and chips its numbers', () => {
+  const c = toSheetCard({
+    id: 'sv-1', kind: 'savant', subject: null, title: 'Savant, week ending Sep 25',
+    scope_from: '2026-09-21', scope_to: '2026-09-25', is_published: true, generated_at: '2026-09-25T20:00:00Z',
+    abstract: null, stats: null, numbers: { signals: 6, papers: 4, connections: 15 },
+  });
+  assert.equal(c.href, '/savant/2026-09-25');
+  assert.equal(c.pdfHref, '/savant/2026-09-25/pdf');
+  assert.equal(c.access, 'portal');
+  assert.equal(c.kindLabel, 'Savant weekly');
+  assert.equal(c.subject, `Week ending ${dateLabel('2026-09-25')}`);
+  assert.deepEqual(c.chips, ['6 signals', '4 papers', '15 connections']);
+  assert.ok(REPORT_KIND_FILTERS.find((f) => f.key === 'savant').match(c));
+  assert.ok(!REPORT_KIND_FILTERS.find((f) => f.key === 'intel_deck').match(c));
 });
 
 // ---------------------------------------------------------------- paginate

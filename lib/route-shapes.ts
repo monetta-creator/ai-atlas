@@ -54,6 +54,14 @@ export function isMalformedDetailPath(pathname: string): boolean {
     if (!seg || seg === 'archive' || seg === 'desk') return false;
     return !isRealDay(seg);
   }
+  // The Savant weekly issue: /savant (latest), /savant/archive, /savant/desk
+  // (the admin console) are static siblings; everything else under /savant/
+  // is a week-ending day, exactly like /blotter/<day>.
+  if (path.startsWith('/savant/')) {
+    const seg = path.slice('/savant/'.length).split('/')[0];
+    if (!seg || seg === 'archive' || seg === 'desk') return false;
+    return !isRealDay(seg);
+  }
   // The company intel deck: /intel/deck (latest) and /intel/deck/<day>[/pdf].
   if (path.startsWith('/intel/deck/')) {
     const seg = path.slice('/intel/deck/'.length).split('/')[0];

@@ -48,7 +48,7 @@ export const NAV_TREE: NavGroup[] = [
     children: [
       { href: '/blotter', label: "Today's edition", access: 'public' },
       { href: '/blotter/archive', label: 'Archive', access: 'public' },
-      { href: '/blotter/desk', label: 'Desk', access: 'admin' },
+      { href: '/savant/desk', label: 'Savant', access: 'admin' },
       { href: '/pipeline', label: 'Pipeline', access: 'admin', badge: 'pipeline' },
       { href: '/scan', label: 'Scan', access: 'admin' },
       { href: '/intel', label: 'Intel', access: 'admin' },
@@ -76,8 +76,8 @@ export const NAV_TREE: NavGroup[] = [
     children: [
       { href: '/reports', label: 'Portal', access: 'public' },
       { href: '/intel/deck', label: 'Intel deck', access: 'portal' },
+      { href: '/savant', label: 'Savant', access: 'portal' },
       { href: '/reports/period', label: 'Period generator', access: 'admin' },
-      { href: '/savant/desk', label: 'Savant desk', access: 'admin' },
     ],
   },
   {

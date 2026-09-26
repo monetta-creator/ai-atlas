@@ -51,7 +51,7 @@ export function fallbackPlan(input: FallbackPlanInput): PlanPayload {
     question_slug: slug,
     why,
     hypothesis: {
-      statement: deDash(recastAsQuestion(headline ?? topic)).slice(0, 240),
+      statement: deDash(recastAsQuestion(headline ?? topic)).slice(0, 400),
       what_would_settle_it: ['Two independent public records pointing the same way', 'A contrary filing or measurement'],
       watch: [slug],
     },
@@ -101,7 +101,7 @@ export function validatePlan(raw: unknown, ctx: ValidatePlanCtx): PlanPayload {
     question_slug,
     why,
     hypothesis: {
-      statement: statement.slice(0, 240),
+      statement: statement.slice(0, 400),
       what_would_settle_it: what_would_settle_it.length ? what_would_settle_it : ctx.fallback.hypothesis.what_would_settle_it,
       watch: watch.length ? watch : ctx.fallback.hypothesis.watch,
     },

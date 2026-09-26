@@ -292,6 +292,7 @@ export const SHEET_KIND_LABEL: Record<SheetKind, string> = {
   tooling_features: 'Feature sheet',
   edition: 'Daily edition',
   intel_deck: 'Company intel deck',
+  savant: 'Savant weekly',
 };
 
 // edition's own section labels (front / the column / things happen) do not
@@ -310,6 +311,7 @@ export const SHEET_SECTION_TITLES: Record<SheetKind, { reading: string; connecti
   tooling_features: { reading: 'Features worth stealing', connections: 'Who does what', watch: 'Watch' },
   edition: { reading: 'Front', connections: 'The column', watch: 'Things happen' },
   intel_deck: { reading: 'The day', connections: 'By company', watch: 'Quiet' },
+  savant: { reading: 'The lead', connections: "Savant's hypotheses", watch: 'The week ahead' },
 };
 
 export function featureLabel(slug: string): string {

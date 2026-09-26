@@ -68,7 +68,7 @@ export async function addRateCard(input: {
 // isPublished defaults to false (the human publish gate every other kind keeps);
 // the weekly research roundup cron (lib/research/roundup.ts), the weekly
 // tooling entrants report (lib/tooling/reports.ts), and the daily edition
-// (lib/edition/run.ts) are the three kinds that may pass true (Kevin's
+// (lib/edition/run.ts), the intel deck and Savant (lib/savant/issue.ts) are the kinds that may pass true (Kevin's
 // decisions to auto-publish those, 2026-08-30, 2026-09-17, and 2026-09-23
 // respectively; the tooling entrants pref is tooling_prefs.auto_publish_entrants,
 // default true, and the build-vs-buy brief never auto-publishes regardless).
@@ -76,7 +76,7 @@ export async function saveGeneratedReport(input: {
   kind:
     | 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup'
     | 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features'
-    | 'edition' | 'intel_deck';
+    | 'edition' | 'intel_deck' | 'savant';
   subject: string | null;
   title: string;
   scope_from: string | null;

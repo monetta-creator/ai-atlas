@@ -10,6 +10,9 @@ Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/
 Schibsted Grotesk:
 Copyright 2022 The Schibsted Grotesk Project Authors (https://github.com/schibsted/schibsted-grotesk)
 
+Sacramento:
+Copyright 2012 by Brian J. Bonislawsky DBA Astigmatic (AOETI) (astigma@astigmatic.com), used for the Savant imprint's script signature.
+
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
 -----------------------------------------------------------

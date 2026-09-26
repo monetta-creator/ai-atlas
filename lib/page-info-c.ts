@@ -60,19 +60,51 @@ export const PAGE_INFO_C: Record<string, PageInfoContent> = {
       },
     ],
   },
-  '/blotter/desk': {
-    title: 'What the Desk shows',
+  // '/blotter/desk' retired 2026-09-26: the map-health/pipeline dashboard is
+  // gone and the route now redirects to '/savant/desk', which renders no
+  // PageTop of its own (it never reaches a page body), so no entry is needed.
+  '/savant': {
+    title: 'How Savant works',
     summary:
-      'The map-health dashboard that used to be the blotter, before the daily edition took that address. ' +
-      'It tracks the health of the Argument Map and the discovery pipeline, not the news, so it stays admin-only.',
+      'Savant is the Atlas\'s autonomous weekly research report: one issue every Friday, written for people ' +
+      'doing AI transformation inside large regulated financial-services companies and read by their ' +
+      'executives. It is its own imprint under The AI Atlas, and it needs an access key.',
     sections: [
       {
-        heading: 'Map health',
-        body: 'The claims ledger, the signal wire, and (out of preview) the recent confidence moves: the same personal-layer view the maintainer used to open first.',
+        heading: 'Public data only',
+        body: 'Savant reads only what the Atlas\'s engines collect from public sources: news and filings, extracted facts, research papers, the tooling monitor, and published signals and their evidence. It never reads admin notes or free text, and every figure and every link in an issue traces to one of those records.',
       },
       {
-        heading: 'The pipeline\'s own business',
-        body: 'Discovery-pipeline analytics and the full candidate archive live here, the working detail behind the signals the public edition and Signal Board surface.',
+        heading: 'Who can read it',
+        body: 'An access key or the admin password. The public page shows an issue\'s title and table of contents only, because the peer and market watch section names the reader organization and its industry peers by tier.',
+      },
+      {
+        heading: 'The editorial rules',
+        body: 'One new falsifiable hypothesis a week, carried forward and revisited every issue after. A model writes each department over a frozen weekly notebook; an editor persona reviews the draft against a fixed checklist before it publishes. Nothing about the reader organization may lean on anything but a cited public record.',
+      },
+    ],
+  },
+  '/savant/[week]': {
+    title: 'Reading an archived issue',
+    summary: 'One week\'s issue, exactly as it published. Use the archive to browse every past week.',
+    sections: [
+      {
+        heading: 'A frozen record',
+        body: 'An issue never changes after it publishes: the notebook it drew on, the hypotheses it moved, and every link on the page are fixed to what the engines had stored that week.',
+      },
+      {
+        heading: 'Reading the hypotheses',
+        body: 'Each week either poses one new hypothesis or updates the standing ones: strengthened, weakened, unchanged, or closed with a verdict. Appendix A shows the notebook entries the week\'s reading rests on.',
+      },
+    ],
+  },
+  '/savant/archive': {
+    title: 'The Savant archive',
+    summary: 'Every past issue, newest first.',
+    sections: [
+      {
+        heading: 'What is listed',
+        body: 'Access-key holders and the admin see every issue with its title and issue number. Anyone else sees the same list\'s table of contents only, with a link to request a key.',
       },
     ],
   },

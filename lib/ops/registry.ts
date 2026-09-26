@@ -153,7 +153,7 @@ export const OPS_JOBS: OpsJob[] = [
     family: 'publisher',
     paths: ['/api/cron/edition'],
     describe: 'Weekdays 16:45 UTC: the AI newspaper written from what the day’s engines already stored, never a new search.',
-    consoleHref: '/blotter/desk',
+    consoleHref: '/blotter',
     pausePref: { table: 'edition_prefs', column: 'enabled' },
     deadmanEnv: 'HC_PING_URL_EDITION',
     dayBoundary: 'press-16:45',
@@ -205,6 +205,18 @@ export const OPS_JOBS: OpsJob[] = [
     deadmanEnv: 'HC_PING_URL_SAVANT',
     dayBoundary: 'utc-midnight',
     readLatest: 'savant',
+  }),
+  job({
+    key: 'savant-issue',
+    label: 'Savant Issue',
+    family: 'publisher',
+    paths: ['/api/cron/savant/issue', '/api/cron/savant/issue/sweep', '/api/cron/savant/issue/sweep2'],
+    describe: 'Fridays 20:00 UTC (+20:20, +20:40 to resume parked legs): Savant researches its hypothesis, writes the issue, the editor persona reviews it, one revision, then it publishes to key holders.',
+    consoleHref: '/savant/desk',
+    pausePref: { table: 'savant_prefs', column: 'enabled' },
+    deadmanEnv: 'HC_PING_URL_SAVANT_ISSUE',
+    dayBoundary: 'utc-midnight',
+    readLatest: 'savant-issue',
   }),
 ];
 

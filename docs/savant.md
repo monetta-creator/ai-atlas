@@ -27,16 +27,38 @@ This document is the contract: what Savant reads, what it writes, and the rules 
 
 Budget: `checkSavantBudget(weekEnd)` sums the `savant_*` features stamped `metadata.week_end` against `SAVANT_WEEKLY_BUDGET_USD` (default 6). The first live pass cost under a cent.
 
-Console: `/savant/desk` (admin): the week's notebook by day, the hypotheses ledger, prefs (models, rotation, one-off lead override, editor name, email on/off).
+Console: `/savant/desk` (admin): the week's notebook by day, the hypotheses ledger, prefs (models, rotation, one-off lead override, editor name, email on/off). It replaced the old News Blotter Desk (the leaf is labeled Savant; `/blotter/desk` redirects).
 
 Measured on the first live pass (Friday 2026-09-25): 81 raw connections, 15 kept (papers on the hiring evaluation bottleneck to the labor claims; Bank of America's AI budget and Citi's job cuts to claim 7.2), 19 metric anomalies after the delta rule (Citi's CFPB complaints down 41% month on month at 4.95σ, PNC's efficiency ratio up two points), 3 misses, one note. Before the delta rule the anomaly leg fired 66 times on level trends and on EDGAR series that had ended years earlier.
 
-## Phase 2 (next): the Friday issue
+## Phase 2 (shipped 2026-09-26): the Friday issue
 
-Departments, in order: executive summary; lead analysis (1,500 to 2,500 words, the Monday topic researched through the week); Savant's hypotheses (the new one, the standing ones with updates) and what moved on the map; peer and market watch (the `self` company beside its tiers from public filings; key-gated content); regulation and policy; research desk; tools and builders; missed and blind spots; the week ahead (dated items already in the corpus); Appendix A, how this issue was researched (the notebook); Appendix B, numbers; Appendix C, sources; the editor's note.
+`lib/savant/issue.ts runSavantIssue(weekEnd)` runs Fridays at 20:00 UTC, with sweeps at 20:20 and 20:40 that resume from the legs parked in the notebook (`kind = 'query'`, `key = 'leg:<name>'`), so three 300-second calls finish an issue. By hand: `npx -y tsx scripts/savant-issue.mts <week> [--force] [--reset-legs] [--email]`.
 
-Legs: pack (`buildSavantPack`), lead research (the deep-research loop extracted from `/api/ask/deep` into a library function, portal-mode retrieval, web capped at 3 and labeled), department writing on `writer_model`, the editor persona on `editor_model` (checklist: bottom line first, every claim sourced, no insider tone, no hedging, no repetition, figures consistent with Appendix B, the lead answers its hypothesis, banned words, no em dashes), one revision round, save as `generated_reports` kind `savant` (one per week, published on save), email. Surfaces: `/savant`, `/savant/[week]`, `/savant/archive`, `/savant/[week]/pdf` (Letter, the script wordmark on the cover); the `/reports` card; the nav leaf. The public page shows title and table of contents only.
+| leg | module | model | what it does |
+|---|---|---|---|
+| plan (if the week has none) | `plan.ts` | notebook model | the Monday plan made on Friday's material; the hypothesis enters the ledger |
+| pack | `pack.ts`, `peers.ts`, `calendar.ts` | none | the frozen data half: notebook, what moved, the peer tables with identifier-built citations, regulation, research, tools, dated items, counts, every map href |
+| lead | `lead.ts` | writer model | Savant's own bounded research loop over the /ask tools in portal mode plus web search (3), 4 rounds, then a forced `submit_lead`: 1,500 to 2,500 words, records cited by tag and resolved to hrefs, positions linked by exact href, a "What we will watch" close, and its reading of the week's hypothesis |
+| front | `write.ts` | writer model | the five-bullet executive summary, the new hypothesis paragraph, one reading per open hypothesis |
+| departments | `write.ts` | writer model | what moved, regulation, research, tools, missed, the week ahead (an empty department prints its one-line notice) |
+| peers | `write.ts` | writer model | the peer and market watch from the tables, every figure from the table, every series linked |
+| editor | `editor-core.ts` + `editor.ts` | editor model | deterministic checks, then the editor persona: verdict, required edits per section, cuts, a signed note |
+| revise | `editor.ts` | writer model | one round over the sections the editor named |
+| save | `issue.ts` | none | citation gate over every fragment, `generated_reports` kind `savant` (published), the ledger update, the email |
 
-## Phase 3: distribution
+Departments, in order: executive summary; lead analysis; Savant's hypotheses (the new one, then the standing ones with this week's reading) and what moved on the map; peer and market watch; regulation and policy; research desk; tools and builders; missed and blind spots; the week ahead; Appendix A (how this issue was researched: the plan, the diary, the queries, the editor's cuts, what the gate removed); Appendix B (numbers and the peer tables); Appendix C (every link, by host); the editor's note; the colophon.
 
-Per-key opt-in (`portal_keys.savant_email`), the Friday email with the executive summary and a link, a verified Resend sending domain (without it only the account owner receives mail).
+Surfaces: `/savant` (latest), `/savant/[week]`, `/savant/archive` (the Report Portal's cover-page cards, one per issue), `/savant/[week]/pdf`. Guests see the title and the table of contents only; access-key holders and the admin read the issue. The `/reports` portal lists it as a portal-only card.
+
+Fallbacks: past the weekly budget or on a failed leg, the lead falls back to the plan stated as open questions, departments to their empty notices, and the editor to the automated checks alone; the issue still publishes with the shortfall recorded in `dropped` and the editor's note.
+
+## Phase 3 (shipped 2026-09-26): distribution
+
+`email.ts sendSavantIssue` sends the executive summary, the table of contents and a link, one Resend send per recipient: the admin (`AGENT_EMAIL_TO`, else `agent_prefs.email_to`) and every active key with `savant_email` set, toggled per key on `/access`. `savant_prefs.email_enabled` gates it (default off). Without a verified Resend sending domain only the account owner receives mail; the run records failures rather than failing.
+
+## Tuning notes
+
+- Echoes need a paper or fact on one side; two news items at 0.99 are the scan and intel engines storing the same article.
+- Metric anomalies use the z-score of the latest period-over-period change against the trailing eight changes, a 120-day freshness gate, no year-to-date or annual/quarterly-mixed flows, and one entry per company and label family. The first live pass fired 66 times on levels; the rule brings it to about 16.
+- FDIC and Y-9C report dollars in thousands, EDGAR in dollars; `fmtMetric` renders both in billions.

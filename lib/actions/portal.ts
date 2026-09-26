@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { UUID_RE, requireAdmin, str } from './shared';
 import { listAccessRequests } from '../data/portal';
 import {
-  declineAccessRequest, issuePortalKey, renewPortalKey, revokePortalKey, setPortalKeyBudget,
+  declineAccessRequest, issuePortalKey, renewPortalKey, revokePortalKey, setKeySavantEmail, setPortalKeyBudget,
 } from '../mutations/portal';
 import { magicLink } from '../portal/keys';
 import { emailConfigured, sendEmail } from '../email/resend';
@@ -153,5 +153,13 @@ export async function setPortalKeyBudgetAction(id: string, formData: FormData): 
   const dailyMaxCalls = parseCalls(str(formData, 'calls'));
   if (dailyBudgetUsd === undefined || dailyMaxCalls === undefined) throw new Error('Both a daily budget and a daily call cap are required.');
   await setPortalKeyBudget(id, { dailyBudgetUsd, dailyMaxCalls });
+  revalidatePath('/access');
+}
+
+// The Savant Friday-email opt-in toggle on the keys table.
+export async function setKeySavantEmailAction(id: string, on: boolean): Promise<void> {
+  await requireAdmin();
+  if (!UUID_RE.test(id)) throw new Error('Bad key id.');
+  await setKeySavantEmail(id, on);
   revalidatePath('/access');
 }

@@ -114,3 +114,198 @@ export interface SelfCompany {
   name: string;
   public_blurb: string | null;
 }
+
+// ---------------------------------------------------------------- Phase 2: the issue
+
+import type { EditionPaper, EditionTool, EditionRelease, EditionBuilderRead } from '../edition/types';
+
+export interface SavantBrief {
+  title: string;
+  url: string | null;
+  href: string | null;
+  domain: string | null;
+  date: string | null;     // YYYY-MM-DD
+  lens?: string | null;
+  company?: string | null;
+  kind: 'signal' | 'scan_item' | 'intel_item' | 'intel_fact' | 'paper' | 'candidate';
+}
+
+export interface MovedClaim {
+  code: string;
+  statement: string;
+  href: string;
+  evidence: number;
+  supports: number;
+  contradicts: number;
+}
+
+export interface SavantMoved {
+  evidenceByDirection: { supports: number; contradicts: number; neutral: number };
+  evidenceByLens: Record<string, number>;
+  signalsByLens: Record<string, number>;
+  topClaims: MovedClaim[];
+  signals: SavantBrief[];          // published this week, newest first, capped
+}
+
+export interface PeerMetricCell {
+  code: string;
+  label: string;
+  latest: number | null;
+  period: string | null;
+  prev: number | null;
+  delta: number | null;          // latest - prev
+  pct: number | null;            // delta / |prev|
+  unit: string;
+  source: string;
+  sourceUrl: string | null;
+  goodWhen: 'up' | 'down' | 'neutral';
+}
+
+export interface PeerRow {
+  slug: string;
+  name: string;
+  tier: string;
+  isSelf: boolean;
+  metrics: PeerMetricCell[];
+  aiItems: number;               // intel items with the tech_ai dimension this week
+  aiItemsTrailing: number;       // trailing 4-week mean
+  facts: number;                 // intel facts this week
+  filings: SavantBrief[];        // edgar / filing items this week
+  cfpb: { latest: number | null; prev: number | null; period: string | null; sourceUrl: string | null };
+  hiring: { aiMl: number | null; agents: number | null; total: number | null; asOf: string | null };
+}
+
+export interface SavantPeers {
+  self: PeerRow | null;
+  tiers: { tier: string; label: string; rows: PeerRow[] }[];
+  codes: { code: string; label: string; unit: string; source: string }[];  // the columns shown
+}
+
+export interface DatedItem {
+  date: string;
+  what: string;
+  url: string | null;
+  href: string | null;
+  trigger: string;
+}
+
+export interface QueryLogEntry {
+  tool: string;
+  query: string;
+  results: number;
+  round: number;
+}
+
+export interface SavantPack {
+  weekEnd: string;
+  windowFrom: string;
+  windowTo: string;
+  issueNumber: number;
+  self: SelfCompany | null;
+  plan: PlanPayload | null;
+  hypotheses: { fresh: Hypothesis | null; open: Hypothesis[] };   // fresh = posed this week
+  notebook: {
+    notes: { day: string; text: string }[];
+    connections: ConnectionPayload[];
+    echoes: EchoPayload[];
+    anomalies: AnomalyPayload[];
+    misses: MissPayload[];
+  };
+  moved: SavantMoved;
+  peers: SavantPeers;
+  regulation: SavantBrief[];
+  research: EditionPaper[];
+  researchKept: number;
+  tools: { entrants: EditionTool[]; releases: EditionRelease[]; reads: EditionBuilderRead[] };
+  ahead: DatedItem[];
+  numbers: {
+    itemsRead: number;
+    outlets: number;
+    signals: number;
+    papers: number;
+    evidence: number;
+    connections: number;
+    anomalies: number;
+    companies: number;
+  };
+  sources: { domain: string; count: number }[];
+  mapHrefs: { href: string; code: string; statement: string }[];   // every claim and bridge, so the lead may link any position
+  generatedAt: string;
+}
+
+export interface HypothesisReading {
+  id: string;
+  statement: string;
+  posedWeek: string;
+  direction: 'strengthened' | 'weakened' | 'unchanged' | 'closed';
+  note: string;              // one paragraph, plain text with markdown links allowed -> html at save
+  html: string;
+  verdict: string | null;
+}
+
+export interface SavantDepartment {
+  key: 'moved' | 'peers' | 'regulation' | 'research' | 'tools' | 'missed' | 'ahead';
+  title: string;
+  html: string;              // citation-gated
+  empty: boolean;            // true when the department prints its one-line "nothing this week"
+}
+
+export interface EditorReview {
+  name: string;
+  verdict: 'publish' | 'publish_with_edits' | 'hold';
+  requiredEdits: { section: string; instruction: string }[];
+  cuts: { section: string; quote: string; reason: string }[];
+  note: string;              // the signed editor's note printed in the issue
+  checks: string[];          // the deterministic checks that fired
+}
+
+export interface SavantNarrative {
+  title: string;             // the issue's title (from the lead)
+  summary: string[];         // 5 bullets, html fragments, each with a link
+  lead: { title: string; html: string; wordCount: number };
+  hypotheses: { fresh: { statement: string; html: string } | null; readings: HypothesisReading[] };
+  departments: SavantDepartment[];
+  editor: EditorReview | null;
+  research: { queries: QueryLogEntry[]; roundsUsed: number; webSearches: number; dropped: string[] };
+  citedTags: string[];
+  dropped: string[];
+  models: { writer: string; editor: string; lead: string };
+  revised: boolean;
+}
+
+export interface SavedSavantIssue {
+  id: string;
+  week_end: string;          // YYYY-MM-DD
+  pack: SavantPack;
+  narrative: SavantNarrative;
+  is_published: boolean;
+  generated_at: string;
+}
+
+export interface SavantIssueListRow {
+  id: string;
+  week_end: string;
+  title: string;
+  issueNumber: number | null;
+  is_published: boolean;
+}
+
+// The fixed table of contents; the public teaser prints exactly this.
+export const SAVANT_TOC: { key: string; title: string }[] = [
+  { key: 'summary', title: 'Executive summary' },
+  { key: 'lead', title: 'Lead analysis' },
+  { key: 'hypotheses', title: "Savant's hypotheses" },
+  { key: 'moved', title: 'What moved on the map' },
+  { key: 'peers', title: 'Peer and market watch' },
+  { key: 'regulation', title: 'Regulation and policy' },
+  { key: 'research', title: 'Research desk' },
+  { key: 'tools', title: 'Tools and builders' },
+  { key: 'missed', title: 'Missed and blind spots' },
+  { key: 'ahead', title: 'The week ahead' },
+  { key: 'appendix-a', title: 'Appendix A: how this issue was researched' },
+  { key: 'appendix-b', title: 'Appendix B: numbers' },
+  { key: 'appendix-c', title: 'Appendix C: sources' },
+  { key: 'editor', title: "Editor's note" },
+];
+
+export const SAVANT_STRAPLINE = 'An autonomous research agent with an editorial point of view. Produced by The AI Atlas.';

@@ -4,7 +4,7 @@ import { useState, type CSSProperties, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   approveAccessRequestAction, declineAccessRequestAction, issuePortalKeyAction,
-  renewPortalKeyAction, revokePortalKeyAction, setPortalKeyBudgetAction,
+  renewPortalKeyAction, revokePortalKeyAction, setKeySavantEmailAction, setPortalKeyBudgetAction,
   type KeyIssuedResult,
 } from '@/lib/actions/portal';
 import type { AccessRequestRow, PortalKeyRow } from '@/lib/data/portal';
@@ -180,6 +180,15 @@ function KeyRow({ row, busy, anyBusy, defaultDays, run }: {
           </button>
         )}
         <button type="button" className="btn btn--quiet btn--sm" onClick={() => setBudgetOpen((o) => !o)}>Budget</button>
+        {row.email ? (
+          <button type="button" className="btn btn--quiet btn--sm" disabled={anyBusy}
+            title={row.savant_email ? `Savant's Friday email goes to ${row.email}` : 'Turn on to send Savant\'s Friday issue to this key\'s email'}
+            onClick={() => void run(row.id, async () => { await setKeySavantEmailAction(row.id, !row.savant_email); })}>
+            Savant email: {row.savant_email ? 'on' : 'off'}
+          </button>
+        ) : (
+          <span className="text-xs" style={faint} title="Add an email to this key to enable Savant's Friday email">Savant email: no email on key</span>
+        )}
         {row.state !== 'revoked' && (
           <button type="button" className="btn btn--quiet btn--sm" style={{ color: 'var(--heat-4)', marginLeft: 'auto' }} disabled={anyBusy}
             onClick={() => { if (window.confirm(`Revoke ${row.name}'s key? Their browser and scripts stop working at once.`)) void run(row.id, () => revokePortalKeyAction(row.id)); }}>

@@ -89,6 +89,13 @@ export async function setPortalKeyBudget(id: string, budget: { dailyBudgetUsd: n
   );
 }
 
+// The per-key opt-in to Savant's Friday email (migration 0068). The console
+// disables the toggle when the key carries no email; the write itself does
+// not re-check that, so it stays a pure flip.
+export async function setKeySavantEmail(id: string, on: boolean): Promise<void> {
+  await exec(`update portal_keys set savant_email = $2 where id = $1::uuid`, [id, on]);
+}
+
 // The public request form's write (POST /api/access/request validates first).
 export async function createAccessRequest(input: {
   name: string;

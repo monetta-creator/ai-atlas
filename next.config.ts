@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
     "/blotter/[day]/pdf": ["./lib/pdf/fonts/*.ttf"],
     "/blotter/[day]/deck/pdf": ["./lib/pdf/fonts/*.ttf"],
     "/intel/deck/[day]/pdf": ["./lib/pdf/fonts/*.ttf"],
+    "/savant/[week]/pdf": ["./lib/pdf/fonts/*.ttf"],
   },
 };
 

@@ -91,20 +91,21 @@ const SECTIONS = [
     body: (
       <>
         <p>
-          Most of what the models produce is a proposal a human then commits or discards. Seven things publish without
+          Most of what the models produce is a proposal a human then commits or discards. Eight things publish without
           a human step:
         </p>
         <ul>
           <li>The Daily Edition, written each weekday from what the engines already stored, by default by a GLM model via OpenRouter (the model is a setting).</li>
           <li>The Friday research roundup and the Monday tooling entrants report, both written by Claude Sonnet.</li>
           <li>The weekday company intel deck, written from the Intel Desk’s collected items, extracted facts, filings, and metric moves; it goes out to access-key holders and the admin only, never guests, since it names the companies the desk tracks.</li>
+          <li>Savant, a weekly research report written from the same public engine data, drafted and reviewed by two separate model personas (a writer and an editor); it also goes out to access-key holders and the admin only, since it names the reader organization and its peers.</li>
           <li>High-significance pipeline signal drafts that touch at least one claim, published after a veto window (48 hours by default) unless a human archives them first.</li>
           <li>Tooling products scored at or above the catalog threshold, which enter the public catalog automatically.</li>
           <li>Period reports, which are public as soon as the admin saves one.</li>
         </ul>
         <p>
-          The Daily Edition, the research roundup, the tooling reports, the generated sheets, the thesis reports, and
-          the company intel deck pass a citation gate, so a link the records cannot vouch for is stripped. Period
+          The Daily Edition, the research roundup, the tooling reports, the generated sheets, the thesis reports, Savant,
+          and the company intel deck pass a citation gate, so a link the records cannot vouch for is stripped. Period
           reports are edited by the admin before saving; a signal draft’s claim touches are checked against live claim
           codes but its text is not link-gated. A confidence on the argument map never moves without a human-written
           rationale.

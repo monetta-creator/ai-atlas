@@ -203,7 +203,8 @@ export async function listGeneratedReports(
     `select ${GEN_REPORT_META},
             narrative->>'bottomLine' as bottom_line,
             pack->'stats' as stats,
-            pack->'health' as health
+            pack->'health' as health,
+            pack->'numbers' as numbers
        from generated_reports
        ${where}
       order by generated_at desc, id`,

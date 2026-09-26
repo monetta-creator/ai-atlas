@@ -23,6 +23,9 @@
     { "path": "/api/cron/edition", "schedule": "45 16 * * 1-5" },
     { "path": "/api/cron/feeds", "schedule": "30 20 * * 1-5" },
     { "path": "/api/cron/savant", "schedule": "15 17 * * 1-5" },
+    { "path": "/api/cron/savant/issue", "schedule": "0 20 * * 5" },
+    { "path": "/api/cron/savant/issue/sweep", "schedule": "20 20 * * 5" },
+    { "path": "/api/cron/savant/issue/sweep2", "schedule": "40 20 * * 5" },
     { "path": "/api/cron/agent", "schedule": "45 * * * *" },
     { "path": "/api/cron/agent/brief", "schedule": "30 12 * * *" }
   ]

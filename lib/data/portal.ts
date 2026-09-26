@@ -20,6 +20,7 @@ export interface PortalKeyRow {
   daily_ask_max_calls: number;
   notes: string | null;
   request_id: string | null;
+  savant_email: boolean;
   state: KeyState;
   usage_count: number;
   spend_today_usd: number;
@@ -59,6 +60,7 @@ const KEY_SELECT = `
          k.created_at::text as created_at, k.expires_at::text as expires_at,
          k.revoked_at::text as revoked_at, k.last_used_at::text as last_used_at,
          k.daily_ask_budget_usd, k.daily_ask_max_calls, k.notes, k.request_id::text as request_id,
+         k.savant_email,
          coalesce(u.n, 0)::int as usage_count,
          coalesce(s.usd, 0)::numeric as spend_today_usd
     from portal_keys k
@@ -339,6 +341,22 @@ export async function listKeysExpiringWithin(days: number): Promise<Pick<PortalK
         and expires_at <= now() + ($1::int * interval '1 day')
       order by expires_at asc`,
     [days]
+  );
+}
+
+// Savant's Friday email recipients: active, unexpired keys opted in with an
+// email on file. Reuses listPortalKeys' active predicate (revoked_at is null
+// and expires_at is in the future); lib/savant/* reads this, never the raw
+// table, so the "active + has email" rule lives in one place.
+export async function getSavantEmailRecipients(): Promise<{ keyId: string; email: string; holder: string | null }[]> {
+  return q<{ keyId: string; email: string; holder: string | null }>(
+    `select id::text as "keyId", email as "email", name as "holder"
+       from portal_keys
+      where savant_email = true
+        and email is not null
+        and revoked_at is null
+        and expires_at > now()
+      order by name asc`
   );
 }
 

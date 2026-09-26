@@ -1,4 +1,4 @@
-import type { NextRequest } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { isAdmin, isPortal } from '@/lib/auth';
 import { getGeneratedReport } from '@/lib/data';
 import { isPortalOnlyKind } from '@/lib/reports/access';
@@ -23,6 +23,10 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (!UUID_RE.test(id)) return new Response('Not found', { status: 404 });
   const saved = await getGeneratedReport(id);
   if (!saved) return new Response('Not found', { status: 404 });
+  // Savant's own PDF lives at /savant/<week>/pdf, which carries the correct
+  // renderer for its pack shape (this route's renderSheetPdf only knows the
+  // AnySheetPack union, which savant's pack does not join).
+  if (saved.kind === 'savant' && saved.scope_to) return NextResponse.redirect(new URL(`/savant/${saved.scope_to}/pdf`, req.url));
   const admin = await isAdmin();
   const isTooling = String(saved.kind).startsWith('tooling_');
   const keyed = await isPortal(); // revocation-aware (lib/auth.ts)

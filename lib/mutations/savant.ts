@@ -85,3 +85,15 @@ export async function setSavantPrefs(patch: Partial<SavantPrefs>): Promise<void>
   if (!sets.length) return;
   await exec(`update savant_prefs set ${sets.join(', ')} where id = true`, vals);
 }
+
+
+// A forced rebuild of a week's issue re-reads every open hypothesis; drop
+// the readings that issue wrote the first time so the ledger holds one per
+// week. Statuses are recomputed by the new readings.
+export async function clearHypothesisUpdatesForWeek(weekEnd: string): Promise<void> {
+  await exec(
+    `update savant_hypotheses
+        set updates = coalesce((select jsonb_agg(u) from jsonb_array_elements(updates) u where u->>'week' <> $1), '[]'::jsonb)`,
+    [weekEnd]
+  );
+}

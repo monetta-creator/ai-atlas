@@ -26,6 +26,9 @@ export default async function SheetPage({ params }: { params: Promise<{ id: stri
   // not here: send anyone who lands on a sheet URL for one straight there.
   if (saved.kind === 'edition' && saved.scope_to) redirect(`/blotter/${saved.scope_to}`);
   if (saved.kind === 'intel_deck' && saved.scope_to) redirect(`/intel/deck/${saved.scope_to}`);
+  // Savant is a generated_reports row too, but it reads at /savant/<week> (the
+  // weekly issue's own gate mirrors this page's isPortalOnlyKind check).
+  if (saved.kind === 'savant' && saved.scope_to) redirect(`/savant/${saved.scope_to}`);
   const isTooling = String(saved.kind).startsWith('tooling_');
   const keyed = await isPortal(); // revocation-aware (lib/auth.ts)
   // Portal-only kinds (lib/reports/access.ts) name tracked companies: a
