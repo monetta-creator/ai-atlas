@@ -8,6 +8,8 @@ import { researchLead } from './lead';
 import type { LeadResult } from './lead';
 import { writeSummaryAndHypotheses, writeDepartments, writePeers, md2html } from './write';
 import { deterministicChecks, editorReview, reviseSection } from './editor';
+import { planFigures } from './figures';
+import type { SavantFigure } from './figures-core';
 import { revisionKeepsFigures } from './editor-core';
 import type { Draft } from './editor';
 import { allowlistForSavant } from './allowlist';
@@ -24,7 +26,7 @@ import type { SavantNarrative, SavantPack, PlanPayload, HypothesisReading, Savan
 // citation gate, save (published), the ledger update, email. Past the budget
 // the legs fall back to deterministic renderings, never to silence.
 
-type Leg = 'lead' | 'front' | 'departments' | 'peers' | 'editor' | 'revise';
+type Leg = 'lead' | 'front' | 'departments' | 'peers' | 'editor' | 'revise' | 'figures';
 
 interface Parked<T> { leg: Leg; value: T }
 
@@ -213,9 +215,21 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
   }
   done.push('revise');
 
-  // 6. Gate, assemble, save.
+  // 6. Figures: over the final text, against the same allow-list the gate uses.
   const allow = allowlistForSavant(pack);
   for (const [, href] of lead.tagHrefs) allow.hrefs.add(href);
+  let figures = await parked<{ figures: SavantFigure[]; dropped: string[] }>(weekEnd, 'figures');
+  if (!figures) {
+    if (timeLeft() < 60_000) return { partial: true, weekEnd, done, next: 'figures' };
+    figures = budget.ok
+      ? await planFigures(pack, { leadTitle: draft.title, leadHtml: draft.leadHtml, departments: draft.departments }, allow.hrefs, { model: prefs.writer_model, weekEnd, timeoutMs: Math.min(timeLeft() - 20_000, 120_000) }).catch(() => null)
+      : null;
+    figures = figures ?? { figures: [], dropped: ['the figure leg did not run'] };
+    await park(weekEnd, 'figures', figures);
+  }
+  done.push('figures');
+
+  // 7. Gate, assemble, save.
   const dropped: string[] = [];
   const gate = (html: string): string => {
     const g = enforceCitations(html, allow);
@@ -232,11 +246,12 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
     },
     departments: draft.departments.map((d) => ({ ...d, html: gate(d.html) })),
     editor,
-    research: { queries: lead.queries, roundsUsed: lead.rounds, webSearches: lead.webSearches, dropped: revisionRejected.map((s) => `revision discarded for ${s}: it introduced a figure the original did not state`) },
+    research: { queries: lead.queries, roundsUsed: lead.rounds, webSearches: lead.webSearches, dropped: [...revisionRejected.map((s) => `revision discarded for ${s}: it introduced a figure the original did not state`), ...figures.dropped.map((d) => `figure dropped: ${d}`)] },
     citedTags: [],
     dropped: [...new Set(dropped)],
     models: { writer: prefs.writer_model, editor: prefs.editor_model, lead: prefs.writer_model },
     revised,
+    figures: figures.figures,
   };
 
   let id: string;

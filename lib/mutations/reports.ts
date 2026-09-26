@@ -155,3 +155,13 @@ export async function rewriteEditionPackSections(
     [id, JSON.stringify(sections), patch.papersKept ?? null]
   );
 }
+
+// Merges a partial narrative into a saved Savant issue (the figure script
+// and any later per-section regeneration). jsonb || replaces top-level keys
+// only, so a patch never touches the keys it does not name.
+export async function patchSavantNarrative(id: string, patch: Record<string, unknown>): Promise<void> {
+  await exec(
+    `update generated_reports set narrative = narrative || $2::jsonb where id = $1 and kind = 'savant'`,
+    [id, JSON.stringify(patch)]
+  );
+}

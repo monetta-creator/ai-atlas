@@ -4,6 +4,8 @@ import {
   COBALT, INK, DIM, LINE, s,
 } from './shell';
 import { SAVANT_TOC, type SavedSavantIssue } from '../savant/types';
+import { interleave, type FigureSection } from '../savant/figures-core';
+import { PdfFigure } from './savant-figures';
 import { allowlistForSavant } from '../savant/allowlist';
 import { enforceCitations } from '../citations';
 import { dateLabel } from '../format';
@@ -107,6 +109,20 @@ export async function renderSavantPdf(saved: SavedSavantIssue, origin: string): 
   const dateLine = `Issue No. ${pack.issueNumber} · Week ending ${dateLabel(pack.weekEnd)}`;
 
   const gate = (html: string | null) => enforceCitations(html, allow).html;
+  const figures = narrative.figures ?? [];
+  const sectionOrder: FigureSection[] = ['lead', ...narrative.departments.map((d) => d.key)];
+  const numbered = [...figures].sort((a, b) => sectionOrder.indexOf(a.section) - sectionOrder.indexOf(b.section) || a.after - b.after);
+  const figureNumber = (id: string) => numbered.findIndex((f) => f.id === id) + 1;
+  // A section's html with its figures between the blocks (the web view's Illustrated).
+  const illustrated = (html: string | null, section: FigureSection) => {
+    const own = figures.filter((f) => f.section === section);
+    if (!own.length) return <Html html={gate(html) ?? ''} origin={origin} />;
+    return interleave(gate(html), own).map((piece, i) => (
+      'figure' in piece
+        ? <PdfFigure key={piece.figure.id} figure={piece.figure} index={figureNumber(piece.figure.id)} origin={origin} />
+        : <Html key={i} html={piece.html} origin={origin} />
+    ));
+  };
   const sourceCount = [...allow.hrefs].filter((h) => /^https?:\/\//.test(h)).length;
   const deptDetail = new Map(narrative.departments.map((d) => [d.key, d.html] as const));
   const firstSentence = (html: string | null | undefined): string | undefined => {
@@ -196,7 +212,7 @@ export async function renderSavantPdf(saved: SavedSavantIssue, origin: string): 
         <Text id="lead" style={s.sectionHead}>Lead analysis</Text>
         <Text style={p.byline}>By Savant</Text>
         <Text style={p.leadTitle}>{narrative.lead.title}</Text>
-        <Html html={gate(narrative.lead.html) ?? ''} origin={origin} />
+        {illustrated(narrative.lead.html, 'lead')}
 
         <Text id="hypotheses" style={s.sectionHead}>Savant&apos;s hypotheses</Text>
         {narrative.hypotheses.fresh && (
@@ -219,7 +235,7 @@ export async function renderSavantPdf(saved: SavedSavantIssue, origin: string): 
         {narrative.departments.map((d) => (
           <View key={d.key}>
             <Text id={d.key} style={s.sectionHead}>{d.title}</Text>
-            <Html html={gate(d.html) ?? ''} origin={origin} />
+            {illustrated(d.html, d.key)}
           </View>
         ))}
 

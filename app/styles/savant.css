@@ -156,6 +156,7 @@
      .sv-byline / .sv-lead-title / .sv-lead-prose / .sv-wordcount
      .sv-hypo-new / .sv-hypo-row / .sv-direction[data-direction]
      .sv-plan / .sv-notes / .sv-query-table / .sv-cuts / .sv-dropped   Appendix A
+     .sv-figure / .sv-fig-*          Savant's figures (components/savant/Figure.tsx)
      .sv-source-group / .sv-attest                                    Appendix B
      .sv-editor-verdict[data-verdict] / .sv-editor-note / .sv-editor-sig
      .sv-colophon
@@ -182,6 +183,26 @@
 .sv-prose { font-size: 14.5px; line-height: 1.65; color: var(--ink); }
 .sv-prose a { color: var(--accent); }
 .sv-lead-prose p { margin: 0 0 14px; }
+
+.sv-figure { margin: 22px 0 26px; padding-top: 10px; border-top: 2px solid var(--ink); }
+.sv-fig-kicker { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin: 0 0 2px; }
+.sv-fig-title { font-size: 15px; font-weight: 700; color: var(--ink); margin: 0 0 10px; }
+.sv-fig-svg { display: block; width: 100%; height: auto; }
+.sv-fig-svg a { cursor: pointer; }
+.sv-fig-svg a:hover text { text-decoration: underline; }
+.sv-fig-caption { font-size: 12.5px; line-height: 1.5; color: var(--dim); margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--line); }
+.sv-fig-note { color: var(--faint-ink); }
+.sv-fig-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.sv-fig-cards[data-cols="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.sv-fig-card { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--surface); }
+.sv-fig-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.sv-fig-card-name { font-size: 13.5px; font-weight: 700; color: var(--ink); text-decoration: none; }
+a.sv-fig-card-name:hover { color: var(--accent); }
+.sv-fig-card-note { font-size: 12px; line-height: 1.45; color: var(--dim); margin: 0 0 4px; }
+.sv-fig-card-bullets { margin: 0; padding-left: 16px; font-size: 12px; line-height: 1.5; color: var(--ink); list-style: disc; }
+@media (max-width: 640px) {
+  .sv-fig-cards, .sv-fig-cards[data-cols="3"] { grid-template-columns: 1fr; }
+}
 .sv-wordcount { font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink); margin: 10px 0 0; }
 
 .sv-hypo-new {

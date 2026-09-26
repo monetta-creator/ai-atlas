@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import type { SavedSavantIssue, SavantDepartment, HypothesisReading } from '@/lib/savant/types';
 import { SAVANT_STRAPLINE } from '@/lib/savant/types';
 import { allowlistForSavant } from '@/lib/savant/allowlist';
+import { interleave, type SavantFigure, type FigureSection } from '@/lib/savant/figures-core';
+import Figure from './Figure';
 import { enforceCitations, type CitationAllowlist } from '@/lib/citations';
 import { dateLabel } from '@/lib/format';
 
@@ -54,11 +56,30 @@ function HypothesisRow({ r, allow }: { r: HypothesisReading; allow: CitationAllo
   );
 }
 
-function DepartmentSection({ d, allow }: { d: SavantDepartment; allow: CitationAllowlist }) {
+// A section's prose with Savant's figures placed between its blocks (the
+// figure leg names the block each one follows). Figure numbers run across
+// the whole issue in reading order.
+function Illustrated({ html, allow, className, figures, numberOf }: {
+  html: string | null; allow: CitationAllowlist; className: string; figures: SavantFigure[]; numberOf: (id: string) => number;
+}) {
+  if (!figures.length) return <Gated html={html} allow={allow} className={className} />;
+  const { html: clean } = enforceCitations(html, allow);
+  return (
+    <>
+      {interleave(clean, figures).map((piece, i) => (
+        'figure' in piece
+          ? <Figure key={piece.figure.id} figure={piece.figure} index={numberOf(piece.figure.id)} />
+          : <div key={i} className={className} dangerouslySetInnerHTML={{ __html: piece.html }} />
+      ))}
+    </>
+  );
+}
+
+function DepartmentSection({ d, allow, figures, numberOf }: { d: SavantDepartment; allow: CitationAllowlist; figures: SavantFigure[]; numberOf: (id: string) => number }) {
   return (
     <section className="sv-section" id={d.key}>
       <h2 className="sv-h2">{d.title}</h2>
-      <Gated html={d.html} allow={allow} className="sv-prose" />
+      <Illustrated html={d.html} allow={allow} className="sv-prose" figures={figures} numberOf={numberOf} />
     </section>
   );
 }
@@ -87,6 +108,11 @@ export default function SavantView({ saved }: { saved: SavedSavantIssue }) {
   const { pack, narrative } = saved;
   const allow = allowlistForSavant(pack);
   const summaryGated = narrative.summary.map((html) => enforceCitations(html, allow).html).filter((h): h is string => !!h);
+  const figures = narrative.figures ?? [];
+  const sectionOrder: FigureSection[] = ['lead', ...narrative.departments.map((d) => d.key)];
+  const numbered = [...figures].sort((a, b) => sectionOrder.indexOf(a.section) - sectionOrder.indexOf(b.section) || a.after - b.after);
+  const figureNumber = (id: string) => numbered.findIndex((f) => f.id === id) + 1;
+  const figuresFor = (section: FigureSection) => figures.filter((f) => f.section === section);
 
   const gatedFragments = [
     ...narrative.summary,
@@ -129,7 +155,7 @@ export default function SavantView({ saved }: { saved: SavedSavantIssue }) {
       <section className="sv-section" id="lead">
         <p className="sv-byline">by Savant</p>
         <h2 className="sv-lead-title">{narrative.lead.title}</h2>
-        <Gated html={narrative.lead.html} allow={allow} className="sv-prose sv-lead-prose" />
+        <Illustrated html={narrative.lead.html} allow={allow} className="sv-prose sv-lead-prose" figures={figuresFor('lead')} numberOf={figureNumber} />
         <p className="sv-wordcount">{narrative.lead.wordCount} words</p>
       </section>
 
@@ -148,7 +174,7 @@ export default function SavantView({ saved }: { saved: SavedSavantIssue }) {
         )}
       </section>
 
-      {narrative.departments.map((d) => <DepartmentSection key={d.key} d={d} allow={allow} />)}
+      {narrative.departments.map((d) => <DepartmentSection key={d.key} d={d} allow={allow} figures={figuresFor(d.key)} numberOf={figureNumber} />)}
 
       <section className="sv-section" id="appendix-a">
         <h2 className="sv-h2">Appendix A: how this issue was researched</h2>

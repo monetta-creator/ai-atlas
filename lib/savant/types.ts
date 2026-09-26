@@ -1,3 +1,4 @@
+import type { SavantFigure } from './figures-core';
 // Savant's shapes (2026-09-26): the notebook rows the weekday pass writes,
 // the hypotheses ledger, the prefs singleton. The Friday issue's pack and
 // narrative shapes join in Phase 2. Types only; plain-Node loadable.
@@ -271,6 +272,7 @@ export interface SavantNarrative {
   dropped: string[];
   models: { writer: string; editor: string; lead: string };
   revised: boolean;
+  figures?: SavantFigure[];   // the figure leg's output (figures-core.ts); absent on issues before 2026-09-26
 }
 
 export interface SavedSavantIssue {
