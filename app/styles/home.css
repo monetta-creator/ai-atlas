@@ -93,6 +93,8 @@ a.bs-index-cell:hover { background: color-mix(in oklab, var(--ink) 4%, transpare
 .bs-list { list-style: none; margin: 0; padding: 0; }
 .bs-list > li { border-bottom: 1px solid var(--line); }
 .bs-list > li:last-child { border-bottom: none; }
+.bs-list--archive > li { display: flex; align-items: center; gap: 12px; }
+.bs-list--archive .bs-row { flex: 1; min-width: 0; }
 .bs-row { display: flex; gap: 14px; padding: 13px 0; align-items: baseline; color: var(--ink); }
 .bs-row:hover .bs-rowhed { text-decoration: underline; text-decoration-color: var(--line-strong, var(--ink-faint)); }
 .bs-code { font-family: var(--font-mono); font-size: 12px; color: var(--accent); min-width: 34px; flex: none; }

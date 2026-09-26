@@ -8,7 +8,10 @@
      .ed-numbers / .ed-numbers-cell / -n / -l                the almanac strip
      .ed-body / .ed-front / .ed-item                          the front page
      .ed-column / .ed-kicker / .ed-column-title               the column
-     .ed-things / .ed-things-list                              Things happen
+     .ed-industry / .ed-brief-row                              The industry
+     .ed-desks / .ed-deskgrid / .ed-desk / .ed-desk-head       Things happen by desk
+     .ed-brief / .ed-brief-hed / .ed-brief-meta                 shared brief row
+     .ed-research / .ed-papergrid                              Research (full width)
      .ed-tier                                                  T1..T4 chip
      .ed-sections / .ed-section-head                           the section shelf
      .ed-footer                                                 the colophon line
@@ -95,6 +98,34 @@
 .ed-column-prose p { margin: 0 0 12px; }
 .ed-column-prose a { color: var(--accent); }
 
+/* ---- The industry: non-AI financial-services briefs ---- */
+.ed-industry { margin-top: 30px; }
+.ed-brief-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 24px; }
+
+/* ---- Things happen, grouped by desk ---- */
+.ed-desks { margin-top: 34px; }
+.ed-deskgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px 32px; }
+.ed-desk { min-width: 0; }
+.ed-desk-head {
+  font-family: var(--font-body); font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+  font-size: 10.5px; color: var(--accent); margin: 0 0 4px; padding-bottom: 6px;
+  border-bottom: 1px solid var(--ink-faint); display: flex; justify-content: space-between;
+}
+.ed-desk-count { font-family: var(--font-mono); font-weight: 400; color: var(--faint-ink); letter-spacing: 0; }
+
+/* ---- shared brief row: The industry + each desk column ---- */
+.ed-brief { padding: 9px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ed-brief-hed {
+  font-size: 13.5px; font-weight: 600; line-height: 1.35; color: var(--ink);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+a.ed-brief-hed:hover { color: var(--accent); text-decoration: none; }
+.ed-brief-meta { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink); }
+.ed-brief-domain { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-inatlas {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .06em; padding: 1px 5px; border-radius: 3px;
+  color: var(--accent); background: color-mix(in oklab, var(--accent) 12%, transparent);
+}
 
 /* ---- source-tier chip, T1 best .. T4 junk ---- */
 .ed-tier {
@@ -107,23 +138,29 @@
 .ed-tier[data-tier="3"] { color: var(--heat-2); background: color-mix(in oklab, var(--heat-2) 14%, transparent); }
 .ed-tier[data-tier="4"] { color: var(--faint-ink); background: color-mix(in oklab, var(--ink) 8%, transparent); }
 
-/* ---- the section shelf: Companies / Research / Tools / Blind spots / Sources ---- */
+/* ---- the section shelf: Tools (Mondays) / Blind spots ---- */
 .ed-sections {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px;
   margin-top: 36px; padding-top: 22px; border-top: 4px double var(--ink-faint);
 }
-@media (max-width: 900px) { .ed-sections { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 620px) { .ed-sections { grid-template-columns: 1fr; } }
 .ed-section-head {
   font-family: var(--font-body); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
   font-size: 11px; color: var(--dim); margin: 0 0 12px;
 }
 
+/* ---- Research, full width ---- */
+.ed-research { margin-top: 34px; padding-top: 22px; border-top: 4px double var(--ink-faint); }
+.ed-papergrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 36px; }
+@media (max-width: 700px) { .ed-papergrid { grid-template-columns: 1fr; } }
 
 .ed-paper { margin-bottom: 12px; }
 .ed-paper-title { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink); }
 .ed-paper-title:hover { text-decoration: underline; }
-.ed-paper-cares { font-size: 12px; color: var(--dim); margin: 2px 0 0; line-height: 1.4; }
+.ed-paper-cares {
+  font-size: 12px; color: var(--dim); margin: 2px 0 0; line-height: 1.4;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
 
 .ed-tool { margin-bottom: 12px; font-size: 13px; }
 .ed-tool-name { font-weight: 600; color: var(--ink); }
@@ -155,8 +192,8 @@
 .ed-market[data-dir="up"] .ed-market-chg, .ed-market[data-dir="up"] .ed-spark { color: var(--supports); }
 .ed-market[data-dir="down"] .ed-market-chg, .ed-market[data-dir="down"] .ed-spark { color: var(--contradicts); }
 
-/* ---- Full-width card grids: Things happen, Hacker News ---- */
-.ed-things, .ed-hn { margin-top: 34px; }
+/* ---- Full-width card grid: Hacker News ---- */
+.ed-hn { margin-top: 34px; }
 .ed-cardgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 @media (max-width: 900px) { .ed-cardgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .ed-cardgrid { grid-template-columns: 1fr; } }
@@ -171,7 +208,6 @@ a.ed-card:hover { border-color: color-mix(in oklab, var(--accent) 45%, var(--lin
 a.ed-card-hed:hover { color: var(--accent); text-decoration: none; }
 .ed-card-foot { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink); }
 .ed-card-domain { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ed-card-arrow { margin-left: auto; color: var(--accent); }
 .ed-card-comments { margin-left: auto; color: var(--faint-ink); }
 .ed-card-comments:hover { color: var(--accent); }
 

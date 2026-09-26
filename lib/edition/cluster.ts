@@ -4,6 +4,8 @@
 // its coverage count is how many distinct outlets reported it, the Ground
 // News idea. Ranking rewards relevance, coverage and source quality.
 
+import { isAiStory } from './desks.ts';
+
 export type StorySource = 'scan' | 'intel' | 'pipeline' | 'signal';
 
 export interface StoryItem {
@@ -30,6 +32,7 @@ export interface StoryCluster {
   tierMix: Record<'1' | '2' | '3' | '4' | 'unknown', number>;
   entities: string[];          // union, most frequent first
   score: number;
+  repeat?: boolean;            // stamped by penalizeRepeats (lib/edition/pure.ts) when it echoes a prior front
 }
 
 const STOP = new Set([
@@ -40,8 +43,17 @@ const STOP = new Set([
   'launch', 'announces', 'announced', 'unveils', 'introduces', 'inc', 'ltd', 'plc', 'corp', 'co',
 ]);
 
+// Trailing outlet suffixes (" - FinTech Futures", " | Reuters", " - MacRumors")
+// are stripped before tokenizing: they made three unrelated funding rounds
+// from one outlet look like the same story (measured 2026-09-26).
+const OUTLET_SUFFIX = /\s+[-|–]\s+[A-Za-z][A-Za-z0-9.&' ]{1,40}$/;
+
+export function stripOutletSuffix(headline: string): string {
+  return headline.replace(OUTLET_SUFFIX, '');
+}
+
 export function tokens(headline: string): string[] {
-  return headline
+  return stripOutletSuffix(headline)
     .toLowerCase()
     .replace(/[’'`]/g, '')
     .replace(/[^a-z0-9$%. ]+/g, ' ')
@@ -77,7 +89,11 @@ export function sameStory(a: StoryItem, b: StoryItem): boolean {
   const eb = new Set(normalizeEntities(b.entities));
   let shared = 0;
   for (const e of ea) if (eb.has(e)) shared += 1;
-  return shared >= 2 && j >= 0.2;
+  // Two shared entities with a light headline overlap, or one shared entity
+  // with a firmer one (the replay over 2026-09-22..25 found the Adyen/Klarna
+  // CFO move across three outlets and the Anthropic/OpenAI price cut across
+  // CNBC and Ars only through the second rule).
+  return (shared >= 2 && j >= 0.2) || (shared >= 1 && j >= 0.25);
 }
 
 export const TIER_WEIGHT: Record<string, number> = { '1': 1.0, '2': 0.85, '3': 0.6, '4': 0.25, unknown: 0.7 };
@@ -88,13 +104,10 @@ export const CONTENT_WEIGHT: Record<string, number> = {
 // The engines' relevance is TOPIC fit (a bank-capital story scores high on a
 // banking topic). The edition is an AI paper, so an item earns full weight
 // only when its own text says AI; pipeline candidates and published signals
-// came through the AI lenses and always count as AI.
-const AI_TERMS = /\b(ai|a\.i\.|artificial intelligence|machine learning|deep learning|llm|llms|language model|foundation model|frontier model|generative|gen ai|genai|agentic|ai agent|agents?\b.*\b(model|llm|copilot)|copilot|chatbot|openai|anthropic|claude|gpt|gemini|llama|mistral|deepseek|nvidia|gpu|gpus|tpu|accelerator|inference|training run|data center|datacenter|hyperscaler|compute|semiconductor|chips?\b|hugging face|transformer|multimodal|rag\b|vector database|fine-?tun)/i;
-
+// came through the AI lenses and always count as AI. isAiStory (./desks.ts)
+// is the one AI gate, shared with the front/Things-happen filter.
 export function aiWeight(it: StoryItem): number {
-  if (it.source === 'pipeline' || it.source === 'signal') return 1;
-  const hay = `${it.headline} ${it.summary ?? ''} ${it.tags.join(' ')} ${it.entities.join(' ')}`;
-  return AI_TERMS.test(hay) ? 1 : 0.45;
+  return isAiStory(it) ? 1 : 0.45;
 }
 
 export function itemWeight(it: StoryItem): number {
@@ -140,8 +153,10 @@ export function clusterStories(items: StoryItem[]): StoryCluster[] {
 
 export function coverageLine(c: StoryCluster): string {
   const n = c.outlets.length;
-  const parts: string[] = [`${n} outlet${n === 1 ? '' : 's'}`];
-  if (c.tierMix['1']) parts.push(`${c.tierMix['1']} tier 1`);
-  if (c.tierMix['4']) parts.push(`${c.tierMix['4']} promo`);
-  return parts.join(', ');
+  const notes: string[] = [];
+  if (c.tierMix['1']) notes.push(`${c.tierMix['1']} tier 1`);
+  if (c.tierMix['4']) notes.push(`${c.tierMix['4']} promo`);
+  if (n === 1 && notes.length === 0) return '';
+  const label = n === 1 ? `${n} outlet` : `Corroborated by ${n} outlets`;
+  return [label, ...notes].join(', ');
 }

@@ -1,7 +1,7 @@
 /* ============================================================
    OPERATIONS (.ops-*) — /ops, the one authoritative admin view of
    everything that runs in the background. Tokens only; theme-aware
-   via the --heat-*/--supports/--accent vars already redefined for
+   via the --heat-N, --supports and --accent vars already redefined for
    dark mode in tokens.css.
    ============================================================ */
 

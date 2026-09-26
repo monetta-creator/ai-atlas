@@ -1,18 +1,21 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import type { SavedEdition } from '@/lib/edition/types';
+import type { SavedEdition, EditionThing } from '@/lib/edition/types';
 import { allowlistForEdition } from '@/lib/edition/pure';
+import { groupByDesk, cleanBlindSpots } from '@/lib/edition/desks';
 import { fmtChange } from '@/lib/edition/markets';
 import { enforceCitations } from '@/lib/citations';
 import { dateLabel } from '@/lib/format';
 
-// The daily edition's read view (2026-09-23): masthead, a numbers strip, a
-// two-column body (the front + Matt Levine-style column, ending in Things
-// Happen), then the section shelf (Companies / Research / Tools / Blind
-// spots / Sources). Renders one SavedEdition; used by /blotter (latest) and
-// /blotter/[day] (archive). Guest-safe by construction: every field it reads
-// comes off the pack or the gated narrative, never an admin column. The
-// `admin` prop only toggles the model-name line in the footer.
+// The daily edition's read view (2026-09-26): masthead, a numbers strip, the
+// market strip, a two-column body (the front + Matt Levine-style column),
+// The industry (non-AI financial-services briefs), Things happen grouped by
+// desk, Research (full width), Hacker News, Sources, then the section shelf
+// (Tools on Mondays / Blind spots). Renders one SavedEdition; used by
+// /blotter (latest) and /blotter/[day] (archive). Guest-safe by construction:
+// every field it reads comes off the pack or the gated narrative, never an
+// admin column. The `admin` prop only toggles the model-name line in the
+// footer.
 //
 // The column is the one piece of free-form model prose here, so it is
 // re-gated at render, belt and braces, exactly like SheetReadView: the same
@@ -53,6 +56,20 @@ function TierChip({ tier }: { tier: number | null }) {
   return <span className="ed-tier" data-tier={tier}>{`T${tier}`}</span>;
 }
 
+// Shared brief markup for The industry and Things-happen-by-desk.
+function Brief({ t }: { t: EditionThing }) {
+  return (
+    <div className="ed-brief">
+      <GoTo href={t.href ?? t.url} className="ed-brief-hed">{t.headline}</GoTo>
+      <span className="ed-brief-meta">
+        <span className="ed-brief-domain">{t.domain}</span>
+        <TierChip tier={t.tier} />
+        {t.href?.startsWith('/') && <span className="ed-inatlas">in Atlas</span>}
+      </span>
+    </div>
+  );
+}
+
 export default function EditionView({ edition, admin }: { edition: SavedEdition; admin: boolean }) {
   const { pack, narrative } = edition;
   const allow = allowlistForEdition(pack);
@@ -64,7 +81,7 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
     { n: pack.numbers.signalsPublished, l: 'Signals published' },
     { n: pack.numbers.papersKept, l: 'Papers analyzed' },
     ...(pack.numbers.newTools > 0 ? [{ n: pack.numbers.newTools, l: 'New tools' }] : []),
-    { n: pack.numbers.clusters, l: 'Stories' },
+    { n: pack.numbers.clusters, l: 'AI stories' },
   ];
 
   return (
@@ -106,7 +123,8 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
                 <h3 className="ed-item-hed">{item.headline}</h3>
                 <p className="ed-item-why">{item.why}</p>
                 {item.numbers && <p className="ed-item-numbers">{item.numbers}</p>}
-                <p className="ed-coverage">{item.coverage}</p>
+                {/* Editions stored before 2026-09-26 carry the literal '1 outlet'; a lone plain outlet says nothing. */}
+                {item.coverage && item.coverage !== '1 outlet' && <p className="ed-coverage">{item.coverage}</p>}
                 <GoTo href={item.goDeeperHref} className="ed-godeeper">
                   {item.goDeeperLabel} →
                 </GoTo>
@@ -122,19 +140,41 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
         </div>
       </div>
 
+      {pack.industry && pack.industry.length > 0 && (
+        <section className="ed-industry">
+          <p className="ed-section-head">The industry · financial services, no AI angle</p>
+          <div className="ed-brief-row">
+            {pack.industry.map((t) => <Brief key={t.url} t={t} />)}
+          </div>
+        </section>
+      )}
+
       {pack.thingsHappen.length > 0 && (
-        <section className="ed-things">
+        <section className="ed-desks">
           <p className="ed-section-head">Things happen · {pack.thingsHappen.length}</p>
-          <div className="ed-cardgrid">
-            {pack.thingsHappen.map((t) => (
-              <GoTo key={t.url} href={t.href ?? t.url} className="ed-card">
-                <span className="ed-card-hed">{t.headline}</span>
-                <span className="ed-card-foot">
-                  <span className="ed-card-domain">{t.domain}</span>
-                  <TierChip tier={t.tier} />
-                  <span className="ed-card-arrow" aria-hidden="true">↗</span>
-                </span>
-              </GoTo>
+          <div className="ed-deskgrid">
+            {groupByDesk(pack.thingsHappen).map((g) => (
+              <div key={g.desk} className="ed-desk">
+                <p className="ed-desk-head">{g.label} <span className="ed-desk-count">{g.items.length}</span></p>
+                {g.items.map((t) => <Brief key={t.url} t={t} />)}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {pack.papers.length > 0 && (
+        <section className="ed-research">
+          <p className="ed-section-head">
+            Research · {pack.numbers.papersKept} analyzed
+            {pack.numbers.papersKept > pack.papers.length ? `, top ${pack.papers.length}` : ''}
+          </p>
+          <div className="ed-papergrid">
+            {pack.papers.map((p) => (
+              <div key={p.id} className="ed-paper">
+                <Link href={p.href} className="ed-paper-title">{p.title}</Link>
+                {p.whoCares && <p className="ed-paper-cares">{p.whoCares}</p>}
+              </div>
             ))}
           </div>
         </section>
@@ -176,18 +216,6 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
       )}
 
       <div className="ed-sections">
-        {pack.papers.length > 0 && (
-          <div>
-            <p className="ed-section-head">Research</p>
-            {pack.papers.map((p) => (
-              <div key={p.id} className="ed-paper">
-                <Link href={p.href} className="ed-paper-title">{p.title}</Link>
-                {p.whoCares && <p className="ed-paper-cares">{p.whoCares}</p>}
-              </div>
-            ))}
-          </div>
-        )}
-
         {pack.tools.length > 0 && (
           <div>
             <p className="ed-section-head">Tools</p>
@@ -203,15 +231,20 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
 
         <div>
           <p className="ed-section-head">Blind spots</p>
-          {pack.blindSpots.length > 0 ? (
-            pack.blindSpots.map((b, i) => (
-              <p key={i} className="ed-blind">
-                {b.url ? <GoTo href={b.url}>{b.headline}</GoTo> : b.headline}
-              </p>
-            ))
-          ) : (
-            <p className="ed-blind-empty">Nothing the desk knows it missed today.</p>
-          )}
+          {(() => {
+            const blindSpots = cleanBlindSpots(
+              pack.blindSpots.map((b) => ({ headline: b.headline, url: b.url, covered: false }))
+            );
+            return blindSpots.length > 0 ? (
+              blindSpots.map((b, i) => (
+                <p key={i} className="ed-blind">
+                  {b.url ? <GoTo href={b.url}>{b.headline}</GoTo> : b.headline}
+                </p>
+              ))
+            ) : (
+              <p className="ed-blind-empty">Nothing the desk knows it missed today.</p>
+            );
+          })()}
         </div>
       </div>
 

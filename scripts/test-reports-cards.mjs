@@ -63,7 +63,7 @@ check('toSheetCard: edition reads on the blotter, subject is the day', () => {
   }));
   assert.equal(card.href, '/blotter/2026-09-23');
   assert.equal(card.subject, 'Sep 23, 2026');
-  // The edition's PDF is the blotter deck PDF, not the generic sheet PDF.
+  // The edition's PDF is the blotter's newspaper PDF, not the generic sheet PDF.
   assert.equal(card.pdfHref, '/blotter/2026-09-23/pdf');
   assert.ok(REPORT_KIND_FILTERS.find((f) => f.key === 'edition').match(card));
   assert.ok(!REPORT_KIND_FILTERS.find((f) => f.key === 'tooling').match(card));

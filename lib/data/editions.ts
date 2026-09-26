@@ -44,6 +44,19 @@ export async function listEditions(limit = 60, publishedOnly = true): Promise<Ed
   );
 }
 
+// The n most recent PUBLISHED editions strictly before `beforeDay` (newest
+// first): lib/edition/pack.ts's repeat-penalty pass reads this to avoid
+// re-running yesterday's (and the day before's) front page verbatim.
+export async function getRecentEditions(beforeDay: string, n = 2): Promise<SavedEdition[]> {
+  return q<SavedEdition>(
+    `select ${EDITION_ROW} from generated_reports
+      where kind = 'edition' and is_published = true and scope_to < $1::date
+      order by scope_to desc
+      limit $2`,
+    [beforeDay, Math.max(1, n)]
+  );
+}
+
 export async function countEditions(): Promise<number> {
   const row = await one<{ n: number }>(`select count(*)::int as n from generated_reports where kind = 'edition'`);
   return row?.n ?? 0;

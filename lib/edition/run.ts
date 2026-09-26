@@ -1,8 +1,8 @@
 import { buildEditionPack } from './pack';
-import { deterministicFront, thingsHappenFor, EDITION_PRESS_UTC } from './pure';
-import { generateFront, generateColumn } from './generate';
+import { deterministicFront, thingsHappenFor, industryFor, EDITION_PRESS_UTC } from './pure';
+import { generateFront, generateColumn, headsFrom } from './generate';
 import { checkEditionBudget } from './budget';
-import { getEditionForDay, getEditionPrefs } from '../data/editions';
+import { getEditionForDay, getEditionPrefs, getRecentEditions } from '../data/editions';
 import { saveGeneratedReport, deleteGeneratedReport } from '../mutations';
 import type { EditionNarrative } from './types';
 
@@ -47,6 +47,16 @@ export async function runDailyEdition(
 
   const budget = await checkEditionBudget();
 
+  // The column leg reads the last 2 columns (title + section/lead-bold heads)
+  // so it never reuses yesterday's beats or title, plus which weekday this
+  // is (Monday: cover the weekend; Friday: close the week).
+  const recentEditions = await getRecentEditions(day, 2);
+  const recentColumns = recentEditions.map((e) => ({
+    title: e.narrative.column.title,
+    heads: headsFrom(e.narrative.column.html),
+  }));
+  const weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
+
   let front;
   let column: EditionNarrative['column'];
   let model: string | null;
@@ -65,7 +75,7 @@ export async function runDailyEdition(
       dropped = [`front leg failed: ${e instanceof Error ? e.message : 'model error'}`];
     }
     try {
-      const columnOut = await generateColumn(pack, front, prefs.model);
+      const columnOut = await generateColumn(pack, front, prefs.model, { recentColumns, weekday });
       column = { title: columnOut.title, html: columnOut.html };
       citedTags = columnOut.cited;
       dropped = [...dropped, ...columnOut.dropped];
@@ -85,6 +95,7 @@ export async function runDailyEdition(
   // the model picked from past the default tail start never renders twice.
   const frontIds = new Set(front.map((f) => f.clusterId));
   pack.thingsHappen = thingsHappenFor(pack.clusters, frontIds);
+  pack.industry = industryFor(pack.clusters, frontIds);
 
   let reportId: string;
   try {

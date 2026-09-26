@@ -3,6 +3,7 @@
 // summaries and in-app hrefs, never review notes, raw text or admin columns.
 
 import type { StoryCluster } from './cluster';
+import type { DeskKey } from './desks';
 
 export interface EditionNumbers {
   itemsRead: number;        // scan + intel + pipeline candidates in the window
@@ -29,12 +30,7 @@ export interface EditionThing {
   domain: string;
   tier: number | null;
   href: string | null;      // in-app record when one exists
-}
-
-export interface EditionCompanyNote {
-  companySlug: string;
-  companyName: string;
-  facts: { fact: string; valueText: string | null; url: string | null }[];
+  desk?: DeskKey;           // stamped at pack build since 2026-09-26; older rows group from the headline
 }
 
 export interface EditionPaper {
@@ -91,8 +87,11 @@ export interface EditionPack {
   issueNumber: number;      // count of editions so far + 1
   numbers: EditionNumbers;
   clusters: StoryCluster[]; // ranked; the front is drawn from the top
-  thingsHappen: EditionThing[];
-  companies: EditionCompanyNote[];
+  thingsHappen: EditionThing[];      // AI stories only (isAiStory), desk-stamped
+  industry?: EditionThing[];         // the strongest non-AI financial-services stories (2026-09-26)
+  // Written until 2026-09-26, never rendered since; kept optional so an older
+  // stored edition still type-checks. No writer fills this any more.
+  companies?: { companySlug: string; companyName: string; facts: { fact: string; valueText: string | null; url: string | null }[] }[];
   papers: EditionPaper[];
   tools: EditionTool[];
   blindSpots: EditionBlindSpot[];
@@ -100,6 +99,7 @@ export interface EditionPack {
   claimsTouched: { code: string; statement: string; href: string; signalHrefs: string[] }[];
   hn?: EditionHnItem[];
   markets?: { asOf: string; rows: EditionMarketRow[] } | null;
+  priorFront?: { day: string; headlines: string[] }[]; // the last 2 published editions' front headlines, for the repeat penalty
   generatedAt: string;
 }
 

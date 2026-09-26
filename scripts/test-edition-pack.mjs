@@ -1,14 +1,16 @@
 // Pure tests for the daily edition's DB-free helpers (lib/edition/pure.ts):
 // the citation allowlist, the front-item validator, the window computation,
-// the things-happen projection and the em-dash backstop. No DB: pure.ts
-// never imports lib/db, so this loads under plain Node.
+// the things-happen/industry projections and the em-dash backstop. No DB:
+// pure.ts never imports lib/db, so this loads under plain Node.
 // Run: node scripts/test-edition-pack.mjs
 
 import assert from 'node:assert/strict';
 import {
-  windowFor, allowlistForEdition, deDash, validateFrontItems, goDeeperLabel, thingsHappenFor, deterministicFront,
+  windowFor, allowlistForEdition, deDash, validateFrontItems, goDeeperLabel, thingsHappenFor, industryFor,
+  deterministicFront,
 } from '../lib/edition/pure.ts';
 import { clusterStories, coverageLine } from '../lib/edition/cluster.ts';
+import { deskFor, cleanBlindSpots, groupByDesk, balanceColumns, DESK_KEYS } from '../lib/edition/desks.ts';
 
 let pass = 0; let fail = 0;
 function check(name, fn) { try { fn(); pass += 1; console.log(`  ok  ${name}`); } catch (e) { fail += 1; console.error(`FAIL  ${name}\n      ${e.message}`); } }
@@ -92,6 +94,22 @@ check('allowlistForEdition: an href outside the pack is not in the allowlist', (
   assert.ok(!allow.hrefs.has('https://not-in-pack.example.com/'));
 });
 
+check('allowlistForEdition: includes industry urls/hrefs when present', () => {
+  const pack = fixturePack();
+  pack.industry = [
+    { headline: 'A regional bank story', url: 'https://bank.example.com/story', domain: 'bank.example.com', tier: 1, href: null },
+  ];
+  const allow = allowlistForEdition(pack);
+  assert.ok(allow.hrefs.has('https://bank.example.com/story'));
+});
+
+check('allowlistForEdition: tolerates a pack with no companies/industry (the 2026-09-26 fields)', () => {
+  const pack = fixturePack();
+  delete pack.companies;
+  const allow = allowlistForEdition(pack);
+  assert.ok(allow.hrefs.has(pack.thingsHappen[0].url));
+});
+
 // ---------------------------------------------------------------- validateFrontItems
 
 check('validateFrontItems: keeps a valid item as-is', () => {
@@ -150,6 +168,19 @@ check('validateFrontItems: an empty or non-string headline falls back to the lea
   assert.equal(out[0].coverage, coverageLine(lead));
 });
 
+check('validateFrontItems: prefers a /signals/<id> href over an external url when the cluster carries one', () => {
+  const cluster = clusterStories([
+    it('ext', 'A bank and a lab both cover the same launch today'),
+    it('sig', 'A bank and a lab both cover the same launch today too', { source: 'signal', href: '/signals/sig-9', url: 'https://wire.com/story' }),
+  ]);
+  assert.equal(cluster.length, 1, 'fixture expects both items to merge into one cluster');
+  const out = validateFrontItems(cluster, [
+    { clusterId: cluster[0].id, headline: 'x', why: 'y', numbers: '', goDeeperHref: 'https://outlet-ext.com/story' },
+  ], 6);
+  assert.equal(out[0].goDeeperHref, '/signals/sig-9');
+  assert.equal(out[0].goDeeperLabel, 'Read the signal');
+});
+
 check('goDeeperLabel: labels an in-app href by its kind', () => {
   assert.equal(goDeeperLabel('/signals/abc'), 'Read the signal');
   assert.equal(goDeeperLabel('/research/abc'), 'Read the paper');
@@ -189,19 +220,36 @@ check('deterministicFront: every goDeeperHref is inside the edition allowlist (t
   for (const f of deterministicFront(pack, 7)) assert.ok(allow.hrefs.has(f.goDeeperHref), f.goDeeperHref);
 });
 
-// ---------------------------------------------------------------- thingsHappenFor
+check('deterministicFront: skips repeat-flagged clusters unless there are not enough fresh ones to fill n', () => {
+  const pack = fixturePack();
+  assert.equal(pack.clusters.length, 2, 'fixture expects exactly 2 clusters');
+  pack.clusters[0].repeat = true;
+  const out = deterministicFront(pack, 1);
+  assert.notEqual(out[0].clusterId, pack.clusters[0].id, 'the repeat-flagged cluster should be skipped');
+  // Flagging every cluster as a repeat leaves 0 fresh clusters, so asking
+  // for n=2 must backfill from the repeats rather than return fewer than 2.
+  pack.clusters[1].repeat = true;
+  const full = deterministicFront(pack, 2);
+  assert.equal(full.length, 2);
+});
 
+// ---------------------------------------------------------------- thingsHappenFor / industryFor
+
+// Every headline below carries plain AI vocabulary (a lab/model name, a chip
+// or data-center term, or the word "AI" itself) so the onlyAi default keeps
+// every one of them: the exact slice-equality check below depends on none
+// being dropped.
 const TOPICS = [
   'Nvidia reports record data center revenue', 'EU delays AI Act enforcement', 'OpenAI raises new funding round',
-  'Anthropic ships new model', 'Google expands Gemini to workspace', 'Microsoft cuts Azure prices',
-  'Meta open-sources vision model', 'Apple delays Siri overhaul', 'Amazon builds new chip fab',
-  'Fed governor warns on AI credit risk', 'UK regulator opens cloud probe', 'Tesla robotaxi pilot expands',
-  'Salesforce agent platform launch', 'Oracle signs sovereign cloud deal', 'Intel foundry lands customer',
-  'AMD guides above consensus', 'TSMC raises capex outlook', 'SoftBank plans chip venture',
-  'Mistral partners with telecom', 'Cohere wins bank contract', 'Databricks acquires startup',
-  'Snowflake reports slower growth', 'Palantir extends defense deal', 'Stripe adds agent payments',
-  'Visa pilots agent commerce', 'Mastercard tokenizes agent flows', 'JPMorgan expands AI rollout',
-  'Goldman automates filings', 'Citi retrains staff on AI', 'HSBC trims branch network',
+  'Anthropic ships new model', 'Google expands Gemini to workspace', 'Microsoft cuts Azure AI prices',
+  'Meta open-sources vision foundation model', 'Apple delays Siri AI overhaul', 'Amazon builds new chip fab',
+  'Fed governor warns on AI credit risk', 'UK regulator opens AI cloud probe', 'Tesla expands autonomous robotaxi pilot',
+  'Salesforce launches new AI agent platform', 'Oracle signs sovereign AI cloud deal', 'Intel foundry lands customer',
+  'AMD guides above consensus on GPU demand', 'TSMC raises capex outlook', 'SoftBank plans chip venture',
+  'Mistral partners with telecom', 'Cohere wins bank AI contract', 'Databricks acquires AI startup',
+  'Snowflake reports slower AI growth', 'Palantir extends AI defense deal', 'Stripe adds AI agent payments',
+  'Visa pilots AI agent commerce', 'Mastercard tokenizes AI agent flows', 'JPMorgan expands AI rollout',
+  'Goldman automates filings with AI', 'Citi retrains staff on AI', 'HSBC trims branch network after AI rollout',
 ];
 const bigClusters = clusterStories(TOPICS.map((h, i) => it(`t${i}`, h)));
 
@@ -220,12 +268,73 @@ check('thingsHappenFor: clamps to 23 in rank order with an empty exclude', () =>
   for (let i = 0; i < 3; i++) assert.equal(out[i].url, bigClusters[i].lead.url);
 });
 
-check('thingsHappenFor: excluding the first 7 equals the slice(7, 30) projection', () => {
+check('thingsHappenFor: excluding the first 7 equals the slice(7, 30) projection, desk-stamped', () => {
   const out = thingsHappenFor(bigClusters, new Set(bigClusters.slice(0, 7).map((c) => c.id)));
   const expected = bigClusters.slice(7, 30).map((c) => ({
     headline: c.lead.headline, url: c.lead.url, domain: c.lead.domain, tier: c.lead.tier, href: c.lead.href,
+    desk: deskFor({ headline: c.lead.headline, summary: c.lead.summary, tags: c.lead.tags, entities: c.lead.entities }),
   }));
   assert.deepEqual(out, expected);
+});
+
+check('thingsHappenFor: drops a non-AI cluster among many, and desk-stamps every survivor', () => {
+  const withNonAi = clusterStories([
+    ...TOPICS.map((h, i) => it(`t${i}`, h)),
+    it('bakery', 'Local bakery expands to three new locations'),
+  ]);
+  const out = thingsHappenFor(withNonAi, new Set());
+  assert.ok(!out.some((t) => t.headline === 'Local bakery expands to three new locations'));
+  for (const t of out) assert.ok(DESK_KEYS.includes(t.desk), `bad desk ${t.desk} for "${t.headline}"`);
+});
+
+check('industryFor: keeps only non-AI, tier<=2 (or null), news/analysis/data leads', () => {
+  const cs = clusterStories([
+    it('bank1', 'Regional bank raises deposit rates', { tier: 1, contentKind: 'news' }),
+    it('bank2', 'Insurer reports higher claims costs', { tier: 3, contentKind: 'news' }),
+    it('ai1', 'OpenAI ships a new model update', { tier: 1, contentKind: 'news' }),
+    it('promo1', 'Fintech app wins a design award', { tier: 2, contentKind: 'marketing' }),
+  ]);
+  const out = industryFor(cs, new Set());
+  assert.deepEqual(out.map((t) => t.headline), ['Regional bank raises deposit rates']);
+});
+
+check('industryFor: excludes clusters named in the exclude set', () => {
+  const cs = clusterStories([it('bank1', 'Regional bank raises deposit rates', { tier: 1, contentKind: 'news' })]);
+  const out = industryFor(cs, new Set([cs[0].id]));
+  assert.equal(out.length, 0);
+});
+
+// ---------------------------------------------------------------- cleanBlindSpots
+
+check('cleanBlindSpots: drops bare site names, earnings transcripts and ticker/fund pages; keeps a real AI headline', () => {
+  const out = cleanBlindSpots([
+    { headline: 'Fortune', url: 'https://fortune.com/', covered: false },
+    { headline: 'Cheniere Energy (LNG) Q4 2025 Earnings Call Transcript', url: 'https://x.example.com/a', covered: false },
+    { headline: 'UNGRFAU:SP - United CIO Growth Fund - Bloomberg.com', url: 'https://bloomberg.com/x', covered: false },
+    { headline: 'OpenAI releases a new frontier model with 2x cheaper inference', url: 'https://x.example.com/b', covered: false },
+  ]);
+  assert.deepEqual(out.map((d) => d.headline), ['OpenAI releases a new frontier model with 2x cheaper inference']);
+});
+
+// ---------------------------------------------------------------- desks: grouping/columns
+
+check('groupByDesk: the biggest desk sorts first, "other" always last', () => {
+  const things = [
+    { headline: 'a', url: 'https://x/a', domain: 'x', tier: null, href: null, desk: 'other' },
+    { headline: 'b', url: 'https://x/b', domain: 'x', tier: null, href: null, desk: 'labs' },
+    { headline: 'c', url: 'https://x/c', domain: 'x', tier: null, href: null, desk: 'labs' },
+    { headline: 'd', url: 'https://x/d', domain: 'x', tier: null, href: null, desk: 'policy' },
+  ];
+  const groups = groupByDesk(things);
+  assert.equal(groups[0].desk, 'labs');
+  assert.equal(groups[groups.length - 1].desk, 'other');
+});
+
+check('balanceColumns: returns min(n, groups.length) columns', () => {
+  const groups = [{ n: 5 }, { n: 3 }, { n: 1 }];
+  assert.equal(balanceColumns(groups, 2, (g) => g.n).length, 2);
+  assert.equal(balanceColumns(groups, 10, (g) => g.n).length, groups.length);
+  assert.equal(balanceColumns(groups, 1, (g) => g.n).length, 1);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

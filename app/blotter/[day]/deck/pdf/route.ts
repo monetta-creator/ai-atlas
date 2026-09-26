@@ -1,22 +1,19 @@
 import type { NextRequest } from 'next/server';
 import { isAdmin } from '@/lib/auth';
 import { getEditionForDay } from '@/lib/data';
-import { buildEditionPaper, editionPaperFilename } from '@/lib/edition/paper';
-import { renderEditionPaperPdf } from '@/lib/pdf/edition-paper';
+import { buildEditionDeck } from '@/lib/edition/deck';
+import { renderCostDeckPdf } from '@/lib/pdf/costs-deck';
 import { dateLabel } from '@/lib/format';
 import { isRealDay } from '@/lib/route-shapes';
 
-// The newspaper PDF of one day's Daily Edition (2026-09-26): US Letter, two
-// or three dense pages, every link clickable, the online edition linked from
-// the masthead. Public once the edition is published; an admin may also pull
-// an unpublished day to check a run before it goes live (same gate as
-// app/blotter/[day]/page.tsx). The 16:9 deck lives at ./deck/pdf.
+// The 16:9 deck of one day's Daily Edition, the SECONDARY format since
+// 2026-09-26 (the newspaper PDF at ../pdf is the primary download; this route
+// keeps the deck reachable behind the smaller "Deck" button). Same gate as
+// app/blotter/[day]/page.tsx: public once published, an admin may pull an
+// unpublished day.
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-// proxy.ts already 404s a malformed /blotter/<day> before this renders; kept
-// as the in-route guard so the ::date cast never sees a bad day.
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ day: string }> }): Promise<Response> {
   const { day } = await ctx.params;
@@ -28,13 +25,16 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ day: string
   if (!(edition.is_published || admin)) return new Response('Not found', { status: 404 });
 
   const origin = req.nextUrl.origin || process.env.APP_BASE_URL || '';
-  const model = buildEditionPaper(edition, origin);
-  const buf = await renderEditionPaperPdf(model, `Daily edition, ${dateLabel(day)}, The AI Atlas`);
+  const deck = buildEditionDeck(edition, origin);
+  const buf = await renderCostDeckPdf(deck, {
+    footerLabel: `DAILY EDITION · ${dateLabel(day)}`,
+    docTitle: `Daily edition deck, ${dateLabel(day)}, The AI Atlas`,
+  });
 
   return new Response(new Uint8Array(buf), {
     headers: {
       'content-type': 'application/pdf',
-      'content-disposition': `attachment; filename="${editionPaperFilename(day)}"`,
+      'content-disposition': `attachment; filename="atlas-edition-deck-${day}.pdf"`,
       'cache-control': 'no-store',
     },
   });

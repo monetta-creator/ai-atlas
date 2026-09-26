@@ -4,9 +4,10 @@
 // dependency-light module. Nothing here touches lib/db.
 
 import { lookbackDays } from '../scan/core.ts';
-import { coverageLine } from './cluster.ts';
+import { coverageLine, tokens } from './cluster.ts';
+import { isAiStory, deskFor } from './desks.ts';
 import type { StoryCluster } from './cluster';
-import type { EditionPack, EditionFrontItem, EditionThing } from './types';
+import type { EditionPack, EditionFrontItem, EditionThing, SavedEdition } from './types';
 import type { CitationAllowlist } from '../citations';
 
 // Belt-and-braces on the no-em-dash rule, same as lib/research/roundup.ts's
@@ -37,10 +38,47 @@ export function windowFor(day: string, pressUtc: string = EDITION_PRESS_UTC): { 
 
 // The ranked clusters the front did not take, projected to the Things Happen
 // row shape. buildEditionPack calls it against the default 7-item front;
-// runDailyEdition calls it again against the model's actual picks.
-export function thingsHappenFor(clusters: StoryCluster[], exclude: Set<string>, limit = 23): EditionThing[] {
+// runDailyEdition calls it again against the model's actual picks. onlyAi
+// (default true) keeps this an AI newspaper's briefs page: a cluster earns a
+// slot only when its lead or one of its corroborating items reads as AI
+// (isAiStory), the same gate aiWeight applies to ranking. Each thing is
+// desk-stamped (deskFor) so the render groups them like a newspaper section.
+export function thingsHappenFor(
+  clusters: StoryCluster[],
+  exclude: Set<string>,
+  limit = 23,
+  opts: { onlyAi?: boolean } = {}
+): EditionThing[] {
+  const onlyAi = opts.onlyAi ?? true;
   return clusters
     .filter((c) => !exclude.has(c.id))
+    .filter((c) => !onlyAi || isAiStory(c.lead) || c.items.some((it) => isAiStory(it)))
+    .slice(0, limit)
+    .map((c) => {
+      const tags = new Set<string>();
+      const entities = new Set<string>();
+      for (const it of c.items) {
+        for (const t of it.tags) tags.add(t);
+        for (const e of it.entities) entities.add(e);
+      }
+      return {
+        headline: c.lead.headline, url: c.lead.url, domain: c.lead.domain, tier: c.lead.tier, href: c.lead.href,
+        desk: deskFor({ headline: c.lead.headline, summary: c.lead.summary, tags: [...tags], entities: [...entities] }),
+      };
+    });
+}
+
+// The strongest non-AI financial-services developments, for "The industry"
+// strip: topically relevant to the desk's audience but never AI (isAiStory
+// on the lead or any corroborating item excludes it), a real news/analysis/
+// data story (not marketing or opinion), from a source good enough to lead
+// with (tier 1, 2, or unrated). Clusters arrive already ranked by score.
+export function industryFor(clusters: StoryCluster[], exclude: Set<string>, limit = 4): EditionThing[] {
+  return clusters
+    .filter((c) => !exclude.has(c.id))
+    .filter((c) => !isAiStory(c.lead) && !c.items.some((it) => isAiStory(it)))
+    .filter((c) => c.lead.tier === null || c.lead.tier === 1 || c.lead.tier === 2)
+    .filter((c) => c.lead.contentKind === null || ['news', 'analysis', 'data'].includes(c.lead.contentKind))
     .slice(0, limit)
     .map((c) => ({ headline: c.lead.headline, url: c.lead.url, domain: c.lead.domain, tier: c.lead.tier, href: c.lead.href }));
 }
@@ -63,6 +101,10 @@ export function allowlistForEdition(pack: EditionPack): CitationAllowlist {
     hrefs.add(t.url);
     if (t.href) hrefs.add(t.href);
   }
+  for (const t of pack.industry ?? []) {
+    hrefs.add(t.url);
+    if (t.href) hrefs.add(t.href);
+  }
   for (const p of pack.papers) hrefs.add(p.href);
   for (const t of pack.tools) hrefs.add(t.href);
   for (const c of pack.claimsTouched) {
@@ -70,7 +112,7 @@ export function allowlistForEdition(pack: EditionPack): CitationAllowlist {
     for (const h of c.signalHrefs) hrefs.add(h);
     tagByHref.set(c.href, c.code);
   }
-  for (const co of pack.companies) for (const f of co.facts) if (f.url) hrefs.add(f.url);
+  for (const co of pack.companies ?? []) for (const f of co.facts) if (f.url) hrefs.add(f.url);
   for (const b of pack.blindSpots) if (b.url) hrefs.add(b.url);
   return { hrefs, tagByHref };
 }
@@ -117,6 +159,13 @@ export function validateFrontItems(
     const leadHref = c.lead.href ?? c.lead.url;
     let href = typeof it.goDeeperHref === 'string' ? it.goDeeperHref : '';
     if (!allow.has(href)) href = leadHref;
+    // A signal's own /signals/<id> page beats an external url whenever the
+    // cluster has one: the model was given the external url as one option
+    // among several, and a signal never 404s for a guest once published.
+    if (!href.startsWith('/')) {
+      const signalItem = c.items.find((item) => item.href?.startsWith('/signals/'));
+      if (signalItem?.href) href = signalItem.href;
+    }
     const numbersRaw = typeof it.numbers === 'string' ? deDash(it.numbers).trim() : '';
     out.push({
       clusterId: c.id,
@@ -135,8 +184,15 @@ export function validateFrontItems(
 // The no-budget / no-model fallback (lib/edition/run.ts): the top n clusters
 // by score, headline = lead headline, why = the lead's summary first
 // sentence (or empty), numbers always null (never invented without a model).
+// Clusters penalizeRepeats flagged (`repeat: true`) are skipped so a quiet
+// day doesn't re-run yesterday's front page verbatim, unless there are not
+// enough fresh clusters to fill n, in which case the repeats backfill the
+// remainder in their existing (penalized) rank order.
 export function deterministicFront(pack: EditionPack, n: number): EditionFrontItem[] {
-  return pack.clusters.slice(0, Math.max(0, n)).map((c) => {
+  const nCount = Math.max(0, n);
+  const fresh = pack.clusters.filter((c) => !c.repeat);
+  const pool = fresh.length >= nCount ? fresh : [...fresh, ...pack.clusters.filter((c) => c.repeat)];
+  return pool.slice(0, nCount).map((c) => {
     const href = c.lead.href ?? c.lead.url;
     const firstSentence = c.lead.summary ? c.lead.summary.split(/(?<=[.!?])\s/)[0] : '';
     return {
@@ -149,4 +205,56 @@ export function deterministicFront(pack: EditionPack, n: number): EditionFrontIt
       coverage: coverageLine(c),
     };
   });
+}
+
+// ---------------------------------------------------------------- repeat penalty
+
+// Every url/href and headline from the recent front pages, so today's ranking
+// can penalize a cluster that only rehashes one of them. Reads front items
+// (goDeeperHref + headline) and, for each front item's cluster, every item's
+// own url/href (a story often gets a fresh outlet the next day, so matching
+// on the cluster's full item set catches a re-cover, not just an exact link).
+export function priorFrontFrom(editions: SavedEdition[]): { urls: Set<string>; headlines: string[] } {
+  const urls = new Set<string>();
+  const headlines: string[] = [];
+  for (const e of editions) {
+    const clusterIds = new Set(e.narrative.front.map((f) => f.clusterId));
+    for (const f of e.narrative.front) {
+      if (f.goDeeperHref) urls.add(f.goDeeperHref);
+      headlines.push(f.headline);
+    }
+    for (const c of e.pack.clusters) {
+      if (!clusterIds.has(c.id)) continue;
+      for (const it of c.items) {
+        urls.add(it.url);
+        if (it.href) urls.add(it.href);
+      }
+    }
+  }
+  return { urls, headlines };
+}
+
+function tokenOverlap(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const x of a) if (b.has(x)) inter += 1;
+  return inter / (a.size + b.size - inter);
+}
+
+// A cluster is a repeat when one of its items shares a url/href with a recent
+// front page, or its lead headline overlaps a recent front headline heavily
+// (token Jaccard >= 0.4: catches the same story re-covered by a new outlet
+// with a rephrased headline). Repeats are demoted (score * 0.35, well below
+// a fresh story of similar underlying weight) and flagged `repeat: true` so
+// deterministicFront and generateFront's candidate list can skip them; the
+// list is re-sorted by score after the penalty.
+export function penalizeRepeats(clusters: StoryCluster[], prior: { urls: Set<string>; headlines: string[] }): StoryCluster[] {
+  const priorTokenSets = prior.headlines.map((h) => new Set(tokens(h)));
+  const out = clusters.map((c) => {
+    const urlHit = c.items.some((it) => prior.urls.has(it.url) || (it.href != null && prior.urls.has(it.href)));
+    const headlineHit = !urlHit && priorTokenSets.some((pt) => tokenOverlap(new Set(tokens(c.lead.headline)), pt) >= 0.4);
+    if (!urlHit && !headlineHit) return c;
+    return { ...c, score: c.score * 0.35, repeat: true };
+  });
+  return out.sort((a, b) => b.score - a.score);
 }

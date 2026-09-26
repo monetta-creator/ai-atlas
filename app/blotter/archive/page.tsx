@@ -42,7 +42,7 @@ export default async function BlotterArchive() {
           return (
             <div key={m} style={{ marginTop: 32 }}>
               <div className="section-label">{monthLabel(rows[0].day)}</div>
-              <ul className="bs-list">
+              <ul className="bs-list bs-list--archive">
                 {rows.map((e) => (
                   <li key={e.id}>
                     <Link href={`/blotter/${e.day}`} className="bs-row">
@@ -57,6 +57,13 @@ export default async function BlotterArchive() {
                         </span>
                       )}
                     </Link>
+                    <a
+                      className="btn btn--ghost btn--sm"
+                      href={`/blotter/${e.day}/pdf`}
+                      aria-label={`PDF of the ${dateLabel(e.day)} edition`}
+                    >
+                      PDF
+                    </a>
                   </li>
                 ))}
               </ul>

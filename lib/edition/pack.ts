@@ -9,13 +9,14 @@
 
 import { q, one } from '../db.ts';
 import { clusterStories } from './cluster.ts';
+import { isAiStory, cleanBlindSpots } from './desks.ts';
 import { fetchHnAiFront } from './hn.ts';
 import { fetchMarketStrip } from './markets.ts';
-import { windowFor, thingsHappenFor } from './pure.ts';
+import { windowFor, thingsHappenFor, industryFor, priorFrontFrom, penalizeRepeats } from './pure.ts';
+import { rateDomainByRule } from '../scan/source-tiers.ts';
 import type { StoryItem } from './cluster';
 import type {
-  EditionPack, EditionNumbers, EditionCompanyNote, EditionPaper, EditionTool,
-  EditionBlindSpot, EditionSourceRow,
+  EditionPack, EditionNumbers, EditionPaper, EditionTool, EditionSourceRow,
 } from './types';
 
 function domainOf(url: string | null | undefined): string | null {
@@ -51,13 +52,23 @@ interface SignalRow {
   claim_touches: string[]; source_url: string | null;
 }
 
-// ---------------------------------------------------------------- pack builder
+// ---------------------------------------------------------------- story items
 
-export async function buildEditionPack(day: string): Promise<EditionPack> {
+// The four collection engines' items in the window, projected to StoryItem
+// and returned alongside their raw rows (buildEditionPack still needs the
+// row counts for `numbers`, and signalRows for the claims-touched query).
+// Split out so a caller that only needs the clustered items (none today, but
+// mirrors the tooling engine's read/build split) never re-derives the rows.
+export async function loadStoryItems(day: string): Promise<{
+  items: StoryItem[];
+  scanRows: ScanRow[];
+  intelRows: IntelRow[];
+  candidateRows: CandidateRow[];
+  signalRows: SignalRow[];
+}> {
   const w = windowFor(day);
-  const isMonday = new Date(`${day}T00:00:00Z`).getUTCDay() === 1;
 
-  const [scanRows, intelRows, candidateRows, signalRows, factRows, paperRows, coverageRow, countRow] = await Promise.all([
+  const [scanRows, intelRows, candidateRows, signalRows] = await Promise.all([
     q<ScanRow>(
       `select si.id, si.headline, si.url, si.source_domain, si.source_tier, si.content_kind,
               si.relevance::float as relevance, to_char(si.published_date, 'YYYY-MM-DD') as published_date,
@@ -109,42 +120,7 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
         order by s.first_published_at desc`,
       [w.from, w.to]
     ),
-    q<{ company_slug: string; company_name: string; fact: string; value_text: string | null; url: string | null }>(
-      `select f.company_slug, c.name as company_name, f.fact, f.value_text, ii.url
-         from intel_facts f
-         join intel_companies c on c.slug = f.company_slug
-         left join intel_items ii on ii.id = f.item_id
-        where f.created_at >= $1::timestamptz and f.created_at < $2::timestamptz
-        order by f.company_slug, f.created_at desc`,
-      [w.from, w.to]
-    ),
-    // The research engine's analyze step extracts findings from agent-positive
-    // kept papers the same day they arrive; a human review_status lands days
-    // later, so a same-day tracked/noted predicate read 0 every edition. Read
-    // the engine-analyzed papers in the window instead, human-confirmed first,
-    // and never one a human dismissed (an explicit "no" recorded with a why).
-    q<{ id: string; title: string; headline_claim: string | null; who_cares: { lens: string; note: string }[] | null }>(
-      `select p.id, p.title, p.extraction->>'headline_claim' as headline_claim, p.extraction->'who_cares' as who_cares
-         from papers p
-        where p.triage_status = 'kept' and p.extraction is not null
-          and p.review_status <> 'dismissed'
-          and p.created_at >= $1::timestamptz and p.created_at < $2::timestamptz
-        order by (p.review_status in ('tracked','noted')) desc, p.created_at desc
-        limit 8`,
-      [w.from, w.to]
-    ),
-    one<{ coverage: { developments: { headline: string; url: string | null; covered: boolean }[] } | null }>(
-      `select coverage from pipeline_runs
-        where status = 'completed' and coverage is not null
-          and triggered_at >= $1::timestamptz and triggered_at < $2::timestamptz
-        order by triggered_at desc
-        limit 1`,
-      [w.from, w.to]
-    ),
-    one<{ n: number }>(`select count(*)::int as n from generated_reports where kind = 'edition'`),
   ]);
-
-  // ---- story items ------------------------------------------------------
 
   const scanItems: StoryItem[] = scanRows.map((r) => ({
     id: `scan:${r.id}`, source: 'scan', headline: r.headline ?? r.url, url: r.url,
@@ -170,28 +146,94 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
     publishedDate: r.published_date, summary: r.summary, entities: [], tags: [], href: `/signals/${r.id}`,
   }));
 
-  const allItems = [...scanItems, ...intelItems, ...candidateItems, ...signalItems];
-  const clustersFull = clusterStories(allItems);
+  // Pipeline candidates and published signals carry no source_tier of their
+  // own (the scan/intel engines stamp theirs at collection), so a third of
+  // Things happen printed with no tier chip. Rate their domains the same way
+  // the engines do: the pure rules first, then the model-rated source_tiers
+  // table for the long tail; a domain neither knows stays null.
+  const untiered = [...candidateItems, ...signalItems].filter((it) => it.tier == null && it.domain);
+  if (untiered.length) {
+    const byRule = new Map<string, number | null>();
+    for (const it of untiered) if (!byRule.has(it.domain)) byRule.set(it.domain, rateDomainByRule(it.domain)?.tier ?? null);
+    const unknown = [...byRule.entries()].filter(([, t]) => t == null).map(([d]) => d);
+    if (unknown.length) {
+      const rows = await q<{ domain: string; tier: number }>(
+        `select domain, tier from source_tiers where domain = any($1)`,
+        [unknown]
+      );
+      for (const r of rows) byRule.set(r.domain, r.tier);
+    }
+    for (const it of untiered) it.tier = byRule.get(it.domain) ?? null;
+  }
+
+  const items = [...scanItems, ...intelItems, ...candidateItems, ...signalItems];
+  return { items, scanRows, intelRows, candidateRows, signalRows };
+}
+
+// ---------------------------------------------------------------- pack builder
+
+export async function buildEditionPack(day: string): Promise<EditionPack> {
+  const w = windowFor(day);
+  const isMonday = new Date(`${day}T00:00:00Z`).getUTCDay() === 1;
+
+  const [{ items: allItems, scanRows, intelRows, candidateRows, signalRows }, paperRows, coverageRow, countRow, papersKeptRow] =
+    await Promise.all([
+      loadStoryItems(day),
+      // The research engine's analyze step extracts findings from agent-positive
+      // kept papers the same day they arrive; a human review_status lands days
+      // later, so a same-day tracked/noted predicate read 0 every edition. Read
+      // the engine-analyzed papers in the window instead, human-confirmed first,
+      // and never one a human dismissed (an explicit "no" recorded with a why).
+      q<{ id: string; title: string; headline_claim: string | null; who_cares: { lens: string; note: string }[] | null }>(
+        `select p.id, p.title, p.extraction->>'headline_claim' as headline_claim, p.extraction->'who_cares' as who_cares
+           from papers p
+          where p.triage_status = 'kept' and p.extraction is not null
+            and p.review_status <> 'dismissed'
+            and p.created_at >= $1::timestamptz and p.created_at < $2::timestamptz
+          order by (p.review_status in ('tracked','noted')) desc, p.created_at desc
+          limit 8`,
+        [w.from, w.to]
+      ),
+      one<{ coverage: { developments: { headline: string; url: string | null; covered: boolean }[] } | null }>(
+        `select coverage from pipeline_runs
+          where status = 'completed' and coverage is not null
+            and triggered_at >= $1::timestamptz and triggered_at < $2::timestamptz
+          order by triggered_at desc
+          limit 1`,
+        [w.from, w.to]
+      ),
+      one<{ n: number }>(`select count(*)::int as n from generated_reports where kind = 'edition'`),
+      // The unpaginated twin of the 8-row paperRows query above: `numbers`
+      // reports every paper the engine analyzed in the window, not just the
+      // 8 the strip has room to list.
+      one<{ n: number }>(
+        `select count(*)::int as n from papers p
+          where p.triage_status = 'kept' and p.extraction is not null
+            and p.review_status <> 'dismissed'
+            and p.created_at >= $1::timestamptz and p.created_at < $2::timestamptz`,
+        [w.from, w.to]
+      ),
+    ]);
+
+  // ---- clustering + repeat penalty ---------------------------------------
+
+  const clustersRanked = clusterStories(allItems);
+  // Dynamic import, resolved every build: lib/data/editions.ts imports '../db'
+  // with no .ts extension, which plain Node's ESM resolver cannot follow (the
+  // tooling branch below does the same for the same reason).
+  const { getRecentEditions } = await import('../data/editions');
+  const recentEditions = await getRecentEditions(day, 2);
+  const prior = priorFrontFrom(recentEditions);
+  const clustersFull = penalizeRepeats(clustersRanked, prior);
   const clusters = clustersFull.slice(0, 40).map((c) => ({ ...c, items: c.items.slice(0, 12) }));
 
-  // ---- things happen ----------------------------------------------------
+  // ---- things happen + the industry --------------------------------------
 
   // The ranked tail after the default 7-item front; runDailyEdition rebuilds
   // it against the actual front picks.
-  const thingsHappen = thingsHappenFor(clustersFull, new Set(clustersFull.slice(0, 7).map((c) => c.id)));
-
-  // ---- companies ----------------------------------------------------------
-
-  const byCompany = new Map<string, { name: string; facts: EditionCompanyNote['facts'] }>();
-  for (const f of factRows) {
-    const entry = byCompany.get(f.company_slug) ?? { name: f.company_name, facts: [] };
-    if (entry.facts.length < 4) entry.facts.push({ fact: f.fact, valueText: f.value_text, url: f.url });
-    byCompany.set(f.company_slug, entry);
-  }
-  const companies: EditionCompanyNote[] = [...byCompany.entries()]
-    .sort((a, b) => b[1].facts.length - a[1].facts.length)
-    .slice(0, 6)
-    .map(([companySlug, v]) => ({ companySlug, companyName: v.name, facts: v.facts }));
+  const frontExclude = new Set(clustersFull.slice(0, 7).map((c) => c.id));
+  const thingsHappen = thingsHappenFor(clustersFull, frontExclude);
+  const industry = industryFor(clustersFull, frontExclude);
 
   // ---- papers -------------------------------------------------------------
 
@@ -221,10 +263,7 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
 
   // ---- blind spots ----------------------------------------------------
 
-  const blindSpots: EditionBlindSpot[] = (coverageRow?.coverage?.developments ?? [])
-    .filter((d) => !d.covered)
-    .slice(0, 6)
-    .map((d) => ({ headline: d.headline, url: d.url ?? null }));
+  const blindSpots = cleanBlindSpots(coverageRow?.coverage?.developments ?? []);
 
   // ---- sources rollup ---------------------------------------------------
 
@@ -284,13 +323,19 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
   const [hn, markets] = await Promise.all([fetchHnAiFront(8), fetchMarketStrip()]);
 
   const outletSet = new Set(allItems.map((it) => it.domain).filter(Boolean));
+  // Counted over clustersFull (every cluster, before the 40-cap slice) so a
+  // heavy AI day that pushes non-AI clusters past the cap still reports the
+  // true count.
+  const aiClusterCount = clustersFull.filter(
+    (c) => isAiStory(c.lead) || c.items.some((it) => isAiStory(it))
+  ).length;
   const numbers: EditionNumbers = {
     itemsRead: scanRows.length + intelRows.length + candidateRows.length,
     outlets: outletSet.size,
     signalsPublished: signalRows.length,
-    papersKept: paperRows.length,
+    papersKept: papersKeptRow?.n ?? paperRows.length,
     newTools: isMonday ? tools.length : 0,
-    clusters: clusters.length,
+    clusters: aiClusterCount,
   };
 
   return {
@@ -301,7 +346,7 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
     numbers,
     clusters,
     thingsHappen,
-    companies,
+    industry,
     papers,
     tools,
     blindSpots,
@@ -309,6 +354,7 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
     claimsTouched,
     hn,
     markets,
+    priorFront: recentEditions.map((e) => ({ day: e.day, headlines: e.narrative.front.map((f) => f.headline) })),
     generatedAt: new Date().toISOString(),
   };
 }

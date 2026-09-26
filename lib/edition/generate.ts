@@ -1,4 +1,6 @@
 import { marked } from 'marked';
+import { parse, NodeType } from 'node-html-parser';
+import type { HTMLElement as ParsedElement, Node as ParsedNode } from 'node-html-parser';
 import { routedStructured } from '../model-route';
 import { enforceCitations } from '../citations';
 import { coverageLine } from './cluster';
@@ -30,6 +32,30 @@ function extractHrefs(html: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) out.push(m[1]);
   return out;
+}
+
+const isElement = (n: ParsedNode): n is ParsedElement => n.nodeType === NodeType.ELEMENT_NODE;
+
+// A column's "heads" for the recent-columns reminder (lib/edition/run.ts):
+// every <h2>/<h3> section header plus the text of a leading <strong> inside
+// each <p> (the column has no subheads today, only bold-led paragraphs, but
+// either style should be caught so a future prompt tweak doesn't go stale).
+export function headsFrom(html: string): string[] {
+  if (!html) return [];
+  const root = parse(html);
+  const heads: string[] = [];
+  for (const h of [...root.querySelectorAll('h2'), ...root.querySelectorAll('h3')]) {
+    const t = h.text.trim();
+    if (t) heads.push(t);
+  }
+  for (const p of root.querySelectorAll('p')) {
+    const first = p.childNodes.find(isElement);
+    if (first && first.tagName?.toLowerCase() === 'strong') {
+      const t = first.text.trim();
+      if (t) heads.push(t);
+    }
+  }
+  return heads;
 }
 
 // ---------------------------------------------------------------- leg 1: front
@@ -85,14 +111,30 @@ const FRONT_SCHEMA = {
 };
 
 export async function generateFront(pack: EditionPack, model: string, n: number): Promise<EditionFrontItem[]> {
-  const top = pack.clusters.slice(0, Math.min(n + 3, 10));
+  // Repeat-penalized clusters (lib/edition/pure.ts's penalizeRepeats) are
+  // excluded from the model's candidate list outright, not just ranked
+  // lower, so the front never re-runs yesterday's lead story unless there
+  // is nothing else: a quiet day with fewer than n fresh clusters falls
+  // back to the full ranked list.
+  const fresh = pack.clusters.filter((c) => !c.repeat);
+  const candidates = fresh.length >= n ? fresh : pack.clusters;
+  const top = candidates.slice(0, Math.min(n + 3, 10));
   if (!top.length) return [];
-  const user = [
+  const parts = [
     `DAY: ${pack.day} (issue No. ${pack.issueNumber})`,
     `Pick the ${n} strongest of the clusters below for the front page, ranked order.`,
     '',
     ...top.map(fmtCluster),
-  ].join('\n\n');
+  ];
+  if (pack.priorFront?.length) {
+    parts.push(
+      [
+        'RECENT FRONT PAGES (do not pick a story that only repeats one of these unless it is materially new):',
+        ...pack.priorFront.flatMap((p) => p.headlines.map((h) => `- ${p.day}: ${h}`)),
+      ].join('\n')
+    );
+  }
+  const user = parts.join('\n\n');
   const out = await routedStructured<{ items?: RawFrontItem[] }>({
     model,
     system: FRONT_SYSTEM,
@@ -124,17 +166,22 @@ function fmtClaimsTouched(pack: EditionPack): string {
 
 const COLUMN_SYSTEM =
   `You are writing THE COLUMN of The AI Atlas's daily edition, in the style of Matt Levine's Money ` +
-  `Stuff: one voice, two or three beats under plain sub-headers, connecting the day's news to the ` +
-  `standing claims The AI Atlas tracks. You receive today's front-page items and the claims/bridge-` +
-  `claims that today's published signals touch. Connect AT LEAST TWO of today's front items to the ` +
-  `claims they bear on: name what would move the claim's confidence, one way or the other. Link a ` +
-  `claim by wrapping its exact statement text (or a short paraphrase) in a markdown link using its ` +
-  `EXACT href, e.g. [this claim](/claim/1.2); never invent an href or link outside what you were ` +
-  `given. 350 to 550 words. End with one wry but factual closing line, never sarcasm that undercuts ` +
-  `a fact. No fluff, no praise, no throat-clearing. Never use an em dash; use a comma, a colon, or ` +
-  `separate sentences instead. Output GitHub-flavored MARKDOWN in "body_md", no heading at the top ` +
-  `(the title is separate). "title" is a short editorial title for today's column, at most 10 words, ` +
-  `plain text, no quotes.`;
+  `Stuff: one voice, two or three beats under plain sub-headers, for a general reader who has never ` +
+  `heard of The AI Atlas and does not need to. You receive today's front-page items and a list of ` +
+  `standing positions in the AI-economy debate, each with the page that argues it. Each beat makes an ` +
+  `argument about what today's news means for one of these standing questions. State the position as ` +
+  `your own reasoning: lay out what today's news suggests, then say plainly what evidence would ` +
+  `strengthen it and what would weaken it. Never use the words claim, bridge-claim, confidence, ` +
+  `argument map, logic tree, or node in the prose, and never write out a position code like 1.2 or B4; ` +
+  `never write "this claim" or "the claim that". Link AT LEAST TWO positions to their pages by ` +
+  `wrapping a natural phrase of your own sentence, the position itself, in a markdown link using the ` +
+  `EXACT href you were given, e.g. [inference is getting cheaper faster than demand grows](/claim/1.2); ` +
+  `never invent an href or link outside what you were given. 350 to 550 words. End with one wry but ` +
+  `factual closing line, never sarcasm that undercuts a fact. The reader should feel they are reading ` +
+  `a columnist, not a system. No fluff, no praise, no throat-clearing. Never use an em dash; use a ` +
+  `comma, a colon, or separate sentences instead. Output GitHub-flavored MARKDOWN in "body_md", no ` +
+  `heading at the top (the title is separate). "title" is a short editorial title for today's column, ` +
+  `at most 10 words, plain text, no quotes.`;
 
 const COLUMN_SCHEMA = {
   type: 'object',
@@ -153,16 +200,35 @@ export interface ColumnOut {
   dropped: string[];
 }
 
-export async function generateColumn(pack: EditionPack, front: EditionFrontItem[], model: string): Promise<ColumnOut> {
-  const user = [
+export async function generateColumn(
+  pack: EditionPack,
+  front: EditionFrontItem[],
+  model: string,
+  opts: { recentColumns?: { title: string; heads: string[] }[]; weekday?: number } = {}
+): Promise<ColumnOut> {
+  const lines = [
     `DAY: ${pack.day} (issue No. ${pack.issueNumber})`,
     '',
     "TODAY'S FRONT ITEMS:",
     ...front.map((f) => `- "${f.headline}" (href ${f.goDeeperHref}): ${f.why}`),
     '',
-    'CLAIMS/BRIDGES ON THE ARGUMENT MAP TOUCHED BY SIGNALS PUBLISHED THIS WINDOW (cite with the exact href):',
+    'POSITIONS YOU MAY LINK (exact href, statement):',
     fmtClaimsTouched(pack),
-  ].join('\n');
+  ];
+  if (opts.recentColumns?.length) {
+    lines.push(
+      '',
+      'RECENT COLUMNS (do not reuse these titles or beats, and do not use the "what would move the ' +
+        'claim\'s confidence up or down" formula two days running):',
+      ...opts.recentColumns.map((c) => `- "${c.title}"${c.heads.length ? `: ${c.heads.join('; ')}` : ''}`)
+    );
+  }
+  if (opts.weekday === 1) {
+    lines.push('', 'Today is Monday: cover the weekend and set up the week.');
+  } else if (opts.weekday === 5) {
+    lines.push('', 'Today is Friday: close the week in one arc.');
+  }
+  const user = lines.join('\n');
   const out = await routedStructured<{ title?: string; body_md?: string }>({
     model,
     system: COLUMN_SYSTEM,

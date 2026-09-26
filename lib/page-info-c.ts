@@ -36,6 +36,10 @@ export const PAGE_INFO_C: Record<string, PageInfoContent> = {
         heading: 'A frozen record',
         body: 'An archived edition never changes after it runs: the items, the column, and every link on the page are fixed to what the engines had stored that day.',
       },
+      {
+        heading: 'Two downloads',
+        body: 'Newspaper PDF is the edition as a two or three page paper, US Letter, every link live. Deck is the same edition as 16:9 slides.',
+      },
     ],
   },
   '/blotter/archive': {
