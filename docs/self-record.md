@@ -25,7 +25,7 @@ The Atlas is written for people doing AI transformation inside one regulated fin
 
 - **The AI timeline** (`self_timeline`, phase `self-timeline`): per year, Sonnet reads every non-patent AI record (up to 140, spread across the year) plus an even sample of 24 AI patents and the year's patent count by quarter, and writes 8 to 25 dated events, each citing at least one record; the patent stream gets at most two events. A thin year from a rich record set is retried once. Events whose citations do not resolve are dropped (`validateTimeline`). (Feeding the first 160 rows by date let a thousand patents crowd out everything after spring.)
 - **The cited profile** (`intel_companies.public_profile`, phase `self-profile`): 8 to 15 sentences over the timeline and the latest annual report's AI passages, each with its record ids (`validateProfile`). Savant reads it in place of the empty one-line `public_blurb`; `public_blurb` stays the maintainer's own line.
-- **The page** `/savant/record` (keyholders and admin): the profile, the timeline by year, and the filterable record list.
+- **The page** `/savant/record` (keyholders and admin): the profile, the timeline by year, the filterable record list, and CSV/JSON download buttons for the `company-record` dataset.
 
 ## How it connects to the other paths
 
@@ -36,7 +36,8 @@ The Atlas is written for people doing AI transformation inside one regulated fin
 | `intel_metrics` | FDIC and Y-9C since 2016, SEC XBRL since 2006, CFPB complaints | numbers stay there; the record holds documents and events |
 | `intel_companies.dossier` | a model-written summary, refreshed Mondays | admin and the key-gated intel dataset only, never in a prompt; `public_profile` is the cited successor for prompts |
 | Savant | the peer table and the reader-organization context in its prompts | reads the profile and the latest timeline events; its citation allow-list admits every record URL, so a sentence about the organization can link its source (which the editor check already requires) |
-| The Daily Edition, Ask, datasets | self news via the intel engine | unchanged; the record is not embedded for Ask and is not a dataset |
+| The Daily Edition, Ask | self news via the intel engine | unchanged; the record is not embedded for Ask |
+| Datasets (the firewall export) | the key-gated `company-record` dataset: every document, timeline event and profile sentence in one row shape (`record_type`), events and sentences carrying the ids and URLs they cite | together with `intel-items`, `intel-facts` and `intel-metrics` filtered `?company=<slug>` and the self row in `intel-companies`, this is everything the Atlas holds about the organization |
 
 ## Rebuilding
 

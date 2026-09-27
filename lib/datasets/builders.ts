@@ -1063,3 +1063,52 @@ export async function buildToolingCatalog(q: Q, opts: DatasetOpts = {}): Promise
     params
   );
 }
+
+export async function buildCompanyRecord(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
+  // The reader organization's public record (mig 0076, docs/self-record.md) in
+  // ONE row shape for a firewall intake: every document (filing, press
+  // release, news, paper, patent, regulatory document), every AI timeline
+  // event, and every sentence of the cited profile. Timeline events and
+  // profile sentences carry the record ids they cite (`cites`) and those
+  // records' URLs (`cite_urls`), so the intake can rebuild the links. The
+  // organization's name comes from the registry row, never from code. The
+  // engine's ongoing news, facts and metrics for the same company ship in
+  // intel-items / intel-facts / intel-metrics with ?company=<slug>.
+  const params: unknown[] = [];
+  let limitClause = '';
+  if (isPositiveInt(opts.limit)) {
+    params.push(opts.limit);
+    limitClause = ` limit $${params.length}`;
+  }
+  return q<DatasetRow>(
+    `with self as (select slug, name, public_profile from intel_companies where tier = 'self' limit 1),
+     docs as (
+       select 'document' as record_type, r.id::text as record_id, r.company_slug, s.name as company_name,
+              to_char(r.published_date, 'YYYY-MM-DD') as date, r.source, r.title,
+              r.summary as text, r.url, case when r.ai_related then 'yes' else 'no' end as ai_related,
+              r.dimension, nullif(array_to_string(r.ai_passages, E'\\n\\n'), '') as ai_passages,
+              r.text_excerpt, null::text as cites, null::text as cite_urls, r.metadata::text as metadata, 0 as ord
+         from self_record r join self s on s.slug = r.company_slug),
+     events as (
+       select 'timeline_event', t.id::text, t.company_slug, s.name,
+              to_char(t.event_date, 'YYYY-MM-DD'), t.category, t.headline, t.body, null::text, 'yes', null::text,
+              null::text, null::text, array_to_string(t.record_ids::text[], ';'),
+              (select string_agg(r.url, ' ' order by r.published_date) from self_record r where r.id = any(t.record_ids)),
+              null::text, 1
+         from self_timeline t join self s on s.slug = t.company_slug),
+     profile as (
+       select 'profile_sentence', s.slug || ':profile:' || p.n, s.slug, s.name,
+              to_char((s.public_profile->>'built_at')::timestamptz, 'YYYY-MM-DD'), 'profile', 'Profile sentence ' || p.n,
+              p.sentence->>'text', null::text, 'yes', null::text, null::text, null::text,
+              (select string_agg(x, ';') from jsonb_array_elements_text(p.sentence->'record_ids') x),
+              (select string_agg(r.url, ' ') from self_record r
+                 where r.id::text in (select jsonb_array_elements_text(p.sentence->'record_ids'))),
+              null::text, 2
+         from self s, jsonb_array_elements(coalesce(s.public_profile->'sentences', '[]'::jsonb)) with ordinality as p(sentence, n))
+     select record_type, record_id, company_slug, company_name, date, source, title, text, url, ai_related,
+            dimension, ai_passages, text_excerpt, cites, cite_urls, metadata
+       from (select * from docs union all select * from events union all select * from profile) u
+      order by ord, date nulls last, record_id${limitClause}`,
+    params
+  );
+}

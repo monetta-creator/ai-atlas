@@ -97,14 +97,15 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   // ---- signals-export extras (appended after the shared scan-shaped columns) ----
   significance: { type: 'string', nullable: false, enum: ['high', 'medium', 'low'] },
   lenses: { type: 'string', nullable: false },
-  // Union of every domain's origin values (signals-export: manual/pipeline;
+  // Union of every domain's origin values (signals-export: manual/pipeline,
+  // plus backfill since 2026-09-27 for the published since-ChatGPT history;
   // scout-companies: discovery/manual, unmapped before now; tooling-products:
   // tavily/hn/producthunt/github/enumeration/manual/feed). Widening the enum
   // to the union is additive: no domain's actual values fall outside it, and
   // each domain's data never produces another domain's values anyway.
   origin: {
     type: 'string', nullable: false,
-    enum: ['manual', 'pipeline', 'discovery', 'tavily', 'hn', 'producthunt', 'github', 'enumeration', 'feed'],
+    enum: ['manual', 'pipeline', 'backfill', 'discovery', 'tavily', 'hn', 'producthunt', 'github', 'enumeration', 'feed'],
   },
   claim_touches: { type: 'string', nullable: false },
   touch_details: { type: 'string', nullable: false },

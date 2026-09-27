@@ -248,6 +248,7 @@ export const DATASET_TABLES: Record<string, string[]> = {
   'intel-items': ['intel_items', 'intel_runs', 'intel_companies', 'intel_facts'],
   'intel-companies': ['intel_companies'],
   'intel-facts': ['intel_facts', 'intel_companies', 'intel_items'],
+  'company-record': ['self_record', 'self_timeline', 'intel_companies'],
   'intel-metrics': ['intel_metrics', 'intel_companies'],
   'tooling-products': ['tooling_products', 'tooling_categories'],
   'tooling-events': ['tooling_events', 'tooling_products'],

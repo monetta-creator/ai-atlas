@@ -117,6 +117,7 @@ check('AI passages: paragraphs naming AI, deduped, capped, trimmed', () => {
   assert.ok(out[1].startsWith('Generative AI'));
   assert.equal(extractAiPassages(text).length, 3);
   assert.equal(extractAiPassages('Short AI line.').length, 0);
+  assert.equal(extractAiPassages(`Machine learning ${'\uFFFD'.repeat(40)} ${'text '.repeat(20)}`).length, 0, 'garbled paragraphs are dropped');
 });
 
 check('htmlToText drops scripts and keeps paragraph breaks', () => {

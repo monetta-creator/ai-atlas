@@ -14,6 +14,7 @@ import { SAVANT_STRAPLINE } from '@/lib/savant/types';
 // organization); a guest gets the same keyholders-only plate the other
 // Savant pages use, never the company's name or record list.
 export const dynamic = 'force-dynamic';
+const EXPORT_URL = '/api/datasets/company-record';
 export const metadata: Metadata = { title: 'Company record · Savant · The AI Atlas', description: descriptionFor('/savant/record') };
 
 function LockPlate() {
@@ -90,6 +91,14 @@ export default async function SavantRecordPage({
         label="Company record"
         viewer={viewer}
         title={<h1>{data.company.name}: the public record</h1>}
+        action={
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* File downloads from the key-gated datasets route: plain anchors, never client navigation. */}
+            <a className="btn btn--sm" href={`${EXPORT_URL}?format=csv&download=1`}>CSV</a>
+            <a className="btn btn--sm" href={`${EXPORT_URL}?format=json&download=1`}>JSON</a>
+            <Link className="btn btn--quiet btn--sm" href="/datasets/company-record">Dataset</Link>
+          </div>
+        }
       />
 
       {data.profile.length > 0 && (

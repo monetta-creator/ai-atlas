@@ -234,6 +234,9 @@ export function extractAiPassages(text: string, opts: { max?: number; maxChars?:
   const out: string[] = [];
   for (const p of paras) {
     if (!AI_TERMS_RE.test(p)) continue;
+    // A paragraph of undecodable glyphs (two annual-report PDFs extracted as
+    // U+FFFD runs) is noise, not a passage.
+    if ((p.match(/\uFFFD/g)?.length ?? 0) > p.length * 0.02) continue;
     const key = p.slice(0, 120).toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
