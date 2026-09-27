@@ -62,7 +62,7 @@ export async function createUiJobAction(input: {
 }
 
 export async function markJobStepAction(
-  id: string, key: string, state: StepState, extra: { note?: string | null; attempt?: number | null; label?: string } = {}
+  id: string, key: string, state: StepState, extra: { note?: string | null; attempt?: number | null; label?: string; parallel?: boolean } = {}
 ): Promise<{ ok: true }> {
   await owned(id);
   if (!STEP_KEY_RE.test(key)) throw new Error('Invalid step.');
@@ -71,6 +71,7 @@ export async function markJobStepAction(
     ...(extra.note !== undefined ? { note: clip(extra.note, 500) } : {}),
     ...(typeof extra.attempt === 'number' ? { attempt: Math.max(1, Math.min(9, Math.floor(extra.attempt))) } : {}),
     ...(extra.label ? { label: clip(extra.label, 80) ?? undefined } : {}),
+    ...(extra.parallel ? { parallel: true } : {}),
   });
   return { ok: true };
 }

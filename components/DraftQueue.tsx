@@ -7,6 +7,7 @@ import {
   dedupeDraftsAction, mergeDraftSignalsAction, discardDraftSignalAction,
   dismissDedupeGroupAction, clearDedupeScanAction,
 } from '@/lib/actions';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 import SignalFeed from './SignalFeed';
 
 // The admin Draft queue: a MANUAL duplicate scan over ALL unpublished drafts, plus the
@@ -29,14 +30,14 @@ export default function DraftQueue({
   const groups = rec?.groups ?? [];
   const dupTotal = groups.reduce((n, g) => n + g.duplicates.length, 0);
 
-  async function onScan() {
-    if (scanning || acting) return;
+  // Wraps the scan action only to hide stale results while a fresh scan runs
+  // (ModelCallButton owns the button's own busy/retry state; this local flag
+  // is purely for the "hide the previous groups" rendering below).
+  async function scanAction() {
     setScanning(true);
     setNote(null);
     try {
-      setRec(await dedupeDraftsAction());
-    } catch (e) {
-      setNote({ text: e instanceof Error ? e.message : 'Scan failed.', err: true });
+      return await dedupeDraftsAction();
     } finally {
       setScanning(false);
     }
@@ -125,15 +126,18 @@ export default function DraftQueue({
               automatically. You choose what to merge or discard.
             </p>
           </div>
-          <button
-            type="button"
-            className="btn btn--primary btn--sm"
-            onClick={onScan}
-            disabled={scanning || acting || draftCount < 2}
-            title={draftCount < 2 ? 'Need at least 2 drafts to scan' : undefined}
-          >
-            {scanning ? 'Scanning…' : rec ? 'Scan again' : `Scan ${draftCount} draft${draftCount === 1 ? '' : 's'}`}
-          </button>
+          <span title={draftCount < 2 ? 'Need at least 2 drafts to scan' : undefined}>
+            <ModelCallButton
+              label={rec ? 'Scan again' : `Scan ${draftCount} draft${draftCount === 1 ? '' : 's'}`}
+              busyLabel="Scanning…"
+              kind="single:draft_dedupe"
+              feature="draft_dedupe"
+              className="btn btn--primary btn--sm"
+              disabled={acting || draftCount < 2}
+              action={scanAction}
+              onDone={(result) => { setNote(null); setRec(result); }}
+            />
+          </span>
         </div>
 
         {note && (

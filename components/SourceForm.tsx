@@ -1,6 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { aboutLabel, clockLabel, usdLabel } from '@/lib/jobs/core';
+import { useModelRun } from '@/lib/jobs/use-model-run';
 import { createSourceAction, extractSourceMetadataAction } from '@/lib/actions';
 
 const DOMAIN_OPTIONS: [string, string][] = [
@@ -28,6 +30,36 @@ export default function SourceForm() {
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const cleanTextRef = useRef('');
+
+  // The PDF-metadata leg (the AI call inside the upload flow) is auto-triggered
+  // right after browser-side text extraction, not by its own click, so it uses
+  // useModelRun directly rather than the ModelCallButton wrapper: same usual
+  // time/cost + visible-retry toolkit, rendered inline below.
+  const metaRun = useModelRun({
+    kind: 'single:pdf_metadata',
+    label: 'Read PDF metadata',
+    steps: [{ key: 'call', label: 'Read metadata', running: 'Reading metadata…', features: ['pdf_metadata'] }],
+    run: async (ctx) => {
+      const meta = await ctx.step('call', () => extractSourceMetadataAction(cleanTextRef.current));
+      setTitle((v) => v || meta.title);
+      setAuthor((v) => v || meta.author);
+      setUrl((v) => v || meta.url);
+      setPublished((v) => v || meta.published_at);
+      setDomain((v) => v || meta.domain_tag);
+      const filled = [
+        meta.title && 'title', meta.author && 'author', meta.url && 'URL',
+        meta.published_at && 'date', meta.domain_tag && 'domain',
+      ].filter(Boolean);
+      setStatus(
+        filled.length
+          ? `Auto-filled ${filled.join(', ')} from the PDF. Review and edit below.`
+          : 'Text extracted; no metadata could be read. Fill the fields manually.'
+      );
+    },
+  });
+  const metaTyp = metaRun.typical;
+  const metaUsual = metaTyp.known ? [aboutLabel(metaTyp.p50Ms), usdLabel(metaTyp.p50Usd)].filter(Boolean).join(', ') : '';
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -51,23 +83,9 @@ export default function SourceForm() {
         return;
       }
       setText((prev) => (prev.trim() ? prev : clean));
-      setStatus(`Extracted ${clean.length.toLocaleString()} characters, reading metadata…`);
-
-      const meta = await extractSourceMetadataAction(clean);
-      setTitle((v) => v || meta.title);
-      setAuthor((v) => v || meta.author);
-      setUrl((v) => v || meta.url);
-      setPublished((v) => v || meta.published_at);
-      setDomain((v) => v || meta.domain_tag);
-      const filled = [
-        meta.title && 'title', meta.author && 'author', meta.url && 'URL',
-        meta.published_at && 'date', meta.domain_tag && 'domain',
-      ].filter(Boolean);
-      setStatus(
-        filled.length
-          ? `Auto-filled ${filled.join(', ')} from the PDF. Review and edit below.`
-          : 'Text extracted; no metadata could be read. Fill the fields manually.'
-      );
+      setStatus(`Extracted ${clean.length.toLocaleString()} characters.`);
+      cleanTextRef.current = clean;
+      await metaRun.start();
     } catch (err) {
       setError(true);
       const msg = err instanceof Error ? err.message : 'unknown error';
@@ -97,6 +115,18 @@ export default function SourceForm() {
           {status && (
             <span className="text-xs" role="status" aria-live="polite" style={{ color: error ? 'var(--heat-4)' : 'var(--faint-ink)' }}>
               {status}
+            </span>
+          )}
+          {metaRun.status === 'running' && (
+            <span className="mr-inline" role="status" aria-live="polite">
+              <span className="spinner mr-btn-spin" aria-hidden="true" />
+              Reading metadata… <span className="mr-clock">{clockLabel(metaRun.elapsedMs)}{metaUsual ? ` of ${metaUsual}` : ''}</span>
+            </span>
+          )}
+          {metaRun.status === 'failed' && (
+            <span className="mr-inline mr-inline--fail" role="alert">
+              ✗ {metaRun.error ?? 'Failed.'}{' '}
+              <button type="button" className="mr-inline-btn" onClick={() => void metaRun.retry()}>Try again</button>
             </span>
           )}
         </div>

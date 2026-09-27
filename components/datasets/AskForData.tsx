@@ -6,6 +6,8 @@ import {
   describeState, fromViewParams, toSearchParams,
   type ColType, type FilterableDef,
 } from '@/lib/datasets/query-url';
+import { useModelRun } from '@/lib/jobs/use-model-run';
+import ModelRunPanel from '@/components/jobs/ModelRunPanel';
 
 // The Data Portal hub's natural-language query builder (migration 0064): a
 // plain-language question in, a validated filter + a ready download href out,
@@ -28,12 +30,6 @@ interface NlResult {
   dropped: string[];
   explanation: string;
 }
-
-type ReqState =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | { status: 'error'; message: string }
-  | { status: 'done'; result: NlResult };
 
 function splitWhereToken(raw: string): [string, string] {
   const i1 = raw.indexOf(':');
@@ -91,40 +87,45 @@ export default function AskForData({
 }) {
   const [question, setQuestion] = useState('');
   const [datasetSel, setDatasetSel] = useState('');
-  const [req, setReq] = useState<ReqState>({ status: 'idle' });
+  const [result, setResult] = useState<NlResult | null>(null);
   const [copied, setCopied] = useState(false);
 
-  async function run() {
-    const trimmed = question.trim();
-    if (!trimmed || req.status === 'loading') return;
-    setReq({ status: 'loading' });
-    try {
-      const res = await fetch('/api/portal/query/nl', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmed, ...(datasetSel ? { dataset: datasetSel } : {}) }),
-      });
-      let body: { error?: string; message?: string } & Partial<NlResult> = {};
-      try { body = await res.json(); } catch { /* non-JSON error body */ }
-      if (!res.ok) {
-        setReq({ status: 'error', message: body.message || body.error || `Could not build a query (status ${res.status}).` });
-        return;
-      }
-      setReq({
-        status: 'done',
-        result: {
-          dataset: body.dataset ?? '', params: body.params ?? {}, href: body.href ?? '',
-          dropped: body.dropped ?? [], explanation: body.explanation ?? '',
-        },
-      });
-    } catch {
-      setReq({ status: 'error', message: 'Could not reach the Atlas.' });
+  async function fetchNl(q: string, dataset: string): Promise<NlResult> {
+    const res = await fetch('/api/portal/query/nl', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, ...(dataset ? { dataset } : {}) }),
+    });
+    let body: { error?: string; message?: string } & Partial<NlResult> = {};
+    try { body = await res.json(); } catch { /* non-JSON error body */ }
+    if (!res.ok) {
+      throw new Error(body.message || body.error || `Could not build a query (status ${res.status}).`);
     }
+    return {
+      dataset: body.dataset ?? '', params: body.params ?? {}, href: body.href ?? '',
+      dropped: body.dropped ?? [], explanation: body.explanation ?? '',
+    };
+  }
+
+  const run = useModelRun({
+    kind: 'single:portal_nl_query',
+    label: 'Ask for data in words',
+    steps: [{ key: 'call', label: 'Ask for data', running: 'Thinking…', features: ['portal_nl_query'] }],
+    run: async (ctx) => {
+      setResult(null);
+      const r = await ctx.step('call', () => fetchNl(question.trim(), datasetSel));
+      setResult(r);
+    },
+  });
+
+  function trigger() {
+    if (!question.trim() || run.status === 'running') return;
+    void run.start();
   }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    void run();
+    trigger();
   }
 
   function copyUrl(href: string) {
@@ -146,8 +147,6 @@ export default function AskForData({
     );
   }
 
-  const result = req.status === 'done' ? req.result : null;
-
   return (
     <div className="plate dp-ask">
       <div className="section-label">Ask for data in words</div>
@@ -159,7 +158,7 @@ export default function AskForData({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
-              void run();
+              trigger();
             }
           }}
           maxLength={MAX_QUESTION_LEN}
@@ -175,15 +174,15 @@ export default function AskForData({
               {datasets.map((d) => <option key={d.slug} value={d.slug}>{d.title}</option>)}
             </select>
           </label>
-          <button type="submit" className="btn btn--primary btn--sm" disabled={!question.trim() || req.status === 'loading'}>
-            {req.status === 'loading' ? 'Thinking…' : 'Build query'}
+          <button type="submit" className="btn btn--primary btn--sm" disabled={!question.trim() || run.status === 'running'}>
+            {run.status === 'running' ? 'Thinking…' : 'Build query'}
           </button>
           <span className="dp-ask-counter">{question.length}/{MAX_QUESTION_LEN}</span>
         </div>
         <p className="dp-qb-hint">Each request costs about a cent, charged against the daily Ask budget.</p>
       </form>
 
-      {req.status === 'error' && <p className="dp-qb-hint dp-qb-hint--error">{req.message}</p>}
+      <ModelRunPanel run={run} />
 
       {result && (() => {
         const state = fromViewParams(result.params, columnsForParams(result.params));

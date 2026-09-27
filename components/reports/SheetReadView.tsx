@@ -75,25 +75,25 @@ export default function SheetReadView({
       )}
 
       {n.reading && (
-        <section style={{ marginTop: 20 }}>
+        <section id="reading" style={{ marginTop: 20 }}>
           <div className="section-label">{titles.reading}</div>
           <div className="report-prose" dangerouslySetInnerHTML={{ __html: n.reading }} />
         </section>
       )}
       {n.connections && (
-        <section style={{ marginTop: 20 }}>
+        <section id="connections" style={{ marginTop: 20 }}>
           <div className="section-label">{titles.connections}</div>
           <div className="report-prose" dangerouslySetInnerHTML={{ __html: n.connections }} />
         </section>
       )}
       {n.watch && (
-        <section style={{ marginTop: 20 }}>
+        <section id="watch" style={{ marginTop: 20 }}>
           <div className="section-label">{titles.watch}</div>
           <div className="report-prose" dangerouslySetInnerHTML={{ __html: n.watch }} />
         </section>
       )}
       {n.bottomLine && (
-        <div style={{ borderLeft: '3px solid var(--accent)', paddingLeft: 16, margin: '20px 0' }}>
+        <div id="bottomLine" style={{ borderLeft: '3px solid var(--accent)', paddingLeft: 16, margin: '20px 0' }}>
           <div className="report-prose" dangerouslySetInnerHTML={{ __html: n.bottomLine }} />
         </div>
       )}
@@ -169,25 +169,25 @@ function RoundupReadView({ saved, pack }: { saved: SavedSheet; pack: RoundupPack
       </p>
 
       {n.reading && (
-        <section style={{ marginTop: 20 }}>
+        <section id="reading" style={{ marginTop: 20 }}>
           <div className="section-label">{titles.reading}</div>
           <div className="report-prose" dangerouslySetInnerHTML={{ __html: n.reading }} />
         </section>
       )}
       {n.connections && (
-        <section style={{ marginTop: 20 }}>
+        <section id="connections" style={{ marginTop: 20 }}>
           <div className="section-label">{titles.connections}</div>
           <div className="report-prose" dangerouslySetInnerHTML={{ __html: n.connections }} />
         </section>
       )}
       {n.watch && (
-        <section style={{ marginTop: 20 }}>
+        <section id="watch" style={{ marginTop: 20 }}>
           <div className="section-label">{titles.watch}</div>
           <div className="report-prose" dangerouslySetInnerHTML={{ __html: n.watch }} />
         </section>
       )}
       {n.bottomLine && (
-        <div style={{ borderLeft: '3px solid var(--accent)', paddingLeft: 16, margin: '20px 0' }}>
+        <div id="bottomLine" style={{ borderLeft: '3px solid var(--accent)', paddingLeft: 16, margin: '20px 0' }}>
           <div className="report-prose" dangerouslySetInnerHTML={{ __html: n.bottomLine }} />
         </div>
       )}

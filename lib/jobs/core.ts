@@ -60,7 +60,7 @@ export function applyTransition(
   key: string,
   state: StepState,
   at: string,
-  extra: { note?: string | null; attempt?: number | null; label?: string } = {}
+  extra: { note?: string | null; attempt?: number | null; label?: string; parallel?: boolean } = {}
 ): JobStep[] {
   const idx = steps.findIndex((s) => s.key === key);
   const base = idx >= 0 ? steps : [...steps, { key, label: extra.label ?? key, state: 'todo' as const }];
@@ -77,7 +77,9 @@ export function applyTransition(
         ...(extra.attempt !== undefined ? { attempt: extra.attempt } : {}),
       };
     }
-    if (state === 'running' && i < at_ && s.state === 'running') return { ...s, state: 'done', endedAt: at };
+    // Sequential chains: starting a step closes an earlier one left running.
+    // Parallel steps (the period report's lenses) leave their siblings alone.
+    if (!extra.parallel && state === 'running' && i < at_ && s.state === 'running') return { ...s, state: 'done', endedAt: at };
     return s;
   });
 }
@@ -202,7 +204,7 @@ export function jobFromEngineRun(engine: EngineName, run: {
   return {
     id: `engine:${engine}:${run.id}`,
     kind: `engine:${engine}`,
-    subject: run.day,
+    subject: run.id,
     label: `${ENGINE_LABEL[engine]}${run.day ? `, ${run.day}` : ''}`,
     status: 'running',
     steps: run.step ? [{ key: run.step, label: run.step, state: 'running', startedAt: run.started_at }] : [],
@@ -229,6 +231,8 @@ export const JOB_KIND_HREF: Record<string, string> = {
   'engine:research': '/research/console',
   'engine:pipeline': '/pipeline',
   'engine:tooling': '/tooling/console',
+  'engine:scout': '/scout/console',
+  'engine:research-pull': '/research/console',
 };
 
 export function hrefForJob(job: Pick<UiJob, 'kind' | 'resultHref'>): string | null {

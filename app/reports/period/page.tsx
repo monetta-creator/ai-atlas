@@ -1,6 +1,6 @@
 import { adminGate } from '@/lib/admin-gate';
 import { buildReportData } from '@/lib/report';
-import { listSavedReports, getNavCounts } from '@/lib/data';
+import { listSavedReports, getNavCounts, getFeatureStats, getRecentJobOfKind } from '@/lib/data';
 import { SIGNAL_LENS_SLUGS } from '@/lib/format';
 import type { SignalLens } from '@/lib/types';
 import { getEditContext } from '@/lib/content';
@@ -46,10 +46,14 @@ export default async function PeriodReportPage({
     .filter((l) => valid.has(l)) as SignalLens[];
   const lenses = parsed.length ? parsed : [...SIGNAL_LENS_SLUGS];
 
-  const [report, saved, counts] = await Promise.all([
+  const [report, saved, counts, runStats, lastRun] = await Promise.all([
     buildReportData({ from, to, lenses, personal: true }),
     listSavedReports(),
     getNavCounts().catch(() => null),
+    // The generator's run panel: the usual time and cost per step, and a run
+    // still going (or just ended) when the admin comes back to this page.
+    getFeatureStats().catch(() => null),
+    getRecentJobOfKind('period_report', { admin: true, keyId: null }).catch(() => null),
   ]);
 
   return (
@@ -70,7 +74,14 @@ export default async function PeriodReportPage({
           }
         />
 
-        <ReportGenerator initialFrom={from} initialTo={to} initialLenses={lenses} initialSaved={saved} />
+        <ReportGenerator
+          initialFrom={from}
+          initialTo={to}
+          initialLenses={lenses}
+          initialSaved={saved}
+          stats={runStats}
+          initialJob={lastRun}
+        />
         <ReportPreview report={report} />
       </section>
     </>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useFormStatus } from 'react-dom';
+import FormRunStatus from '@/components/jobs/FormRunStatus';
 import { generateDossierAction } from '@/lib/actions';
 
 function SubmitButton({ regenerate }: { regenerate: boolean }) {
@@ -15,11 +16,7 @@ function SubmitButton({ regenerate }: { regenerate: boolean }) {
       >
         {pending ? 'Generating dossier…' : regenerate ? 'Regenerate' : 'Generate dossier'}
       </button>
-      {pending && (
-        <span className="text-[11px]" style={{ color: 'var(--faint-ink)' }}>
-          up to a minute
-        </span>
-      )}
+      <FormRunStatus busyLabel="Reading the source…" feature="dossier" />
     </span>
   );
 }

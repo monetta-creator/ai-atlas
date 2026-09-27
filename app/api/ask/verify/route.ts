@@ -3,7 +3,7 @@ import { isAdmin } from '@/lib/auth';
 import { q } from '@/lib/db';
 import { recordApiCall } from '@/lib/cost';
 import { loadNamespace } from '@/lib/ask/retrieve';
-import { parseCitations, type CitationKind, type ValidIdsPlain } from '@/lib/ask/verify';
+import { parseCitations, toPeekId, type CitationKind, type ValidIdsPlain } from '@/lib/ask/verify';
 import { fetchRecord, type PeekKind } from '@/lib/ask/search';
 import { skeletonBlock } from '@/lib/ask/prompt';
 import { splitBeyond } from '@/lib/ask/lanes';
@@ -28,8 +28,14 @@ const MAX_RECORDS = 12;
 
 const KIND_TO_PEEK: Record<CitationKind, PeekKind> = {
   claim: 'claim', bridge: 'bridge', stance: 'stance', Q: 'question', concept: 'concept', signal: 'signal',
-  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact',
+  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact', report: 'report',
 };
+
+// Kinds resolved through the request's tag -> map-value SignalMap, rather
+// than cited by their own stable code (signal/paper/item/fact/report all
+// mint per-request tags; see lib/ask/verify.ts's toPeekId for what each
+// kind's map value needs to become before fetchRecord/the peek route accept it).
+const MAP_KINDS = new Set<CitationKind>(['signal', 'paper', 'item', 'fact', 'report']);
 
 export async function POST(req: Request): Promise<Response> {
   if (!(await isAdmin())) return new Response('Unauthorized', { status: 401 });
@@ -77,7 +83,8 @@ export async function POST(req: Request): Promise<Response> {
   const corpus: string[] = [ns.skeleton];
   const recordBlocks: string[] = [];
   for (const { kind, id } of cited.values()) {
-    const dbId = kind === 'signal' || kind === 'paper' ? map[id] : id;
+    const raw = MAP_KINDS.has(kind) ? map[id] : id;
+    const dbId = raw ? toPeekId(kind, raw) : null;
     if (!dbId) continue;
     const payload = await fetchRecord(q, KIND_TO_PEEK[kind], dbId, { admin: true });
     if (!payload) continue;

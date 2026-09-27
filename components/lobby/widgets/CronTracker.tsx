@@ -58,7 +58,7 @@ function dayLabel(day: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-export default async function CronTracker() {
+export default async function CronTracker({ board }: { board?: 'home' | 'ops' } = {}) {
   let status: DailyJobStatus;
   try {
     status = await getDailyJobStatus();
@@ -101,7 +101,7 @@ export default async function CronTracker() {
           <a href={`/api/datasets/intel-facts?format=json&download=1`}>intel-facts-{status.day}.json</a>
         </div>
       )}
-      <Link href="/ops" className="lw-ops-link">Full operations view {'→'}</Link>
+      {board !== 'ops' && <Link href="/ops" className="lw-ops-link">Full operations view {'→'}</Link>}
     </>
   );
 }

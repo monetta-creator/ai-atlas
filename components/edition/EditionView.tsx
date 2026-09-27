@@ -120,7 +120,7 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
       <div className="ed-body">
         <div className="ed-front">
           {narrative.front.map((item, i) => (
-            <div key={item.clusterId} className="ed-item">
+            <div key={item.clusterId} id={`front-${i}`} className="ed-item">
               <span className="ed-item-n">{i + 1}</span>
               <div className="ed-item-body">
                 <h3 className="ed-item-hed">{item.headline}</h3>
@@ -136,7 +136,7 @@ export default function EditionView({ edition, admin }: { edition: SavedEdition;
           ))}
         </div>
 
-        <div className="ed-column">
+        <div id="column" className="ed-column">
           <p className="ed-kicker">The column</p>
           <h2 className="ed-column-title">{narrative.column.title}</h2>
           {columnHtml && <div className="ed-column-prose" dangerouslySetInnerHTML={{ __html: columnHtml }} />}

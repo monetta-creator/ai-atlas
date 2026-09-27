@@ -37,6 +37,15 @@ const TERMS: { id: string; term: string; def: string }[] = [
   { id: 'citation-gate', term: 'Citation gate', def: 'The check that strips any generated citation the underlying data pack cannot vouch for. Runs at generation, save, and render.' },
   { id: 'human-gate', term: 'Human gate', def: 'The rule that no confidence changes without a person: confidences move by hand with a reason, recommendations are accepted by hand, and signal drafts publish by hand or, for high-significance pipeline drafts that touch a claim, by the promotion policy after its 48-hour veto window.' },
   { id: 'access-key', term: 'Access key', def: 'The per-person key, issued by the maintainer on request and expiring after 90 days, that unlocks the portal tier: Ask, the key-gated datasets with retained text and machine-extracted records, tooling reports, and Scout’s research tools. Guests without one see the public layer.' },
+  { id: 'savant', term: 'Savant', def: 'The Atlas’s own weekly research report, written every Friday by an autonomous research agent and reviewed by a second model acting as its editor. Each issue argues one lead analysis, poses one new hypothesis and revisits the open ones. The full issue needs an access key.' },
+  { id: 'hypothesis-ledger', term: 'Hypothesis ledger', def: 'The running list of Savant’s falsifiable hypotheses: each is posed in one issue, updated in later ones as strengthened, weakened or unchanged, and closed with a verdict when the evidence settles it.' },
+  { id: 'intel-deck', term: 'Company intel deck', def: 'A weekday slide deck of what each tracked company did since the previous afternoon, one cited line per company. For access-key holders.' },
+  { id: 'atlas-agent', term: 'Atlas Agent', def: 'The maintainer’s resident operator. Every hour it checks the engines, queues and budgets, files what it finds, fixes the safe things itself and proposes the rest. It never moves a confidence and never publishes outside the stated policy.' },
+  { id: 'tooling-monitor', term: 'Tooling Monitor', def: 'The weekly scan of the market for AI tools: discovery by category, enrichment, a rubric score, and a catalog of the tools that clear it.' },
+  { id: 'portals', term: 'Portals', def: 'The Atlas’s product surfaces, listed together under Portals in the navigation. Each is one way into the same body of material.' },
+  { id: 'figures', term: 'Figures', def: 'The diagrams in a Savant issue (entity grids, maps, relationship diagrams, timelines, comparisons), drawn by the Atlas from a specification the agent writes and kept only when every item in them links to a record in the issue.' },
+  { id: 'report-passage', term: 'Report passage', def: 'A section of one of the Atlas’s own reports (an edition, a roundup, a Savant issue) that Ask can retrieve and cite as [report R7], beside the records the report rests on.' },
+  { id: 'model-run', term: 'Model run', def: 'Any action that calls a model. Its button shows the steps, the usual time and cost, and a link to the result, and the run keeps going if you leave the page.' },
 ];
 
 export default async function GlossaryPage() {

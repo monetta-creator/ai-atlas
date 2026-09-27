@@ -9,6 +9,10 @@
 // Extensioned import so scripts/test-deep.mjs can load this module under plain
 // Node type stripping (the pack-core pattern; pack-shared is pure, zero-import).
 import { ORQ } from '../pack-shared.ts';
+import {
+  reportSections, reportPrefix, reportSectionHref, splitReportRecordId, buildNameMatcher, scrubSentences,
+  EDITION_WINDOW_DAYS, type ReportRow, type ReportSection,
+} from '../embed/report-sections.ts';
 
 export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 
@@ -17,7 +21,9 @@ export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 // it and 'fact' (intel_facts) are portal/admin only (see fetchRecord below):
 // the datasets that carry them are key-gated, so a guest must get null even
 // with a well-formed id, never a 404 that would confirm the id's shape.
-export type PeekKind = 'claim' | 'bridge' | 'stance' | 'question' | 'concept' | 'signal' | 'paper' | 'thread' | 'item' | 'fact';
+// 'report' is a section of the Atlas's own editorial reports (Daily Edition,
+// research roundup, Savant); its id is '<report uuid>:<section key>'.
+export type PeekKind = 'claim' | 'bridge' | 'stance' | 'question' | 'concept' | 'signal' | 'paper' | 'thread' | 'item' | 'fact' | 'report';
 
 interface PeekEvidence {
   direction: string;
@@ -49,6 +55,11 @@ export interface PeekPayload {
   finding: { label: string; value: string }[];
   members: { id: string; title: string; relation: string | null }[];
   internal: string;
+  // A report passage (kind 'report' only): the section label as the kicker,
+  // the passage itself, and where the full report lives.
+  section: string | null;
+  passage: string | null;
+  report: { kind: string; scope: string | null; href: string } | null;
 }
 
 const empty = (kind: PeekKind, title: string, internal: string): PeekPayload => ({
@@ -56,6 +67,7 @@ const empty = (kind: PeekKind, title: string, internal: string): PeekPayload => 
   counterpoint: null, significance: null, lenses: null, published_on: null,
   source: null, evidence: [], signals: [], stances: [], prerequisites: [],
   builds_toward: [], finding: [], members: [], internal,
+  section: null, passage: null, report: null,
 });
 
 // Public-shaped evidence for one claim/bridge code: excerpt-only, never
@@ -303,6 +315,38 @@ export async function fetchRecord(
     return p;
   }
 
+  // report: a section of the Atlas's own editorial reports (Daily Edition,
+  // research roundup, Savant). id is '<report uuid>:<section key>'. Row
+  // visibility is admin-widened (an unpublished report resolves for admins
+  // only, same as signal below); Savant's peer-and-market section additionally
+  // needs portal or admin (see reportSections' portalOnly flag); a guest gets
+  // the passage with every sentence naming a tracked company dropped.
+  if (kind === 'report') {
+    const split = splitReportRecordId(id);
+    if (!split) return null;
+    const rows = await q<ReportRow>(
+      `select id::text as id, kind::text as kind, scope_to::text as scope_to, title, narrative
+         from generated_reports where id = $1::uuid and (is_published or $2::boolean)`,
+      [split.id, opts.admin === true]
+    );
+    const r = rows[0];
+    if (!r) return null;
+    const section = reportSections(r).find((s) => s.key === split.key);
+    if (!section) return null;
+    if (section.portalOnly && !opts.admin && !opts.portal) return null;
+    let passage = section.text;
+    if (!opts.admin && !opts.portal) {
+      const names = await q<{ name: string }>(`select name from intel_companies where active`);
+      passage = scrubSentences(passage, buildNameMatcher(names.map((n) => n.name))).text;
+    }
+    const href = reportSectionHref(r.kind, r.id, r.scope_to, section.key);
+    const p = empty('report', r.title, href);
+    p.section = section.label;
+    p.passage = passage;
+    p.report = { kind: r.kind, scope: r.scope_to, href };
+    return p;
+  }
+
   // signal: row visibility is admin-widened (drafts resolve for admins only);
   // the columns stay public-shaped either way.
   const rows = await q<{
@@ -374,6 +418,20 @@ const snip = (s: string | null | undefined, n = 200): string => {
   return t.length > n ? `${t.slice(0, n)} ...` : t;
 };
 
+// A report's best-matching section by plain query-term overlap (mirrors
+// retrieve.ts's private helper of the same name; kept local here since that
+// module is not exported for reuse).
+function bestSectionKey(sections: ReportSection[], query: string): string | null {
+  const terms = [...new Set(query.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3))];
+  let best: { key: string; score: number } | null = null;
+  for (const s of sections) {
+    const hay = s.text.toLowerCase();
+    const score = terms.reduce((n, w) => n + (hay.includes(w) ? 1 : 0), 0);
+    if (!best || score > best.score) best = { key: s.key, score };
+  }
+  return best && best.score > 0 ? best.key : null;
+}
+
 export async function searchAtlas(
   q: Q,
   query: string,
@@ -388,6 +446,11 @@ export async function searchAtlas(
     // the kind is skipped. Guest-unsafe: only searched when admin or portal.
     itemTagFor?: (id: string) => string;
     factTagFor?: (id: string) => string;
+    // The Atlas's own editorial reports mint R-tags on the shared counter,
+    // keyed by the same descriptor retrieve.ts mints them with
+    // ('report:<kind>:<scope>:<uuid>:<section>'), so a tag minted here and one
+    // minted by retrieval resolve identically for the rest of the conversation.
+    reportTagFor?: (descriptor: string) => string;
   }
 ): Promise<AtlasSearchHit[]> {
   const want = new Set(opts.kinds);
@@ -548,6 +611,32 @@ export async function searchAtlas(
         kind: 'fact',
         id: ftag(r.id),
         snippet: `${r.company_slug} · ${r.dimension}: ${snip(r.fact, 220)}${r.value_text ? ` (${snip(r.value_text, 80)})` : ''}${r.as_of ? ` as of ${r.as_of}` : ''}`,
+      });
+    }
+  }
+
+  if (want.has('report') && opts.reportTagFor) {
+    const rtag = opts.reportTagFor;
+    const rows = await q<ReportRow>(
+      `select id::text as id, kind::text as kind, scope_to::text as scope_to, title, narrative
+         from generated_reports
+        where is_published and search_tsv @@ ${ORQ}
+          and (kind = 'savant' or kind = 'roundup'
+               or (kind = 'edition' and scope_to >= current_date - ${EDITION_WINDOW_DAYS}))
+        order by ts_rank(search_tsv, ${ORQ}, ${RANK_NORM}) desc
+        limit ${lim}`,
+      [query]
+    );
+    for (const r of rows) {
+      const sections = reportSections(r);
+      const key = bestSectionKey(sections, query);
+      if (!key) continue;
+      const section = sections.find((s) => s.key === key);
+      if (!section || (section.portalOnly && !canSeeIntel)) continue;
+      hits.push({
+        kind: 'report',
+        id: rtag(`report:${r.kind}:${r.scope_to ?? ''}:${r.id}:${section.key}`),
+        snippet: `${reportPrefix(r.kind, r.scope_to, section.label)}: ${snip(section.text, 220)}`,
       });
     }
   }

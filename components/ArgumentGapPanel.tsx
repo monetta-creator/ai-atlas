@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { DOMAIN_LABEL, dateLabel } from '@/lib/format';
 import type { ArgumentGapScan, ArgumentGapRecommendation } from '@/lib/types';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 
 const relLabel = (r: string) => (r === 'depends_on' ? 'depends on' : r);
 
@@ -21,6 +22,7 @@ function draftHref(r: ArgumentGapRecommendation, thesisId?: string): string {
 // persisted scan; nothing here writes.
 export default function ArgumentGapPanel({
   initial, diagnose, dismiss: dismissAction, clear, thesisId, title, explainer, emptyCopy,
+  feature = 'argument_gaps',
 }: {
   initial: ArgumentGapScan | null;
   diagnose: () => Promise<ArgumentGapScan>;
@@ -30,25 +32,14 @@ export default function ArgumentGapPanel({
   title?: string;
   explainer?: string;
   emptyCopy?: string;
+  feature?: string;   // the ai_cost_log feature this scan spends: 'argument_gaps' (map-wide) or 'thesis_gaps' (per-thesis)
 }) {
   const [scan, setScan] = useState<ArgumentGapScan | null>(initial);
-  const [busy, setBusy] = useState(false);
   const [ranEmpty, setRanEmpty] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function run() {
-    setBusy(true);
-    setError(null);
-    setRanEmpty(false);
-    try {
-      const result = await diagnose();
-      setScan(result.recommendations.length ? result : null);
-      setRanEmpty(result.recommendations.length === 0);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Diagnosis failed. Try again.');
-    } finally {
-      setBusy(false);
-    }
+  function onDiagnosed(result: ArgumentGapScan) {
+    setScan(result.recommendations.length ? result : null);
+    setRanEmpty(result.recommendations.length === 0);
   }
 
   async function dismiss(code: string) {
@@ -86,17 +77,23 @@ export default function ArgumentGapPanel({
         </div>
         <div className="flex items-center gap-2">
           {scan && (
-            <button type="button" className="btn btn--quiet btn--sm" onClick={clearAll} disabled={busy}>
+            <button type="button" className="btn btn--quiet btn--sm" onClick={clearAll}>
               Clear
             </button>
           )}
-          <button type="button" className="btn btn--ghost btn--sm" onClick={run} disabled={busy}>
-            {busy ? 'Diagnosing…' : scan ? '✦ Re-run diagnosis' : '✦ Diagnose gaps'}
-          </button>
+          <ModelCallButton
+            label={scan ? '✦ Re-run diagnosis' : '✦ Diagnose gaps'}
+            busyLabel="Diagnosing…"
+            kind={`single:${feature}`}
+            subject={thesisId ?? null}
+            feature={feature}
+            className="btn btn--ghost btn--sm"
+            action={diagnose}
+            onDone={onDiagnosed}
+          />
         </div>
       </div>
 
-      {error && <p className="editable-error">{error}</p>}
       {ranEmpty && !scan && (
         <p className="gap-empty">
           {emptyCopy ?? 'No gaps. The map already covers what recent reports and signals surface.'}

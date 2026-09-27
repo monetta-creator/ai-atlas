@@ -2,6 +2,7 @@ import { q, exec } from '../db';
 import { chunkRecord } from './chunk';
 import { embedTexts, embedModel, toVectorLiteral } from './client';
 import { getEmbeddable, type EmbedKind, type EmbeddableRecord } from './sources';
+import { EDITION_WINDOW_DAYS } from './report-sections';
 
 export type { EmbedKind, EmbeddableRecord } from './sources';
 export { EMBED_KINDS } from './sources';
@@ -91,4 +92,18 @@ export async function indexKind(
   const records = await getEmbeddable(kind, q);
   const capped = opts.limit ? records.slice(0, opts.limit) : records;
   return upsertEmbeddings(kind, capped, opts);
+}
+
+// Editions are a rolling window in Ask (EDITION_WINDOW_DAYS): drop the
+// section embeddings of editions that aged out. Called after each new
+// edition is saved; cheap (a handful of rows a day).
+export async function pruneStaleReportEmbeddings(): Promise<number> {
+  return exec(
+    `delete from embeddings e
+      using generated_reports g
+      where e.kind = 'report'
+        and g.id::text = split_part(e.record_id, ':', 1)
+        and g.kind = 'edition'
+        and g.scope_to < current_date - ${EDITION_WINDOW_DAYS}`
+  );
 }

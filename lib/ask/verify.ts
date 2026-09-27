@@ -14,8 +14,9 @@
 // tagged X<n>) share the retrieval layer's per-request tag counter with
 // signal/paper (migration 0066's vector leg); they never get a claim code's
 // "F<n>" shorthand (F1 is already a real frame-claim code — see 'claims.code'
-// seeding — so facts had to take a different letter).
-export type CitationKind = 'claim' | 'bridge' | 'stance' | 'Q' | 'concept' | 'signal' | 'paper' | 'thread' | 'item' | 'fact';
+// seeding — so facts had to take a different letter). 'report' (a section of
+// the Atlas's own editorial reports, tagged R<n>) shares the same counter.
+export type CitationKind = 'claim' | 'bridge' | 'stance' | 'Q' | 'concept' | 'signal' | 'paper' | 'thread' | 'item' | 'fact' | 'report';
 
 // The serializable, static namespace passed from the server page to the client.
 // (Signals are not here: they are per-request and arrive via the SignalMap below.)
@@ -34,6 +35,40 @@ export interface ValidIdsPlain {
 // live in this map and one signalOffset covers them; the prefix carries the kind.
 export type SignalMap = Record<string, string>;
 
+// A report tag's map value is the full descriptor retrieve.ts/search.ts mint
+// it with: 'report:<kind>:<scope>:<uuid>:<section>' (scope may be empty).
+// Pure string parsing, no import: this module stays client-safe.
+const REPORT_DESCRIPTOR_RE =
+  /^report:(edition|roundup|savant):([0-9-]{0,10}):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):([A-Za-z0-9-]{1,24})$/i;
+
+function parseReportDescriptor(v: string): { kind: string; scope: string | null; id: string; key: string } | null {
+  const m = REPORT_DESCRIPTOR_RE.exec(v);
+  if (!m) return null;
+  return { kind: m[1], scope: m[2] || null, id: m[3], key: m[4] };
+}
+
+// A report link, without importing lib/embed/report-sections.ts's own copy
+// (kept in sync by hand; that module has zero imports and this one stays
+// that way too). Mirrors reportSectionHref there exactly.
+function reportHref(kind: string, id: string, scope: string | null, key: string): string {
+  if (kind === 'edition' && scope) return `/blotter/${scope}#${key}`;
+  if (kind === 'savant' && scope) return `/savant/${scope}#${key}`;
+  return `/reports/sheet/${id}#${key}`;
+}
+
+// The peek/fetch id for a citation's underlying record, from its SignalMap
+// value: unchanged for item/fact (already the composite/bare id the peek
+// route expects) and for signal/paper (already the bare uuid); a report's
+// full descriptor collapses to '<uuid>:<section>', what /api/ask/peek and
+// fetchRecord's 'report' kind expect.
+export function toPeekId(kind: CitationKind, mapValue: string): string {
+  if (kind === 'report') {
+    const d = parseReportDescriptor(mapValue);
+    return d ? `${d.id}:${d.key}` : mapValue;
+  }
+  return mapValue;
+}
+
 export interface ParsedCode {
   kind: CitationKind;
   id: string;
@@ -50,12 +85,12 @@ interface CitationSpan {
 
 const KIND_WORDS: Record<string, CitationKind> = {
   claim: 'claim', bridge: 'bridge', stance: 'stance', q: 'Q', concept: 'concept', signal: 'signal',
-  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact',
+  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact', report: 'report',
 };
 // A token that is unambiguously a code, so a bracket without a kind word (e.g.
 // [3.3], [B1, S2]) is recognized as a citation while ordinary prose like [note]
 // is left alone. Slugs are intentionally excluded here (too word-like).
-const STRONG = /^(S\d+|P\d+|I\d+|X\d+|B\d+|F\d+|\d+(?:\.\d+)?|Q\d+-S\d+[A-Za-z]?)$/i;
+const STRONG = /^(S\d+|P\d+|I\d+|X\d+|R\d+|B\d+|F\d+|\d+(?:\.\d+)?|Q\d+-S\d+[A-Za-z]?)$/i;
 const BRACKET = /\[([^\]]+)\]/g;
 
 function hrefFor(kind: CitationKind, id: string, ids: ValidIdsPlain, sig: SignalMap): string | null {
@@ -93,6 +128,14 @@ function hrefFor(kind: CitationKind, id: string, ids: ValidIdsPlain, sig: Signal
       const uuid = sig[id];
       return uuid ? `/datasets/intel-facts?where=fact_id:eq:${encodeURIComponent(uuid)}` : null;
     }
+    // A report tag's map value is the full descriptor ('report:<kind>:
+    // <scope>:<uuid>:<section>'); parse it back to the section's anchor.
+    case 'report': {
+      const raw = sig[id];
+      if (!raw) return null;
+      const d = parseReportDescriptor(raw);
+      return d ? reportHref(d.kind, d.id, d.scope, d.key) : null;
+    }
   }
 }
 
@@ -102,11 +145,11 @@ function hrefFor(kind: CitationKind, id: string, ids: ValidIdsPlain, sig: Signal
 function classify(token: string, ids: ValidIdsPlain, sig: SignalMap): ParsedCode {
   let kind: CitationKind | null = null;
   // The tag map holds S-tags (signals), P-tags (papers), I-tags (scan/intel
-  // items) and X-tags (intel facts); the prefix says which record kind the
-  // id belongs to.
+  // items), X-tags (intel facts) and R-tags (report passages); the prefix
+  // says which record kind the id belongs to.
   if (token in sig) {
     const t = token.toUpperCase();
-    kind = t.startsWith('P') ? 'paper' : t.startsWith('I') ? 'item' : t.startsWith('X') ? 'fact' : 'signal';
+    kind = t.startsWith('P') ? 'paper' : t.startsWith('I') ? 'item' : t.startsWith('X') ? 'fact' : t.startsWith('R') ? 'report' : 'signal';
   }
   else if (ids.claims.includes(token)) kind = 'claim';
   else if (ids.bridges.includes(token)) kind = 'bridge';
@@ -122,10 +165,11 @@ function classify(token: string, ids: ValidIdsPlain, sig: SignalMap): ParsedCode
       : /^P\d+$/i.test(token) ? 'paper'
         : /^I\d+$/i.test(token) ? 'item'
           : /^X\d+$/i.test(token) ? 'fact'
-            : /^B\d+$/i.test(token) ? 'bridge'
-              : /-S\d+/i.test(token) ? 'stance'
-                : /^(F\d+|\d+(?:\.\d+)?)$/i.test(token) ? 'claim'
-                  : 'concept';
+            : /^R\d+$/i.test(token) ? 'report'
+              : /^B\d+$/i.test(token) ? 'bridge'
+                : /-S\d+/i.test(token) ? 'stance'
+                  : /^(F\d+|\d+(?:\.\d+)?)$/i.test(token) ? 'claim'
+                    : 'concept';
   return { kind: inferred, id: token, valid: false, href: null };
 }
 

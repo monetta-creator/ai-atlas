@@ -3,6 +3,7 @@ import { getPortalIdentity } from '@/lib/portal/identity';
 import { getLatestSavantIssue } from '@/lib/data/savant-issues';
 import { dateLabel } from '@/lib/format';
 import PageTop from '@/components/PageTop';
+import { descriptionFor } from '@/lib/page-info';
 import SavantView from '@/components/savant/SavantView';
 import SavantTeaser from '@/components/savant/SavantTeaser';
 import SavantPdfButton from '@/components/savant/SavantPdfButton';
@@ -13,7 +14,7 @@ import SavantPdfButton from '@/components/savant/SavantPdfButton';
 // (never a 404 that hides the product, never anything from the pack or the
 // narrative beyond the issue's own title).
 export const dynamic = 'force-dynamic';
-export const metadata: Metadata = { title: 'Savant · The AI Atlas' };
+export const metadata: Metadata = { title: 'Savant · The AI Atlas', description: descriptionFor('/savant') };
 
 export default async function SavantLatestPage() {
   const identity = await getPortalIdentity();

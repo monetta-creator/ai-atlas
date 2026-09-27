@@ -75,7 +75,9 @@ export default function AskPeek({
   return (
     <div className="ask-peek">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span className="lbl" style={{ fontSize: 9.5 }}>{data?.subtitle ?? 'Record'}</span>
+        <span className="lbl" style={{ fontSize: 9.5 }}>
+          {data?.kind === 'report' ? (data.section ?? 'Report') : (data?.subtitle ?? 'Record')}
+        </span>
         <button
           type="button"
           className="btn btn--quiet btn--sm"
@@ -152,6 +154,7 @@ export default function AskPeek({
             </div>
           )}
 
+          {data.kind === 'report' && data.passage && <Section label="Passage">{data.passage}</Section>}
           {data.body && <Section label="Summary">{data.body}</Section>}
           {data.finding.map((f) => (
             <Section key={f.label} label={f.label}>{f.value}</Section>
@@ -244,7 +247,7 @@ export default function AskPeek({
             href={data.internal}
             prefetch={false}
           >
-            Open in the Atlas
+            {data.kind === 'report' ? 'Open in the report' : 'Open in the Atlas'}
           </Link>
         </>
       )}

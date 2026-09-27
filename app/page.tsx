@@ -1,5 +1,5 @@
 import { isAdmin, isPreview } from '@/lib/auth';
-import { getHomeWidgets } from '@/lib/data';
+import { getBoardWidgets } from '@/lib/data/home';
 import LobbyAsk from '@/components/lobby/LobbyAsk';
 import WidgetBoard from '@/components/lobby/WidgetBoard';
 import CustomizeWidgets from '@/components/lobby/CustomizeWidgets';
@@ -7,13 +7,13 @@ import CustomizeWidgets from '@/components/lobby/CustomizeWidgets';
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'The AI Atlas' };
 
-// The lobby (2026-08-30 widget-board rework): a greeting, the chat launcher,
-// then an ordered, admin-customizable board of widgets (components/lobby/
-// widgets/*, wired through the registry + WIDGET_CATALOG in
-// lib/widgets/catalog.ts). One global layout: guests see the same order
-// minus admin-only widgets, filtered out server-side in WidgetBoard before
-// their data is ever fetched. The seven portal tiles and the upload door are
-// now widgets like any other, just pre-loaded into DEFAULT_WIDGETS.
+// The lobby (2026-08-30 widget-board rework; public-leaning since
+// 2026-09-27): a greeting, the chat launcher, then the 'home' board, an
+// ordered, admin-customizable set of widgets (lib/widgets/catalog.ts, the
+// lobby registry in components/lobby/widgets/registry.tsx). The operations
+// widgets moved to their own board at /ops. Guests see the same order minus
+// any admin-only widget, filtered server-side in WidgetBoard before its data
+// is ever fetched.
 
 // Server-rendered time-of-day. Pinned to Eastern (a single-user tool with US
 // colleagues) so the serverless region's clock never decides the greeting.
@@ -44,7 +44,7 @@ export default async function Lobby() {
   const preview = await isPreview();
   const personal = admin && !preview;
 
-  const widgets = await getHomeWidgets();
+  const widgets = await getBoardWidgets('home');
 
   return (
     <div className="lobby-page">
@@ -56,9 +56,9 @@ export default async function Lobby() {
         </div>
 
         {personal && (
-          <div className="lobby-customize-row"><CustomizeWidgets active={widgets} /></div>
+          <div className="lobby-customize-row"><CustomizeWidgets board="home" active={widgets} /></div>
         )}
-        <WidgetBoard widgets={widgets} personal={personal} />
+        <WidgetBoard board="home" widgets={widgets} personal={personal} />
       </section>
     </div>
   );

@@ -42,6 +42,11 @@ const SECTIONS = [
     heading: 'The economics',
     body: 'The entire daily ingestion runs for pennies. Search runs mostly on Tavily, a model-free API, beside RSS feeds and primary sources; Anthropic’s web_search, which has the model search for itself, is limited to Scout, the tooling deep dives and big-pull enumeration, and the Ask web toggle, plus a fallback the engines use only when their model-free providers are not configured. Enrichment runs on inexpensive open-weight models that are benchmarked head to head, and frontier models (Claude) are reserved for the few places judgment matters. Costs are priced at call time against a rate card and surfaced on the same consoles that show coverage, so the spend is as visible as the output. Changing focus (a new company, a new topic, a new export) is an edit measured in minutes, not a procurement cycle measured in quarters.',
   },
+  {
+    id: 'written-reports',
+    heading: 'Reports written from the record',
+    body: 'A chatbot writes a fresh answer every time from whatever it retrieves. The Atlas also writes on a schedule: a daily paper, a weekly research roundup, and Savant, a weekly report with a point of view, each with every citation resolving to a record. Ask reads those reports first when they cover a question, which is cheaper and more consistent, and still cites the records underneath.',
+  },
 ];
 
 export default async function WhyBespokePage() {

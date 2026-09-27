@@ -36,7 +36,7 @@ export async function markJobStep(
   id: string,
   key: string,
   state: StepState,
-  extra: { note?: string | null; attempt?: number | null; label?: string } = {}
+  extra: { note?: string | null; attempt?: number | null; label?: string; parallel?: boolean } = {}
 ): Promise<void> {
   await withTx(async (c) => {
     const r = await c.query<{ steps: JobStep[] }>(`select steps from ui_jobs where id = $1 for update`, [id]);

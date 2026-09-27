@@ -7,6 +7,7 @@ import { runBriefNowAction, runChecksNowAction, saveAgentPrefsAction } from '@/l
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import FindingCard from '@/components/agent/FindingCard';
 import AgentChat from '@/components/agent/AgentChat';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 
 type Tab = 'today' | 'findings' | 'activity' | 'chat';
 
@@ -49,7 +50,6 @@ export function AgentPanel({ variant }: { variant: 'drawer' | 'page' }) {
   const [fetched, setFetched] = useState<{ key: number; data: AgentStateResponse } | null>(null);
   const [prefsOpen, setPrefsOpen] = useState(false);
   const [busyChecks, setBusyChecks] = useState(false);
-  const [busyBrief, setBusyBrief] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -70,17 +70,6 @@ export function AgentPanel({ variant }: { variant: 'drawer' | 'page' }) {
       await runChecksNowAction();
     } finally {
       setBusyChecks(false);
-      doReload();
-    }
-  }
-
-  async function runBriefNow() {
-    if (busyBrief) return;
-    setBusyBrief(true);
-    try {
-      await runBriefNowAction();
-    } finally {
-      setBusyBrief(false);
       doReload();
     }
   }
@@ -124,9 +113,7 @@ export function AgentPanel({ variant }: { variant: 'drawer' | 'page' }) {
           <TodayTab
             state={current}
             busyChecks={busyChecks}
-            busyBrief={busyBrief}
             onRunChecks={runChecksNow}
-            onRunBrief={runBriefNow}
             onReload={doReload}
           />
         )}
@@ -144,13 +131,11 @@ export function AgentPanel({ variant }: { variant: 'drawer' | 'page' }) {
 }
 
 function TodayTab({
-  state, busyChecks, busyBrief, onRunChecks, onRunBrief, onReload,
+  state, busyChecks, onRunChecks, onReload,
 }: {
   state: AgentStateResponse;
   busyChecks: boolean;
-  busyBrief: boolean;
   onRunChecks: () => void;
-  onRunBrief: () => void;
   onReload: () => void;
 }) {
   const memo = state.brief?.memo ?? null;
@@ -160,9 +145,15 @@ function TodayTab({
         <button type="button" className="btn btn--quiet btn--sm" onClick={onRunChecks} disabled={busyChecks}>
           {busyChecks ? 'Running checks…' : 'Run checks now'}
         </button>
-        <button type="button" className="btn btn--quiet btn--sm" onClick={onRunBrief} disabled={busyBrief}>
-          {busyBrief ? 'Writing brief…' : 'Run brief now'}
-        </button>
+        <ModelCallButton
+          label="Run brief now"
+          busyLabel="Writing brief…"
+          kind="single:agent_brief"
+          feature="agent_brief"
+          className="btn btn--quiet btn--sm"
+          action={runBriefNowAction}
+          onDone={onReload}
+        />
       </div>
 
       {!memo && <p className="ag-empty">No brief yet. Run checks, then run the brief.</p>}

@@ -1,6 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { cronGate, pingDeadman } from '@/lib/cron/shared';
-import { runSavantIssue } from '@/lib/savant/issue';
+import { runSavantIssueJob } from '@/lib/savant/issue-job';
 import { weekEndFor } from '@/lib/savant/week';
 
 // Savant's Friday issue: 20:00 UTC (vercel.json), with sweeps at 20:20 and
@@ -19,7 +19,9 @@ export async function handleIssueCron(req: NextRequest): Promise<Response> {
   const weekEnd = raw && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? weekEndFor(raw) : weekEndFor(new Date().toISOString().slice(0, 10));
   const force = req.nextUrl.searchParams.get('force') === '1';
   try {
-    const result = await runSavantIssue(weekEnd, { deadlineMs: 270_000, force, origin: req.nextUrl.origin || process.env.APP_BASE_URL });
+    // Registered as a run (actor cron): the rail shows the Friday issue while it
+    // writes, and a sweep window resumes the same row a parked call left.
+    const result = await runSavantIssueJob(weekEnd, { deadlineMs: 270_000, force, origin: req.nextUrl.origin || process.env.APP_BASE_URL, actor: 'cron' });
     if ('id' in result) pingDeadman(process.env.HC_PING_URL_SAVANT_ISSUE);
     return Response.json(result);
   } catch (e) {

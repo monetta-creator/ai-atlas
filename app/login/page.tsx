@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { loginAdmin, enterAsGuest } from './actions';
+import { ATLAS_ONE_LINER } from '@/lib/brand';
 
 export default async function LoginPage({
   searchParams,
@@ -33,7 +34,7 @@ export default async function LoginPage({
             The AI Atlas
           </span>
           <p className="lede" style={{ fontSize: 14.5, marginTop: 12 }}>
-            A structured map for staying oriented in the AI economy debate.
+            {ATLAS_ONE_LINER}
           </p>
         </div>
 

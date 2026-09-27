@@ -16,8 +16,8 @@ import { useModelRun, type RunOutcome } from '@/lib/jobs/use-model-run';
 //     action={() => diagnoseArgumentGapsAction()} onDone={() => router.refresh()} />
 
 export default function ModelCallButton<T>({
-  label, busyLabel, kind, subject = null, jobLabel, feature, calls = 1, stats, action, onDone,
-  className = 'btn btn--sm', disabled = false, retries, resultHref,
+  label, busyLabel, kind, subject = null, jobLabel, feature, features, calls = 1, stats, action, onDone,
+  className = 'btn btn--sm', disabled = false, retries, resultHref, title,
 }: {
   label: string;
   busyLabel: string;                  // the sentence while it runs ("Reading recent papers…")
@@ -25,6 +25,7 @@ export default function ModelCallButton<T>({
   subject?: string | null;
   jobLabel?: string;                  // the rail/toast label; defaults to the button label
   feature: string;                    // the ai_cost_log feature it spends
+  features?: string[];                // several features, one entry per expected call (overrides feature/calls)
   calls?: number;                     // expected model calls (a two-half summary is 2)
   stats?: FeatureStats | null;
   action: () => Promise<T>;
@@ -33,12 +34,13 @@ export default function ModelCallButton<T>({
   disabled?: boolean;
   retries?: number;
   resultHref?: (result: T) => string | null;
+  title?: string;                     // the button's tooltip (e.g. why it is disabled)
 }) {
   const run = useModelRun({
     kind,
     subject,
     label: jobLabel ?? label,
-    steps: [{ key: 'call', label, running: busyLabel, features: Array.from({ length: Math.max(1, calls) }, () => feature) }],
+    steps: [{ key: 'call', label, running: busyLabel, features: features?.length ? features : Array.from({ length: Math.max(1, calls) }, () => feature) }],
     stats,
     run: async (ctx) => {
       const r = await ctx.step('call', action, retries ? { retries } : undefined);
@@ -64,7 +66,7 @@ export default function ModelCallButton<T>({
 
   return (
     <span className="mr-call">
-      <button type="button" className={className} disabled={disabled || busy} onClick={() => void run.start()}>
+      <button type="button" className={className} disabled={disabled || busy} title={title} onClick={() => void run.start()}>
         {busy ? <><span className="spinner mr-btn-spin" aria-hidden="true" />{label}</> : label}
       </button>
       {busy && (

@@ -48,6 +48,7 @@ export interface IssueRunOpts {
   email?: boolean;            // send the Friday email after save (default: prefs.email_enabled)
   force?: boolean;            // delete an existing issue for the week and rebuild
   origin?: string;            // for absolute links in the email
+  onLeg?: (leg: string, state: 'running' | 'done') => Promise<void> | void; // progress for the run registry (lib/savant/issue-job.ts)
 }
 
 export type IssueRunResult =
@@ -96,9 +97,12 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
   }
 
   // 1. The pack, rebuilt on every call (cheap, and it must see the plan).
+  await opts.onLeg?.('pack', 'running');
   const pack = await buildSavantPack(weekEnd);
+  await opts.onLeg?.('pack', 'done');
   const budget = await checkSavantBudget(weekEnd);
   const done: Leg[] = [];
+  const legDone = async (leg: Leg) => { done.push(leg); await opts.onLeg?.(leg, 'done'); };
 
   // 2. Lead research. The loop is Anthropic tool use + web search, so a
   // non-Anthropic writer hands this one leg to the fallback.
@@ -114,7 +118,7 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
       : deterministicLead(pack);
     await park<LeadParked>(weekEnd, 'lead', { ...lead, tagHrefs: [...lead.tagHrefs.entries()] });
   }
-  done.push('lead');
+  await legDone('lead');
 
   // 3. Front + departments + peers.
   let front = await parked<{ summary: string[]; freshHtml: string | null; readings: HypothesisReading[] }>(weekEnd, 'front');
@@ -130,7 +134,7 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
     };
     await park(weekEnd, 'front', front);
   }
-  done.push('front');
+  await legDone('front');
 
   let departments = await parked<SavantDepartment[]>(weekEnd, 'departments');
   if (!departments) {
@@ -139,7 +143,7 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
     departments = departments ?? [];
     await park(weekEnd, 'departments', departments);
   }
-  done.push('departments');
+  await legDone('departments');
 
   let peers = await parked<SavantDepartment>(weekEnd, 'peers');
   if (!peers) {
@@ -148,7 +152,7 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
     peers = peers ?? { key: 'peers', title: 'Peer and market watch', html: '<p class="sv-empty">The peer tables are in Appendix B; the desk did not write them up this week.</p>', empty: true };
     await park(weekEnd, 'peers', peers);
   }
-  done.push('peers');
+  await legDone('peers');
 
   // Department order: moved, peers, regulation, research, tools, missed, ahead.
   const order: SavantDepartment['key'][] = ['moved', 'peers', 'regulation', 'research', 'tools', 'missed', 'ahead'];
@@ -170,7 +174,7 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
       : { name: prefs.editor_name, verdict: 'publish', requiredEdits: [], cuts: [], note: 'This issue published on the automated checks alone: the week\'s model budget was spent before the editor read it.', checks };
     await park(weekEnd, 'editor', editor);
   }
-  done.push('editor');
+  await legDone('editor');
 
   // 5. One revision round over the sections the editor named.
   let revised = false;
@@ -216,7 +220,7 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
     }
     await park(weekEnd, 'revise', { draft, revised, rejected: revisionRejected });
   }
-  done.push('revise');
+  await legDone('revise');
 
   // 6. Figures: over the final text, against the same allow-list the gate uses.
   const allow = allowlistForSavant(pack);
@@ -230,7 +234,7 @@ export async function runSavantIssue(weekEnd: string, opts: IssueRunOpts = {}): 
     figures = figures ?? { figures: [], dropped: ['the figure leg did not run'] };
     await park(weekEnd, 'figures', figures);
   }
-  done.push('figures');
+  await legDone('figures');
 
   // 7. Gate, assemble, save.
   const dropped: string[] = [];

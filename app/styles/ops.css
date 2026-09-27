@@ -7,6 +7,12 @@
 
 .ops-page { display: flex; flex-direction: column; gap: 8px; }
 
+/* The ops board reuses the lobby's widget grid (.lobby-widgets in lobby.css);
+   this file loads after lobby.css, so it wins the cascade. The board sits
+   right under PageTop and the Customize row rather than a hero, so it needs
+   less top margin than the lobby's. */
+.ops-board { margin-top: 12px; }
+
 .ops-status-line {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -75,6 +81,10 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--dim);
+}
+.ops-tl-repeat {
+  font-family: var(--font-mono); font-size: 11px; color: var(--dim);
+  margin: 0 0 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--line);
 }
 
 /* ---- job cards ---------------------------------------------------------- */

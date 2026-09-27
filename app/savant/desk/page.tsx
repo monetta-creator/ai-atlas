@@ -9,6 +9,7 @@ import PageTop from '@/components/PageTop';
 import DeskNotebook from '@/components/savant/DeskNotebook';
 import SavantPrefsForm from '@/components/savant/SavantPrefsForm';
 import RunIssueButton from '@/components/savant/RunIssueButton';
+import { getFeatureStats, getRecentJobOfKind } from '@/lib/data/jobs';
 
 export const dynamic = 'force-dynamic';
 // The run button's server action researches, writes and edits an issue in
@@ -47,6 +48,10 @@ export default async function SavantDeskPage({
     getNavCounts().catch(() => null),
     listSavantIssues(20, false),
     getModelRates().catch(() => ({})),
+  ]);
+  const [runStats, lastRun] = await Promise.all([
+    getFeatureStats().catch(() => null),
+    getRecentJobOfKind('savant_issue', { admin: true, keyId: null }, { subject: week, withinMin: 24 * 60 }).catch(() => null),
   ]);
   const weekIssue = issues.find((i) => i.week_end === week) ?? null;
 
@@ -91,7 +96,7 @@ export default async function SavantDeskPage({
           <p className="sv-run-lede">
             Week ending {dateLabel(week) ?? week}: {weekIssue ? `issue No. ${weekIssue.issueNumber ?? ''} is published.` : 'no issue yet.'}
           </p>
-          <RunIssueButton weekEnd={week} hasIssue={Boolean(weekIssue)} />
+          <RunIssueButton weekEnd={week} hasIssue={Boolean(weekIssue)} stats={runStats} initialJob={lastRun} />
         </section>
 
         <section className="sv-section">

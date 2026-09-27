@@ -100,7 +100,12 @@ export async function getActiveUiJobs(viewer: JobViewer): Promise<UiJob[]> {
     a.value ? [a.value] : []
   );
   const jobs = rows.map(toJob).filter((j) => j.status === 'running' || j.status === 'queued');
-  if (viewer.admin) jobs.push(...(await activeEngineJobs()));
+  if (viewer.admin) {
+    // An engine run a console is driving is already a registered job (kind
+    // engine:<name>, subject = the run id): skip its synthetic twin.
+    const driven = new Set(jobs.filter((j) => j.kind.startsWith('engine:')).map((j) => `${j.kind}:${j.subject}`));
+    jobs.push(...(await activeEngineJobs()).filter((e) => !driven.has(`${e.kind}:${e.subject}`)));
+  }
   return jobs;
 }
 
@@ -137,17 +142,29 @@ export async function getRecentJobs(limit: number, viewer: JobViewer): Promise<U
 let memo: { at: number; value: FeatureStats } | null = null;
 const MEMO_MS = 5 * 60_000;
 
+// Also per feature AND leg (`savant_lead:final`), for the features whose
+// calls are tagged metadata.leg: a leg is a steadier unit than a call when
+// one feature mixes short tool rounds with one long write.
 async function readFeatureStats(days: number): Promise<FeatureStats> {
   const rows = await q<{ feature: string; p50_ms: number; p90_ms: number; p50_usd: number; n: number }>(
-    `select feature,
+    `with base as (
+       select feature, metadata->>'leg' as leg, wall_ms, cost_usd from ai_cost_log
+        where created_at > now() - ($1::int * interval '1 day')
+          and wall_ms > 0 and feature is not null
+     )
+     select feature,
             percentile_cont(0.5) within group (order by wall_ms)::float8 as p50_ms,
             percentile_cont(0.9) within group (order by wall_ms)::float8 as p90_ms,
             percentile_cont(0.5) within group (order by cost_usd)::float8 as p50_usd,
             count(*)::int as n
-       from ai_cost_log
-      where created_at > now() - ($1::int * interval '1 day')
-        and wall_ms > 0 and feature is not null
-      group by feature`,
+       from base group by feature
+     union all
+     select feature || ':' || leg,
+            percentile_cont(0.5) within group (order by wall_ms)::float8,
+            percentile_cont(0.9) within group (order by wall_ms)::float8,
+            percentile_cont(0.5) within group (order by cost_usd)::float8,
+            count(*)::int
+       from base where leg is not null group by feature, leg`,
     [days]
   );
   const out: FeatureStats = {};

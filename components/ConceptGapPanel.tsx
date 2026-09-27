@@ -7,29 +7,18 @@ import {
 } from '@/lib/actions';
 import { CONCEPT_STATUS_LABEL, dateLabel } from '@/lib/format';
 import type { ConceptGapScan } from '@/lib/types';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 
 // Admin-only panel on /concepts: one model call argues for concepts the scaffold
 // is missing (read against the Argument Map). Recommend-only — "Start draft" opens
 // the create form pre-filled from the persisted scan; nothing here writes a concept.
 export default function ConceptGapPanel({ initial }: { initial: ConceptGapScan | null }) {
   const [scan, setScan] = useState<ConceptGapScan | null>(initial);
-  const [busy, setBusy] = useState(false);
   const [ranEmpty, setRanEmpty] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function run() {
-    setBusy(true);
-    setError(null);
-    setRanEmpty(false);
-    try {
-      const result = await diagnoseConceptGapsAction();
-      setScan(result.recommendations.length ? result : null);
-      setRanEmpty(result.recommendations.length === 0);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Diagnosis failed. Try again.');
-    } finally {
-      setBusy(false);
-    }
+  function onDiagnosed(result: ConceptGapScan) {
+    setScan(result.recommendations.length ? result : null);
+    setRanEmpty(result.recommendations.length === 0);
   }
 
   async function dismiss(slug: string) {
@@ -68,17 +57,22 @@ export default function ConceptGapPanel({ initial }: { initial: ConceptGapScan |
         </div>
         <div className="flex items-center gap-2">
           {scan && (
-            <button type="button" className="btn btn--quiet btn--sm" onClick={clearAll} disabled={busy}>
+            <button type="button" className="btn btn--quiet btn--sm" onClick={clearAll}>
               Clear
             </button>
           )}
-          <button type="button" className="btn btn--ghost btn--sm" onClick={run} disabled={busy}>
-            {busy ? 'Diagnosing…' : scan ? '✦ Re-run diagnosis' : '✦ Diagnose gaps'}
-          </button>
+          <ModelCallButton
+            label={scan ? '✦ Re-run diagnosis' : '✦ Diagnose gaps'}
+            busyLabel="Diagnosing…"
+            kind="single:concept_gaps"
+            feature="concept_gaps"
+            className="btn btn--ghost btn--sm"
+            action={diagnoseConceptGapsAction}
+            onDone={onDiagnosed}
+          />
         </div>
       </div>
 
-      {error && <p className="editable-error">{error}</p>}
       {ranEmpty && !scan && (
         <p className="gap-empty">No gaps found: the scaffold covers what the map currently leans on.</p>
       )}

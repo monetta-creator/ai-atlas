@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
+import { descriptionFor } from '@/lib/page-info';
 import { getEditContext } from '@/lib/content';
 import { isAdmin } from '@/lib/auth';
 import { GUIDES } from '@/lib/education/registry';
@@ -9,7 +10,7 @@ import { GUIDES } from '@/lib/education/registry';
 // Signal Board feed and the Argument Map. Follows app/about/page.tsx's shape
 // (Header + .pagehead + a .qgrid of cards) rather than reinventing markup.
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Education · The AI Atlas' };
+export const metadata = { title: 'Education · The AI Atlas', description: descriptionFor('/education') };
 
 export default async function EducationPage() {
   const admin = await isAdmin();

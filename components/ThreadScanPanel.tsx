@@ -7,6 +7,7 @@ import {
   createThreadAction,
 } from '@/lib/actions';
 import type { ResearchThreadScan } from '@/lib/types';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 
 // The thread gap scan (mirrors the concept/argument gap panels): one restraint-biased
 // model call proposes missing threads from the recent kept papers; each card's
@@ -14,23 +15,13 @@ import type { ResearchThreadScan } from '@/lib/types';
 export default function ThreadScanPanel({ scan }: { scan: ResearchThreadScan | null }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
-  async function diagnose() {
-    setBusy(true);
-    setMsg('Reading recent papers and existing threads…');
-    try {
-      const r = await diagnoseThreadGapsAction();
-      setMsg(r.recommendations.length
-        ? `${r.recommendations.length} thread(s) proposed.`
-        : 'No missing threads found: the existing threads cover the recent papers.');
-      router.refresh();
-    } catch (e) {
-      setMsg(`Scan failed (${e instanceof Error ? e.message : 'error'}).`);
-    } finally {
-      setBusy(false);
-    }
+  function onDiagnosed(r: ResearchThreadScan) {
+    setMsg(r.recommendations.length
+      ? `${r.recommendations.length} thread(s) proposed.`
+      : 'No missing threads found: the existing threads cover the recent papers.');
+    router.refresh();
   }
 
   const act = (fn: () => Promise<void>) =>
@@ -46,11 +37,18 @@ export default function ThreadScanPanel({ scan }: { scan: ResearchThreadScan | n
   return (
     <div>
       <div className="flex items-center gap-3 flex-wrap">
-        <button className="btn btn--ghost btn--sm" onClick={diagnose} disabled={busy || pending}>
-          {busy ? 'Scanning…' : '✦ Propose missing threads'}
-        </button>
+        <ModelCallButton
+          label="✦ Propose missing threads"
+          busyLabel="Reading recent papers and existing threads…"
+          kind="single:research_thread_scan"
+          feature="research_thread_scan"
+          className="btn btn--ghost btn--sm"
+          disabled={pending}
+          action={diagnoseThreadGapsAction}
+          onDone={onDiagnosed}
+        />
         {scan && (
-          <button className="btn btn--quiet btn--sm" disabled={busy || pending}
+          <button className="btn btn--quiet btn--sm" disabled={pending}
             onClick={() => act(() => clearThreadScanAction())}>
             Clear scan
           </button>

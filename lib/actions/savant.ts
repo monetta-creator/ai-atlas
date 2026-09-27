@@ -55,17 +55,23 @@ export async function saveSavantPrefsAction(formData: FormData): Promise<void> {
 // each finished leg in the notebook and returns `partial` when the call's
 // wall-clock budget is short, so a second click resumes; the page declares
 // maxDuration 300 to match the cron routes.
-export async function runSavantIssueAction(weekEnd: string, force: boolean): Promise<string> {
+// One click of the desk's run button: up to 270s of the issue run, moving the
+// ui_jobs row the button created (jobId) or the week's open job. Returns a
+// one-line outcome; the panel's steps come from the job row it polls.
+export async function runSavantIssueAction(weekEnd: string, force: boolean, jobId?: string | null): Promise<{ ok: true; message: string; parked: string | null; href: string | null }> {
   await requireAdmin();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(weekEnd)) throw new Error('week must be YYYY-MM-DD');
-  const { runSavantIssue } = await import('../savant/issue');
+  if (jobId && !/^[0-9a-f-]{36}$/i.test(jobId)) throw new Error('Invalid job id.');
+  const { runSavantIssueJob } = await import('../savant/issue-job');
   const { weekEndFor } = await import('../savant/week');
   const week = weekEndFor(weekEnd);
-  const result = await runSavantIssue(week, { deadlineMs: 270_000, force, origin: process.env.APP_BASE_URL });
+  const result = await runSavantIssueJob(week, { deadlineMs: 270_000, force, origin: process.env.APP_BASE_URL, jobId, actor: 'admin' });
   revalidatePath('/savant/desk');
   revalidatePath('/savant');
   revalidatePath('/savant/archive');
-  if ('skipped' in result) return `Skipped: ${result.skipped}`;
-  if ('partial' in result) return `Parked after ${result.done.join(', ')}; next leg ${result.next}. Click Run again to resume.`;
-  return `Published issue No. ${result.issueNumber} for the week ending ${week}: "${result.title}".`;
+  if ('skipped' in result) return { ok: true, message: `Skipped: ${result.skipped}`, parked: null, href: `/savant/${week}` };
+  if ('partial' in result) {
+    return { ok: true, message: `Paused after ${result.done.join(', ') || 'the pack'}; the next run resumes at ${result.next}.`, parked: `Paused before ${result.next}. Run again (or let the next cron window) resume it.`, href: null };
+  }
+  return { ok: true, message: `Published issue No. ${result.issueNumber}: "${result.title}".`, parked: null, href: `/savant/${week}` };
 }

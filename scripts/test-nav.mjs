@@ -100,6 +100,23 @@ check("groupFor('/about/data-handling').key === 'about' and the leaf is a public
   assert.ok(!tabs.includes('/about/architecture'), 'architecture stays hidden');
 });
 
+check("About's tabs are Overview, Inside the Atlas, How it works, Where it fails, Data handling, Glossary, Why bespoke, in that order, and the four retired leaves are gone", () => {
+  assert.equal(groupFor('/about/inside')?.key, 'about');
+  const tabs = tabsFor('/about', guest).map((l) => l.href);
+  assert.deepEqual(tabs, [
+    '/about',
+    '/about/inside',
+    '/about/how-it-works',
+    '/about/where-it-fails',
+    '/about/data-handling',
+    '/about/glossary',
+    '/about/why-bespoke',
+  ]);
+  for (const gone of ['/about/guardrails', '/about/limitations', '/about/ingestion', '/about/retrieval']) {
+    assert.ok(!tabs.includes(gone), `${gone} should no longer be a listed tab`);
+  }
+});
+
 check("pathwayFor('/about/data-handling', 'Data handling') = About(link), Data handling(null)", () => {
   assert.deepEqual(pathwayFor('/about/data-handling', 'Data handling'), [
     { label: 'About', href: '/about' },

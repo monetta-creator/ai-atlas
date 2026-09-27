@@ -1,61 +1,30 @@
 import type { ReactNode } from 'react';
-import { PORTAL_ICONS } from '@/components/portal-icons';
-import { widgetMeta } from '@/lib/widgets/catalog';
-import PortalTile from './PortalTile';
 import AddDocument from './AddDocument';
-import CronTracker from './CronTracker';
-import DeskCounts from './DeskCounts';
-import TodaysSpend from './TodaysSpend';
-import TavilyQuota from './TavilyQuota';
 import LatestSignals from './LatestSignals';
 import AtlasStats from './AtlasStats';
 import ToolingEntrants from './ToolingEntrants';
+import EditionFront from './EditionFront';
+import SavantLatest from './SavantLatest';
+import PortalTiles from './PortalTiles';
+import FreshAcrossPortals from './FreshAcrossPortals';
+import HypothesesLedger from './HypothesesLedger';
 
-// Server-only: every entry here (bar the pure PortalTile) ends up pulling
-// lib/data, so this module must never be imported from a 'use client' file
-// (CustomizeWidgets imports the catalog directly instead, never this).
+// The lobby board's widgets (server-only: most pull lib/data, so this module
+// must never be imported from a 'use client' file; CustomizeWidgets imports
+// the catalog, never this). The ops board's live in
+// components/ops/widgets/registry.tsx; components/widgets/all.tsx merges the
+// two for WidgetBoard.
 
-type WidgetComponent = (props: { personal: boolean }) => Promise<ReactNode> | ReactNode;
+export type WidgetComponent = (props: { personal: boolean; board?: 'home' | 'ops' }) => Promise<ReactNode> | ReactNode;
 
-const TILE_ROUTES: Record<string, { href: string; iconKey: keyof typeof PORTAL_ICONS }> = {
-  'tile-signals': { href: '/signals', iconKey: 'signals' },
-  'tile-blotter': { href: '/blotter', iconKey: 'blotter' },
-  'tile-map': { href: '/map', iconKey: 'claims' },
-  'tile-reports': { href: '/reports', iconKey: 'reports' },
-  'tile-datasets': { href: '/datasets', iconKey: 'data' },
-  'tile-research': { href: '/research', iconKey: 'research' },
-  'tile-scout': { href: '/scout', iconKey: 'scout' },
-  'tile-tooling': { href: '/tooling', iconKey: 'tooling' },
-};
-
-// Curries PortalTile with one catalog entry's route + copy. A zero-arg
-// function is structurally assignable to WidgetComponent (fewer params is
-// fine), so the tile factory can just ignore the {personal} prop it's called
-// with (portal tiles show the same thing to everyone).
-function makeTile(key: keyof typeof TILE_ROUTES): WidgetComponent {
-  const route = TILE_ROUTES[key];
-  const meta = widgetMeta(key);
-  return function Tile() {
-    if (!meta) return null;
-    return <PortalTile href={route.href} iconKey={route.iconKey} name={meta.name} desc={meta.desc} />;
-  };
-}
-
-export const WIDGET_COMPONENTS: Record<string, WidgetComponent> = {
-  'cron-tracker': CronTracker,
-  'desk-counts': DeskCounts,
-  'todays-spend': TodaysSpend,
-  'tavily-quota': TavilyQuota,
+export const HOME_WIDGET_COMPONENTS: Record<string, WidgetComponent> = {
   'latest-signals': LatestSignals,
   'atlas-stats': AtlasStats,
   'add-document': AddDocument,
-  'tile-signals': makeTile('tile-signals'),
-  'tile-blotter': makeTile('tile-blotter'),
-  'tile-map': makeTile('tile-map'),
-  'tile-reports': makeTile('tile-reports'),
-  'tile-datasets': makeTile('tile-datasets'),
-  'tile-research': makeTile('tile-research'),
-  'tile-scout': makeTile('tile-scout'),
-  'tile-tooling': makeTile('tile-tooling'),
   'tooling-entrants': ToolingEntrants,
+  'edition-front': EditionFront,
+  'savant-latest': SavantLatest,
+  'portal-tiles': PortalTiles,
+  'fresh-across-portals': FreshAcrossPortals,
+  'hypotheses-ledger': HypothesesLedger,
 };

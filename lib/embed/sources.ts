@@ -16,6 +16,11 @@
 //     reach buildAskContext with a mode that would expose them) so nothing
 //     here needs an is_published-style gate of its own.
 //   - paper: kept, not dismissed (retrieve.ts's ftsPapers).
+//   - report (2026-09-27): the Atlas's published editorial reports (Daily
+//     Edition within the last EDITION_WINDOW_DAYS, research roundups, Savant),
+//     one record PER SECTION ('<uuid>:<section>', lib/embed/report-sections.ts).
+//     Savant's peer watch section is embedded too; retrieval serves it to
+//     keyholders and the admin only, and the public peek refuses it.
 //   - claim / bridge / stance / concept / thread: no personal-layer columns
 //     are ever selected (statement/test/definition/synthesis only, never
 //     domain_note, confidence, or review notes).
@@ -24,11 +29,11 @@ export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 
 export type EmbedKind =
   | 'signal' | 'candidate' | 'scan_item' | 'intel_item' | 'intel_fact'
-  | 'paper' | 'claim' | 'bridge' | 'stance' | 'concept' | 'thread';
+  | 'paper' | 'claim' | 'bridge' | 'stance' | 'concept' | 'thread' | 'report';
 
 export const EMBED_KINDS: EmbedKind[] = [
   'signal', 'candidate', 'scan_item', 'intel_item', 'intel_fact',
-  'paper', 'claim', 'bridge', 'stance', 'concept', 'thread',
+  'paper', 'claim', 'bridge', 'stance', 'concept', 'thread', 'report',
 ];
 
 export interface EmbeddableRecord {
@@ -36,6 +41,8 @@ export interface EmbeddableRecord {
   title: string;
   text: string;
 }
+
+import { reportSections, reportPrefix, EDITION_WINDOW_DAYS } from './report-sections';
 
 const j = (...xs: (string | null | undefined)[]): string => xs.filter((x) => !!x && x.trim()).join('\n\n');
 const stripHtml = (s: string | null | undefined): string | null =>
@@ -179,6 +186,25 @@ export async function embeddableThreads(q: Q, ids?: string[]): Promise<Embeddabl
   return rows.map((r) => ({ record_id: r.slug, title: r.title, text: j(r.question, stripHtml(r.synthesis)) }));
 }
 
+// ids are REPORT uuids (what a writer hands embedLater); the records that
+// come back are its sections.
+export async function embeddableReports(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
+  const rows = await q<{ id: string; kind: string; scope_to: string | null; title: string; narrative: unknown }>(
+    `select id::text as id, kind::text as kind, scope_to::text as scope_to, title, narrative
+       from generated_reports
+      where is_published
+        and (kind = 'savant' or kind = 'roundup'
+             or (kind = 'edition' and scope_to >= current_date - ${EDITION_WINDOW_DAYS}))
+        ${ids ? 'and id = any($1::uuid[])' : ''}`,
+    ids ? [ids] : []
+  );
+  return rows.flatMap((r) => reportSections(r).map((s) => ({
+    record_id: `${r.id}:${s.key}`,
+    title: reportPrefix(r.kind, r.scope_to, s.label),
+    text: s.text,
+  })));
+}
+
 export async function getEmbeddable(kind: EmbedKind, q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   switch (kind) {
     case 'signal': return embeddableSignals(q, ids);
@@ -192,6 +218,7 @@ export async function getEmbeddable(kind: EmbedKind, q: Q, ids?: string[]): Prom
     case 'stance': return embeddableStances(q, ids);
     case 'concept': return embeddableConcepts(q, ids);
     case 'thread': return embeddableThreads(q, ids);
+    case 'report': return embeddableReports(q, ids);
   }
 }
 

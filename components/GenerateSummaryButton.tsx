@@ -1,6 +1,7 @@
 'use client';
 
 import { useFormStatus } from 'react-dom';
+import FormRunStatus from '@/components/jobs/FormRunStatus';
 import { generateQuestionSummaryAction } from '@/lib/actions';
 
 function Btn({ label }: { label: string }) {
@@ -15,9 +16,7 @@ function Btn({ label }: { label: string }) {
       >
         {pending ? 'Summarizing…' : label}
       </button>
-      {pending && (
-        <span className="text-[11px]" style={{ color: 'var(--faint-ink)' }}>Analyzing…</span>
-      )}
+      <FormRunStatus busyLabel="Analyzing…" feature="question_summary" calls={2} />
     </span>
   );
 }

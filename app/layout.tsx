@@ -4,6 +4,7 @@ import "./globals.css";
 import ChromeGate from "@/components/ChromeGate";
 import Header from "@/components/Header";
 import { Analytics } from "@vercel/analytics/next";
+import { ATLAS_ONE_LINER } from "@/lib/brand";
 
 // Variable fonts: the design system uses non-standard display weights (620/640/660/680),
 // which only render correctly from a variable axis — so load these as variable, no fixed weight.
@@ -30,7 +31,19 @@ const anton = Anton({
 
 export const metadata: Metadata = {
   title: "The AI Atlas",
-  description: "A structured map for staying oriented in the AI economy debate.",
+  description: ATLAS_ONE_LINER,
+  metadataBase: new URL(process.env.APP_BASE_URL ?? "http://localhost:3000"),
+  openGraph: {
+    siteName: "The AI Atlas",
+    type: "website",
+    title: "The AI Atlas",
+    description: ATLAS_ONE_LINER,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "The AI Atlas",
+    description: ATLAS_ONE_LINER,
+  },
 };
 
 // Without this, mobile browsers assume a ~980px layout viewport and shrink-to-fit —

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useFormStatus } from 'react-dom';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 import { addEvidenceBulkAction, recommendClaimsAction } from '@/lib/actions';
 import type { ClaimRecommendation, Direction, Weight } from '@/lib/types';
 
@@ -48,9 +49,7 @@ export default function EvidenceForm({
 }) {
   const [sel, setSel] = useState<Record<string, Sel>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({}); // targetKey -> reason
-  const [recommending, setRecommending] = useState(false);
   const [recStatus, setRecStatus] = useState('');
-  const [recError, setRecError] = useState(false);
 
   const claimByCode = Object.fromEntries(claims.map((c) => [c.code, c]));
 
@@ -66,34 +65,22 @@ export default function EvidenceForm({
     setSel((prev) => (prev[keyOf(t)] ? { ...prev, [keyOf(t)]: { ...prev[keyOf(t)], ...patch } } : prev));
   }
 
-  async function recommend() {
-    setRecommending(true);
-    setRecError(false);
-    setRecStatus('Analyzing…');
-    try {
-      const recs: ClaimRecommendation[] = await recommendClaimsAction(sourceId);
-      if (!recs.length) {
-        setRecStatus('No strong claim matches found. Pick manually below.');
-        return;
-      }
-      const nextSel: Record<string, Sel> = {};
-      const nextReasons: Record<string, string> = {};
-      for (const r of recs) {
-        const c = claimByCode[r.claim_code];
-        if (!c) continue;
-        nextSel[keyOf(c)] = { direction: r.direction, weight: r.weight };
-        nextReasons[keyOf(c)] = r.reason;
-      }
-      setSel((prev) => ({ ...nextSel, ...prev })); // keep anything already selected
-      setReasons((prev) => ({ ...prev, ...nextReasons }));
-      setRecStatus(`Recommended ${recs.length} claim${recs.length === 1 ? '' : 's'} (pre-checked below).`);
-    } catch (err) {
-      setRecError(true);
-      const msg = err instanceof Error ? err.message : 'error';
-      setRecStatus(`Couldn’t get recommendations (${msg}).`);
-    } finally {
-      setRecommending(false);
+  function applyRecommendations(recs: ClaimRecommendation[]) {
+    if (!recs.length) {
+      setRecStatus('No strong claim matches found. Pick manually below.');
+      return;
     }
+    const nextSel: Record<string, Sel> = {};
+    const nextReasons: Record<string, string> = {};
+    for (const r of recs) {
+      const c = claimByCode[r.claim_code];
+      if (!c) continue;
+      nextSel[keyOf(c)] = { direction: r.direction, weight: r.weight };
+      nextReasons[keyOf(c)] = r.reason;
+    }
+    setSel((prev) => ({ ...nextSel, ...prev })); // keep anything already selected
+    setReasons((prev) => ({ ...prev, ...nextReasons }));
+    setRecStatus(`Recommended ${recs.length} claim${recs.length === 1 ? '' : 's'} (pre-checked below).`);
   }
 
   const count = Object.keys(sel).length;
@@ -165,11 +152,18 @@ export default function EvidenceForm({
   return (
     <div>
       <div className="flex items-center gap-3 flex-wrap" style={{ marginBottom: 12 }}>
-        <button type="button" className="btn btn--ghost btn--sm" onClick={recommend} disabled={recommending} style={recommending ? { opacity: 0.6, cursor: 'wait' } : undefined}>
-          {recommending ? 'Recommending…' : '★ Recommend claims (AI)'}
-        </button>
+        <ModelCallButton
+          label="★ Recommend claims (AI)"
+          busyLabel="Analyzing…"
+          kind="single:claim_recommendations"
+          feature="claim_recommendations"
+          retries={1}
+          className="btn btn--ghost btn--sm"
+          action={() => recommendClaimsAction(sourceId)}
+          onDone={applyRecommendations}
+        />
         {recStatus && (
-          <span className="text-xs" role="status" aria-live="polite" style={{ color: recError ? 'var(--heat-4)' : 'var(--faint-ink)' }}>
+          <span className="text-xs" role="status" aria-live="polite" style={{ color: 'var(--faint-ink)' }}>
             {recStatus}
           </span>
         )}

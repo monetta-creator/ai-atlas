@@ -203,7 +203,7 @@ ${questionLines}
 
 The six audience lenses it tracks developments through: market and valuation, labor and knowledge work, geopolitics and security, regulatory and legal, technical capability, societal and cultural.
 
-It also tracks the AI tools market, AI-adjacent startups, and recent AI research papers.`;
+It also tracks the AI tools market, AI-adjacent startups, and recent AI research papers, and it writes its own reports on all of it: a Daily Edition each weekday, a weekly research roundup, and Savant, a weekly research report with a ledger of open hypotheses. A question about what one of those reports said is on the Atlas's beat.`;
 }
 
 // The seven questions as decline-card links (slug + title, both already the

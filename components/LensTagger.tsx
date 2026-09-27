@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 import { setNodeLensAction, recommendNodeLensesAction } from '@/lib/actions';
 import { LENS_LABEL } from '@/lib/format';
 import type { Lens } from '@/lib/types';
@@ -23,7 +24,6 @@ export default function LensTagger({
 }) {
   const [active, setActive] = useState<Set<Lens>>(new Set(initial));
   const [suggested, setSuggested] = useState<Set<Lens>>(new Set());
-  const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
 
   async function toggle(l: Lens) {
@@ -53,21 +53,6 @@ export default function LensTagger({
     }
   }
 
-  async function suggest() {
-    setBusy(true);
-    setStatus('');
-    try {
-      const recs = await recommendNodeLensesAction(statement);
-      const fresh = recs.filter((l) => !active.has(l));
-      setSuggested(new Set(fresh));
-      setStatus(fresh.length ? `Suggested ${fresh.length}, tap to apply` : 'No new lenses suggested.');
-    } catch {
-      setStatus("Couldn't get suggestions.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="lenstag">
       <span className="lenstag__label">Lenses</span>
@@ -88,9 +73,20 @@ export default function LensTagger({
             </button>
           );
         })}
-        <button type="button" className="btn btn--quiet btn--sm lenstag__suggest" onClick={suggest} disabled={busy}>
-          {busy ? '…' : '✦ suggest'}
-        </button>
+        <ModelCallButton
+          label="✦ suggest"
+          busyLabel="Reading…"
+          kind="single:lens_recommendations"
+          feature="lens_recommendations"
+          retries={1}
+          className="btn btn--quiet btn--sm lenstag__suggest"
+          action={() => recommendNodeLensesAction(statement)}
+          onDone={(recs) => {
+            const fresh = recs.filter((l) => !active.has(l));
+            setSuggested(new Set(fresh));
+            setStatus(fresh.length ? `Suggested ${fresh.length}, tap to apply` : 'No new lenses suggested.');
+          }}
+        />
         {status && <span className="lenstag__status">{status}</span>}
       </div>
     </div>

@@ -5,6 +5,7 @@ import { judgeBuilderReads } from './builders';
 import { checkEditionBudget } from './budget';
 import { getEditionForDay, getEditionPrefs, getRecentEditions } from '../data/editions';
 import { saveGeneratedReport, deleteGeneratedReport } from '../mutations';
+import { pruneStaleReportEmbeddings } from '../embed/index';
 import type { EditionNarrative } from './types';
 
 function todayUTC(): string {
@@ -129,6 +130,9 @@ export async function runDailyEdition(
       generated_at: pack.generatedAt,
       isPublished: true,
     });
+    // Ask reads the last EDITION_WINDOW_DAYS of editions: the new one embeds
+    // on save (lib/mutations/reports.ts); the one that aged out drops now.
+    void pruneStaleReportEmbeddings().catch(() => {});
   } catch (e) {
     // generated_reports_edition_day_uq (0058): a concurrent run won the day.
     if ((e as { code?: string } | null)?.code === '23505') return { skipped: `already generated for ${pack.day}` };

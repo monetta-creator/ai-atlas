@@ -37,6 +37,13 @@ check('an undeclared step is appended (engine steps arrive as the run reports th
   assert.equal(s[0].state, 'running');
 });
 
+check('parallel steps leave their running siblings alone', () => {
+  let s = stepsFromSpecs([{ key: 'lens:a', label: 'A', running: '' }, { key: 'lens:b', label: 'B', running: '' }]);
+  s = applyTransition(s, 'lens:a', 'running', T(0), { parallel: true });
+  s = applyTransition(s, 'lens:b', 'running', T(1), { parallel: true });
+  assert.deepEqual(s.map((x) => x.state), ['running', 'running']);
+});
+
 check('attempts and notes ride on the step', () => {
   let s = stepsFromSpecs(SPECS);
   s = applyTransition(s, 'sections', 'running', T(0), { attempt: 2, note: 'retrying' });

@@ -39,7 +39,8 @@ export async function listSavantIssueMetas(publishedOnly = true): Promise<Genera
             to_char(scope_from, 'YYYY-MM-DD') as scope_from,
             to_char(scope_to, 'YYYY-MM-DD') as scope_to,
             is_published, generated_at::text as generated_at,
-            pack->'numbers' as numbers
+            pack->'numbers' as numbers,
+            (pack->>'issueNumber')::int as issue_number
        from generated_reports
       where kind = 'savant' ${publishedOnly ? 'and is_published' : ''}
       order by scope_to desc`

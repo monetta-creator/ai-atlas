@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 import { mapThesisAction, createThesisAction, updateThesisAction } from '@/lib/actions';
 import type { ThesisMappingProposal } from '@/lib/thesis/map';
 import type { TargetOption } from '@/lib/data';
@@ -27,7 +28,6 @@ export default function ThesisForm({
   const [selected, setSelected] = useState<Set<string>>(() => new Set(thesis?.claim_codes ?? []));
   const [proposals, setProposals] = useState<ThesisMappingProposal[]>([]);
   const [note, setNote] = useState(thesis?.mapping_note ?? '');
-  const [mapping, setMapping] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [manualCode, setManualCode] = useState('');
@@ -40,29 +40,16 @@ export default function ThesisForm({
       return next;
     });
 
-  async function runMapping() {
-    if (!statement.trim() || mapping) return;
-    setMapping(true);
-    setError('');
-    try {
-      const r = await mapThesisAction(statement);
-      if (!r.ok) {
-        setError(r.error);
-      } else {
-        setProposals(r.proposals);
-        setSelected((prev) => {
-          const next = new Set(prev);
-          for (const p of r.proposals) next.add(p.code);
-          return next;
-        });
-        if (r.note) setNote(r.note);
-        if (!r.proposals.length) setError('No claim in the Atlas maps to this thesis yet. You can still save it: the report will run on text matches and say so.');
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'mapping failed');
-    } finally {
-      setMapping(false);
-    }
+  function applyMapping(r: Awaited<ReturnType<typeof mapThesisAction>>) {
+    if (!r.ok) return;
+    setProposals(r.proposals);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const p of r.proposals) next.add(p.code);
+      return next;
+    });
+    if (r.note) setNote(r.note);
+    setError(r.proposals.length ? '' : 'No claim in the Atlas maps to this thesis yet. You can still save it: the report will run on text matches and say so.');
   }
 
   async function save() {
@@ -102,9 +89,17 @@ export default function ThesisForm({
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
-        <button type="button" className="btn" onClick={runMapping} disabled={!statement.trim() || mapping}>
-          {mapping ? 'Mapping…' : '✦ Map to Atlas claims'}
-        </button>
+        <ModelCallButton
+          label="✦ Map to Atlas claims"
+          busyLabel="Mapping to claims…"
+          kind="single:thesis_map"
+          feature="thesis_map"
+          retries={1}
+          disabled={!statement.trim()}
+          className="btn"
+          action={() => mapThesisAction(statement)}
+          onDone={applyMapping}
+        />
         <span className="text-xs" style={{ color: 'var(--faint-ink)' }}>
           Recommend-only: you confirm every code before it is saved.
         </span>

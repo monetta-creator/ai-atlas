@@ -4,12 +4,13 @@ import { getEditContext } from '@/lib/content';
 import { dateLabel } from '@/lib/format';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
+import { descriptionFor } from '@/lib/page-info';
 import EditionView from '@/components/edition/EditionView';
 import RunEditionButton from '@/components/edition/RunEditionButton';
 import EditionPdfButton from '@/components/edition/EditionPdfButton';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Daily edition · The AI Atlas' };
+export const metadata = { title: 'Daily edition · The AI Atlas', description: descriptionFor('/blotter') };
 
 // The News Blotter is now the daily edition (2026-09-23): the public read
 // view of the latest SavedEdition, built by the cron-driven two-model-leg

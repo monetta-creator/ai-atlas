@@ -22,7 +22,21 @@ const GUEST_SHOTS = [
   { file: 'reports.png', path: '/reports' },
   { file: 'datasets.png', path: '/datasets' },
   { file: 'research.png', path: '/research' },
+  { file: 'scout.png', path: '/scout' },
+  { file: 'tooling.png', path: '/tooling' },
+  // Savant as a GUEST sees it (the title and contents): the full issue is
+  // key-gated and these grabs appear on public pages.
+  { file: 'savant.png', path: '/savant' },
 ];
+
+// Captured with the admin cookie. Keep this empty for anything shown on a
+// public page: a signed-in grab can show key-gated content.
+const ADMIN_SHOTS = [];
+
+// Hide Next's dev-mode badge when capturing against `npm run dev`.
+async function hideDevChrome(p) {
+  await p.addStyleTag({ content: 'nextjs-portal, [data-nextjs-toast], [data-next-badge-root] { display: none !important; }' }).catch(() => {});
+}
 
 const ASK_QUESTION = 'What did the University of Pittsburgh layoffs study find?';
 
@@ -50,18 +64,37 @@ const ctx = await browser.newContext({
 
 const page = await ctx.newPage();
 
-if (process.env.ONLY !== 'ask') {
+const ONLY = process.env.ONLY ? new Set(process.env.ONLY.split(',')) : null;
+
+if (!ONLY || [...ONLY].some((o) => GUEST_SHOTS.some((s) => s.file === `${o}.png`))) {
   for (const shot of GUEST_SHOTS) {
-    await page.goto(BASE + shot.path, { waitUntil: 'networkidle' });
-    await page.waitForTimeout(700); // let entrance animations settle
+    if (ONLY && !ONLY.has(shot.file.replace('.png', ''))) continue;
+    // 'load' plus a settle delay: some pages poll, so networkidle can hang.
+    await page.goto(BASE + shot.path, { waitUntil: 'load' });
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+    await hideDevChrome(page);
+    await page.waitForTimeout(1200); // let entrance animations settle
     await page.screenshot({ path: OUT + shot.file });
     console.log('captured', shot.file);
   }
 }
 
 const cookie = cookieFromEnv();
+if (cookie) {
+  await ctx.addCookies([cookie]);
+  for (const shot of ADMIN_SHOTS) {
+    if (ONLY && !ONLY.has(shot.file.replace('.png', ''))) continue;
+    await page.goto(BASE + shot.path, { waitUntil: 'networkidle' });
+    await hideDevChrome(page);
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: OUT + shot.file });
+    console.log('captured', shot.file);
+  }
+}
 if (!cookie) {
-  console.log('ADMIN_COOKIE not set: skipping ask.png');
+  console.log('ADMIN_COOKIE not set: skipping the admin shots and ask.png');
+} else if (ONLY && !ONLY.has('ask')) {
+  // ask.png runs a real Ask answer; only on a full run or ONLY=ask.
 } else {
   await ctx.addCookies([cookie]);
   await page.goto(BASE + '/ask', { waitUntil: 'networkidle' });

@@ -7,6 +7,9 @@ import {
   reExtractDocAction, deleteCompanyDocAction, competitorScanAction,
 } from '@/lib/actions';
 import type { CompanyDocument } from '@/lib/types';
+import { useModelRun } from '@/lib/jobs/use-model-run';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
+import ModelRunPanel from '@/components/jobs/ModelRunPanel';
 
 // The per-company research surface (admin + portal keyholders): one steering
 // instruction shared by every tool, then the tools. The steering is a one-off
@@ -15,8 +18,16 @@ import type { CompanyDocument } from '@/lib/types';
 // only sanitized text reaches the server (capped at 200k chars, well under the
 // server-action body limit). Data arrives as props only; this component must
 // never import server modules.
+//
+// Every model call runs through the shared job toolkit (2026-09-27): each
+// tool is its own ModelCallButton (or, for the document upload, a two-step
+// useModelRun since one click both extracts text in the browser and calls the
+// server) so a run survives leaving the page and shows up in the rail.
 
 const TEXT_CAP = 200_000;
+
+const doneLine = (label: string, r: { filled?: string[]; events?: number; skipped?: number }) =>
+  `✓ ${label}.${r.filled?.length ? ` Filled: ${r.filled.join(', ')}.` : ''} ${r.events ?? 0} event${(r.events ?? 0) === 1 ? '' : 's'} logged${r.skipped ? `, ${r.skipped} skipped` : ''}.`;
 
 export default function ResearchPanel({
   id, isAdmin, hasUrl, documents,
@@ -27,132 +38,73 @@ export default function ResearchPanel({
   documents: CompanyDocument[];
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
   const [steering, setSteering] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
-  const [log, setLog] = useState<string[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
-  const push = (s: string) => setLog((l) => [...l, s]);
+  const docFile = useRef<File | null>(null);
+  const [pickError, setPickError] = useState<string | null>(null);
+  const [delPending, startDelete] = useTransition();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const doneLine = (label: string, r: { filled?: string[]; events?: number; skipped?: number }) =>
-    `✓ ${label}.${r.filled?.length ? ` Filled: ${r.filled.join(', ')}.` : ''} ${r.events ?? 0} event${(r.events ?? 0) === 1 ? '' : 's'} logged${r.skipped ? `, ${r.skipped} skipped` : ''}.`;
+  const sweepFeature = isAdmin ? 'scout_intel' : 'portal_scout';
+  const docFeature = isAdmin ? 'scout_doc' : 'portal_scout';
 
-  function runSweep() {
-    setBusy('sweep');
-    setLog([]);
-    push('Searching the web for the company…');
-    startTransition(async () => {
-      try {
-        const r = await intelSweepAction(id, steering);
-        if (r.ok) { push(doneLine('Sweep done', r)); router.refresh(); }
-        else push(`✗ ${r.error ?? 'The sweep failed.'}`);
-      } finally {
-        setBusy(null);
-      }
-    });
-  }
-
-  function runEnrich() {
-    setBusy('enrich');
-    setLog([]);
-    push('Fetching the homepage…');
-    startTransition(async () => {
-      try {
-        const r = await enrichCompanyAction(id);
-        if (r.ok) { push(`✓ Dossier updated.${r.filled?.length ? ` Filled: ${r.filled.join(', ')}.` : ''}`); router.refresh(); }
-        else push(`✗ ${r.error ?? 'Enrichment failed.'}`);
-      } finally {
-        setBusy(null);
-      }
-    });
-  }
+  const docRun = useModelRun({
+    kind: `single:${docFeature}`,
+    subject: id,
+    label: 'Document read',
+    steps: [
+      { key: 'extract', label: 'Extract text', running: 'Extracting text from the PDF…' },
+      { key: 'call', label: 'Read the document', running: 'Reading, extracting facts…', features: [docFeature] },
+    ],
+    run: async (ctx) => {
+      const file = docFile.current;
+      if (!file) throw new Error('No file selected.');
+      const { filename, text } = await ctx.step('extract', async () => {
+        const { extractText, getDocumentProxy } = await import('unpdf');
+        const buf = new Uint8Array(await file.arrayBuffer());
+        const pdf = await getDocumentProxy(buf);
+        const { text: extracted } = await extractText(pdf, { mergePages: true });
+        const clean = (extracted ?? '').trim();
+        if (!clean) throw new Error('No selectable text in that PDF. It looks scanned.');
+        let body = clean;
+        if (body.length > TEXT_CAP) {
+          body = body.slice(0, TEXT_CAP);
+          ctx.note(`Truncated to ${TEXT_CAP.toLocaleString()} characters.`);
+        }
+        return { filename: file.name, text: body };
+      });
+      const r = await ctx.step('call', () => extractCompanyDocAction(id, filename, text, steering), { retries: 1 });
+      if (!r.ok) throw new Error(r.error ?? 'The extraction failed.');
+      router.refresh();
+      return { note: doneLine('Document read', r) };
+    },
+  });
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (fileInput.current) fileInput.current.value = '';
     if (!file) return;
+    setPickError(null);
     const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-    if (!isPdf) { setLog(['✗ That does not look like a PDF. Choose a .pdf file.']); return; }
-    if (file.size > 100 * 1024 * 1024) { setLog(['✗ That PDF is very large (over 100MB).']); return; }
-
-    setBusy('doc');
-    setLog([`Extracting text from ${file.name}…`]);
-    try {
-      const { extractText, getDocumentProxy } = await import('unpdf');
-      const buf = new Uint8Array(await file.arrayBuffer());
-      const pdf = await getDocumentProxy(buf);
-      const { text: extracted } = await extractText(pdf, { mergePages: true });
-      const clean = (extracted ?? '').trim();
-      if (!clean) {
-        push('✗ No selectable text in that PDF. It looks scanned.');
-        setBusy(null);
-        return;
-      }
-      let body = clean;
-      if (body.length > TEXT_CAP) {
-        body = body.slice(0, TEXT_CAP);
-        push(`Truncated to ${TEXT_CAP.toLocaleString()} characters.`);
-      }
-      push(`Extracted ${body.length.toLocaleString()} characters, reading…`);
-      startTransition(async () => {
-        try {
-          const r = await extractCompanyDocAction(id, file.name, body, steering);
-          if (r.ok) { push(doneLine('Document read', r)); router.refresh(); }
-          else push(`✗ ${r.error ?? 'The extraction failed.'}`);
-        } finally {
-          setBusy(null);
-        }
-      });
-    } catch (err) {
-      push(`✗ Could not read that PDF (${err instanceof Error ? err.message : 'unknown error'}).`);
-      setBusy(null);
-    }
-  }
-
-  function runCompetitors() {
-    setBusy('comp');
-    setLog([]);
-    push('Searching the web for similar young companies…');
-    startTransition(async () => {
-      try {
-        const r = await competitorScanAction(id, steering);
-        if (r.ok) {
-          push(`✓ Scan done: ${r.found ?? 0} found, ${r.inserted ?? 0} new in the review queue.${r.names?.length ? ` (${r.names.slice(0, 8).join(', ')}${(r.names.length > 8) ? ', …' : ''})` : ''}`);
-          router.refresh();
-        } else {
-          push(`✗ ${r.error ?? 'The scan failed.'}`);
-        }
-      } finally {
-        setBusy(null);
-      }
-    });
-  }
-
-  function runReExtract(docId: string) {
-    setBusy(`re:${docId}`);
-    setLog(['Re-reading the document…']);
-    startTransition(async () => {
-      try {
-        const r = await reExtractDocAction(docId, steering);
-        if (r.ok) { push(doneLine('Document re-read', r)); router.refresh(); }
-        else push(`✗ ${r.error ?? 'The extraction failed.'}`);
-      } finally {
-        setBusy(null);
-      }
-    });
+    if (!isPdf) { setPickError('That does not look like a PDF. Choose a .pdf file.'); return; }
+    if (file.size > 100 * 1024 * 1024) { setPickError('That PDF is very large (over 100MB).'); return; }
+    docFile.current = file;
+    void docRun.start();
   }
 
   function runDeleteDoc(docId: string) {
-    setBusy(`del:${docId}`);
-    startTransition(async () => {
+    setDeletingId(docId);
+    startDelete(async () => {
       try {
         await deleteCompanyDocAction(docId);
         router.refresh();
       } finally {
-        setBusy(null);
+        setDeletingId(null);
       }
     });
   }
+
+  const anyBusy = docRun.status === 'running' || delPending;
 
   return (
     <div
@@ -169,48 +121,83 @@ export default function ResearchPanel({
           placeholder="e.g. Focus on their claims-processing tech and any named insurance customers."
           value={steering}
           onChange={(e) => setSteering(e.target.value)}
-          disabled={pending}
+          disabled={anyBusy}
         />
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <button type="button" className="btn btn--primary btn--sm" disabled={!!busy || pending} onClick={runSweep}>
-          {busy === 'sweep' ? 'Sweeping…' : '✦ Web intel sweep'}
-        </button>
-        <label className={`btn btn--ghost btn--sm${busy || pending ? ' opacity-50 pointer-events-none' : ''}`} style={{ cursor: 'pointer' }}>
-          {busy === 'doc' ? 'Reading…' : 'Upload a document…'}
+        <ModelCallButton
+          label="✦ Web intel sweep"
+          busyLabel="Searching the web for the company…"
+          kind={`single:${sweepFeature}`}
+          subject={id}
+          jobLabel="Web intel sweep"
+          feature={sweepFeature}
+          retries={1}
+          className="btn btn--primary btn--sm"
+          action={() => intelSweepAction(id, steering)}
+          onDone={(r) => {
+            router.refresh();
+            return { note: doneLine('Sweep done', r) };
+          }}
+        />
+        <label className={`btn btn--ghost btn--sm${anyBusy ? ' opacity-50 pointer-events-none' : ''}`} style={{ cursor: 'pointer' }}>
+          {docRun.status === 'running' ? 'Reading…' : 'Upload a document…'}
           <input
             ref={fileInput}
             type="file"
             accept="application/pdf,.pdf"
             onChange={handleFile}
             style={{ display: 'none' }}
-            disabled={!!busy || pending}
+            disabled={anyBusy}
           />
         </label>
         {isAdmin && (
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            disabled={!!busy || pending}
-            title="Find similar young companies and queue them for review"
-            onClick={runCompetitors}
-          >
-            {busy === 'comp' ? 'Scanning…' : '✦ Find competitors'}
-          </button>
+          <span title="Find similar young companies and queue them for review">
+            <ModelCallButton
+              label="✦ Find competitors"
+              busyLabel="Searching the web for similar young companies…"
+              kind="single:scout_competitors"
+              subject={id}
+              jobLabel="Competitor scan"
+              feature="scout_competitors"
+              retries={1}
+              className="btn btn--ghost btn--sm"
+              action={() => competitorScanAction(id, steering)}
+              onDone={(r) => {
+                router.refresh();
+                return {
+                  note: `✓ Scan done: ${r.found ?? 0} found, ${r.inserted ?? 0} new in the review queue.${r.names?.length ? ` (${r.names.slice(0, 8).join(', ')}${r.names.length > 8 ? ', …' : ''})` : ''}`,
+                };
+              }}
+            />
+          </span>
         )}
         {isAdmin && (
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            disabled={!!busy || pending || !hasUrl}
-            title={hasUrl ? 'Fetch the homepage and extract a dossier' : 'Add a homepage URL first'}
-            onClick={runEnrich}
-          >
-            {busy === 'enrich' ? 'Enriching…' : '✦ Refresh homepage dossier'}
-          </button>
+          <span title={hasUrl ? 'Fetch the homepage and extract a dossier' : 'Add a homepage URL first'}>
+            <ModelCallButton
+              label="✦ Refresh homepage dossier"
+              busyLabel="Fetching the homepage…"
+              kind="single:scout_dossier"
+              subject={id}
+              jobLabel="Homepage dossier refresh"
+              feature="scout_dossier"
+              retries={1}
+              disabled={!hasUrl}
+              className="btn btn--ghost btn--sm"
+              action={() => enrichCompanyAction(id)}
+              onDone={(r) => {
+                router.refresh();
+                return { note: `✓ Dossier updated.${r.filled?.length ? ` Filled: ${r.filled.join(', ')}.` : ''}` };
+              }}
+            />
+          </span>
         )}
       </div>
+
+      {pickError && <p className="text-xs" style={{ color: 'var(--danger, #b42318)' }}>✗ {pickError}</p>}
+
+      <ModelRunPanel run={docRun} />
 
       <p className="text-xs" style={{ color: 'var(--faint-ink)' }}>
         The sweep searches the web for funding, product, team, and news. A document
@@ -236,12 +223,25 @@ export default function ResearchPanel({
                 {d.created_at} · {d.char_count.toLocaleString()} chars · {d.origin}
               </span>
               <span style={{ marginLeft: 'auto' }} className="flex items-center gap-2">
-                <button type="button" className="btn btn--quiet btn--sm" disabled={!!busy || pending} onClick={() => runReExtract(d.id)}>
-                  {busy === `re:${d.id}` ? 'Reading…' : 'Re-extract'}
-                </button>
+                <ModelCallButton
+                  label="Re-extract"
+                  busyLabel="Re-reading the document…"
+                  kind={`single:${docFeature}`}
+                  subject={d.id}
+                  jobLabel={`Document re-read: ${d.filename}`}
+                  feature={docFeature}
+                  retries={1}
+                  disabled={deletingId === d.id}
+                  className="btn btn--quiet btn--sm"
+                  action={() => reExtractDocAction(d.id, steering)}
+                  onDone={(r) => {
+                    router.refresh();
+                    return { note: doneLine('Document re-read', r) };
+                  }}
+                />
                 {isAdmin && (
-                  <button type="button" className="btn btn--quiet btn--sm" disabled={!!busy || pending} onClick={() => runDeleteDoc(d.id)}>
-                    {busy === `del:${d.id}` ? '…' : '✕'}
+                  <button type="button" className="btn btn--quiet btn--sm" disabled={delPending} onClick={() => runDeleteDoc(d.id)}>
+                    {deletingId === d.id ? '…' : '✕'}
                   </button>
                 )}
               </span>
@@ -251,17 +251,6 @@ export default function ResearchPanel({
             </div>
           ))}
         </div>
-      )}
-
-      {log.length > 0 && (
-        <pre
-          className="text-xs"
-          role="status"
-          aria-live="polite"
-          style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}
-        >
-          {log.join('\n')}
-        </pre>
       )}
     </div>
   );

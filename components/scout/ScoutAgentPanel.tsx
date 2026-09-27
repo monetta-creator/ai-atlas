@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import {
   scoreScoutChunkAction, saveScoutPrefsAction, acceptScoutRecommendationsAction,
 } from '@/lib/actions';
+import { useModelRun } from '@/lib/jobs/use-model-run';
+import type { StepSpec } from '@/lib/jobs/core';
+import ModelRunPanel from '@/components/jobs/ModelRunPanel';
 
 // The scoring agent's console strip: the editable acquisition rubric, a
 // standing steering note, "score the queue" (short recommend-only chunks,
@@ -27,13 +30,59 @@ export default function ScoutAgentPanel({
   const [note, setNote] = useState(steering ?? '');
   const [rubricText, setRubricText] = useState(rubric ?? '');
   const [savingPrefs, setSavingPrefs] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [log, setLog] = useState<string[]>([]);
+  const [acceptBusy, setAcceptBusy] = useState<string | null>(null);
+  const [acceptNote, setAcceptNote] = useState<string | null>(null);
   const stopRef = useRef(false);
-  const push = (s: string) => setLog((l) => [...l, s]);
 
   const scored = summary.pursue + summary.watch + summary.pass;
   const prefsDirty = note !== (steering ?? '') || rubricText !== (rubric ?? '');
+  const chunkCount = Math.max(1, Math.ceil(queued.length / CHUNK));
+
+  const SCORE_STEPS: StepSpec[] = [
+    {
+      key: 'chunks', label: 'Score the queue', running: 'Scoring companies…',
+      features: Array.from({ length: chunkCount }, () => 'scout_agent'),
+    },
+  ];
+
+  const scoreRun = useModelRun({
+    kind: 'scout_agent_score',
+    label: `Score the scout queue (${queued.length})`,
+    steps: SCORE_STEPS,
+    run: async (ctx) => {
+      stopRef.current = false;
+      const totals = { processed: 0, pursue: 0, watch: 0, pass: 0 };
+      const chunks: { id: string }[][] = [];
+      for (let i = 0; i < queued.length; i += CHUNK) chunks.push(queued.slice(i, i + CHUNK));
+      await ctx.step('chunks', async () => {
+        ctx.note(`Scoring ${queued.length} companies in ${chunks.length} chunk${chunks.length === 1 ? '' : 's'}…`);
+        for (let i = 0; i < chunks.length; i++) {
+          if (stopRef.current) { ctx.note('Stopped; already-scored recommendations are saved.'); break; }
+          let done = false;
+          for (let attempt = 1; attempt <= 2 && !done; attempt++) {
+            const r = await scoreScoutChunkAction(chunks[i].map((c) => c.id));
+            if (r.ok) {
+              done = true;
+              totals.processed += r.processed ?? 0;
+              totals.pursue += r.pursue ?? 0;
+              totals.watch += r.watch ?? 0;
+              totals.pass += r.pass ?? 0;
+              ctx.note(`Chunk ${i + 1}/${chunks.length}: ${r.processed} companies (${r.pursue} pursue · ${r.watch} watch · ${r.pass} pass)`);
+            } else if (attempt === 2) {
+              ctx.note(`Chunk ${i + 1} failed (${r.error ?? 'error'}); continuing.`);
+            } else {
+              await new Promise((res) => setTimeout(res, 4000));
+            }
+          }
+          if ((i + 1) % 3 === 0) router.refresh();
+        }
+      }, { retries: 1 });
+      router.refresh();
+      return {
+        note: `Done: ${totals.processed} scored (${totals.pursue} pursue · ${totals.watch} watch · ${totals.pass} pass). Review below, then accept per row or in bulk.`,
+      };
+    },
+  });
 
   async function savePrefs() {
     setSavingPrefs(true);
@@ -45,55 +94,24 @@ export default function ScoutAgentPanel({
     }
   }
 
-  async function run() {
-    setBusy('run');
-    stopRef.current = false;
-    setLog([]);
-    const totals = { processed: 0, pursue: 0, watch: 0, pass: 0 };
-    const chunks: { id: string }[][] = [];
-    for (let i = 0; i < queued.length; i += CHUNK) chunks.push(queued.slice(i, i + CHUNK));
-    push(`Scoring ${queued.length} companies in ${chunks.length} chunk${chunks.length === 1 ? '' : 's'}…`);
-    for (let i = 0; i < chunks.length; i++) {
-      if (stopRef.current) { push('Stopped; already-scored recommendations are saved.'); break; }
-      let done = false;
-      for (let attempt = 1; attempt <= 2 && !done; attempt++) {
-        const r = await scoreScoutChunkAction(chunks[i].map((c) => c.id));
-        if (r.ok) {
-          done = true;
-          totals.processed += r.processed ?? 0;
-          totals.pursue += r.pursue ?? 0;
-          totals.watch += r.watch ?? 0;
-          totals.pass += r.pass ?? 0;
-          push(`Chunk ${i + 1}/${chunks.length}: ${r.processed} companies (${r.pursue} pursue · ${r.watch} watch · ${r.pass} pass)`);
-        } else if (attempt === 2) {
-          push(`Chunk ${i + 1} failed (${r.error ?? 'error'}); continuing.`);
-        } else {
-          await new Promise((res) => setTimeout(res, 4000));
-        }
-      }
-      if ((i + 1) % 3 === 0) router.refresh();
-    }
-    push(`Done: ${totals.processed} scored (${totals.pursue} pursue · ${totals.watch} watch · ${totals.pass} pass). Review below, then accept per row or in bulk.`);
-    setBusy(null);
-    router.refresh();
-  }
-
   async function accept(verdict: 'pursue' | 'pass') {
     const n = summary[verdict];
     const label = verdict === 'pursue'
       ? `track ${n} compan${n === 1 ? 'y' : 'ies'} with the agent's whys as review notes`
       : `dismiss ${n} compan${n === 1 ? 'y' : 'ies'}`;
     if (!window.confirm(`Accept all ${n} "${verdict}" recommendations? This will ${label}.`)) return;
-    setBusy(verdict);
-    setLog([]);
+    setAcceptBusy(verdict);
+    setAcceptNote(null);
     try {
       const { ids } = await acceptScoutRecommendationsAction(verdict);
-      push(`${ids.length} compan${ids.length === 1 ? 'y' : 'ies'} ${verdict === 'pursue' ? 'tracked' : 'dismissed'}.`);
+      setAcceptNote(`${ids.length} compan${ids.length === 1 ? 'y' : 'ies'} ${verdict === 'pursue' ? 'tracked' : 'dismissed'}.`);
       router.refresh();
     } finally {
-      setBusy(null);
+      setAcceptBusy(null);
     }
   }
+
+  const busy = scoreRun.status === 'running' || !!acceptBusy;
 
   return (
     <div className="rounded-[var(--radius)] border p-[var(--card-pad)] flex flex-col gap-3"
@@ -134,10 +152,10 @@ export default function ScoutAgentPanel({
 
       <div className="flex items-center gap-3 flex-wrap">
         <button type="button" className="btn btn--primary btn--sm"
-          disabled={!!busy || queued.length === 0} onClick={() => void run()}>
+          disabled={busy || queued.length === 0} onClick={() => void scoreRun.start()}>
           ✦ Score the queue ({queued.length})
         </button>
-        {busy === 'run' && (
+        {scoreRun.status === 'running' && (
           <button type="button" className="btn btn--quiet btn--sm" onClick={() => { stopRef.current = true; }}>
             Stop after this chunk
           </button>
@@ -146,6 +164,7 @@ export default function ScoutAgentPanel({
           Recommend-only: re-runs re-score every queued company with the current rubric and steering.
         </span>
       </div>
+      <ModelRunPanel run={scoreRun} />
 
       {scored > 0 && (
         <div className="flex items-center gap-2 flex-wrap text-sm" style={{ color: 'var(--dim)' }}>
@@ -154,12 +173,12 @@ export default function ScoutAgentPanel({
             {summary.none > 0 ? ` · ${summary.none} unscored` : ''}
           </span>
           {summary.pursue > 0 && (
-            <button type="button" className="btn btn--ghost btn--sm" disabled={!!busy} onClick={() => void accept('pursue')}>
+            <button type="button" className="btn btn--ghost btn--sm" disabled={busy} onClick={() => void accept('pursue')}>
               Accept {summary.pursue} pursue{summary.pursue === 1 ? '' : 's'} → track
             </button>
           )}
           {summary.pass > 0 && (
-            <button type="button" className="btn btn--quiet btn--sm" disabled={!!busy} onClick={() => void accept('pass')}>
+            <button type="button" className="btn btn--quiet btn--sm" disabled={busy} onClick={() => void accept('pass')}>
               Accept {summary.pass} pass{summary.pass === 1 ? '' : 'es'} → dismiss
             </button>
           )}
@@ -170,12 +189,8 @@ export default function ScoutAgentPanel({
           )}
         </div>
       )}
-
-      {log.length > 0 && (
-        <pre className="text-xs" role="status" aria-live="polite"
-          style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'var(--faint-ink)', maxHeight: 240, overflowY: 'auto', fontFamily: 'var(--font-mono)' }}>
-          {log.join('\n')}
-        </pre>
+      {acceptNote && (
+        <p className="text-xs" style={{ margin: 0, color: 'var(--faint-ink)' }}>{acceptNote}</p>
       )}
     </div>
   );

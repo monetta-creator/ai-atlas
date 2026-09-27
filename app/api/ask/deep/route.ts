@@ -123,6 +123,7 @@ export async function POST(req: Request): Promise<Response> {
             kinds: p.kinds, limit: p.limit, admin: true,
             tagFor: tagger.tagFor, paperTagFor: tagger.paperTagFor,
             itemTagFor: tagger.itemTagFor, factTagFor: tagger.factTagFor,
+            reportTagFor: tagger.reportTagFor,
           });
           emit(ndStatus(deDash(statusSearch(p.query, hits.length))));
           return { text: renderSearchHits(hits) };
@@ -137,6 +138,16 @@ export async function POST(req: Request): Promise<Response> {
               return { text: `Unknown ${p.kind} tag ${p.id}. Use a tag from a result in this conversation.`, isError: true };
             }
             dbId = uuid;
+          } else if (p.kind === 'report') {
+            // The map value is the full descriptor ('report:<kind>:<scope>:
+            // <uuid>:<section>'); fetchRecord's 'report' kind wants just the
+            // trailing '<uuid>:<section>'.
+            const descriptor = tagger.idFor(p.id);
+            if (!descriptor) {
+              return { text: `Unknown report tag ${p.id}. Use a tag from a result in this conversation.`, isError: true };
+            }
+            const parts = descriptor.split(':');
+            dbId = parts.length === 5 ? `${parts[3]}:${parts[4]}` : descriptor;
           }
           const payload = await fetchRecord(q, p.kind, dbId, { admin: true });
           if (!payload) return { text: `No ${p.kind} found with id ${p.id}.`, isError: true };

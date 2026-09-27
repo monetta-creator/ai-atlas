@@ -4,6 +4,7 @@ import { getEditContext } from '@/lib/content';
 import { getToolingCategories, searchProducts, listToolingReports, getToolingRuns, countCataloged } from '@/lib/data';
 import { dateLabel } from '@/lib/format';
 import Editable from '@/components/Editable';
+import { descriptionFor } from '@/lib/page-info';
 import ProductFilters from '@/components/tooling/ProductFilters';
 import ProductCard from '@/components/tooling/ProductCard';
 import NewEntrantsStrip from '@/components/tooling/NewEntrantsStrip';
@@ -13,7 +14,7 @@ import ProductLogo from '@/components/tooling/ProductLogo';
 import type { ToolingViewer } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'AI Tooling Monitor · The AI Atlas' };
+export const metadata = { title: 'AI Tooling Monitor · The AI Atlas', description: descriptionFor('/tooling') };
 
 const MATURITIES = new Set([
   'startup_early', 'startup_growth', 'scaleup', 'incumbent', 'big_tech', 'open_source_project', 'unknown',

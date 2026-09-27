@@ -11,30 +11,17 @@ import type { ToolingSectionsOut } from '@/lib/tooling/reports';
 import type { ToolingPack, ToolingCategory } from '@/lib/types';
 import type { ToolingReportMeta } from '@/lib/data';
 import { SHEET_KIND_LABEL, dateLabel } from '@/lib/format';
+import { useModelRun } from '@/lib/jobs/use-model-run';
+import type { FeatureStats, StepSpec, UiJob } from '@/lib/jobs/core';
+import ModelRunPanel from '@/components/jobs/ModelRunPanel';
 
 // The AI Tooling Monitor's report console: four kind cards, one params form
 // per kind, a shared steering note, and the SheetConsole chain (pack ->
-// sections -> close -> save) with client retries. A portal keyholder can
-// run this whole chain, not just an admin; the console never auto-publishes
-// (only the weekly entrants cron does that), so every save here lands as a
-// draft on the list below, admin publish/unpublish only.
-
-const MAX_ATTEMPTS = 3;
-const backoff = (attempt: number) => new Promise((r) => setTimeout(r, attempt * 1500));
-
-async function withRetry<T extends { ok: boolean }>(fn: () => Promise<T>): Promise<T> {
-  let last: T | null = null;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      last = await fn();
-      if (last.ok) return last;
-    } catch (e) {
-      last = { ok: false, error: e instanceof Error ? e.message : 'error' } as unknown as T;
-    }
-    if (attempt < MAX_ATTEMPTS) await backoff(attempt);
-  }
-  return last as T;
-}
+// sections -> close -> save) on the shared run panel (visible retries per
+// step, a cache so a retry resumes without rebuilding earlier legs). A
+// portal keyholder can run this whole chain, not just an admin; the console
+// never auto-publishes (only the weekly entrants cron does that), so every
+// save here lands as a draft on the list below, admin publish/unpublish only.
 
 type Kind = 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features';
 
@@ -56,12 +43,14 @@ const DIMENSIONS: { key: string; label: string }[] = [
 
 const AUDIENCES = ['executive', 'engineering', 'procurement'] as const;
 
-const STEPS = [
-  { running: 'Building the report pack…' },
-  { running: 'Writing the cited narrative…' },
-  { running: 'Writing the bottom line…' },
-  { running: 'Saving the draft…' },
-] as const;
+// The chain, declared once: the panel's stepper, its running sentences, and
+// the ai_cost_log features whose history gives the usual time and cost.
+const STEPS: StepSpec[] = [
+  { key: 'pack', label: 'Report pack', running: 'Building the report pack…' },
+  { key: 'sections', label: 'Cited narrative', running: 'Writing the cited narrative…', features: ['tooling_report_sections'] },
+  { key: 'close', label: 'Bottom line', running: 'Writing the bottom line…', features: ['tooling_report_close'] },
+  { key: 'save', label: 'Saved as a draft', running: 'Saving the draft…' },
+];
 
 function defaultWeek(): { from: string; to: string } {
   // Captured at mount (a client-only component; the same "now at load" idiom
@@ -72,19 +61,22 @@ function defaultWeek(): { from: string; to: string } {
 }
 
 export default function ToolingReportConsole({
-  categories, reports, admin,
+  categories, reports, admin, stats, initialJob,
 }: {
   categories: ToolingCategory[];
   reports: ToolingReportMeta[];
   admin: boolean;
+  stats?: FeatureStats | null;
+  initialJob?: UiJob | null;
 }) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind>('tooling_landscape');
   const [steering, setSteering] = useState('');
-  const [running, setRunning] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<{ id: string; title: string; dropped: string[] } | null>(null);
   const [busyReportId, setBusyReportId] = useState<string | null>(null);
+  // What a resumed run may reuse: the pack and sections built for these same
+  // inputs (a retry from the close/save step never rebuilds them).
+  const [cache, setCache] = useState<{ key: string; pack?: ToolingPack; sections?: ToolingSectionsOut } | null>(null);
 
   // Landscape
   const [lCategory, setLCategory] = useState('');
@@ -125,61 +117,78 @@ export default function ToolingReportConsole({
     }
   }
 
+  const subjectText =
+    kind === 'tooling_landscape' ? lCategory :
+    kind === 'tooling_brief' ? bCapability :
+    kind === 'tooling_entrants' ? 'week' :
+    fCategory;
+  const kindName = CARDS.find((c) => c.kind === kind)?.name ?? kind;
+  const params = buildParams();
+  const runKey = JSON.stringify([kind, params, steering]);
+
   const canRun =
-    !running &&
     (kind !== 'tooling_landscape' || !!lCategory) &&
     (kind !== 'tooling_brief' || bCapability.trim().length >= 3) &&
     (kind !== 'tooling_entrants' || (!!eFrom && !!eTo)) &&
     (kind !== 'tooling_features' || !!fCategory);
 
-  async function generate() {
-    if (!canRun) return;
-    setError(null);
-    setSaved(null);
-    const params = buildParams();
-    try {
-      setRunning(STEPS[0].running);
-      const packRes = await withRetry(() => buildToolingPackAction(kind, params));
-      if (!packRes.ok) throw new Error(packRes.error);
-      const pack: ToolingPack = packRes.pack;
-
-      setRunning(STEPS[1].running);
-      const steer = steering.trim() || null;
-      const secRes = await withRetry(() => generateToolingSectionsAction(pack, steer));
-      if (!secRes.ok) throw new Error(secRes.error);
-      const sections: ToolingSectionsOut = secRes.sections;
-
-      setRunning(STEPS[2].running);
-      const closeRes = await withRetry(() => generateToolingCloseAction(pack, {
-        readingMd: sections.readingMd, connectionsMd: sections.connectionsMd, watchMd: sections.watchMd,
+  const run = useModelRun({
+    kind: 'tooling_report',
+    subject: `${kind}:${subjectText || 'unset'}`,
+    label: `${kindName}${subjectText ? `, ${subjectText}` : ''}`,
+    steps: STEPS,
+    stats,
+    initialJob,
+    run: async (ctx, resumeFrom) => {
+      setSaved(null);
+      const reuse = resumeFrom && cache?.key === runKey ? cache : null;
+      let pack = resumeFrom === 'pack' ? undefined : reuse?.pack;
+      if (!pack) {
+        const r = await ctx.step('pack', () => buildToolingPackAction(kind, params));
+        if (!r.ok) throw new Error(r.error);
+        pack = r.pack;
+        const p = pack;
+        setCache({ key: runKey, pack: p });
+        ctx.note('✓ Report pack built');
+      }
+      const packNow = pack;
+      let sections = resumeFrom === 'close' || resumeFrom === 'save' ? reuse?.sections : undefined;
+      if (!sections) {
+        const steer = steering.trim() || null;
+        const r = await ctx.step('sections', () => generateToolingSectionsAction(packNow, steer));
+        if (!r.ok) throw new Error(r.error);
+        sections = r.sections;
+        const s = sections;
+        setCache({ key: runKey, pack: packNow, sections: s });
+        ctx.note('✓ Narrative written');
+      }
+      const sectionsNow = sections;
+      const closeRes = await ctx.step('close', () => generateToolingCloseAction(packNow, {
+        readingMd: sectionsNow.readingMd, connectionsMd: sectionsNow.connectionsMd, watchMd: sectionsNow.watchMd,
       }));
       if (!closeRes.ok) throw new Error(closeRes.error);
-
-      setRunning(STEPS[3].running);
-      const saveRes = await saveToolingReportAction({
+      const saveRes = await ctx.step('save', () => saveToolingReportAction({
         title: closeRes.title,
-        pack,
+        pack: packNow,
         narrative: {
-          reading: sections.readingHtml || null,
-          connections: sections.connectionsHtml || null,
-          watch: sections.watchHtml || null,
+          reading: sectionsNow.readingHtml || null,
+          connections: sectionsNow.connectionsHtml || null,
+          watch: sectionsNow.watchHtml || null,
           bottomLine: closeRes.bottomLineHtml || null,
         },
-      });
+      }));
       if (!saveRes.ok) throw new Error(saveRes.error);
-
       setSaved({
         id: saveRes.id,
         title: closeRes.title,
-        dropped: [...new Set([...sections.dropped, ...closeRes.dropped])],
+        dropped: [...new Set([...sectionsNow.dropped, ...closeRes.dropped])],
       });
       router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Generation failed.');
-    } finally {
-      setRunning(null);
-    }
-  }
+      return { href: `/reports/sheet/${saveRes.id}`, note: `✓ Saved as a draft: ${closeRes.title}` };
+    },
+  });
+
+  const busy = run.status === 'running';
 
   async function togglePublish(id: string, on: boolean) {
     setBusyReportId(id);
@@ -206,7 +215,7 @@ export default function ToolingReportConsole({
               borderColor: kind === c.kind ? 'var(--accent)' : undefined,
             }}
             aria-pressed={kind === c.kind}
-            onClick={() => { setKind(c.kind); setSaved(null); setError(null); }}
+            onClick={() => { setKind(c.kind); setSaved(null); }}
           >
             <span className="lobby-tile-name">{c.name}</span>
             <span className="lobby-tile-desc">{c.desc}</span>
@@ -324,34 +333,20 @@ export default function ToolingReportConsole({
           placeholder="Your current priorities for this report, if any." />
       </div>
 
-      <button type="button" className="btn btn--primary" disabled={!canRun} onClick={() => void generate()}>
-        {running ? 'Generating…' : 'Generate report'}
+      <button type="button" className="btn btn--primary" disabled={!canRun || busy} onClick={() => void run.start()}>
+        {busy ? <><span className="spinner mr-btn-spin" aria-hidden="true" />Generating</> : 'Generate report'}
       </button>
 
-      {running && (
-        <p className="text-sm" style={{ color: 'var(--dim)', marginTop: 10 }}>
-          <span className="spinner" style={{ marginRight: 8, verticalAlign: -2 }} />{running}
-        </p>
-      )}
-      {error && (
-        <p className="text-sm" style={{ color: 'var(--heat-4)', marginTop: 10 }}>
-          {error} <button type="button" className="btn btn--quiet btn--sm" onClick={() => void generate()}>Retry</button>
-        </p>
-      )}
-      {saved && (
-        <p className="text-sm" style={{ color: 'var(--ink)', marginTop: 10 }}>
-          Draft saved: <Link href={`/reports/sheet/${saved.id}`} className="hover:underline" style={{ color: 'var(--accent)', fontWeight: 600 }}>
-            {saved.title || 'view the report'}
-          </Link>
-          {' '}· <a href={`/reports/sheet/${saved.id}/pdf`} style={{ color: 'var(--accent)' }}>PDF</a>
-          {admin && ' · publish from the list below to make it public'}
-          {saved.dropped.length > 0 && (
-            <span style={{ color: 'var(--faint-ink)' }}>
-              {' '}The citation gate stripped {saved.dropped.length} link{saved.dropped.length === 1 ? '' : 's'} the pack could not vouch for.
-            </span>
-          )}
-        </p>
-      )}
+      <ModelRunPanel run={run} doneLabel="Open the draft">
+        {saved && (
+          <p className="text-sm" style={{ color: 'var(--dim)', margin: 0 }}>
+            {admin && 'Publish from the list below to make it public.'}
+            {saved.dropped.length > 0 && (
+              <> The citation gate stripped {saved.dropped.length} link{saved.dropped.length === 1 ? '' : 's'} the pack could not vouch for.</>
+            )}
+          </p>
+        )}
+      </ModelRunPanel>
 
       <div className="section-label" style={{ marginTop: 30 }}>Past tooling reports</div>
       {reports.length === 0 && (

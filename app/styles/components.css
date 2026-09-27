@@ -147,6 +147,10 @@ svg.edges path { transition: opacity .2s, stroke-width .2s; }
   .reveal { opacity: 1; transform: none; }
 }
 
+.about-oneliner {
+  font-family: var(--font-headline); font-size: clamp(24px, 3.2vw, 34px); line-height: 1.12;
+  color: var(--ink); margin: 4px 0 14px; max-width: 30ch; letter-spacing: -.005em;
+}
 .about-prose { display: flex; flex-direction: column; max-width: 68ch; counter-reset: about-sec; }
 .about-prose > section {
   display: flex; flex-direction: column; gap: 10px;
@@ -370,3 +374,26 @@ a.plate:hover { border-color: var(--ink); text-decoration: none; }
   font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums;
 }
 
+
+/* ---- /about/inside: the portal tour (2026-09-27) ---- */
+.tour { display: flex; flex-direction: column; gap: 44px; }
+.tour-sec {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 520px); gap: 28px; align-items: start;
+  padding-top: 28px; border-top: 1px solid var(--line);
+}
+.tour-sec:not(:has(.tour-grab)) { grid-template-columns: minmax(0, 1fr); }
+.tour-kicker { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint-ink); margin: 0 0 6px; }
+.tour-name { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-family: var(--font-headline); font-size: 28px; line-height: 1.05; }
+.tour-name a { color: var(--ink); text-decoration: none; }
+.tour-name a:hover { color: var(--accent); }
+.tour-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; flex: none; background: color-mix(in oklab, var(--accent) 10%, transparent); color: var(--accent); }
+.tour-icon svg { width: 18px; height: 18px; }
+.tour-summary { margin: 0 0 10px; font-size: 15px; line-height: 1.55; color: var(--ink); font-weight: 500; max-width: 62ch; }
+.tour-body { margin: 0 0 12px; font-size: 14.5px; line-height: 1.65; color: var(--dim); max-width: 62ch; }
+.tour-pages { display: flex; flex-wrap: wrap; gap: 6px; }
+.tour-page { font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink); text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; }
+.tour-page:hover { border-color: var(--accent); color: var(--accent); }
+.tour-page[data-access="admin"] { color: var(--faint-ink); border-style: dashed; }
+.tour-grab { display: block; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 40px -28px color-mix(in oklab, var(--ink) 50%, transparent); }
+.tour-grab img { display: block; width: 100%; height: auto; }
+@media (max-width: 900px) { .tour-sec { grid-template-columns: minmax(0, 1fr); } }

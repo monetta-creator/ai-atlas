@@ -28,7 +28,7 @@ export default function ToolingUnlock() {
           className="input"
           type="password"
           name="key"
-          placeholder="Team portal key"
+          placeholder="Access key"
           autoComplete="off"
           style={{ maxWidth: 280 }}
         />

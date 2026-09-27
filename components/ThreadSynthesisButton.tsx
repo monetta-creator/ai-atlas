@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { updateThreadSynthesisAction, setThreadStatusAction } from '@/lib/actions';
 import type { ThreadStatus } from '@/lib/types';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 
 const STATUSES: ThreadStatus[] = ['open', 'settled', 'dormant'];
 
@@ -16,35 +17,6 @@ export default function ThreadSynthesisButton({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState(false);
-
-  async function update() {
-    setBusy(true);
-    setError(false);
-    setMsg('Rewriting the synthesis…');
-    try {
-      const MAX_ATTEMPTS = 2;
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        const r = await updateThreadSynthesisAction(slug);
-        if (r.ok) {
-          setMsg('Synthesis updated.');
-          router.refresh();
-          return;
-        }
-        if (attempt === MAX_ATTEMPTS) {
-          setError(true);
-          setMsg(`Update failed (${r.error ?? 'error'}).`);
-          return;
-        }
-        setMsg(`Update failed (${r.error ?? 'error'}), retrying…`);
-        await new Promise((res) => setTimeout(res, 3_000));
-      }
-    } catch (e) {
-      setError(true);
-      setMsg(`Error: ${e instanceof Error ? e.message : 'unknown'}`);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function changeStatus(next: string) {
     setBusy(true);
@@ -61,16 +33,19 @@ export default function ThreadSynthesisButton({
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
-      <button
-        type="button"
-        className="btn btn--ghost btn--sm"
-        onClick={update}
-        disabled={busy || paperCount === 0}
-        title={paperCount === 0 ? 'Place papers in this thread first' : undefined}
-        style={busy ? { opacity: 0.6, cursor: 'wait' } : undefined}
-      >
-        {busy ? 'Working…' : '✦ Update synthesis'}
-      </button>
+      <span title={paperCount === 0 ? 'Place papers in this thread first' : undefined}>
+        <ModelCallButton
+          label="✦ Update synthesis"
+          busyLabel="Rewriting the synthesis…"
+          kind="single:research_synthesis"
+          subject={slug}
+          feature="research_synthesis"
+          className="btn btn--ghost btn--sm"
+          disabled={busy || paperCount === 0}
+          action={() => updateThreadSynthesisAction(slug)}
+          onDone={() => router.refresh()}
+        />
+      </span>
       <select
         className="input" style={{ maxWidth: 130 }} value={status} disabled={busy}
         onChange={(e) => changeStatus(e.target.value)}

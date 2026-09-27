@@ -4,12 +4,13 @@ import { DATASETS } from '@/lib/datasets/registry';
 import { toDatasetCard, CATEGORY_LABELS, type DatasetAccessFilter } from '@/lib/datasets/cards';
 import { getEditContext } from '@/lib/content';
 import PageTop from '@/components/PageTop';
+import { descriptionFor } from '@/lib/page-info';
 import Editable from '@/components/Editable';
 import RenewalNotice, { type RenewalState } from '@/components/portal/RenewalNotice';
 import DatasetCatalog from '@/components/datasets/DatasetCatalog';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Data Portal · The AI Atlas' };
+export const metadata = { title: 'Data Portal · The AI Atlas', description: descriptionFor('/datasets') };
 
 // The public Datasets portal hub: a filterable, searchable card grid over the
 // catalog of downloadable datasets (public ones guest-safe, the key-gated

@@ -103,7 +103,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
       {
         heading: 'What guests see',
-        body: 'Only tracked companies are public; a company still in the queue is not shown, since a public "pursue" chip on a named startup would disclose acquisition intent. Team keyholders additionally see queued profiles, the agent read, and can add a target or run research on any visible company.',
+        body: 'Only tracked companies are public; a company still in the queue is not shown, since a public "pursue" chip on a named startup would disclose acquisition intent. Access-key holders additionally see queued profiles, the agent read, and can add a target or run research on any visible company.',
       },
       {
         heading: 'Research on a profile',
@@ -137,7 +137,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
       {
         heading: 'Who can generate one',
-        body: 'Guests see the shelf of published tooling reports only. Generating a report is a live model call, so it sits behind the team portal key or the admin session; a visitor with neither sees an inline unlock instead of a login bounce.',
+        body: 'Guests see the shelf of published tooling reports only. Generating a report is a live model call, so it sits behind an access key or the admin session; a visitor with neither sees an inline unlock instead of a login bounce.',
       },
     ],
   },
@@ -169,7 +169,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
   },
   '/about': {
     title: 'How the About section works',
-    summary: 'A structured map for staying oriented in the AI economy debate.',
+    summary: 'An intelligence system for the AI economy, built on a map of the argument.',
     sections: [
       {
         heading: 'The map’s shape',
@@ -177,13 +177,23 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
       {
         heading: 'What the rest of this section covers',
-        body: 'Guardrails explains the schema rules that enforce falsifiability. Glossary defines every term. Limitations is an honest account of what the tool does not do. Signal ingestion and Why bespoke explain the intake and the case for a purpose-built system over a general chatbot or a commercial platform. Data handling says where the data comes from, which outside services process it, what is stored, and who can see what.',
+        body: 'Inside the Atlas tours every portal. How it works covers the schema rules that enforce falsifiability, how material comes in, and how Ask finds things. Where it fails is an honest account of what the tool does not do. Data handling says where the data comes from, which outside services process it, what is stored, and who can see what. Glossary defines every term, and Why bespoke makes the case for a purpose-built system over a general chatbot or a commercial platform.',
       },
     ],
   },
-  '/about/guardrails': {
-    title: 'About: Guardrails',
-    summary: 'The schema rules that enforce falsifiability, and the anti-patterns they block.',
+  '/about/inside': {
+    title: 'About: Inside the Atlas',
+    summary: 'A tour of every portal: what each does, what it looks like, and the pages inside it.',
+    sections: [
+      {
+        heading: 'One section per portal',
+        body: 'In the rail’s own order, each portal gets its summary, a plain paragraph on what it does, the pages inside it a reader can open, and a screen grab where one exists.',
+      },
+    ],
+  },
+  '/about/how-it-works': {
+    title: 'About: How it works',
+    summary: 'The rules between a model and the page, how material comes in, and how Ask finds things, in three groups on one page.',
     sections: [
       {
         heading: 'What is enforced',
@@ -192,6 +202,24 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       {
         heading: 'The human gate',
         body: 'The model proposes and never commits: it never sets a reliability prior, never writes evidence, never moves a confidence. Every generated narrative passes a citation gate at generation, save, and render, so a link the underlying data cannot vouch for is always stripped.',
+      },
+      {
+        heading: 'How Ask finds things',
+        body: 'A word search and a meaning search over the records, merged and budgeted, a lane decision, and a citation check; Ask also reads the Atlas’s own reports when one already covers the question.',
+      },
+    ],
+  },
+  '/about/where-it-fails': {
+    title: 'About: Where it fails',
+    summary: 'What the tool does not do, what is not built yet, and the honest ways it can still be wrong.',
+    sections: [
+      {
+        heading: 'One person, one lens',
+        body: 'This is one author’s map: one lens in the deep argument map, one person’s confidence judgments, updated only when the author runs a pipeline or adds something by hand. Nothing polls or auto-updates the map itself.',
+      },
+      {
+        heading: 'Where it can still be wrong',
+        body: 'Some reports publish on a schedule with no one reading them first, retrieval measurably misses about one question in seven, and the name scrub for guests is a list match, not understanding. The guardrails reduce the obvious failure modes; they do not remove them.',
       },
     ],
   },
@@ -202,35 +230,6 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       {
         heading: 'How to use it',
         body: 'One definition per term, in the order the map builds: question, stance, claim, test, frame, domain, bridge-claim, evidence, source, confidence, rationale, and on through the Signal Board, research, and Scout vocabulary.',
-      },
-    ],
-  },
-  '/about/limitations': {
-    title: 'About: Limitations',
-    summary: 'What the tool does not do, what is not built yet, and the ways it can be wrong.',
-    sections: [
-      {
-        heading: 'One person, one lens',
-        body: 'This is one author’s map: one lens in the deep argument map, one person’s confidence judgments, updated only when the author runs a pipeline or adds something by hand. Nothing polls or auto-updates the map itself.',
-      },
-      {
-        heading: 'Where it can still be wrong',
-        body: 'Confidence levels can carry the author’s bias, evidence can stay one-sided if the looking stops, and claims can go stale between updates. The guardrails reduce the obvious failure modes; they do not remove them.',
-      },
-    ],
-  },
-  '/about/ingestion': {
-    title: 'About: Signal ingestion',
-    summary:
-      'The Atlas runs a continuous, large-scale intake of external signal: news, filings, and regulatory data, collected daily, structured by models under strict rules, and packaged to travel.',
-    sections: [
-      {
-        heading: 'The standing intake',
-        body: 'Every weekday, before anyone opens the site, the system sweeps press feeds, targeted news search, and primary regulatory sources. Every item is fetched in full text, deduplicated, and stored with its provenance.',
-      },
-      {
-        heading: 'Structure, metrics, exports',
-        body: 'A model reads each item under strict controlled vocabularies: a tag, a link, or a fact outside the allow-list is dropped, not stored. A separate metrics warehouse carries roughly two million data points straight from public regulatory sources, untouched by any model. Everything ships as versioned datasets with a formal schema built to travel.',
       },
     ],
   },
@@ -246,21 +245,6 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       {
         heading: 'Kept indefinitely, three access tiers',
         body: 'Full article text, filings, paper text, extracted facts, and report packs are stored with no retention limit or deletion job; archiving hides, it does not delete. A guest sees the public layer, an access key unlocks Ask and the key-gated datasets, and the admin sees the personal layer and the consoles. Do not enter confidential information into Ask, uploads, or forms.',
-      },
-    ],
-  },
-  '/about/retrieval': {
-    title: 'About: How Ask finds things',
-    summary:
-      'What happens between a question and its answer: a word search and a meaning search over the records, merged and budgeted, a lane decision, and a citation check. Plain version first, technical version underneath.',
-    sections: [
-      {
-        heading: 'Two searches, one merge',
-        body: 'Postgres full-text search finds exact words, codes and tickers; pgvector embeddings (text-embedding-3-small, 33,815 chunks over 10,922 records) find meaning. Reciprocal rank fusion merges them, with the top lexical hits guaranteed a place.',
-      },
-      {
-        heading: 'Measured, not assumed',
-        body: 'On a 40-question gold set the combined search found the right record in the top ten 86% of the time against 54% for words alone. The lane bars for similarity (0.55 / 0.45 / 0.42) come from that measurement and are re-set when the set grows.',
       },
     ],
   },
@@ -391,7 +375,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
       {
         heading: 'Usage',
-        body: 'Every dataset pull, schema read, Ask turn, natural-language query, deck view, and saved view is logged against the key that made it, with today\'s model spend beside it. Anonymous public downloads are not logged. The legacy shared team key still works and logs without a key.',
+        body: 'Every dataset pull, schema read, Ask turn, natural-language query, deck view, and saved view is logged against the key that made it, with today\'s model spend beside it. Anonymous public downloads are not logged. The legacy shared key still works and logs without a key.',
       },
     ],
   },
@@ -429,19 +413,19 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
   },
   '/ops': {
     title: 'How Operations works',
-    summary: 'Everything that runs in the background, today and over the last two weeks: what ran, what is running, what is next, what failed.',
+    summary: 'Every background job at a glance, arranged as a customizable widget board and refreshed every minute: what ran, what is running, what is next, what failed.',
     sections: [
+      {
+        heading: 'A board, like the lobby',
+        body: 'Today’s timeline, the job cards by family, the 14-day history grid, background work, the Atlas Agent, Savant’s week, spend by feature, and the model-run registry are each a widget. Customize reorders, adds, or removes them the same way the lobby board does; the layout is saved per board, not per visit.',
+      },
       {
         heading: 'One registry, every cron',
         body: 'Every /api/cron/* entry in vercel.json is declared once in lib/ops/registry.ts, grouped into a logical job (an engine’s primary run plus its sweep siblings, a single-shot publisher, the hourly agent tick). A schedule can never go unlisted here: a test checks the registry against vercel.json directly.',
       },
       {
-        heading: 'Today, then the last two weeks',
-        body: 'The timeline shows every fire time for today in Eastern time, past ones with their outcome and a summary, future ones marked next. The 14-day grid below it is the same completed/failed/not-scheduled/no-run read the External Scan day grid uses, one row per job.',
-      },
-      {
-        heading: 'Background work',
-        body: 'Some work has no cron of its own: the incremental embedding hooks, the pipeline’s promotion sweep, and the Atlas Agent’s findings all run from inside another request. They get their own section rather than a fake schedule.',
+        heading: 'Refreshed every minute',
+        body: 'The page renders once; a quiet client island calls router.refresh() every 60 seconds while the tab is visible, which re-reads every widget’s data on the server rather than polling a single status endpoint.',
       },
     ],
   },
@@ -499,7 +483,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
     sections: [
       {
         heading: 'Public once tracked',
-        body: 'A profile is public only once a human has tracked it; a company still in the review queue 404s for guests, since a public signal of intent on a named startup would tip the company off. Team keyholders see queued profiles and can run research on them.',
+        body: 'A profile is public only once a human has tracked it; a company still in the review queue 404s for guests, since a public signal of intent on a named startup would tip the company off. Access-key holders see queued profiles and can run research on them.',
       },
       {
         heading: 'Agent read, admin only',
@@ -513,7 +497,7 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
     sections: [
       {
         heading: 'Reading the page',
-        body: 'Facts (deployment, pricing, founding, funding, integrations, compliance claims) sit above the feature tag list and the model-written dossier summary. Team keyholders additionally see the agent’s fit read and can trigger a deep dive; admins get review controls, tools, and the fact-editing form.',
+        body: 'Facts (deployment, pricing, founding, funding, integrations, compliance claims) sit above the feature tag list and the model-written dossier summary. Access-key holders additionally see the agent’s fit read and can trigger a deep dive; admins get review controls, tools, and the fact-editing form.',
       },
       {
         heading: 'Human edits win',

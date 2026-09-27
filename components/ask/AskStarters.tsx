@@ -19,8 +19,8 @@ export default function AskStarters({
       <h1>Ask the Atlas</h1>
       <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--dim)', maxWidth: 560, margin: 0 }}>
         Grounded answers over everything the Atlas tracks: signals, claims and their evidence,
-        concepts, theses, and the retained article text. Every reference is cited and links back
-        to its record{locked ? '. Unlock below with an access key to start.' : '.'}
+        research, company news, theses, and the Atlas’s own editions and reports. Every reference
+        is cited and links back to its record{locked ? '. Unlock below with an access key to start.' : '.'}
       </p>
       <ExamplePill onPick={onPick} />
       <StartHere variant="link" onPick={onPick} />

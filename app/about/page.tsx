@@ -4,26 +4,34 @@ import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import { getEditContext } from '@/lib/content';
 import { isAdmin } from '@/lib/auth';
-import { NAV_TREE } from '@/lib/nav';
+import { portalGroups } from '@/lib/nav';
 import { DATASETS } from '@/lib/datasets/registry';
+import { ATLAS_ONE_LINER } from '@/lib/brand';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'About · The AI Atlas' };
+export const metadata = {
+  title: 'About · The AI Atlas',
+  description: 'An intelligence system for the AI economy, built on a map of the argument: what it is, how a week moves through it, and where it fails.',
+};
 
-// The portal list and its count derive from the nav tree: every NAV_TREE group
-// except Home and the question box (Ask) is a portal. A sentence per portal key;
-// a portal with no sentence yet still counts and is named.
+// The one-liner now lives in lib/brand.ts, imported above, so other pages
+// (layout metadata, the login card, the showcase deck) can use it without
+// pulling in this whole page. Every count and portal name below still
+// derives from the nav tree (portalGroups) and the dataset registry, never a
+// hard-coded number (the truth-pass rule).
+
+// One sentence per portal, keyed by its nav group. A portal with no sentence
+// yet is still counted and named.
 const PORTAL_SENTENCES: Record<string, string> = {
-  signals: 'The Signal Board tracks developments by audience lens.',
-  blotter:
-    'The News Blotter is the Daily Edition: a paper written each weekday by a model from what the collection engines stored, published on schedule.',
-  map: 'Claims & Theses is the argument map.',
-  reports: 'The Report Portal serves generated, citation-gated reports as PDFs.',
-  datasets: 'The Data Portal offers the corpus as downloadable datasets.',
-  research: 'The Research Portal triages arXiv papers against the map.',
-  scout: 'Startup Scout tracks young AI companies by vertical.',
-  tooling: 'The Tooling Monitor catalogs and scores AI tools by category, refreshed weekly.',
-  education: 'Education is a shelf of hand-kept guides.',
+  signals: 'the Signal Board files each tracked development under the audiences it matters to and the claims it bears on;',
+  blotter: 'the News Blotter is the Daily Edition, a newspaper written each weekday from what the engines collected;',
+  savant: 'Savant is the Atlas’s own weekly research report, with a point of view and a ledger of open hypotheses;',
+  map: 'Claims & Theses is the argument map itself;',
+  reports: 'the Report Portal holds every report the Atlas writes, each a cited PDF;',
+  datasets: 'the Data Portal offers the corpus as datasets',
+  research: 'the Research Portal reads new AI research against the map;',
+  scout: 'Startup Scout follows young AI companies;',
+  tooling: 'and the Tooling Monitor scans the market for AI tools each week.',
 };
 
 const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
@@ -32,75 +40,52 @@ function numberWord(n: number): string {
 }
 
 function surfacesDefault(): string {
-  const portals = NAV_TREE.filter((g) => g.key !== 'home' && g.key !== 'ask');
+  const portals = portalGroups();
   const gated = DATASETS.filter((d) => d.keyGated).length;
-  const sentences = portals.map((g) => {
-    const s = PORTAL_SENTENCES[g.key] ?? `${g.label} is a portal.`;
-    if (g.key === 'datasets') {
-      return `${s.replace(/\.$/, '')} (${DATASETS.length} today, ${gated} of them behind an access key).`;
-    }
+  const parts = portals.map((g) => {
+    const s = PORTAL_SENTENCES[g.key] ?? `${g.label} is one of them;`;
+    if (g.key === 'datasets') return `${s} (${DATASETS.length} today, ${gated} of them behind an access key);`;
     return s;
   });
-  return [
-    `The front door is the lobby: a question box and ${numberWord(portals.length)} portals.`,
-    ...sentences,
-    'Ask, the chat workspace, answers over the whole corpus with citations that open the underlying record.',
-  ].join(' ');
+  const body = parts.join(' ').replace(/;\s*$/, '.');
+  return `The Atlas is ${numberWord(portals.length)} portals over one body of material: ${body.charAt(0).toLowerCase()}${body.slice(1)} Beside them, Ask answers questions over all of it with citations you can open, and Education keeps a shelf of guides.`;
 }
 
 const OVERVIEW = [
   {
     id: 'what-it-is',
     heading: 'What it is',
-    body: 'The AI Atlas maps the debate about the AI economy: the open questions, the positions people take on them, what each position depends on, and what is still unsettled. Its job is to place a new development on the map and show what it affects.',
+    body: 'The AI Atlas collects what happens in AI every weekday, from news wires, regulatory filings, research papers and the tool market, and places each development on a map of the open questions: what is being claimed, what would settle it, and which evidence moves it. Engines gather and structure the record; a daily edition and a weekly research report read it; Ask answers over the whole corpus with citations you can open. It is written for people carrying AI transformation inside regulated financial institutions, where a claim has to be checkable before anyone acts on it, and where the honest answer most weeks is that nothing settled.',
   },
   {
-    id: 'the-problem',
-    heading: 'The problem',
-    body: 'Claims about AI arrive fast, confident, contradictory, and usually from someone with a position to protect. The Atlas is one fixed place to put each piece and see what it actually touches.',
+    id: 'the-map',
+    heading: 'The map at the core',
+    body: 'Everything else hangs on one structure. An open question about AI and the economy holds two to four stances, each labeled with who holds it. Each stance rests on claims, and every claim carries a test: what would have to be true to stop believing it. Evidence attaches to a claim as supporting or contradicting it. A claim that links two domains, say compute costs to labor markets, is pulled out as a bridge-claim and tested on its own. The maintainer’s confidence in each claim, and the written reason for every change, sits in a private layer; the public view is the same map with that layer removed. The map is how a new development gets placed: not "is this big news" but "which argument does this move, and which way".',
   },
   {
-    id: 'how-it-works',
-    heading: 'How it works',
-    body: 'A question holds two to four stances, each labeled with who holds it. Each stance rests on claims, and every claim carries a test: what would have to be true to stop believing it. Evidence attaches to claims as supporting or contradicting. Claims linking two domains are pulled out as bridge-claims and tested on their own. A private layer holds the maintainer’s confidence and reasons; the public view is the same map with that layer stripped. New material enters through collection engines that run on weekday crons (a news scan, the Signal Board’s discovery pipeline, company intel, arXiv research, and a weekly tooling scan) and through the maintainer’s own uploads. Nothing they collect moves a confidence: every confidence move is made by hand with a written reason. A signal reaches the board when a human publishes its draft, or when the promotion policy publishes a high-significance pipeline draft that touches a claim after a 48-hour window in which a human can archive it; publishing is what writes its evidence rows. Some outputs publish on a schedule with no review step: the Daily Edition, the Friday research roundup, the Monday tooling entrants report, and tooling products that clear a score threshold enter the catalog. The working surfaces (Ask, the reports, the datasets) sit on top of the same corpus, with every generated citation checked against the records before it ships.',
+    id: 'the-loop',
+    heading: 'How a week moves through it',
+    body: 'Collect: collection engines run on weekday schedules (a news scan, the Signal Board’s discovery pipeline, company intelligence, new research, and a weekly tooling scan), and every item is kept with its source. Structure: models turn raw text into records under written rules (a summary, tags, extracted facts, a relevance score, a source-reliability tier), and every record is indexed for search by words and by meaning. Place: a development becomes a signal that touches named claims; publishing it, by a person or by a 48-hour policy for high-significance drafts that nobody archived, is what writes its evidence onto the map. Read: the Daily Edition writes the day up each weekday afternoon; on Fridays the research roundup and Savant write the week, and Savant poses a new hypothesis and revisits the open ones. Ask: questions get answers drawn from the records and the Atlas’s own reports, each cited, with a line marking where an answer goes beyond what the Atlas holds. Decide: nothing the machines produce moves a confidence. A person moves it, and has to write down why.',
   },
   {
     id: 'why-it-matters',
     heading: 'What success looks like',
-    body: 'Most weeks nothing happens that should move the map, and the tool says so. Success is being able to place a new development and know what it touches.',
+    body: 'Most weeks nothing happens that should move the map, and the Atlas says so. Success is being able to place a new development in a minute and know what it touches, and to hand a colleague a report where every sentence opens onto its record.',
   },
 ];
 
-// Architecture is unlisted by choice; the reading guide is gone (2026-08-15).
+// The six sub-pages. Architecture stays unlisted.
 const HUB = [
-  {
-    id: 'guardrails',
-    href: '/about/guardrails',
-    index: '01',
-    kind: 'anti-bias',
-    title: 'Guardrails',
-    blurb: 'The schema rules that enforce falsifiability, and the anti-patterns they block.',
-  },
-  {
-    id: 'glossary',
-    href: '/about/glossary',
-    index: '02',
-    kind: 'terms',
-    title: 'Glossary',
-    blurb: 'Every term defined: question, stance, claim, test, frame, bridge-claim, and the rest.',
-  },
-  {
-    id: 'limitations',
-    href: '/about/limitations',
-    index: '03',
-    kind: 'honest',
-    title: 'Limitations',
-    blurb: 'What the tool does not do, what is not built yet, and the ways it can be wrong.',
-  },
+  { id: 'inside', href: '/about/inside', index: '01', kind: 'the tour', title: 'Inside the Atlas', blurb: 'Every portal: what it does, what it looks like, and the pages inside it.' },
+  { id: 'how-it-works', href: '/about/how-it-works', index: '02', kind: 'the rules', title: 'How it works', blurb: 'The engines, the gates between a model and the public page, and how Ask finds things.' },
+  { id: 'where-it-fails', href: '/about/where-it-fails', index: '03', kind: 'honest', title: 'Where it fails', blurb: 'What it does not do, what is not built, and the ways it can be wrong.' },
+  { id: 'data-handling', href: '/about/data-handling', index: '04', kind: 'your data', title: 'Data handling', blurb: 'Where the data comes from, which services see it, what is stored, and who can read what.' },
+  { id: 'glossary', href: '/about/glossary', index: '05', kind: 'terms', title: 'Glossary', blurb: 'Every term defined: question, stance, claim, test, bridge-claim, signal, Savant, and the rest.' },
+  { id: 'why-bespoke', href: '/about/why-bespoke', index: '06', kind: 'positioning', title: 'Why bespoke', blurb: 'What this does that a general chatbot or a research platform cannot.' },
 ];
 
 const SCOPE_DEFAULT =
-  'The deep argument map covers one lens: the market and economics of AI. The Signal Board ranges wider, filing developments under six audience lenses. The whole thing is a personal project and a running record of how the maintainer is thinking, not a consensus.';
+  'The deep argument map covers the market and economics of AI. The collection engines range wider, from bank regulation to the tool market, and the Signal Board files what they find under six audience lenses. The whole thing is a personal project and a running record of how the maintainer reads the field, not a consensus and not advice.';
 
 export default async function AboutPage() {
   const [admin, { editing, txt }] = await Promise.all([isAdmin(), getEditContext()]);
@@ -121,21 +106,18 @@ export default async function AboutPage() {
         }
       />
 
+      <p className="about-oneliner">{ATLAS_ONE_LINER}</p>
+
       <Editable
         as="p"
         multiline
         k="about.overview.surfaces"
         value={txt('about.overview.surfaces', surfacesDefault())}
         editing={editing}
-        style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--dim)', margin: '0 0 8px' }}
+        style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--dim)', margin: '0 0 36px', maxWidth: '68ch' }}
       />
 
       <Prose sections={OVERVIEW} editing={editing} keyPrefix="about.overview" txt={txt} />
-
-      <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--dim)', margin: '8px 0 0' }}>
-        Where the data comes from, what is stored and for how long, and who can see it:{' '}
-        <Link href="/about/data-handling">Data handling</Link>.
-      </p>
 
       <div className="test-panel" style={{ marginTop: 44 }}>
         <span className="tlabel">Scope</span>
@@ -175,8 +157,9 @@ export default async function AboutPage() {
         ))}
       </div>
 
-      <div style={{ marginTop: 40, paddingTop: 26, borderTop: '1px solid var(--line)' }}>
-        <Link href="/map" className="btn btn--primary">Enter the Atlas →</Link>
+      <div style={{ marginTop: 40, paddingTop: 26, borderTop: '1px solid var(--line)', display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <Link href="/portals" className="btn btn--primary">Explore the portals →</Link>
+        <Link href="/map" className="btn">Open the argument map</Link>
       </div>
     </>
   );

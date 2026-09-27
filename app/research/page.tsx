@@ -8,10 +8,11 @@ import {
 import { getEditContext } from '@/lib/content';
 import { timeAgo } from '@/lib/format';
 import Editable from '@/components/Editable';
+import { descriptionFor } from '@/lib/page-info';
 import PageTop from '@/components/PageTop';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Research Portal · The AI Atlas' };
+export const metadata = { title: 'Research Portal · The AI Atlas', description: descriptionFor('/research') };
 
 // Strip the synthesis HTML down to a plain-text card excerpt.
 const excerpt = (html: string, n = 190) => {

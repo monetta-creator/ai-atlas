@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { one, q } from '../db';
 import { checkSavantBudget } from '../savant/budget';
 import { OPS_JOBS, type OpsJob, todaysFires, nextFire, fmtEt } from '../ops/registry';
@@ -258,7 +259,11 @@ function fridayOfWeekUTC(now: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function getOpsStatus(now: Date = new Date()): Promise<OpsStatus> {
+// Memoized per request (several ops-board widgets read it in one render);
+// the clock is read inside, so every caller sees the same instant.
+export const getOpsStatus = cache((): Promise<OpsStatus> => readOpsStatus(new Date()));
+
+async function readOpsStatus(now: Date): Promise<OpsStatus> {
   const daily = await getDailyJobStatus();
 
   const jobs = await Promise.all(
@@ -507,7 +512,9 @@ export interface OpsBackground {
   agentHighFindings: number;
 }
 
-export async function getOpsBackground(): Promise<OpsBackground> {
+export const getOpsBackground = cache(readOpsBackground);
+
+async function readOpsBackground(): Promise<OpsBackground> {
   const [missingByKind, embedBudget, promoted, findingCounts] = await Promise.all([
     countMissingEmbeddings(q, embedModel()),
     checkEmbedBudget(),

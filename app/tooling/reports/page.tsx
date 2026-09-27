@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { getPortalIdentity } from '@/lib/portal/identity';
+import { jobViewerFor } from '@/lib/jobs/core';
 import { SHEET_KIND_LABEL, dateLabel } from '@/lib/format';
-import { getToolingCategories, listToolingReports } from '@/lib/data';
+import { getToolingCategories, listToolingReports, getFeatureStats, getRecentJobOfKind } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
@@ -78,16 +79,21 @@ export default async function ToolingReportsPage() {
     );
   }
 
-  const [categories, reports] = await Promise.all([
+  const jobViewer = jobViewerFor(identity);
+  const [categories, reports, runStats, lastRun] = await Promise.all([
     getToolingCategories(admin),
     listToolingReports({ admin, portal: true }),
+    // The generator's run panel: the usual time and cost per step, and a run
+    // still going (or just ended) when the viewer comes back to this page.
+    getFeatureStats().catch(() => null),
+    getRecentJobOfKind('tooling_report', jobViewer).catch(() => null),
   ]);
 
   return (
     <>
       <section className="wrap" style={{ maxWidth: 1000, paddingBottom: 100 }}>
         <PageTop pathname="/tooling/reports" label="Tooling reports" viewer={{ admin, portal }} title={title} />
-        <ToolingReportConsole categories={categories} reports={reports} admin={admin} />
+        <ToolingReportConsole categories={categories} reports={reports} admin={admin} stats={runStats} initialJob={lastRun} />
       </section>
     </>
   );

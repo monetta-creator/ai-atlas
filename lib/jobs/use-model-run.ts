@@ -9,6 +9,7 @@ import {
   type FeatureStats, type JobStep, type StepSpec, type Typical, type UiJob,
 } from './core';
 import { announceJobsChanged } from './jobs-store';
+import { useFeatureStats } from './stats-client';
 
 // The shared state machine behind every button that starts a model call
 // (2026-09-27). A caller declares its steps (label, running sentence, the
@@ -35,7 +36,10 @@ export interface RunCtx {
   // Runs one declared step: marks it running, retries it (a result with
   // ok:false or a throw counts as a failed attempt), marks it done or failed.
   // Throws after the last attempt so the run stops there.
-  step<T>(key: string, fn: () => Promise<T>, opts?: { retries?: number }): Promise<T>;
+  // `parallel: true` for steps that run at the same time as their siblings
+  // (they never close each other); `retries` overrides the default (three
+  // attempts for a model step, one for deterministic work).
+  step<T>(key: string, fn: () => Promise<T>, opts?: { retries?: number; parallel?: boolean }): Promise<T>;
   note(line: string): void;
 }
 
@@ -88,11 +92,14 @@ export class StepError extends Error {
   constructor(public stepKey: string, message: string) { super(message); }
 }
 
+// A failed attempt is a result with ok:false, or one that carries an error
+// string and no ok:true (several actions return `{ error }` on failure).
 function isFailedResult(r: unknown): string | null {
-  if (r && typeof r === 'object' && 'ok' in r && (r as { ok: unknown }).ok === false) {
-    const e = (r as { error?: unknown }).error;
-    return typeof e === 'string' && e ? e : 'failed';
-  }
+  if (!r || typeof r !== 'object') return null;
+  const o = r as { ok?: unknown; error?: unknown };
+  const err = typeof o.error === 'string' && o.error ? o.error : null;
+  if (o.ok === false) return err ?? 'failed';
+  if (err && o.ok !== true) return err;
   return null;
 }
 
@@ -132,6 +139,10 @@ export function useModelRun(opts: {
 }): ModelRun {
   const { kind, subject = null, label, steps: specs, stats, initialJob, mode = 'chain', run } = opts;
   const [st, setSt] = useState<State>(() => initialState(specs, initialJob));
+  // The usual time and cost: the page's own numbers when it passed them, else
+  // the session-wide fetch (one request per browser session).
+  const fetched = useFeatureStats(!stats);
+  const statsNow = stats ?? fetched;
   const [now, setNow] = useState(0);
   const [pollTick, setPollTick] = useState(0);
 
@@ -194,7 +205,7 @@ export function useModelRun(opts: {
     const ctx: RunCtx = {
       jobId: id,
       note: say,
-      async step<T>(key: string, fn: () => Promise<T>, so?: { retries?: number }): Promise<T> {
+      async step<T>(key: string, fn: () => Promise<T>, so?: { retries?: number; parallel?: boolean }): Promise<T> {
         const spec = specs.find((x) => x.key === key);
         const tries = Math.max(1, so?.retries ?? (spec?.features?.length ? 3 : 1));
         const stepLabel = spec?.label ?? key;
@@ -203,9 +214,9 @@ export function useModelRun(opts: {
           const note = a > 1 ? `Retrying, attempt ${a} of ${tries}` : null;
           setSt((s) => ({
             ...s, attempt: a, maxAttempts: tries,
-            steps: applyTransition(s.steps, key, 'running', nowIso(), { attempt: a, note, label: stepLabel }),
+            steps: applyTransition(s.steps, key, 'running', nowIso(), { attempt: a, note, label: stepLabel, parallel: so?.parallel }),
           }));
-          void markJobStepAction(id, key, 'running', { attempt: a, note, label: stepLabel }).catch(() => {});
+          void markJobStepAction(id, key, 'running', { attempt: a, note, label: stepLabel, parallel: so?.parallel }).catch(() => {});
           if (a > 1) await sleep((a - 1) * 1500);
           try {
             const r = await fn();
@@ -268,7 +279,7 @@ export function useModelRun(opts: {
     attempt: st.attempt,
     maxAttempts: st.maxAttempts,
     elapsedMs,
-    typical: typicalForSteps(specs, stats),
+    typical: typicalForSteps(specs, statsNow),
     resultHref: st.resultHref,
     costUsd: st.costUsd,
     error: st.error,

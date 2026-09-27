@@ -1,4 +1,12 @@
 import { one, exec } from '../db';
+import { embedLater } from '../embed/hooks';
+
+// The editorial kinds Ask reads (lib/embed/report-sections.ts): every write
+// that publishes, changes or removes one keeps its section embeddings in step.
+const ASK_KINDS = new Set(['edition', 'roundup', 'savant']);
+async function dropReportEmbeddings(id: string): Promise<void> {
+  await exec(`delete from embeddings where kind = 'report' and record_id like $1`, [`${id}:%`]);
+}
 import type {
   Report, } from '../types';
 
@@ -96,6 +104,7 @@ export async function saveGeneratedReport(input: {
       input.isPublished ?? false,
     ]
   );
+  if (ASK_KINDS.has(input.kind) && input.isPublished) embedLater('report', [row!.id]);
   return row!.id;
 }
 
@@ -103,9 +112,13 @@ export async function saveGeneratedReport(input: {
 // report on the public portal and opens its PDF download.
 export async function setGeneratedReportPublished(id: string, on: boolean): Promise<void> {
   await exec(`update generated_reports set is_published = $2 where id = $1`, [id, on]);
+  // Publishing adds an editorial report to Ask's corpus; unpublishing takes it out.
+  if (on) embedLater('report', [id]);
+  else await dropReportEmbeddings(id);
 }
 
 export async function deleteGeneratedReport(id: string): Promise<void> {
+  await dropReportEmbeddings(id);
   await exec(`delete from generated_reports where id = $1`, [id]);
 }
 
@@ -129,7 +142,7 @@ export async function rewriteEditionColumn(
           || jsonb_build_object('column', $2::jsonb, 'citedTags', $3::jsonb, 'dropped', $4::jsonb, 'model', $5::jsonb)
       where id = $1 and kind = 'edition'`,
     [id, JSON.stringify(column), JSON.stringify(citedTags), JSON.stringify(dropped), JSON.stringify(model)]
-  );
+  );  embedLater('report', [id]);
 }
 
 // Additive sections over a frozen edition (2026-09-26): merge `builders`
@@ -164,4 +177,5 @@ export async function patchSavantNarrative(id: string, patch: Record<string, unk
     `update generated_reports set narrative = narrative || $2::jsonb where id = $1 and kind = 'savant'`,
     [id, JSON.stringify(patch)]
   );
+  embedLater('report', [id]);
 }

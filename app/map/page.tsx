@@ -17,11 +17,12 @@ import ThesisStrip from '@/components/ThesisStrip';
 import ThesisTracker from '@/components/dashboard/ThesisTracker';
 import TopClaimsPanel from '@/components/dashboard/TopClaimsPanel';
 import ConfidenceMovementPanel from '@/components/dashboard/ConfidenceMovementPanel';
+import { descriptionFor } from '@/lib/page-info';
 
 export const dynamic = 'force-dynamic';
 // Hosts the AI gap-diagnosis action (admin).
 export const maxDuration = 60;
-export const metadata = { title: 'Claims & Theses · The AI Atlas' };
+export const metadata = { title: 'Claims & Theses · The AI Atlas', description: descriptionFor('/map') };
 
 // Claims & Theses (the lobby's third tile), layered as the deal workflow reads:
 // the standing THESES first (the entry: how a strategist thinks), the CLAIMS

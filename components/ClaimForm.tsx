@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useFormStatus } from 'react-dom';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 import { recommendClaimEdgesAction } from '@/lib/actions';
 import { DOMAIN_LABEL, RESOLVABILITY_LABEL } from '@/lib/format';
 import type { Domain, Resolvability, Relation, ClaimEdgeRecommendation, Stance, Claim, Edge } from '@/lib/types';
@@ -92,8 +93,6 @@ export default function ClaimForm({
   const [bridgeEdges, setBridgeEdges] = useState<Map<string, Relation>>(initialBridge);
 
   const [recs, setRecs] = useState<ClaimEdgeRecommendation[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [recError, setRecError] = useState<string | null>(null);
 
   const canAsk = statement.trim().length > 0;
 
@@ -107,19 +106,6 @@ export default function ClaimForm({
     const next = new Map(map);
     next.set(codeKey, rel);
     set(next);
-  }
-
-  async function suggest() {
-    setBusy(true);
-    setRecError(null);
-    try {
-      const r = await recommendClaimEdgesAction({ statement, test, questionSlug });
-      setRecs(r);
-    } catch (e) {
-      setRecError(e instanceof Error ? e.message : 'Could not get suggestions.');
-    } finally {
-      setBusy(false);
-    }
   }
 
   function addRec(r: ClaimEdgeRecommendation) {
@@ -218,11 +204,20 @@ export default function ClaimForm({
       <div className="field">
         <div className="flex items-center justify-between gap-3">
           <label style={{ margin: 0 }}>Bears on: stances in {questionLabel} (pick at least one) and bridge-claims it feeds</label>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={suggest} disabled={busy || !canAsk} title={canAsk ? undefined : 'Write the statement first'}>
-            {busy ? 'Asking…' : '✦ AI suggest'}
-          </button>
+          <span title={canAsk ? undefined : 'Write the statement first'}>
+            <ModelCallButton
+              label="✦ AI suggest"
+              busyLabel="Reading the claim…"
+              kind="single:claim_edges"
+              feature="claim_edges"
+              retries={1}
+              disabled={!canAsk}
+              className="btn btn--ghost btn--sm"
+              action={() => recommendClaimEdgesAction({ statement, test, questionSlug })}
+              onDone={(r) => setRecs(r)}
+            />
+          </span>
         </div>
-        {recError && <p className="editable-error">{recError}</p>}
         {recs && (
           <div className="concept-recs">
             {recs.length === 0 ? (

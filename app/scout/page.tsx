@@ -7,11 +7,12 @@ import {
 import { getEditContext } from '@/lib/content';
 import { COMPANY_STAGE_LABEL, COMPANY_EVENT_LABEL, timeAgo } from '@/lib/format';
 import Editable from '@/components/Editable';
+import { descriptionFor } from '@/lib/page-info';
 import PageTop from '@/components/PageTop';
 import AddCompanyForm from '@/components/scout/AddCompanyForm';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Startup Scout · The AI Atlas' };
+export const metadata = { title: 'Startup Scout · The AI Atlas', description: descriptionFor('/scout') };
 
 // Startup Scout (public): the acquisition watchlist. Tracked companies grouped
 // by vertical, each profile a click away, plus a recent-activity strip. The

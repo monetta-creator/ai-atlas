@@ -92,7 +92,7 @@ check('search input: defaults and clamps', () => {
   const p = parseSearchAtlasInput({ query: '  capex  ' });
   assert.equal(p.query, 'capex');
   assert.equal(p.limit, 5);
-  assert.equal(p.kinds.length, 9); // claim, bridge, stance, concept, signal, paper, thread, item, fact
+  assert.equal(p.kinds.length, 10); // claim, bridge, stance, concept, signal, paper, thread, item, fact, report
   assert.equal(parseSearchAtlasInput({ query: 'x', limit: 99 }).limit, 8);
 });
 check('search input: kind filtering', () => {
@@ -161,6 +161,21 @@ check('renderRecord: signal tags ride out, uuids never do', () => {
   assert.ok(out.includes('Evidence (supports): an excerpt (Src, Out)'));
   assert.ok(out.includes('[signal S1] "Touching signal"'));
   assert.ok(!out.includes(U1));
+});
+check('renderRecord: a report payload prints its section and passage, not subtitle/body', () => {
+  const t = createTagger({ R7: 'report:edition:2026-09-26:11111111-1111-4111-8111-111111111111:front-0' }, 0);
+  const payload = {
+    kind: 'report', title: 'Daily Edition', code: null, subtitle: 'should not print', body: 'should not print either',
+    test: null, brief: null, counterpoint: null, significance: null, lenses: null,
+    published_on: null, source: null, evidence: [], signals: [], stances: [], prerequisites: [], builds_toward: [],
+    finding: [], members: [], internal: '/blotter/2026-09-26#front-0',
+    section: 'Front page, top story', passage: 'The passage text.', report: { kind: 'edition', scope: '2026-09-26', href: '/blotter/2026-09-26#front-0' },
+  };
+  const out = renderRecord(payload, 'R7', t.tagFor);
+  assert.ok(out.startsWith('[report R7] Daily Edition'));
+  assert.ok(out.includes('Front page, top story'));
+  assert.ok(out.includes('The passage text.'));
+  assert.ok(!out.includes('should not print'));
 });
 
 // ---- NDJSON protocol ---------------------------------------------------------
@@ -235,6 +250,26 @@ await acheck('searchAtlas: item/fact skip the DB when the query has no word-shap
     itemTagFor: () => 'I1', factTagFor: () => 'X1',
   });
   assert.equal(calls, 0);
+});
+await acheck('searchAtlas: report kind hits generated_reports and mints R-tags', async () => {
+  const narrative = {
+    front: [{
+      headline: 'Capex spending surges across hyperscalers in the third quarter',
+      why: 'Cloud providers raised guidance again this quarter, citing continued demand.',
+      numbers: '',
+    }],
+    column: { title: 'The column', html: '<p>filler text that is long enough to pass the forty character minimum easily</p>' },
+  };
+  const rows = [[{ id: U1, kind: 'edition', scope_to: '2026-09-26', title: 'Daily Edition', narrative }]];
+  const hits = await searchAtlas(fakeQ(rows), 'capex spending hyperscalers', {
+    kinds: ['report'], limit: 5, admin: true, tagFor: () => 'S1',
+    reportTagFor: (id) => `R:${id}`,
+  });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].kind, 'report');
+  assert.equal(hits[0].id, `R:report:edition:2026-09-26:${U1}:front-0`);
+  assert.ok(hits[0].snippet.startsWith('Daily edition, 2026-09-26, Front page, top story:'));
+  assert.ok(hits[0].snippet.includes('Capex spending surges'));
 });
 await acheck('searchArticles: both legs, tags anchored', async () => {
   const t = createTagger({}, 0);

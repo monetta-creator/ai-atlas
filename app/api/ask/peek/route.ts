@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { q } from '@/lib/db';
 import { isAdmin, isPortal } from '@/lib/auth';
 import { fetchRecord, type PeekKind } from '@/lib/ask/search';
+import { REPORT_RECORD_RE } from '@/lib/embed/report-sections';
 
 // The Ask workspace's citation peek: GET /api/ask/peek?kind=<...>&id=<...>.
 // Public (allow-listed in proxy.ts) and guest-safe by construction: payload
@@ -12,9 +13,12 @@ import { fetchRecord, type PeekKind } from '@/lib/ask/search';
 // vector leg) are the one exception to "public page" parity: they have no
 // page of their own and are portal/admin only, same as their key-gated
 // datasets, so fetchRecord returns null for a guest even on a well-formed id.
+// 'report' (a section of the Atlas's own editorial reports) is guest-safe: a
+// guest gets the passage scrubbed of tracked-company names, or null for a
+// portal-only section (Savant's peer watch).
 export const dynamic = 'force-dynamic';
 
-const KINDS = new Set<string>(['claim', 'bridge', 'stance', 'question', 'concept', 'signal', 'paper', 'thread', 'item', 'fact']);
+const KINDS = new Set<string>(['claim', 'bridge', 'stance', 'question', 'concept', 'signal', 'paper', 'thread', 'item', 'fact', 'report']);
 const CODE_RE = /^[A-Za-z0-9.\-]{1,20}$/;
 const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 const UUID_RE = /^[0-9a-f-]{36}$/i;
@@ -23,6 +27,7 @@ const ITEM_ID_RE = /^(scan|intel):[0-9a-f-]{36}$/i;
 function validId(kind: PeekKind, id: string): boolean {
   if (kind === 'signal' || kind === 'paper' || kind === 'fact') return UUID_RE.test(id);
   if (kind === 'item') return ITEM_ID_RE.test(id);
+  if (kind === 'report') return REPORT_RECORD_RE.test(id);
   if (kind === 'question' || kind === 'concept' || kind === 'thread') return SLUG_RE.test(id);
   return CODE_RE.test(id);
 }

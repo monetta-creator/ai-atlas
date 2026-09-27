@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useFormStatus } from 'react-dom';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 import { recommendBridgeFeedersAction } from '@/lib/actions';
 import { DOMAIN_LABEL, RESOLVABILITY_LABEL } from '@/lib/format';
 import type { Domain, Resolvability, Relation, BridgeFeederRecommendation } from '@/lib/types';
@@ -82,8 +83,6 @@ export default function BridgeForm({
   const [feeders, setFeeders] = useState<Map<string, Relation>>(initialFeeders);
 
   const [recs, setRecs] = useState<BridgeFeederRecommendation[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [recError, setRecError] = useState<string | null>(null);
 
   const canAsk = statement.trim().length > 0;
 
@@ -97,19 +96,6 @@ export default function BridgeForm({
   }
   function setRel(codeKey: string, rel: Relation) {
     setFeeders((prev) => new Map(prev).set(codeKey, rel));
-  }
-
-  async function suggest() {
-    setBusy(true);
-    setRecError(null);
-    try {
-      const r = await recommendBridgeFeedersAction({ statement, test });
-      setRecs(r);
-    } catch (e) {
-      setRecError(e instanceof Error ? e.message : 'Could not get suggestions.');
-    } finally {
-      setBusy(false);
-    }
   }
 
   const feedersPayload = JSON.stringify([...feeders].map(([c, relation]) => ({ code: c, relation })));
@@ -187,11 +173,20 @@ export default function BridgeForm({
       <div className="field">
         <div className="flex items-center justify-between gap-3">
           <label style={{ margin: 0 }}>Fed by: claims whose truth bears on this bridge</label>
-          <button type="button" className="btn btn--ghost btn--sm" onClick={suggest} disabled={busy || !canAsk} title={canAsk ? undefined : 'Write the statement first'}>
-            {busy ? 'Asking…' : '✦ AI suggest'}
-          </button>
+          <span title={canAsk ? undefined : 'Write the statement first'}>
+            <ModelCallButton
+              label="✦ AI suggest"
+              busyLabel="Reading the bridge…"
+              kind="single:bridge_feeders"
+              feature="bridge_feeders"
+              retries={1}
+              disabled={!canAsk}
+              className="btn btn--ghost btn--sm"
+              action={() => recommendBridgeFeedersAction({ statement, test })}
+              onDone={(r) => setRecs(r)}
+            />
+          </span>
         </div>
-        {recError && <p className="editable-error">{recError}</p>}
         {recs && (
           <div className="concept-recs">
             {recs.length === 0 ? (

@@ -4,6 +4,9 @@ import type { ValidIdsPlain } from '@/lib/ask/verify';
 import { getAskPrefs } from '@/lib/data/ask';
 import { embedQuery, embedModel } from '@/lib/embed/client';
 import { fuseOrder } from './fusion';
+import {
+  reportSections, reportPrefix, splitReportRecordId, EDITION_WINDOW_DAYS, type ReportRow, type ReportSection,
+} from '@/lib/embed/report-sections';
 
 // Server-only retrieval for "Ask the Atlas". Hybrid lexical + structural, no
 // embeddings (see 0020_ask_fts.sql for the rationale). Two things are assembled:
@@ -266,6 +269,9 @@ export async function buildAskContext(
   const paperTags = new Map<string, string>();  // paper id -> tag
   const itemTags = new Map<string, string>();   // "scan:<uuid>" | "intel:<uuid>" -> tag
   const factTags = new Map<string, string>();   // intel_facts id -> tag
+  // Report passages (R...): keyed by the descriptor the client resolves to a
+  // page and anchor, 'report:<kind>:<scope>:<uuid>:<section>'.
+  const reportTags = new Map<string, string>();
   const tagFor = (id: string) => {
     let t = signalTags.get(id);
     if (!t) { t = `S${++tagCount}`; signalTags.set(id, t); }
@@ -284,6 +290,11 @@ export async function buildAskContext(
   const factTagFor = (id: string) => {
     let t = factTags.get(id);
     if (!t) { t = `X${++tagCount}`; factTags.set(id, t); }
+    return t;
+  };
+  const reportTagFor = (descriptor: string) => {
+    let t = reportTags.get(descriptor);
+    if (!t) { t = `R${++tagCount}`; reportTags.set(descriptor, t); }
     return t;
   };
 
@@ -501,6 +512,7 @@ export async function buildAskContext(
   await ftsThreads(trimmed, push);
   await ftsSignals(trimmed, push, tagFor, mode);
   await ftsPapers(trimmed, push, ptagFor);
+  await ftsReports(trimmed, push, reportTagFor);
   await ftsEvidence(trimmed, push, mode);
   await ftsArticles(trimmed, push, tagFor);
 
@@ -529,6 +541,9 @@ export async function buildAskContext(
   // Best-effort throughout: an embedding-API failure must never break Ask.
   let maxSim = 0;
   let fusedKeyOrder: string[] | null = null;
+  // The report passages the vector leg found, best first: an explicit
+  // question still gets the top two near the head (below).
+  let reportVecOrder: string[] = [];
   try {
     const [prefs, qvec] = await Promise.all([getAskPrefs(), embedQuery(trimmed)]);
     // Measurement hook (scripts/ab-retrieval-run.mts): ASK_RETRIEVAL_OVERRIDE
@@ -541,7 +556,8 @@ export async function buildAskContext(
       maxSim = vecHits[0]?.sim ?? 0;
       if (retrievalMode === 'hybrid' && vecHits.length) {
         if (!explicit) {
-          const vecKeyOrder = await materializeVectorBlocks(vecHits, push, tagFor, ptagFor, itemTagFor, factTagFor);
+          const vecKeyOrder = await materializeVectorBlocks(vecHits, push, tagFor, ptagFor, itemTagFor, factTagFor, reportTagFor);
+          reportVecOrder = vecKeyOrder.filter((k) => k.startsWith('report:'));
           // Sorted by each block's own ts_rank, not push order: the fts*
           // helpers push in rank order WITHIN one call (claims, then bridges,
           // then stances, ...), but the FTS "order" the fusion guard needs to
@@ -550,15 +566,21 @@ export async function buildAskContext(
           // top hit (the p05 fix: bridge B4 ranked 3rd by ts_rank but was
           // pushed well past index 2 in call order).
           const ftsKeyOrder = [...blocks].sort((a, b) => b.rank - a.rank).map((b) => b.key);
-          fusedKeyOrder = fuseOrder([ftsKeyOrder, vecKeyOrder]);
+          // The Atlas's own report passages get a 1.5x fused score: lean on the
+          // written reading when it covers the question (the prompt then asks
+          // for the records it cites as the receipts).
+          fusedKeyOrder = fuseOrder([ftsKeyOrder, vecKeyOrder], undefined, { boost: (k) => (k.startsWith('report:') ? 1.5 : 1) });
         } else {
           // Explicit match: append vector-only material, no reordering.
-          await materializeVectorBlocks(vecHits, push, tagFor, ptagFor, itemTagFor, factTagFor);
+          const vecKeyOrder = await materializeVectorBlocks(vecHits, push, tagFor, ptagFor, itemTagFor, factTagFor, reportTagFor);
+          reportVecOrder = vecKeyOrder.filter((k) => k.startsWith('report:'));
         }
       }
     }
-  } catch {
-    // vector leg is best-effort; fall through to FTS-only ordering below.
+  } catch (e) {
+    // vector leg is best-effort; fall through to FTS-only ordering below. The
+    // warning is the only trace a silent failure leaves, so keep it.
+    console.warn('ask vector leg failed:', e instanceof Error ? e.message : e);
   }
 
   // 3) Assemble, bounded to the char budget. When the question named explicit
@@ -607,13 +629,26 @@ export async function buildAskContext(
       if (!pushedAny) break;
     }
   }
+  // Prefer the Atlas's own reports (2026-09-27): on an explicit question the
+  // sequential fill keeps the named records first, but the two best report
+  // passages move up to sit right after the first three blocks, so a written
+  // reading that covers the question is never cut by the budget. (Fused
+  // questions get the same preference through the fusion boost.)
+  if (explicit && !fusedKeyOrder && reportVecOrder.length) {
+    const want = reportVecOrder.slice(0, 2);
+    const lift = want.map((k) => ordered.find((b) => b.key === k)).filter((b): b is Block => Boolean(b));
+    if (lift.length) {
+      const rest = ordered.filter((b) => !want.includes(b.key));
+      ordered = [...rest.slice(0, 3), ...lift, ...rest.slice(3)];
+    }
+  }
   let detail = '';
   for (const b of ordered) {
     if (detail.length + b.text.length + 2 > MAX_DETAIL) break;
     detail += b.text + '\n\n';
   }
 
-  const signalRefs = [...signalTags, ...paperTags, ...itemTags, ...factTags].map(([id, tag]) => ({ tag, id }));
+  const signalRefs = [...signalTags, ...paperTags, ...itemTags, ...factTags, ...reportTags].map(([id, tag]) => ({ tag, id }));
 
   const retrievedKeys: { kind: string; key: string }[] = [];
   const seenRecord = new Set<string>();
@@ -646,6 +681,7 @@ function keyToRecord(key: string): { kind: string; key: string } | null {
     case 'sig': return { kind: 'signal', key: parts[1] };
     case 'paper': return { kind: 'paper', key: parts[1] };
     case 'fact': return { kind: 'intel_fact', key: parts[1] };
+    case 'report': return { kind: 'report', key: `${parts[1]}:${parts[2]}` };
     case 'item':
       if (parts[1] === 'scan') return { kind: 'scan_item', key: parts[2] };
       if (parts[1] === 'intel') return { kind: 'intel_item', key: parts[2] };
@@ -677,6 +713,12 @@ async function vectorSearch(qvec: number[], admin: boolean): Promise<VecHit[]> {
           or (kind = 'paper' and exists (
             select 1 from papers p where p.id = record_id::uuid and p.triage_status = 'kept' and p.review_status <> 'dismissed'))
           or kind in ('scan_item', 'intel_item', 'intel_fact', 'claim', 'bridge', 'stance', 'concept', 'thread')
+          -- The Atlas's published editorial reports, per section. Savant's
+          -- peer watch section is included: buildAskContext only ever runs for
+          -- the admin or a keyholder, who may read it.
+          or (kind = 'report' and exists (
+            select 1 from generated_reports gr
+             where gr.id::text = split_part(record_id, ':', 1) and gr.is_published))
         )
       group by kind, record_id
       order by sim desc
@@ -695,13 +737,15 @@ async function materializeVectorBlocks(
   tagFor: (id: string) => string,
   ptagFor: (id: string) => string,
   itemTagFor: (id: string) => string,
-  factTagFor: (id: string) => string
+  factTagFor: (id: string) => string,
+  reportTagFor: (descriptor: string) => string
 ): Promise<string[]> {
   const need = {
     claim: new Set<string>(), bridge: new Set<string>(), stance: new Set<string>(),
     concept: new Set<string>(), thread: new Set<string>(), signal: new Set<string>(),
     paper: new Set<string>(), candidate: new Set<string>(),
     scan_item: new Set<string>(), intel_item: new Set<string>(), intel_fact: new Set<string>(),
+    report: new Set<string>(),
   };
   for (const h of hits) need[h.kind as keyof typeof need]?.add(h.record_id);
 
@@ -837,6 +881,22 @@ async function materializeVectorBlocks(
     }
   }
 
+  if (need.report.size) {
+    const byReport = new Map<string, string[]>();
+    for (const rid of need.report) {
+      const s = splitReportRecordId(rid);
+      if (s) byReport.set(s.id, [...(byReport.get(s.id) ?? []), s.key]);
+    }
+    if (byReport.size) {
+      const rows = await q<ReportRow & { is_published: boolean }>(
+        `select id::text as id, kind::text as kind, scope_to::text as scope_to, title, narrative, is_published
+           from generated_reports where id = any($1::uuid[]) and is_published`,
+        [[...byReport.keys()]]
+      );
+      for (const r of rows) pushReportSections(r, byReport.get(r.id) ?? [], push, reportTagFor);
+    }
+  }
+
   const order: string[] = [];
   for (const h of hits) {
     switch (h.kind) {
@@ -847,6 +907,7 @@ async function materializeVectorBlocks(
       case 'thread': order.push(`thread:${h.record_id}`); break;
       case 'signal': order.push(`sig:${h.record_id}`); break;
       case 'paper': order.push(`paper:${h.record_id}`); break;
+      case 'report': order.push(`report:${h.record_id}`); break;
       case 'candidate': { const k = candKeyByRecordId.get(h.record_id); if (k) order.push(k); break; }
       case 'scan_item': order.push(`item:scan:${h.record_id}`); break;
       case 'intel_item': order.push(`item:intel:${h.record_id}`); break;
@@ -952,6 +1013,54 @@ async function ftsThreads(query: string, push: (k: string, t: string, r?: number
 // The research corpus: kept papers (never rejected/pending-triage rows), the
 // reviewed shelf ranked first. Indexed text is public editorial only; the
 // snippet leads with the finding's headline when one exists.
+// The Atlas's own editorial reports (2026-09-27): a report whose text
+// matches the question contributes its best-matching section (the one that
+// shares the most query terms) as one citable passage, tagged R<n>.
+function pushReportSections(
+  r: ReportRow,
+  keys: string[],
+  push: (k: string, t: string, rank?: number) => void,
+  reportTagFor: (descriptor: string) => string,
+  rank?: number
+) {
+  const sections = reportSections(r);
+  for (const key of keys) {
+    const s = sections.find((x) => x.key === key);
+    if (!s) continue;
+    const tag = reportTagFor(`report:${r.kind}:${r.scope_to ?? ''}:${r.id}:${s.key}`);
+    push(`report:${r.id}:${s.key}`, `[report ${tag}] ${reportPrefix(r.kind, r.scope_to, s.label)}: ${clip(s.text, 500)}`, rank);
+  }
+}
+
+function bestSectionKey(sections: ReportSection[], query: string): string | null {
+  const terms = [...new Set(query.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 3))];
+  let best: { key: string; score: number } | null = null;
+  for (const s of sections) {
+    const hay = s.text.toLowerCase();
+    const score = terms.reduce((n, w) => n + (hay.includes(w) ? 1 : 0), 0);
+    if (!best || score > best.score) best = { key: s.key, score };
+  }
+  return best && best.score > 0 ? best.key : null;
+}
+
+async function ftsReports(query: string, push: (k: string, t: string, r?: number) => void, reportTagFor: (descriptor: string) => string) {
+  const rows = await q<ReportRow & { rank: number }>(
+    `select id::text as id, kind::text as kind, scope_to::text as scope_to, title, narrative,
+            ts_rank(search_tsv, ${ORQ}, ${RANK_NORM}) as rank
+       from generated_reports
+      where is_published and search_tsv @@ ${ORQ}
+        and (kind = 'savant' or kind = 'roundup'
+             or (kind = 'edition' and scope_to >= current_date - ${EDITION_WINDOW_DAYS}))
+      order by rank desc
+      limit 4`,
+    [query]
+  );
+  for (const r of rows) {
+    const key = bestSectionKey(reportSections(r), query);
+    if (key) pushReportSections(r, [key], push, reportTagFor, r.rank);
+  }
+}
+
 async function ftsPapers(query: string, push: (k: string, t: string, r?: number) => void, ptagFor: (id: string) => string) {
   const rows = await q<{ id: string; title: string; arxiv_id: string | null; published_at: string | null; headline: string | null; summary: string | null; claim_touches: string[]; reviewed: boolean; rank: number }>(
     `select id::text as id, title, arxiv_id,

@@ -3,7 +3,7 @@ import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
 import { getEditContext } from '@/lib/content';
 import { isAdmin } from '@/lib/auth';
-import { NAV_TREE } from '@/lib/nav';
+import { portalGroups } from '@/lib/nav';
 import { DATASETS } from '@/lib/datasets/registry';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +11,7 @@ export const metadata = { title: 'Data handling · The AI Atlas' };
 
 // The surfaces and dataset counts are derived from their registries so this page
 // cannot drift from the nav or the Data Portal. Both modules are pure (no DB).
-const PORTAL_LABELS = NAV_TREE.filter((g) => g.key !== 'home' && g.key !== 'portals').map((g) => g.label);
+const PORTAL_LABELS = portalGroups().map((g) => g.label);
 const PORTAL_LIST = `${PORTAL_LABELS.slice(0, -1).join(', ')}, and ${PORTAL_LABELS[PORTAL_LABELS.length - 1]}`;
 const DATASET_COUNT = DATASETS.length;
 const KEY_GATED_COUNT = DATASETS.filter((d) => d.keyGated).length;
@@ -48,7 +48,7 @@ const SECTIONS = [
   {
     id: 'processors',
     heading: 'Third-party processors',
-    body: 'Text collected here is sent to outside services to be processed. Anthropic runs the Claude Sonnet and Claude Haiku models. OpenRouter routes calls to open-weight models (Zhipu’s GLM, Alibaba’s Qwen, and DeepSeek’s models) run by whichever inference provider OpenRouter selects for the call. Tavily performs news search. Jina fetches pages the site cannot fetch itself. Resend sends the agent’s daily brief and access-request notices by email to the maintainer. Questions typed into Ask are also sent to an embedding model (text-embedding-3-small) through OpenRouter so the meaning search can run; see How Ask finds things. Vercel hosts the application and, through Vercel Web Analytics, counts page views: each view sends the page path, referrer, and coarse device and country data to Vercel, without cookies and without a per-visitor identifier that persists across days. Supabase hosts the database. On the Tooling Monitor your browser loads vendor logos directly from Google’s favicon service and from GitHub, so those two services see your request; nothing from that is stored here. Each of these providers applies its own retention and training terms to what is sent to it, and this site does not control those terms.',
+    body: 'Text collected here is sent to outside services to be processed. Anthropic’s Claude models run the reasoning legs, from dossiers to Savant’s writer and editor. OpenRouter routes calls to open-weight models from several labs, run by whichever inference provider OpenRouter selects for the call. Tavily performs news search. Jina fetches pages the site cannot fetch itself. Resend sends the agent’s daily brief and access-request notices by email to the maintainer. Questions typed into Ask are also sent to an embedding model (text-embedding-3-small) through OpenRouter so the meaning search can run; see How Ask finds things. Vercel hosts the application and, through Vercel Web Analytics, counts page views: each view sends the page path, referrer, and coarse device and country data to Vercel, without cookies and without a per-visitor identifier that persists across days. Supabase hosts the database. On the Tooling Monitor your browser loads vendor logos directly from Google’s favicon service and from GitHub, so those two services see your request; nothing from that is stored here. Each of these providers applies its own retention and training terms to what is sent to it, and this site does not control those terms.',
   },
   {
     id: 'sent-to-models',
@@ -58,7 +58,7 @@ const SECTIONS = [
   {
     id: 'stored',
     heading: 'What is stored and for how long',
-    body: 'The database keeps the full text of every collected article, filing, and paper; the text extracted in the browser from uploaded documents; the facts, tags, scores, and summaries the models produce; and the data packs behind every generated report, including the tooling report’s context field. Everything is kept indefinitely. There is no retention limit and no deletion job today. Archiving a signal or a draft hides it from the public surfaces; it does not delete the row. Every model run started from a button (a report, a diagnosis, an AI suggestion) leaves a small record: its steps, how long it took, what it cost, and who started it, the maintainer or an access key by its id, never a name; that record is what lets a run continue after its page is closed. Uploaded documents are never stored as files: the browser extracts the text, sends the text, and discards the file. The one exception is the feedback box, whose screenshots are stored in the database and are visible only to the maintainer. The Data Portal’s schema map (/datasets/schema) shows the shape of every table this stores, grouped by subsystem, with no row of data ever shown.',
+    body: 'The database keeps the full text of every collected article, filing, and paper; the text extracted in the browser from uploaded documents; the facts, tags, scores, and summaries the models produce; and the data packs behind every generated report, including the tooling report’s context field. The Atlas’s own reports (the Daily Edition, the research roundup, Savant) are cut into passages and indexed for Ask the same two ways as the records, so an answer can cite a report passage beside the records under it. Everything is kept indefinitely. There is no retention limit and no deletion job today. Archiving a signal or a draft hides it from the public surfaces; it does not delete the row. Every model run started from a button (a report, a diagnosis, an AI suggestion) leaves a small record: its steps, how long it took, what it cost, and who started it, the maintainer or an access key by its id, never a name; that record is what lets a run continue after its page is closed. Uploaded documents are never stored as files: the browser extracts the text, sends the text, and discards the file. The one exception is the feedback box, whose screenshots are stored in the database and are visible only to the maintainer. The Data Portal’s schema map (/datasets/schema) shows the shape of every table this stores, grouped by subsystem, with no row of data ever shown.',
   },
   {
     id: 'personal-data',

@@ -1,16 +1,20 @@
 import { one } from '../db';
-import { DEFAULT_WIDGETS, isWidgetKey } from '../widgets/catalog';
+import { DEFAULT_BOARD_WIDGETS, isWidgetOnBoard, type Board } from '../widgets/catalog';
 
-// ---- Home widget board (migration 0045) ------------------------------------
-// The Lobby's customizable board. Missing row (never saved) or an empty
-// stored array both fall back to DEFAULT_WIDGETS; a stored key that no
-// longer names a catalog entry (a retired widget) is dropped, the drift
+// ---- Widget boards (migration 0075; the lobby's 0045 singleton before it) ---
+// One saved layout per board. A missing row (never saved) or an empty stored
+// array falls back to the board's defaults; a stored key that no longer names
+// a widget on this board (a retired or moved widget) is dropped, the drift
 // guard the rest of the app applies to code-defined enums stored in jsonb.
 
-export async function getHomeWidgets(): Promise<string[]> {
-  const row = await one<{ widgets: string[] }>(`select widgets from home_prefs where id = true`);
+export async function getBoardWidgets(board: Board): Promise<string[]> {
+  const row = await one<{ widgets: string[] }>(`select widgets from board_prefs where board = $1`, [board]);
   const stored = row?.widgets ?? [];
-  if (!Array.isArray(stored) || stored.length === 0) return DEFAULT_WIDGETS;
-  const clean = stored.map((k) => String(k)).filter(isWidgetKey);
-  return clean.length ? clean : DEFAULT_WIDGETS;
+  if (!Array.isArray(stored) || stored.length === 0) return DEFAULT_BOARD_WIDGETS[board];
+  const clean = stored.map((k) => String(k)).filter((k) => isWidgetOnBoard(k, board));
+  return clean.length ? clean : DEFAULT_BOARD_WIDGETS[board];
+}
+
+export async function getHomeWidgets(): Promise<string[]> {
+  return getBoardWidgets('home');
 }

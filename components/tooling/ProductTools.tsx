@@ -1,75 +1,24 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { enrichProductAction, scoreProductAction, adminDeepDiveAction } from '@/lib/actions';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 
 // Admin-only tool trio: re-run the homepage extraction, re-run the rubric
 // score, or run a fresh deep dive with optional steering. Separate from the
 // portal+admin DeepDivePanel (which calls the gated deepDiveAction): an
 // admin is already authenticated, so this goes straight through
 // adminDeepDiveAction with no budget check.
+//
+// enrichProductAction/scoreProductAction/adminDeepDiveAction return
+// `{ ok: true; ... } | { error: string }` (no `ok: false` on the error
+// branch), so each action is wrapped to a consistent `{ ok, error }` shape
+// before handing it to ModelCallButton (its retry/failure logic keys on
+// `'ok' in r && r.ok === false`).
 export default function ProductTools({ id }: { id: string }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [log, setLog] = useState<string[]>([]);
   const [steering, setSteering] = useState('');
-  const push = (s: string) => setLog((l) => [...l, s]);
-
-  function runEnrich() {
-    setBusy('enrich');
-    setLog([]);
-    startTransition(async () => {
-      try {
-        const r = await enrichProductAction(id);
-        if ('ok' in r) {
-          push(`✓ Re-enriched.${r.isAiTool ? '' : ' The reader flagged this as not an AI tool: it was parked.'}`);
-          router.refresh();
-        } else {
-          push(`✗ ${r.error}`);
-        }
-      } finally {
-        setBusy(null);
-      }
-    });
-  }
-
-  function runScore() {
-    setBusy('score');
-    setLog([]);
-    startTransition(async () => {
-      try {
-        const r = await scoreProductAction(id);
-        if ('ok' in r) {
-          push(`✓ Rescored.${r.cataloged ? ' Cataloged.' : ' Parked (below the catalog threshold).'}`);
-          router.refresh();
-        } else {
-          push(`✗ ${r.error}`);
-        }
-      } finally {
-        setBusy(null);
-      }
-    });
-  }
-
-  function runDeepDive() {
-    setBusy('deepdive');
-    setLog(['Researching…']);
-    startTransition(async () => {
-      try {
-        const r = await adminDeepDiveAction(id, steering || null);
-        if ('ok' in r) {
-          push(`✓ Deep dive done. ${r.eventsAdded} event${r.eventsAdded === 1 ? '' : 's'} logged.`);
-          router.refresh();
-        } else {
-          push(`✗ ${r.error}`);
-        }
-      } finally {
-        setBusy(null);
-      }
-    });
-  }
 
   return (
     <div
@@ -85,30 +34,67 @@ export default function ProductTools({ id }: { id: string }) {
           maxLength={1500}
           value={steering}
           onChange={(e) => setSteering(e.target.value)}
-          disabled={pending}
         />
       </div>
       <div className="flex items-center gap-2 flex-wrap">
-        <button type="button" className="btn btn--ghost btn--sm" disabled={!!busy || pending} onClick={runEnrich}>
-          {busy === 'enrich' ? 'Enriching…' : '✦ Re-enrich'}
-        </button>
-        <button type="button" className="btn btn--ghost btn--sm" disabled={!!busy || pending} onClick={runScore}>
-          {busy === 'score' ? 'Scoring…' : '✦ Rescore'}
-        </button>
-        <button type="button" className="btn btn--primary btn--sm" disabled={!!busy || pending} onClick={runDeepDive}>
-          {busy === 'deepdive' ? 'Researching…' : '✦ Deep dive'}
-        </button>
+        <ModelCallButton
+          label="✦ Re-enrich"
+          busyLabel="Enriching…"
+          kind="single:tooling_enrich"
+          subject={id}
+          jobLabel="Re-enrich"
+          feature="tooling_enrich"
+          retries={1}
+          className="btn btn--ghost btn--sm"
+          action={async () => {
+            const r = await enrichProductAction(id);
+            return 'ok' in r ? r : { ok: false as const, error: r.error };
+          }}
+          onDone={(r) => {
+            if (!r.ok) return;
+            router.refresh();
+            return { note: `✓ Re-enriched.${r.isAiTool ? '' : ' The reader flagged this as not an AI tool: it was parked.'}` };
+          }}
+        />
+        <ModelCallButton
+          label="✦ Rescore"
+          busyLabel="Scoring…"
+          kind="single:tooling_score"
+          subject={id}
+          jobLabel="Rescore"
+          feature="tooling_score"
+          retries={1}
+          className="btn btn--ghost btn--sm"
+          action={async () => {
+            const r = await scoreProductAction(id);
+            return 'ok' in r ? r : { ok: false as const, error: r.error };
+          }}
+          onDone={(r) => {
+            if (!r.ok) return;
+            router.refresh();
+            return { note: `✓ Rescored.${r.cataloged ? ' Cataloged.' : ' Parked (below the catalog threshold).'}` };
+          }}
+        />
+        <ModelCallButton
+          label="✦ Deep dive"
+          busyLabel="Researching…"
+          kind="single:tooling_deepdive"
+          subject={id}
+          jobLabel="Deep dive"
+          feature="tooling_deepdive"
+          retries={1}
+          className="btn btn--primary btn--sm"
+          action={async () => {
+            const r = await adminDeepDiveAction(id, steering || null);
+            return 'ok' in r ? r : { ok: false as const, error: r.error };
+          }}
+          onDone={(r) => {
+            if (!r.ok) return;
+            router.refresh();
+            return { note: `✓ Deep dive done. ${r.eventsAdded} event${r.eventsAdded === 1 ? '' : 's'} logged.` };
+          }}
+        />
       </div>
-      {log.length > 0 && (
-        <pre
-          className="text-xs"
-          role="status"
-          aria-live="polite"
-          style={{ margin: 0, whiteSpace: 'pre-wrap', color: 'var(--faint-ink)', fontFamily: 'var(--font-mono)' }}
-        >
-          {log.join('\n')}
-        </pre>
-      )}
     </div>
   );
 }

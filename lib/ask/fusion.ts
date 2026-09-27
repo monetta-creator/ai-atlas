@@ -32,8 +32,16 @@ export function reciprocalRankFusion(lists: string[][], k: number = RRF_K): Map<
 // hits under plain RRF. After fusing, the FTS leg's top 3 keys are
 // guaranteed a spot in the fused top 10 (pulled up to positions 8-10,
 // 1-indexed, at the latest) if RRF would otherwise have dropped them out.
-export function fuseOrder(lists: string[][], k: number = RRF_K): string[] {
-  const fused = [...reciprocalRankFusion(lists, k).entries()]
+//
+// Boost (2026-09-27): an optional per-key multiplier on the fused score. The
+// retriever passes 1.5 for the Atlas's own report passages, so a written
+// reading that covers the question ranks ahead of the raw records it cites
+// (cheaper context, the same receipts). The FTS top-3 guarantee still runs
+// after the boost.
+export function fuseOrder(lists: string[][], k: number = RRF_K, opts: { boost?: (key: string) => number } = {}): string[] {
+  const scores = reciprocalRankFusion(lists, k);
+  if (opts.boost) for (const [key, s] of scores) scores.set(key, s * (opts.boost(key) || 1));
+  const fused = [...scores.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([key]) => key);
   return guaranteeFtsTop3(fused, lists[0] ?? []);

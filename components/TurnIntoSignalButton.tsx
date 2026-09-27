@@ -1,91 +1,85 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   prepareSignalFromSourceAction,
   analyzeCandidateAction,
   overrideAndApproveAction,
   completePipelineRunAction,
 } from '@/lib/actions';
+import { useModelRun } from '@/lib/jobs/use-model-run';
+import type { StepSpec } from '@/lib/jobs/core';
+import ModelRunPanel from '@/components/jobs/ModelRunPanel';
 
 // Source-page affordance: turn this source into a Signal Board entry through the SAME steps as
 // the discovery pipeline — triage (full, can reject), then analysis into a draft. The model
-// proposes; the admin reviews/publishes the draft. We drive 2–3 short server calls from the
-// client (each its own function invocation) so neither LLM leg pushes past the 60s cap.
+// proposes; the admin reviews/publishes the draft. Each leg is its own server action (its own
+// function invocation) so neither LLM leg pushes past the 60s cap; the run is a model run like
+// any other, so it survives leaving the page.
+
+const STEPS: StepSpec[] = [
+  { key: 'triage', label: 'Triage', running: 'Triaging…', features: ['pipeline_triage'] },
+  { key: 'analyze', label: 'Analyze', running: 'Analyzing…', features: ['pipeline_analysis'] },
+];
+
 export default function TurnIntoSignalButton({ sourceId }: { sourceId: string }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState('');
-  const [error, setError] = useState(false);
   const [review, setReview] = useState<
     { candidateId: string; runId: string; kind: 'rejected' | 'duplicate'; reason?: string } | null
   >(null);
+  const [overriding, setOverriding] = useState(false);
+  const [overrideError, setOverrideError] = useState<string | null>(null);
 
-  async function analyzeAndGo(candidateId: string, runId: string) {
-    setStatus('Analyzing…');
-    const res = await analyzeCandidateAction(candidateId);
-    if (!res.ok) {
-      setError(true);
-      setStatus(`Analysis failed (${res.error ?? 'error'}).`);
-      return;
-    }
-    await completePipelineRunAction(runId).catch(() => {});
-    if (res.signalId) {
-      router.push(`/signals/${res.signalId}/edit`);
-    } else {
-      // Idempotent no-op (already drafted by a peer) — fall back to the board.
-      router.push('/signals');
-    }
-  }
-
-  async function run() {
-    setBusy(true);
-    setError(false);
-    setReview(null);
-    setStatus('Triaging…');
-    try {
-      const r = await prepareSignalFromSourceAction(sourceId);
-      if (r.status === 'exists') {
-        setStatus('This source already has a signal. Opening it.');
-        router.push(`/signals/${r.signalId}/edit`);
-        return;
+  const run = useModelRun({
+    kind: 'signal_from_source',
+    subject: sourceId,
+    label: 'Turn into signal',
+    steps: STEPS,
+    run: async (ctx, from) => {
+      let candidateId: string;
+      let runId: string;
+      if (from === 'analyze') {
+        if (!review) throw new Error('Missing candidate to resume from; triage again.');
+        candidateId = review.candidateId;
+        runId = review.runId;
+      } else {
+        setReview(null);
+        setOverrideError(null);
+        const r = await ctx.step('triage', () => prepareSignalFromSourceAction(sourceId));
+        if (r.status === 'exists') {
+          return { href: `/signals/${r.signalId}/edit`, note: 'This source already has a signal.' };
+        }
+        if (r.triage_status !== 'approved') {
+          const kind = r.triage_status === 'duplicate' ? 'duplicate' : 'rejected';
+          setReview({ candidateId: r.candidateId!, runId: r.runId!, kind, reason: r.reason });
+          return { parked: `Triage flagged this source as ${kind}${r.reason ? `: ${r.reason}` : ''}. Review below to override.` };
+        }
+        candidateId = r.candidateId!;
+        runId = r.runId!;
       }
-      if (r.triage_status === 'approved') {
-        await analyzeAndGo(r.candidateId!, r.runId!);
-        return;
-      }
-      // rejected or duplicate — let the admin override and create anyway
-      setReview({
-        candidateId: r.candidateId!,
-        runId: r.runId!,
-        kind: r.triage_status === 'duplicate' ? 'duplicate' : 'rejected',
-        reason: r.reason,
-      });
-      setStatus('');
-    } catch (e) {
-      setError(true);
-      setStatus(`Couldn’t prepare a signal (${e instanceof Error ? e.message : 'error'}).`);
-    } finally {
-      setBusy(false);
-    }
-  }
+      const res = await ctx.step('analyze', () => analyzeCandidateAction(candidateId));
+      await completePipelineRunAction(runId).catch(() => {});
+      return {
+        href: res.signalId ? `/signals/${res.signalId}/edit` : '/signals',
+        note: res.signalId ? undefined : 'Already drafted by a peer.',
+      };
+    },
+  });
 
   async function createAnyway() {
     if (!review) return;
-    setBusy(true);
-    setError(false);
-    setStatus('Overriding…');
+    setOverriding(true);
+    setOverrideError(null);
     try {
       await overrideAndApproveAction(review.candidateId, review.runId);
-      await analyzeAndGo(review.candidateId, review.runId);
+      await run.start({ from: 'analyze' });
     } catch (e) {
-      setError(true);
-      setStatus(`Override failed (${e instanceof Error ? e.message : 'error'}).`);
+      setOverrideError(`Override failed (${e instanceof Error ? e.message : 'error'}).`);
     } finally {
-      setBusy(false);
+      setOverriding(false);
     }
   }
+
+  const busy = run.status === 'running' || overriding;
 
   return (
     <div>
@@ -94,26 +88,17 @@ export default function TurnIntoSignalButton({ sourceId }: { sourceId: string })
         <button
           type="button"
           className="btn btn--ghost btn--sm"
-          onClick={run}
+          onClick={() => void run.start()}
           disabled={busy}
           style={busy ? { opacity: 0.6, cursor: 'wait' } : undefined}
         >
-          {busy ? 'Working…' : '✦ Turn into signal'}
+          ✦ Turn into signal
         </button>
       </div>
 
-      {status && (
-        <span
-          className="text-xs"
-          role="status"
-          aria-live="polite"
-          style={{ color: error ? 'var(--heat-4)' : 'var(--faint-ink)' }}
-        >
-          {status}
-        </span>
-      )}
+      <ModelRunPanel run={run} doneLabel="Open the draft signal" />
 
-      {review && (
+      {review && run.status === 'paused' && (
         <div
           className="text-sm"
           style={{
@@ -136,8 +121,13 @@ export default function TurnIntoSignalButton({ sourceId }: { sourceId: string })
             disabled={busy}
             style={busy ? { opacity: 0.6, cursor: 'wait' } : undefined}
           >
-            Create anyway
+            {overriding ? 'Overriding…' : 'Create anyway'}
           </button>
+          {overrideError && (
+            <p className="text-xs" role="alert" style={{ margin: '8px 0 0', color: 'var(--heat-4)' }}>
+              {overrideError}
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -24,7 +24,7 @@ const {
   encodeCostReport, extractCostReport, parseCostReport, COST_MARKER,
   USER_TURN_CAP, ASSISTANT_TURN_CAP, MAX_MESSAGES, CHAR_BUDGET,
 } = await import('../lib/ask/history.ts');
-const { parseCitations } = await import('../lib/ask/verify.ts');
+const { parseCitations, toPeekId } = await import('../lib/ask/verify.ts');
 const { EXAMPLE_QUESTIONS } = await import('../components/ask/starters.ts');
 const store = await import('../components/ask/store.ts');
 
@@ -157,6 +157,50 @@ check('parseCitations: stale S1 and fresh S7 both resolve through a merged map',
 check('parseCitations: unknown tag flags invalid', () => {
   const spans = parseCitations('See [signal S9].', IDS, { S1: 'u' });
   assert.equal(spans[0].codes[0].valid, false);
+});
+
+// ---- verify: report tags (R<n>), the descriptor -> section anchor -----------
+const EDITION_R = { R7: 'report:edition:2026-09-26:11111111-1111-4111-8111-111111111111:front-0' };
+const SAVANT_R = { R2: 'report:savant:2026-09-25:22222222-2222-4222-8222-222222222222:lead' };
+const ROUNDUP_R = { R9: 'report:roundup::33333333-3333-4333-8333-333333333333:bottomLine' };
+check('parseCitations: [report R7] classifies as report with a bracket kind word', () => {
+  const spans = parseCitations('See [report R7].', IDS, EDITION_R);
+  const c = spans[0].codes[0];
+  assert.equal(c.kind, 'report');
+  assert.equal(c.valid, true);
+  assert.equal(c.href, '/blotter/2026-09-26#front-0');
+});
+check('parseCitations: bare [R7] (no kind word) still resolves via STRONG', () => {
+  const spans = parseCitations('See [R7].', IDS, EDITION_R);
+  assert.equal(spans[0].codes[0].kind, 'report');
+  assert.equal(spans[0].codes[0].valid, true);
+});
+check('parseCitations: report href for savant uses /savant/<week>#<key>', () => {
+  const spans = parseCitations('[report R2]', IDS, SAVANT_R);
+  assert.equal(spans[0].codes[0].href, '/savant/2026-09-25#lead');
+});
+check('parseCitations: report href for roundup (empty scope) falls back to /reports/sheet', () => {
+  const spans = parseCitations('[report R9]', IDS, ROUNDUP_R);
+  assert.equal(spans[0].codes[0].href, '/reports/sheet/33333333-3333-4333-8333-333333333333#bottomLine');
+});
+check('parseCitations: an unknown report tag flags invalid with no href', () => {
+  const spans = parseCitations('[report R99]', IDS, EDITION_R);
+  assert.equal(spans[0].codes[0].valid, false);
+  assert.equal(spans[0].codes[0].href, null);
+});
+check('toPeekId: report descriptor collapses to <uuid>:<section>', () => {
+  assert.equal(
+    toPeekId('report', EDITION_R.R7),
+    '11111111-1111-4111-8111-111111111111:front-0'
+  );
+});
+check('toPeekId: signal/paper/item/fact map values pass through unchanged', () => {
+  assert.equal(toPeekId('signal', 'uuid-one'), 'uuid-one');
+  assert.equal(toPeekId('item', 'scan:uuid-two'), 'scan:uuid-two');
+  assert.equal(toPeekId('fact', 'uuid-three'), 'uuid-three');
+});
+check('toPeekId: a malformed report descriptor passes through unchanged', () => {
+  assert.equal(toPeekId('report', 'not-a-descriptor'), 'not-a-descriptor');
 });
 
 // ---- store -------------------------------------------------------------------

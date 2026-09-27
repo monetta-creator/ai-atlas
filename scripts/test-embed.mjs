@@ -160,5 +160,14 @@ check('embedBudgetAllows: refuses at or over the cap', () => {
   assert.equal(embedBudgetAllows(0.5, 0.25), false);
 });
 
+check('fuseOrder boost: a boosted report passage overtakes an unboosted record at the same ranks; the FTS top 3 still hold', () => {
+  const fts = ['claim:1', 'claim:2', 'claim:3', 'report:r:lead'];
+  const vec = ['claim:2', 'report:r:lead', 'claim:1'];
+  const plain = fuseOrder([fts, vec]);
+  const boosted = fuseOrder([fts, vec], undefined, { boost: (k) => (k.startsWith('report:') ? 1.5 : 1) });
+  assert.ok(boosted.indexOf('report:r:lead') < plain.indexOf('report:r:lead'), 'the boost moves the report passage up');
+  for (const k of fts.slice(0, 3)) assert.ok(boosted.indexOf(k) < 10, `${k} stays in the top 10`);
+});
+
 console.log(`\n${failures === 0 ? 'All checks passed.' : `${failures} check(s) FAILED.`}`);
 process.exit(failures === 0 ? 0 : 1);

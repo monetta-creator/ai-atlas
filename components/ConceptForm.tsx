@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useFormStatus } from 'react-dom';
+import ModelCallButton from '@/components/jobs/ModelCallButton';
 import { recommendConceptPrereqsAction, recommendConceptClaimsAction } from '@/lib/actions';
 import { CONCEPT_STATUS_LABEL } from '@/lib/format';
 import type {
@@ -67,11 +68,7 @@ export default function ConceptForm({
   const [claimCodes, setClaimCodes] = useState<Set<string>>(new Set(initial.claim_codes ?? []));
 
   const [prereqRecs, setPrereqRecs] = useState<ConceptPrereqRecommendation[] | null>(null);
-  const [prereqBusy, setPrereqBusy] = useState(false);
-  const [prereqError, setPrereqError] = useState<string | null>(null);
   const [claimRecs, setClaimRecs] = useState<ConceptClaimRecommendation[] | null>(null);
-  const [claimBusy, setClaimBusy] = useState(false);
-  const [claimError, setClaimError] = useState<string | null>(null);
 
   const canAsk = name.trim().length > 0 && shortDefinition.trim().length > 0;
 
@@ -80,36 +77,6 @@ export default function ConceptForm({
     if (next.has(value)) next.delete(value);
     else next.add(value);
     return next;
-  }
-
-  async function suggestPrereqs() {
-    setPrereqBusy(true);
-    setPrereqError(null);
-    try {
-      const recs = await recommendConceptPrereqsAction({
-        name, short_definition: shortDefinition, explanation, excludeId: conceptId,
-      });
-      setPrereqRecs(recs);
-    } catch (e) {
-      setPrereqError(e instanceof Error ? e.message : 'Could not get suggestions.');
-    } finally {
-      setPrereqBusy(false);
-    }
-  }
-
-  async function suggestClaims() {
-    setClaimBusy(true);
-    setClaimError(null);
-    try {
-      const recs = await recommendConceptClaimsAction({
-        name, short_definition: shortDefinition, explanation,
-      });
-      setClaimRecs(recs);
-    } catch (e) {
-      setClaimError(e instanceof Error ? e.message : 'Could not get suggestions.');
-    } finally {
-      setClaimBusy(false);
-    }
   }
 
   return (
@@ -206,17 +173,22 @@ export default function ConceptForm({
       <div className="field">
         <div className="flex items-center justify-between gap-3">
           <label style={{ margin: 0 }}>Prerequisites: understand these first</label>
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={suggestPrereqs}
-            disabled={prereqBusy || !canAsk}
-            title={canAsk ? undefined : 'Add a name and short definition first'}
-          >
-            {prereqBusy ? 'Asking…' : '✦ AI suggest'}
-          </button>
+          <span title={canAsk ? undefined : 'Add a name and short definition first'}>
+            <ModelCallButton
+              label="✦ AI suggest"
+              busyLabel="Reading the concept…"
+              kind="single:concept_prereqs"
+              feature="concept_prereqs"
+              retries={1}
+              disabled={!canAsk}
+              className="btn btn--ghost btn--sm"
+              action={() => recommendConceptPrereqsAction({
+                name, short_definition: shortDefinition, explanation, excludeId: conceptId,
+              })}
+              onDone={(recs) => setPrereqRecs(recs)}
+            />
+          </span>
         </div>
-        {prereqError && <p className="editable-error">{prereqError}</p>}
         {prereqRecs && (
           <div className="concept-recs">
             {prereqRecs.length === 0 ? (
@@ -264,17 +236,22 @@ export default function ConceptForm({
       <div className="field">
         <div className="flex items-center justify-between gap-3">
           <label style={{ margin: 0 }}>Argument Map: claims &amp; bridge-claims this concept is relevant to</label>
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={suggestClaims}
-            disabled={claimBusy || !canAsk}
-            title={canAsk ? undefined : 'Add a name and short definition first'}
-          >
-            {claimBusy ? 'Asking…' : '✦ AI suggest'}
-          </button>
+          <span title={canAsk ? undefined : 'Add a name and short definition first'}>
+            <ModelCallButton
+              label="✦ AI suggest"
+              busyLabel="Reading the concept…"
+              kind="single:concept_claims"
+              feature="concept_claims"
+              retries={1}
+              disabled={!canAsk}
+              className="btn btn--ghost btn--sm"
+              action={() => recommendConceptClaimsAction({
+                name, short_definition: shortDefinition, explanation,
+              })}
+              onDone={(recs) => setClaimRecs(recs)}
+            />
+          </span>
         </div>
-        {claimError && <p className="editable-error">{claimError}</p>}
         {claimRecs && (
           <div className="concept-recs">
             {claimRecs.length === 0 ? (

@@ -3,10 +3,11 @@ import { getSignalsPage } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
+import { descriptionFor } from '@/lib/page-info';
 import SignalFeed from '@/components/SignalFeed';
 
 export const dynamic = 'force-dynamic';
-export const metadata = { title: 'Signal Board · The AI Atlas' };
+export const metadata = { title: 'Signal Board · The AI Atlas', description: descriptionFor('/signals') };
 
 // The PUBLISHED feed — what the world sees. Guests, logged-out visitors, and the admin all
 // see the same published signals here; the admin's unpublished drafts live on the separate

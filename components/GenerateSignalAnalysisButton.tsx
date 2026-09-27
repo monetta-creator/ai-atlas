@@ -1,6 +1,7 @@
 'use client';
 
 import { useFormStatus } from 'react-dom';
+import FormRunStatus from '@/components/jobs/FormRunStatus';
 import { generateSignalAnalysisAction } from '@/lib/actions';
 
 // Admin button on the signal detail page. One press generates BOTH the briefing and the
@@ -18,11 +19,7 @@ function SubmitButton({ regenerate }: { regenerate: boolean }) {
       >
         {pending ? 'Generating analysis…' : regenerate ? 'Regenerate analysis' : 'Generate analysis'}
       </button>
-      {pending && (
-        <span className="text-[11px]" style={{ color: 'var(--faint-ink)' }}>
-          up to a minute
-        </span>
-      )}
+      <FormRunStatus busyLabel="Reading the signal…" feature="signal_analysis" />
     </span>
   );
 }

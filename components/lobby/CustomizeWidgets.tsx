@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { WIDGET_CATALOG, widgetMeta } from '@/lib/widgets/catalog';
-import { saveHomeWidgetsAction } from '@/lib/actions';
+import { catalogFor, widgetMeta, type Board } from '@/lib/widgets/catalog';
+import { saveBoardWidgetsAction } from '@/lib/actions';
 
 // Immutable adjacent-swap reorder; the ↑/↓ fallback to drag-and-drop.
 function moveUp(list: string[], idx: number): string[] {
@@ -20,11 +20,11 @@ function moveDown(list: string[], idx: number): string[] {
   return next;
 }
 
-// Admin-only Lobby control: reorder, add, and remove board widgets, then
-// save through the guarded action. Collapsed to a single button so the
+// Admin-only board control (the lobby and the /ops board): reorder, add, and
+// remove the board's widgets, then save through the guarded action. Collapsed to a single button so the
 // board itself stays the focus; the working list is local state seeded
 // fresh from `active` every time the panel opens.
-export default function CustomizeWidgets({ active }: { active: string[] }) {
+export default function CustomizeWidgets({ active, board = 'home' }: { active: string[]; board?: Board }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [list, setList] = useState<string[]>(active);
@@ -68,7 +68,7 @@ export default function CustomizeWidgets({ active }: { active: string[] }) {
     setError(null);
     startTransition(async () => {
       try {
-        await saveHomeWidgetsAction(list);
+        await saveBoardWidgetsAction(board, list);
         router.refresh();
         setOpen(false);
       } catch (e) {
@@ -85,7 +85,7 @@ export default function CustomizeWidgets({ active }: { active: string[] }) {
     );
   }
 
-  const available = WIDGET_CATALOG.filter((w) => !list.includes(w.key));
+  const available = catalogFor(board).filter((w) => !list.includes(w.key));
 
   return (
     <div className="lwc-panel">

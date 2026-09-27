@@ -10,9 +10,9 @@ export interface StartPortal {
 
 export const START_HERE = {
   kicker: 'Where do I start?',
-  title: 'A map of the AI-economy debate.',
+  title: 'An intelligence system with a map at its core.',
   what: [
-    'The Atlas tracks the argument about AI and the economy as a map: open questions, the stances people take, the falsifiable claims those stances rest on, and the evidence for and against each claim.',
+    'The Atlas collects what happens in AI every weekday and places each development on a map of the argument: open questions, the stances people take, the falsifiable claims those stances rest on, and the evidence for and against each claim.',
     'It orients rather than proves. On most days the honest reading is that nothing settled, and it says so.',
   ],
   why: [
@@ -28,6 +28,7 @@ export const START_HERE = {
   portals: [
     { href: '/signals', name: 'Signal Board', line: 'Tracked AI developments, wired to the claims they touch.', icon: 'signals' },
     { href: '/blotter', name: 'News Blotter', line: 'A daily AI newspaper written from what the engines collected.', icon: 'blotter' },
+    { href: '/savant', name: 'Savant', line: 'The Atlas’s own weekly research report, with a point of view and a ledger of open hypotheses.', icon: 'savant' },
     { href: '/map', name: 'Claims & Theses', line: 'The argument itself: questions, claims, evidence, and the theses tracked against them.', icon: 'claims' },
     { href: '/reports', name: 'Report Portal', line: 'Cited reports and 16:9 decks, downloadable as PDF.', icon: 'reports' },
     { href: '/datasets', name: 'Data Portal', line: 'Everything as CSV or JSON, with a documented schema.', icon: 'data' },

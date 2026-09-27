@@ -18,7 +18,7 @@ function markSeen() {
 }
 
 // "Where do I start?" — a short tutorial dialog: what the Atlas is, why it
-// exists, what it does differently, the eight portals, and three starter
+// exists, what it does differently, every portal, and three starter
 // questions. Reachable from the lobby (a round ? button beside Ask, which
 // also auto-opens the dialog once per browser) and from the /ask empty state
 // (a plain text link, never auto-opening). Same overlay idiom as PageInfo and

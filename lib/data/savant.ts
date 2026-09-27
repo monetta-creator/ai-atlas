@@ -87,6 +87,19 @@ export async function getCompanyNameMap(): Promise<Map<string, string>> {
   return new Map(rows.map((r) => [r.slug, r.name]));
 }
 
+// This issue week's spend: every savant_* feature call stamped with this
+// week_end in metadata (the notebook legs and the Friday issue legs alike).
+// Mirrors checkSavantBudget's own sum (lib/savant/budget.ts) for the ops
+// board, which has no reason to import the budget module's guard logic.
+export async function getSavantWeekSpend(weekEnd: string): Promise<number> {
+  const row = await one<{ usd: number }>(
+    `select coalesce(sum(cost_usd), 0)::float8 as usd from ai_cost_log
+      where feature like 'savant_%' and metadata->>'week_end' = $1`,
+    [weekEnd]
+  );
+  return row?.usd ?? 0;
+}
+
 // The live rate cards for the prefs form's cost estimate: USD per million
 // tokens by model id (numeric arrives as a number via lib/db's type parser).
 export async function getModelRates(): Promise<RateTable> {

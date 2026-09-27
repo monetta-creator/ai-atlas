@@ -19,6 +19,8 @@ const nextConfig: NextConfig = {
     "/blotter/[day]/deck/pdf": ["./lib/pdf/fonts/*.ttf"],
     "/intel/deck/[day]/pdf": ["./lib/pdf/fonts/*.ttf"],
     "/savant/[week]/pdf": ["./lib/pdf/fonts/*.ttf"],
+    "/opengraph-image": ["./lib/pdf/fonts/*.ttf"],
+    "/twitter-image": ["./lib/pdf/fonts/*.ttf"],
   },
 };
 

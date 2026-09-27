@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL, SIGNAL_LENS_COLOR } from '@/lib/format';
 import {
@@ -8,6 +8,9 @@ import {
   saveReportAction, listSavedReportsAction, getSavedReportAction, deleteReportAction,
 } from '@/lib/actions';
 import type { Report, SignalLens, SavedReportMeta } from '@/lib/types';
+import { useModelRun } from '@/lib/jobs/use-model-run';
+import type { FeatureStats, StepSpec, UiJob } from '@/lib/jobs/core';
+import ModelRunPanel from '@/components/jobs/ModelRunPanel';
 import ReportDocument from './ReportDocument';
 import ReportPrint from './ReportPrint';
 import SavedReports from './SavedReports';
@@ -16,7 +19,10 @@ import SavedReports from './SavedReports';
 // server-rendered data preview below tracks them); "Generate report" runs the real
 // generation — one call per active lens (scoped to that lens's signals), then one
 // synthesis call — assembling the full Report and handing it to ReportDocument (the
-// editor shell). Partial-failure tolerant: a failed lens is surfaced inline, not fatal.
+// editor shell). Partial-failure tolerant: a failed lens is surfaced inline, not fatal
+// (caught inside the parallel group so it never aborts the run or the other lenses).
+// The retry-one-lens control in ReportDocument stays a standalone action (runLens,
+// its own three-attempt backoff), independent of the run panel below.
 
 const POOL = 3;                      // concurrent per-lens calls (each its own ≤60s call)
 const MAX_ATTEMPTS = 3;              // per-lens retry budget (transient/rate-limit)
@@ -24,29 +30,40 @@ const backoff = (attempt: number) => new Promise((r) => setTimeout(r, attempt * 
 
 type LensResult = { ok: true; narrative: string; callout: string } | { ok: false; error: string };
 
+interface Cache {
+  key: string;
+  data?: Report;
+  narratives?: Record<string, string>;
+  callouts?: Record<string, string | null>;
+}
+
 export default function ReportGenerator({
   initialFrom,
   initialTo,
   initialLenses,
   initialSaved,
+  stats,
+  initialJob,
 }: {
   initialFrom: string;
   initialTo: string;
   initialLenses: SignalLens[];
   initialSaved: SavedReportMeta[];
+  stats?: FeatureStats | null;
+  initialJob?: UiJob | null;
 }) {
   const router = useRouter();
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
   const [lenses, setLenses] = useState<Set<SignalLens>>(() => new Set(initialLenses));
 
-  const [busy, setBusy] = useState(false);
-  const [log, setLog] = useState<string[]>([]);
-  const [elapsed, setElapsed] = useState(0);
   const [report, setReport] = useState<Report | null>(null);
   const [lensErrors, setLensErrors] = useState<Record<string, string>>({});
   const [retrying, setRetrying] = useState<SignalLens | null>(null);
-  const startRef = useRef(0);
+  // What a resumed run may reuse: the data pack and the lens narratives
+  // already written for these same inputs (a retry from a later step never
+  // rebuilds or re-runs a lens that already succeeded).
+  const [cache, setCache] = useState<Cache | null>(null);
 
   // Persistence + post-edit actions.
   const [savedReports, setSavedReports] = useState<SavedReportMeta[]>(initialSaved);
@@ -54,9 +71,23 @@ export default function ReportGenerator({
   const [title, setTitle] = useState('');
   const [saving, setSaving] = useState(false);
   const [resynth, setResynth] = useState(false);
+  const [note, setNote] = useState<string | null>(null);   // save/open/re-synthesis status, separate from the run panel
 
   const selected = SIGNAL_LENS_SLUGS.filter((l) => lenses.has(l));
   const ready = !!from && !!to && from <= to && selected.length > 0;
+  const runKey = JSON.stringify([from, to, selected]);
+
+  // The chain's steps depend on which lenses are picked: one per selected
+  // lens, run up to POOL at a time. Keyed on the picked set so the array
+  // reference stays stable while the selection does not change.
+  const specs = useMemo<StepSpec[]>(() => [
+    { key: 'data', label: 'Report data', running: 'Assembling report data…' },
+    ...selected.map((l): StepSpec => ({
+      key: `lens:${l}`, label: SIGNAL_LENS_LABEL[l], running: `Writing ${SIGNAL_LENS_LABEL[l]}…`, features: ['report_lens'],
+    })),
+    { key: 'synthesis', label: 'Synthesis', running: 'Synthesizing macro survey + claims recap…', features: ['report_synthesis'] },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [selected.join(',')]);
 
   // Keep the URL (and the server-rendered data preview) in sync with the controls.
   const firstRender = useRef(true);
@@ -70,13 +101,6 @@ export default function ReportGenerator({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to, lenses]);
 
-  // Live elapsed timer while generating.
-  useEffect(() => {
-    if (!busy) return;
-    const id = setInterval(() => setElapsed(Math.round((Date.now() - startRef.current) / 1000)), 250);
-    return () => clearInterval(id);
-  }, [busy]);
-
   function toggleLens(l: SignalLens) {
     setLenses((prev) => {
       const next = new Set(prev);
@@ -86,10 +110,10 @@ export default function ReportGenerator({
     });
   }
 
-  const say = (line: string) => setLog((l) => [...l, line]);
-
   // One lens with retry/backoff. Both a thrown rejection and an {ok:false} are treated as
-  // a failed attempt — so a single lens never aborts the whole run.
+  // a failed attempt — so a single lens never aborts the whole run. Used both inside the
+  // chain below (wrapped in ctx.step, retries:1 since the backoff here already covers it)
+  // and standalone by retryLens (the ReportDocument "Retry" control on one failed lens).
   async function runLens(f: string, t: string, lens: SignalLens): Promise<LensResult> {
     let lastErr = 'error';
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -105,76 +129,72 @@ export default function ReportGenerator({
     return { ok: false, error: lastErr };
   }
 
-  async function generate() {
-    if (!ready || busy) return;
-    setBusy(true);
-    setReport(null);
-    setLensErrors({});
-    setLog([]);
-    setElapsed(0);
-    startRef.current = Date.now();
-    const f = from, t = to;
+  const run = useModelRun({
+    kind: 'period_report',
+    subject: `${from}:${to}`,
+    label: `Period report, ${from} to ${to}`,
+    steps: specs,
+    stats,
+    initialJob,
+    run: async (ctx, resumeFrom) => {
+      const f = from, t = to;
+      const reuse = resumeFrom && cache?.key === runKey ? cache : null;
 
-    try {
-      // Fetch the data half for the current controls so the assembled report matches.
-      say('Assembling report data…');
-      const data = await getReportDataAction(f, t, selected);
-      const active = data.byLens.filter((g) => g.signals.length > 0).map((g) => g.lens);
-      const skipped = data.lenses.filter((l) => !active.includes(l));
-      skipped.forEach((l) => say(`· ${SIGNAL_LENS_LABEL[l]}: no developments, skipped`));
-      say(`Generating ${active.length} lens section${active.length === 1 ? '' : 's'}…`);
+      let data = resumeFrom && resumeFrom !== 'data' ? reuse?.data : undefined;
+      if (!data) {
+        setReport(null);
+        setLensErrors({});
+        data = await ctx.step('data', () => getReportDataAction(f, t, selected));
+        setCache({ key: runKey, data });
+        ctx.note('✓ Report data assembled');
+      }
+      const dataNow = data;
+      const active = dataNow.byLens.filter((g) => g.signals.length > 0).map((g) => g.lens);
+      const skipped = dataNow.lenses.filter((l) => !active.includes(l));
+      skipped.forEach((l) => ctx.note(`· ${SIGNAL_LENS_LABEL[l]}: no developments, skipped`));
 
-      // Per-lens, bounded concurrency. Collect successes + failures; never abort.
-      const narratives: Record<string, string> = {};
-      const callouts: Record<string, string | null> = {};
+      // Per-lens, bounded concurrency. A lens already narrated by an earlier
+      // attempt (reused from the cache on resume) is never re-run. Collect
+      // successes + failures; a lens failure never aborts the others.
+      const narratives: Record<string, string> = resumeFrom && resumeFrom !== 'data' ? { ...(reuse?.narratives ?? {}) } : {};
+      const callouts: Record<string, string | null> = resumeFrom && resumeFrom !== 'data' ? { ...(reuse?.callouts ?? {}) } : {};
       const errors: Record<string, string> = {};
-      const queue = [...active];
+      const todo = active.filter((l) => !narratives[l]);
+      const queue = [...todo];
       const worker = async () => {
         for (let lens = queue.shift(); lens; lens = queue.shift()) {
-          const res = await runLens(f, t, lens);
-          if (res.ok) {
-            narratives[lens] = res.narrative;
-            if (res.callout) callouts[lens] = res.callout;
-            say(`✓ ${SIGNAL_LENS_LABEL[lens]}`);
-          } else { errors[lens] = res.error; say(`✗ ${SIGNAL_LENS_LABEL[lens]}: ${res.error}`); }
+          try {
+            const res = await ctx.step(`lens:${lens}`, () => runLens(f, t, lens), { parallel: true, retries: 1 });
+            if (res.ok) { narratives[lens] = res.narrative; if (res.callout) callouts[lens] = res.callout; }
+            else errors[lens] = res.error;
+          } catch (e) {
+            errors[lens] = e instanceof Error ? e.message : 'error';
+          }
         }
       };
-      await Promise.all(Array.from({ length: Math.min(POOL, active.length) }, worker));
+      if (todo.length) await Promise.all(Array.from({ length: Math.min(POOL, todo.length) }, worker));
+      setLensErrors(errors);
+      setCache({ key: runKey, data: dataNow, narratives, callouts });
 
-      // Synthesis over the full set + the lens summaries that succeeded.
-      say('Synthesizing macro survey + claims recap…');
-      const summaries = active
-        .filter((l) => narratives[l])
-        .map((l) => ({ lens: l, narrative: narratives[l] }));
-      let macroSurvey: string | null = null;
-      let claimsRecap: string | null = null;
-      let reportTitle = '';
-      const syn = await synthesizeReportAction(f, t, data.lenses, summaries);
-      if (syn.ok) {
-        macroSurvey = syn.macroSurvey;
-        claimsRecap = syn.claimsRecap;
-        reportTitle = syn.title;
-        say('✓ synthesis');
-      } else { say(`✗ synthesis: ${syn.error}`); }
+      // Synthesis over the full set + the lens summaries that succeeded (today's
+      // behavior: it runs regardless of how many lenses failed).
+      const summaries = active.filter((l) => narratives[l]).map((l) => ({ lens: l, narrative: narratives[l] }));
+      const syn = await ctx.step('synthesis', () => synthesizeReportAction(f, t, dataNow.lenses, summaries));
+      if (!syn.ok) throw new Error(syn.error);
 
       // Assemble the full Report and hand it to the editor shell.
       const perLens: Record<string, string | null> = {};
-      for (const l of data.lenses) perLens[l] = narratives[l] ?? null;
+      for (const l of dataNow.lenses) perLens[l] = narratives[l] ?? null;
       setReport({
-        ...data,
+        ...dataNow,
         generatedAt: new Date().toISOString(),
-        narrative: { macroSurvey, perLens, claimsRecap, callouts },
+        narrative: { macroSurvey: syn.macroSurvey, perLens, claimsRecap: syn.claimsRecap, callouts },
       });
-      setLensErrors(errors);
       setSavedId(null);                       // a fresh generation is unsaved
-      setTitle(reportTitle || `AI Atlas Report ${f} to ${t}`);   // editorial title from synthesis
-      say(`Done in ${Math.round((Date.now() - startRef.current) / 1000)}s.`);
-    } catch (e) {
-      say(`✗ ${e instanceof Error ? e.message : 'generation failed'}`);
-    } finally {
-      setBusy(false);
-    }
-  }
+      setTitle(syn.title || `AI Atlas Report ${f} to ${t}`);   // editorial title from synthesis
+      return { note: '✓ Report ready.' };
+    },
+  });
 
   // Edits from the rich-text fields flow back into the held Report (HTML), so the object
   // Phase 4 exports always reflects the latest text. `key` is 'macroSurvey' | 'claimsRecap'
@@ -237,7 +257,7 @@ export default function ReportGenerator({
       const res = await saveReportAction({ id: savedId ?? undefined, title, report });
       setSavedId(res.id);
       await refreshSaved();
-    } catch (e) { say(`✗ save: ${e instanceof Error ? e.message : 'error'}`); }
+    } catch (e) { setNote(`✗ save: ${e instanceof Error ? e.message : 'error'}`); }
     finally { setSaving(false); }
   }
   async function openSaved(id: string) {
@@ -248,8 +268,8 @@ export default function ReportGenerator({
       setTitle(r.title);
       setSavedId(r.id);
       setLensErrors({});
-      setLog([]);
-    } catch (e) { say(`✗ open: ${e instanceof Error ? e.message : 'error'}`); }
+      setNote(null);
+    } catch (e) { setNote(`✗ open: ${e instanceof Error ? e.message : 'error'}`); }
   }
   async function deleteSaved(id: string) {
     try {
@@ -276,8 +296,8 @@ export default function ReportGenerator({
             : prev
         );
         if (syn.title) setTitle(syn.title);   // refresh the editorial title from the new summary
-      } else { say(`✗ re-synthesis: ${syn.error}`); }
-    } catch (e) { say(`✗ re-synthesis: ${e instanceof Error ? e.message : 'error'}`); }
+      } else { setNote(`✗ re-synthesis: ${syn.error}`); }
+    } catch (e) { setNote(`✗ re-synthesis: ${e instanceof Error ? e.message : 'error'}`); }
     finally { setResynth(false); }
   }
 
@@ -333,11 +353,10 @@ export default function ReportGenerator({
           <button
             type="button"
             className="btn btn--primary"
-            onClick={generate}
-            disabled={!ready || busy}
-            style={busy ? { opacity: 0.6, cursor: 'wait' } : undefined}
+            onClick={() => void (run.status === 'failed' ? run.retry() : run.start())}
+            disabled={!ready || run.status === 'running'}
           >
-            {busy ? `Generating… ${elapsed}s` : 'Generate report'}
+            {run.status === 'running' ? <><span className="spinner mr-btn-spin" aria-hidden="true" />Generating</> : 'Generate report'}
           </button>
           <span className="text-xs" style={{ color: 'var(--faint-ink)' }}>
             {!ready
@@ -346,21 +365,10 @@ export default function ReportGenerator({
           </span>
         </div>
 
-        {log.length > 0 && (
-          <pre
-            role="status"
-            aria-live="polite"
-            className="text-xs"
-            style={{
-              margin: 0, padding: 10, whiteSpace: 'pre-wrap',
-              background: 'var(--surface)', border: '1px solid var(--line)',
-              borderRadius: 'var(--radius)', color: 'var(--dim)', fontFamily: 'var(--font-mono)',
-            }}
-          >
-            {log.join('\n')}
-          </pre>
-        )}
+        <ModelRunPanel run={run} doneLabel="Review the report below" />
       </div>
+
+      {note && <p className="text-sm" style={{ margin: 0, color: 'var(--dim)' }}>{note}</p>}
 
       <SavedReports
         reports={savedReports}

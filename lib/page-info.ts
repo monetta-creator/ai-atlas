@@ -71,11 +71,11 @@ const CORE: Record<string, PageInfoContent> = {
       },
       {
         heading: 'Reading a card',
-        body: 'Name and vendor, a one-line description, then maturity, deployment model, pricing model, and first seen, the date the scanner found it (not the founding date). The tags are features named in the product\'s own material. Team keyholders also see the fit band, the agent\'s rubric score, which is recommend-only.',
+        body: 'Name and vendor, a one-line description, then maturity, deployment model, pricing model, and first seen, the date the scanner found it (not the founding date). The tags are features named in the product\'s own material. Access-key holders also see the fit band, the agent\'s rubric score, which is recommend-only.',
       },
       {
         heading: 'Who sees what',
-        body: 'Guests see the catalog and published reports. Team keyholders also see held products, the agent read, and deep dives, and can add a product or generate a report. The console is admin only.',
+        body: 'Guests see the catalog and published reports. Access-key holders also see held products, the agent read, and deep dives, and can add a product or generate a report. The console is admin only.',
       },
       {
         heading: 'Reports',
@@ -95,4 +95,15 @@ export function pageInfoFor(pathname: string): PageInfoContent | null {
     if ((pathname === key || pathname.startsWith(`${key}/`)) && (!best || key.length > best.length)) best = key;
   }
   return best ? PAGE_INFO[best] : null;
+}
+
+// A per-page meta description, derived from the same registry the "i" dialog
+// reads: the entry's summary, first sentence only, capped at 160 characters
+// so it never trips a search engine's truncation. Undefined when the path has
+// no entry, so a caller can fall back to its own default.
+export function descriptionFor(pathname: string): string | undefined {
+  const info = pageInfoFor(pathname);
+  if (!info) return undefined;
+  const firstSentence = info.summary.match(/^[^.!?]*[.!?]/)?.[0]?.trim() ?? info.summary;
+  return firstSentence.length > 160 ? `${firstSentence.slice(0, 157).trimEnd()}...` : firstSentence;
 }

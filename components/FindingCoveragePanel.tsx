@@ -1,8 +1,11 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { hydratePaperAction, analyzePaperAction } from '@/lib/actions';
+import { useModelRun } from '@/lib/jobs/use-model-run';
+import type { StepSpec } from '@/lib/jobs/core';
+import ModelRunPanel from '@/components/jobs/ModelRunPanel';
 
 // Batch findings extraction over the reviewed shelf: the portal leads with
 // findings, so tracked/noted papers without one are holes in the product. Each
@@ -17,46 +20,56 @@ export default function FindingCoveragePanel({
   missing: { id: string; title: string }[];
 }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [log, setLog] = useState<string[]>([]);
   const stopRef = useRef(false);
-  const push = (s: string) => setLog((l) => [...l, s]);
 
-  async function run() {
-    setBusy(true);
-    stopRef.current = false;
-    setLog([]);
-    let done = 0;
-    for (const p of missing) {
-      if (stopRef.current) {
-        push('Stopped.');
-        break;
-      }
-      push(`Analyzing: ${p.title.slice(0, 80)}`);
-      try {
-        const h = await hydratePaperAction(p.id);
-        if (!h.ok) push(`  fetch failed (${h.error ?? 'error'}); analyzing from the abstract`);
-        let ok = false;
-        for (let attempt = 1; attempt <= 2 && !ok; attempt++) {
-          const r = await analyzePaperAction(p.id);
-          if (r.ok) {
-            ok = true;
-            done += 1;
-            push(`  done: ${r.headline ?? 'finding extracted'}`);
-          } else if (r.terminal || attempt === 2) {
-            push(`  failed: ${r.error ?? 'analysis error'}`);
-          } else {
-            await new Promise((res) => setTimeout(res, r.status === 429 ? 10_000 : 3_000));
+  const STEPS: StepSpec[] = [
+    {
+      key: 'papers', label: 'Extract findings', running: 'Extracting findings…',
+      features: Array.from({ length: missing.length }, () => 'research_analysis'),
+    },
+  ];
+
+  const run = useModelRun({
+    kind: 'research_finding_coverage',
+    label: `Analyze missing findings (${missing.length})`,
+    steps: STEPS,
+    run: async (ctx) => {
+      stopRef.current = false;
+      let done = 0;
+      await ctx.step('papers', async () => {
+        for (const p of missing) {
+          if (stopRef.current) {
+            ctx.note('Stopped.');
+            break;
+          }
+          ctx.note(`Analyzing: ${p.title.slice(0, 80)}`);
+          try {
+            const h = await hydratePaperAction(p.id);
+            if (!h.ok) ctx.note(`  fetch failed (${h.error ?? 'error'}); analyzing from the abstract`);
+            let ok = false;
+            for (let attempt = 1; attempt <= 2 && !ok; attempt++) {
+              const r = await analyzePaperAction(p.id);
+              if (r.ok) {
+                ok = true;
+                done += 1;
+                ctx.note(`  done: ${r.headline ?? 'finding extracted'}`);
+              } else if (r.terminal || attempt === 2) {
+                ctx.note(`  failed: ${r.error ?? 'analysis error'}`);
+              } else {
+                await new Promise((res) => setTimeout(res, r.status === 429 ? 10_000 : 3_000));
+              }
+            }
+          } catch (e) {
+            ctx.note(`  failed: ${e instanceof Error ? e.message : 'unknown error'}`);
           }
         }
-      } catch (e) {
-        push(`  failed: ${e instanceof Error ? e.message : 'unknown error'}`);
-      }
-    }
-    push(`Finished: ${done} of ${missing.length} findings extracted.`);
-    setBusy(false);
-    router.refresh();
-  }
+      }, { retries: 1 });
+      router.refresh();
+      return { note: `Finished: ${done} of ${missing.length} findings extracted.` };
+    },
+  });
+
+  const busy = run.status === 'running';
 
   return (
     <div className="rounded-[var(--radius)] border p-[var(--card-pad)] flex flex-col gap-3"
@@ -66,7 +79,7 @@ export default function FindingCoveragePanel({
           {withFinding}/{reviewed} reviewed papers have a structured finding.
         </span>
         {missing.length > 0 && !busy && (
-          <button type="button" className="btn btn--ghost btn--sm" onClick={() => void run()}>
+          <button type="button" className="btn btn--ghost btn--sm" onClick={() => void run.start()}>
             ✦ Analyze missing ({missing.length})
           </button>
         )}
@@ -79,15 +92,7 @@ export default function FindingCoveragePanel({
           ~$0.10 per paper; the finding renders on the paper page and the portal.
         </span>
       </div>
-      {log.length > 0 && (
-        <pre className="text-xs" role="status" aria-live="polite"
-          style={{
-            margin: 0, whiteSpace: 'pre-wrap', color: 'var(--faint-ink)',
-            maxHeight: 220, overflowY: 'auto', fontFamily: 'var(--font-mono)',
-          }}>
-          {log.join('\n')}
-        </pre>
-      )}
+      <ModelRunPanel run={run} />
     </div>
   );
 }

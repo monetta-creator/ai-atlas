@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
-import type { CitationKind, ParsedCode, ValidIdsPlain, SignalMap } from '@/lib/ask/verify';
+import { toPeekId, type CitationKind, type ParsedCode, type ValidIdsPlain, type SignalMap } from '@/lib/ask/verify';
 import type { PeekKind } from '@/lib/ask/search';
 import type { Lane } from '@/lib/ask/lanes';
 import { LANE_LABEL } from '@/lib/ask/lanes';
@@ -24,12 +24,14 @@ function hostOf(url: string): string {
   }
 }
 
-// CitationKind -> peek kind; signal and paper tags additionally resolve to
-// uuids through the message's own frozen map before the peek opens.
+// CitationKind -> peek kind; signal, paper, item, fact and report tags
+// additionally resolve through the message's own frozen map (via toPeekId)
+// before the peek opens.
 const KIND_TO_PEEK: Record<CitationKind, PeekKind> = {
   claim: 'claim', bridge: 'bridge', stance: 'stance', Q: 'question', concept: 'concept', signal: 'signal',
-  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact',
+  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact', report: 'report',
 };
+const MAP_KINDS = new Set<CitationKind>(['signal', 'paper', 'item', 'fact', 'report']);
 
 // The message thread. Auto-scroll stays pinned to the bottom while streaming
 // unless the reader scrolled up (tracked in a ref from the scroll handler;
@@ -133,9 +135,9 @@ export default function AskThread({
               ...(onCite
                 ? {
                     onCite: (c: ParsedCode) => {
-                      if (c.kind === 'signal' || c.kind === 'paper') {
-                        const uuid = map[c.id];
-                        if (uuid) onCite(KIND_TO_PEEK[c.kind], uuid, i);
+                      if (MAP_KINDS.has(c.kind)) {
+                        const raw = map[c.id];
+                        if (raw) onCite(KIND_TO_PEEK[c.kind], toPeekId(c.kind, raw), i);
                         return;
                       }
                       onCite(KIND_TO_PEEK[c.kind], c.id, i);
@@ -230,9 +232,9 @@ export default function AskThread({
               <div className="ask-msg--assistant">
                 {renderAnswer(liveDraft, validIds, draftMap, onCite ? {
                   onCite: (c: ParsedCode) => {
-                    if (c.kind === 'signal' || c.kind === 'paper') {
-                      const uuid = draftMap[c.id];
-                      if (uuid) onCite(KIND_TO_PEEK[c.kind], uuid);
+                    if (MAP_KINDS.has(c.kind)) {
+                      const raw = draftMap[c.id];
+                      if (raw) onCite(KIND_TO_PEEK[c.kind], toPeekId(c.kind, raw));
                       return;
                     }
                     onCite(KIND_TO_PEEK[c.kind], c.id);

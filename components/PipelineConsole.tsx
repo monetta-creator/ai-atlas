@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   startPipelineRunAction, discoverBatchAction, discoverBreakingSweepAction, triageChunkAction,
@@ -10,6 +10,9 @@ import {
 } from '@/lib/actions';
 import { SIGNAL_LENS_LABEL } from '@/lib/format';
 import type { PipelineRun, SignalLens } from '@/lib/types';
+import { useModelRun, type RunCtx } from '@/lib/jobs/use-model-run';
+import type { StepSpec } from '@/lib/jobs/core';
+import ModelRunPanel from '@/components/jobs/ModelRunPanel';
 
 // How many analyze calls run concurrently. Each is its own Vercel function, so this is
 // real parallelism; kept low to respect Anthropic rate limits and leave a per-host
@@ -21,6 +24,21 @@ const ANALYSIS_POOL = 4;
 // pool because each call holds an Anthropic request open the whole time.
 const DISCOVERY_POOL = 3;
 
+type Mode = 'full' | 'discovery' | 'triage' | 'analysis';
+
+// The run's phases on the shared model-run registry (lib/jobs/use-model-run.ts):
+// discovery -> triage -> analysis, plus the advisory coverage check that
+// analysis runs on success. Each phase's own inner loop (many short server
+// actions with per-unit retries) is unchanged; it now reports through
+// ctx.note() instead of a local log, and the whole phase is one ctx.step()
+// call so a failure surfaces as "Retry from <phase>".
+const STEPS: StepSpec[] = [
+  { key: 'discovery', label: 'Discovery', running: 'Running the discovery searches and the breaking sweep…', features: ['pipeline_discovery'] },
+  { key: 'triage', label: 'Triage', running: 'Triaging the discovered candidates…', features: ['pipeline_triage'] },
+  { key: 'analysis', label: 'Analysis', running: 'Hydrating and analyzing approved candidates…', features: ['pipeline_analysis'] },
+  { key: 'coverage', label: 'Coverage check', running: 'Checking coverage of the window…', features: ['pipeline_coverage'] },
+];
+
 // Client orchestrator. Each step is many short server actions (one batch / one candidate)
 // so nothing exceeds the Hobby 60s cap; discovery/triage run as sequential chunks, analysis
 // as a small concurrent pool. State is persisted server-side after every unit, so closing
@@ -31,8 +49,6 @@ export default function PipelineConsole({
   const router = useRouter();
   const [cadence, setCadence] = useState<'weekly' | 'daily'>('weekly');
   const [lookback, setLookback] = useState<7 | 1>(7);
-  const [busy, setBusy] = useState(false);
-  const [log, setLog] = useState<string[]>([]);
 
   // The live run id is held in a ref so async handlers (and the failure path) always
   // see the run created *during* the handler, not a stale render-time value.
@@ -47,29 +63,18 @@ export default function PipelineConsole({
       ? latestRun.id
       : null;
   const runIdRef = useRef<string | null>(resumeId);
-  // Approved ids from a triage run in this same session, so "3 · Analysis" right after
-  // "2 · Triage" doesn't race the (stale) pendingAnalysisIds prop.
+  // Approved ids from a triage run in this same session, so a following
+  // analysis step doesn't race the (stale) pendingAnalysisIds prop.
   const sessionApprovedRef = useRef<string[] | null>(null);
+  // Which of the three numbered buttons (or "Run full pipeline") started the
+  // current/most recent run; a Retry after a failure keeps resuming in that
+  // same mode rather than reverting to the full chain.
+  const modeRef = useRef<Mode>('full');
 
-  // Live elapsed clock while a step runs, so it's obvious the pipeline is working.
-  const startRef = useRef<number>(0);
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    if (!busy) return;
-    const iv = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current) / 1000)), 1000);
-    return () => clearInterval(iv);
-  }, [busy]);
-  const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`;
-  const current = log.length ? log[log.length - 1].trim() : 'Working…';
-
-  const say = (line: string) => setLog((l) => [...l, line]);
-
-  async function runDiscovery(): Promise<string> {
-    say(`▶ Discovery (${cadence}, last ${lookback}d)…`);
+  async function runDiscoveryPhase(ctx: RunCtx): Promise<string> {
+    ctx.note(`▶ Discovery (${cadence}, last ${lookback}d)…`);
     const { runId, plan, sinceISO } = await startPipelineRunAction(cadence, lookback);
-    runIdRef.current = runId;
-    sessionApprovedRef.current = null;
-    say(`  run ${runId.slice(0, 8)} · ${plan.length} batches + breaking sweep · since ${sinceISO}`);
+    ctx.note(`  run ${runId.slice(0, 8)} · ${plan.length} batches + breaking sweep · since ${sinceISO}`);
     let total = 0;
     const processBatch = async (b: (typeof plan)[number]) => {
       const label = `${SIGNAL_LENS_LABEL[b.lens as SignalLens]} · batch ${b.batchIndex + 1}`;
@@ -81,15 +86,15 @@ export default function PipelineConsole({
         try {
           const { inserted } = await discoverBatchAction(runId, b.lens, b.batchIndex, sinceISO);
           total += inserted;
-          say(`  ${label} → +${inserted} (running ${total})`);
+          ctx.note(`  ${label} → +${inserted} (running ${total})`);
           break;
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'error';
           if (attempt < MAX_ATTEMPTS) {
-            say(`  ↻ ${label}: ${msg}, retrying (${attempt}/${MAX_ATTEMPTS - 1})`);
+            ctx.note(`  ↻ ${label}: ${msg}, retrying (${attempt}/${MAX_ATTEMPTS - 1})`);
             await new Promise((r) => setTimeout(r, attempt * 1500));
           } else {
-            say(`  ✗ ${label}: ${msg} (gave up after ${MAX_ATTEMPTS} attempts)`);
+            ctx.note(`  ✗ ${label}: ${msg} (gave up after ${MAX_ATTEMPTS} attempts)`);
           }
         }
       }
@@ -111,24 +116,24 @@ export default function PipelineConsole({
       try {
         const { inserted } = await discoverBreakingSweepAction(runId, sinceISO);
         total += inserted;
-        say(`  Breaking sweep → +${inserted} (running ${total})`);
+        ctx.note(`  Breaking sweep → +${inserted} (running ${total})`);
         break;
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'error';
         if (attempt < SWEEP_ATTEMPTS) {
-          say(`  ↻ breaking sweep: ${msg}, retrying (${attempt}/${SWEEP_ATTEMPTS - 1})`);
+          ctx.note(`  ↻ breaking sweep: ${msg}, retrying (${attempt}/${SWEEP_ATTEMPTS - 1})`);
           await new Promise((r) => setTimeout(r, attempt * 1500));
         } else {
-          say(`  ✗ breaking sweep: ${msg} (gave up after ${SWEEP_ATTEMPTS} attempts)`);
+          ctx.note(`  ✗ breaking sweep: ${msg} (gave up after ${SWEEP_ATTEMPTS} attempts)`);
         }
       }
     }
-    say(`✓ Discovery done: ${total} candidates.`);
+    ctx.note(`✓ Discovery done: ${total} candidates.`);
     return runId;
   }
 
-  async function runTriage(runId: string): Promise<string[]> {
-    say('▶ Triage…');
+  async function runTriagePhase(ctx: RunCtx, runId: string): Promise<string[]> {
+    ctx.note('▶ Triage…');
     let approved = 0, rejected = 0, duplicate = 0;
     let approvedIds: string[] = [];
     // Drive triage one bounded chunk per call so each fits the 60s cap; loop until the
@@ -143,7 +148,7 @@ export default function PipelineConsole({
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'error';
           if (attempt < MAX_ATTEMPTS) {
-            say(`  ↻ triage chunk: ${msg}, retrying (${attempt}/${MAX_ATTEMPTS - 1})`);
+            ctx.note(`  ↻ triage chunk: ${msg}, retrying (${attempt}/${MAX_ATTEMPTS - 1})`);
             await new Promise((r) => setTimeout(r, attempt * 1500));
           } else {
             throw e;
@@ -155,7 +160,7 @@ export default function PipelineConsole({
       rejected += res.rejected;
       duplicate += res.duplicate;
       if (res.processed > 0) {
-        say(`  +${res.processed} triaged → ${approved} approved / ${rejected} rejected / ${duplicate} dup · ${res.remaining} left`);
+        ctx.note(`  +${res.processed} triaged → ${approved} approved / ${rejected} rejected / ${duplicate} dup · ${res.remaining} left`);
       }
       if (res.remaining === 0) {
         approvedIds = res.approvedIds ?? [];
@@ -163,18 +168,17 @@ export default function PipelineConsole({
       }
       if (res.processed === 0) break; // safety: nothing left to process
     }
-    sessionApprovedRef.current = approvedIds;
-    say(`✓ Triage: ${approved} approved · ${rejected} rejected · ${duplicate} duplicate.`);
+    ctx.note(`✓ Triage: ${approved} approved · ${rejected} rejected · ${duplicate} duplicate.`);
     return approvedIds;
   }
 
   // Complete the run only when no candidates are still pending triage; otherwise leave it
   // running (resumable) and tell the admin to finish triage or archive the stragglers. This
   // mirrors completePipelineRunAction's hard guard but keeps the run out of the failed state.
-  async function tryComplete(runId: string): Promise<boolean> {
+  async function tryComplete(ctx: RunCtx, runId: string): Promise<boolean> {
     const pending = await pendingTriageCountAction(runId).catch(() => 0);
     if (pending > 0) {
-      say(`◐ ${pending} candidate(s) still pending triage: run “2 · Triage” (or archive them), then complete.`);
+      ctx.note(`◐ ${pending} candidate(s) still pending triage: run "2 · Triage" (or archive them), then complete.`);
       return false;
     }
     await completePipelineRunAction(runId);
@@ -185,43 +189,43 @@ export default function PipelineConsole({
   // significant AI developments (independent query phrasing) and marks each as covered
   // or a possible miss against the run's candidates + existing signals. Never blocks the
   // run — a silent miss becoming a visible flag is the whole point (the Kimi K3 lesson).
-  async function runCoverage(runId: string) {
-    say('▶ Coverage check…');
+  async function runCoveragePhase(ctx: RunCtx, runId: string) {
+    ctx.note('▶ Coverage check…');
     try {
       const cov = await coverageCheckAction(runId);
       for (const d of cov.developments) {
         const host = (() => {
           try { return new URL(d.url).hostname.replace(/^www\./, ''); } catch { return ''; }
         })();
-        say(d.covered
+        ctx.note(d.covered
           ? `  ✓ covered: ${d.headline}`
           : `  ⚠ possible miss: ${d.headline}${host ? ` (${host})` : ''}`);
       }
       const misses = cov.developments.filter((d) => !d.covered).length;
-      say(misses
+      ctx.note(misses
         ? `◐ Coverage check: ${misses} possible miss(es) of ${cov.developments.length}. Saved to the run below.`
         : `✓ Coverage check: all ${cov.developments.length} significant developments accounted for.`);
     } catch (e) {
-      say(`✗ Coverage check failed (non-blocking): ${e instanceof Error ? e.message : 'error'}`);
+      ctx.note(`✗ Coverage check failed (non-blocking): ${e instanceof Error ? e.message : 'error'}`);
     }
   }
 
-  async function runAnalysis(runId: string, ids: string[]) {
+  async function runAnalysisPhase(ctx: RunCtx, runId: string, ids: string[]) {
     if (!ids.length) {
-      say('▶ Analysis: nothing approved to analyze.');
+      ctx.note('▶ Analysis: nothing approved to analyze.');
       // Close the run only if no triage is still pending; audit coverage once closed.
-      if (await tryComplete(runId)) await runCoverage(runId);
+      if (await tryComplete(ctx, runId)) await ctx.step('coverage', () => runCoveragePhase(ctx, runId), { retries: 1 });
       return;
     }
     const total = ids.length;
-    say(`▶ Analysis: ${total} candidate(s), ${ANALYSIS_POOL} at a time…`);
+    ctx.note(`▶ Analysis: ${total} candidate(s), ${ANALYSIS_POOL} at a time…`);
     let made = 0, flagged = 0, done = 0;
 
     // Flag a candidate out of the queue with its reason — the terminal give-up path.
     const flagOne = async (id: string, reason: string) => {
       await markCandidateUnanalyzableAction(runId, id, reason).catch(() => {});
       flagged++; done++;
-      say(`  ${done}/${total} ⚑ flagged for manual review (${reason})`);
+      ctx.note(`  ${done}/${total} ⚑ flagged for manual review (${reason})`);
     };
 
     // Process one candidate in two stages, each its own short invocation:
@@ -248,7 +252,7 @@ export default function PipelineConsole({
           failMsg = e instanceof Error ? e.message : 'error';
         }
         if (terminal || attempt === MAX_ATTEMPTS) return flagOne(id, failMsg ?? 'fetch failed');
-        say(`  ↻ fetch retry (${attempt}/${MAX_ATTEMPTS - 1}): ${failMsg}`);
+        ctx.note(`  ↻ fetch retry (${attempt}/${MAX_ATTEMPTS - 1}): ${failMsg}`);
         await new Promise((r) => setTimeout(r, 2_000 * attempt));
       }
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -259,11 +263,11 @@ export default function PipelineConsole({
           const r = await analyzeCandidateAction(id);
           if (r.ok) {
             done++;
-            if (r.skipped) say(`  ${done}/${total} ⊘ already drafted`);
+            if (r.skipped) ctx.note(`  ${done}/${total} ⊘ already drafted`);
             else {
               made++;
               const viaNote = via === 'jina' ? ' · via reader' : '';
-              say(`  ${done}/${total} ✓ ${r.title} [${r.significance}, ${r.touches} touches, rel≈${r.reliability}]${viaNote}`);
+              ctx.note(`  ${done}/${total} ✓ ${r.title} [${r.significance}, ${r.touches} touches, rel≈${r.reliability}]${viaNote}`);
             }
             return;
           }
@@ -276,7 +280,7 @@ export default function PipelineConsole({
           failMsg = e instanceof Error ? e.message : 'error';
         }
         if (terminal || attempt === MAX_ATTEMPTS) return flagOne(id, failMsg ?? 'error');
-        say(`  ↻ retrying (${attempt}/${MAX_ATTEMPTS - 1}): ${failMsg}`);
+        ctx.note(`  ↻ retrying (${attempt}/${MAX_ATTEMPTS - 1}): ${failMsg}`);
         // Rate limits need real room; other transient errors a short backoff.
         await new Promise((r) => setTimeout(r, (rateLimited ? 10_000 : 3_000) * attempt));
       }
@@ -293,53 +297,67 @@ export default function PipelineConsole({
     await Promise.all(Array.from({ length: Math.min(ANALYSIS_POOL, total) }, worker));
 
     // Only complete the run when nothing is left un-drafted; otherwise leave it resumable
-    // (a closed tab / interrupted pass keeps its place — click 3 · Analysis to continue).
+    // (a closed tab / interrupted pass keeps its place — run 3 · Analysis again to continue).
     const leftover = await pendingAnalysisIdsAction(runId).catch(() => [] as string[]);
     if (leftover.length) {
-      say(`◐ Analysis incomplete: ${made} draft(s), ${flagged} flagged, ${leftover.length} still pending. Click 3 · Analysis again to finish.`);
+      ctx.note(`◐ Analysis incomplete: ${made} draft(s), ${flagged} flagged, ${leftover.length} still pending. Run 3 · Analysis again to finish.`);
       return;
     }
-    if (await tryComplete(runId)) {
-      say(`✓ Analysis done: ${made} draft(s)${flagged ? `, ${flagged} flagged for manual review` : ''}. Review on the Signal Board.`);
-      await runCoverage(runId);
+    if (await tryComplete(ctx, runId)) {
+      ctx.note(`✓ Analysis done: ${made} draft(s)${flagged ? `, ${flagged} flagged for manual review` : ''}. Review on the Signal Board.`);
+      await ctx.step('coverage', () => runCoveragePhase(ctx, runId), { retries: 1 });
     }
   }
 
-  async function guard(fn: () => Promise<void>) {
+  const run = useModelRun({
+    kind: 'engine:pipeline',
+    label: 'Discovery pipeline',
+    steps: STEPS,
+    run: async (ctx, from) => {
+      const mode = modeRef.current;
+      try {
+        let runId = runIdRef.current;
+        const wantDiscovery = mode === 'full' ? (!from || from === 'discovery') : mode === 'discovery';
+        const wantTriage = mode === 'full' ? (!from || from === 'discovery' || from === 'triage') : mode === 'triage';
+        const wantAnalysis = mode === 'full'
+          ? (!from || from === 'discovery' || from === 'triage' || from === 'analysis')
+          : mode === 'analysis';
+
+        if (wantDiscovery) {
+          runId = await ctx.step('discovery', () => runDiscoveryPhase(ctx), { retries: 1 });
+          runIdRef.current = runId;
+          sessionApprovedRef.current = null;
+        }
+        if (!runId) throw new Error('No active run: run discovery first.');
+
+        let approvedIds = sessionApprovedRef.current ?? pendingAnalysisIds;
+        if (wantTriage) {
+          approvedIds = await ctx.step('triage', () => runTriagePhase(ctx, runId!), { retries: 1 });
+          sessionApprovedRef.current = approvedIds;
+        }
+
+        if (wantAnalysis) {
+          await ctx.step('analysis', () => runAnalysisPhase(ctx, runId!, approvedIds), { retries: 1 });
+        }
+
+        router.refresh();
+        return { note: '✓ Done.' };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'error';
+        const rid = runIdRef.current;
+        if (rid) await failPipelineRunAction(rid, msg).catch(() => {});
+        router.refresh();
+        throw e;
+      }
+    },
+  });
+
+  const busy = run.status === 'running';
+  const startMode = (mode: Mode) => {
     if (busy) return;
-    startRef.current = Date.now();
-    setElapsed(0);
-    setBusy(true);
-    try {
-      await fn();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'error';
-      say(`✗ ${msg}`);
-      const rid = runIdRef.current;
-      if (rid) await failPipelineRunAction(rid, msg).catch(() => {});
-    } finally {
-      setBusy(false);
-      router.refresh();
-    }
-  }
-
-  const onDiscovery = () => guard(async () => { await runDiscovery(); });
-  const onTriage = () => guard(async () => {
-    const rid = runIdRef.current;
-    if (!rid) { say('✗ No active run: run discovery first.'); return; }
-    await runTriage(rid);
-  });
-  const onAnalysis = () => guard(async () => {
-    const rid = runIdRef.current;
-    if (!rid) { say('✗ No active run: run discovery first.'); return; }
-    const ids = sessionApprovedRef.current ?? pendingAnalysisIds;
-    await runAnalysis(rid, ids);
-  });
-  const onFull = () => guard(async () => {
-    const runId = await runDiscovery();
-    const approvedIds = await runTriage(runId);
-    await runAnalysis(runId, approvedIds);
-  });
+    modeRef.current = mode;
+    void run.start();
+  };
 
   return (
     <div
@@ -366,12 +384,12 @@ export default function PipelineConsole({
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
-        <button className="btn btn--primary" onClick={onFull} disabled={busy}>
-          {busy ? 'Running…' : '▶ Run full pipeline'}
+        <button className="btn btn--primary" onClick={() => startMode('full')} disabled={busy}>
+          {busy ? <><span className="spinner mr-btn-spin" aria-hidden="true" />Running</> : '▶ Run full pipeline'}
         </button>
-        <button className="btn btn--ghost btn--sm" onClick={onDiscovery} disabled={busy}>1 · Discovery</button>
-        <button className="btn btn--ghost btn--sm" onClick={onTriage} disabled={busy}>2 · Triage</button>
-        <button className="btn btn--ghost btn--sm" onClick={onAnalysis} disabled={busy}>3 · Analysis</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => startMode('discovery')} disabled={busy}>1 · Discovery</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => startMode('triage')} disabled={busy}>2 · Triage</button>
+        <button className="btn btn--ghost btn--sm" onClick={() => startMode('analysis')} disabled={busy}>3 · Analysis</button>
       </div>
 
       <p className="text-xs" style={{ color: 'var(--faint-ink)', marginTop: 10 }}>
@@ -379,26 +397,7 @@ export default function PipelineConsole({
         step; the run can be stopped and resumed later.
       </p>
 
-      {busy && (
-        <div className="pipeline-status" role="status" aria-live="polite">
-          <span className="spinner" aria-hidden="true" />
-          <span>{current}</span>
-          <span className="clock">{mmss} elapsed</span>
-        </div>
-      )}
-
-      {log.length > 0 && (
-        <pre
-          style={{
-            marginTop: 14, padding: '12px 14px', borderRadius: 8, fontSize: 12, lineHeight: 1.6,
-            background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--dim)',
-            maxHeight: 320, overflow: 'auto', whiteSpace: 'pre-wrap',
-          }}
-          aria-live="polite"
-        >
-          {log.join('\n')}
-        </pre>
-      )}
+      <ModelRunPanel run={run} doneLabel="Open the pipeline" />
     </div>
   );
 }

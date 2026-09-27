@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { one } from '../db';
 import { getScanPrefs } from './scan';
 import { getPipelinePrefs } from './pipeline';
@@ -195,7 +196,11 @@ function resolveJob(
   return { key, label, console: consoleHref, state, step: null, detail: null, finishedAtET: null, error: null, yesterdayIncomplete, warning: null };
 }
 
-export async function getDailyJobStatus(): Promise<DailyJobStatus> {
+// Memoized per request: the lobby tracker, the ops board and getOpsStatus all
+// read it in one render.
+export const getDailyJobStatus = cache(readDailyJobStatus);
+
+async function readDailyJobStatus(): Promise<DailyJobStatus> {
   const now = new Date();
   const yesterday = previousWeekdayUTC(now);
 

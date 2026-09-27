@@ -133,6 +133,7 @@ export default async function ThesisPage({ params }: { params: Promise<{ id: str
             dismiss={dismissThesisGapAction.bind(null, thesis.id)}
             clear={clearThesisGapScanAction.bind(null, thesis.id)}
             thesisId={thesis.id}
+            feature="thesis_gaps"
             title="3 · Gap diagnosis"
             explainer="The model reads this thesis, its mapped claims, and the signals its text attracts, and argues for the few claims the thesis depends on that the map lacks. Proposals appear as dashed nodes on the tree above. Creating a claim from one also maps it onto this thesis."
             emptyCopy="No gaps. The mapped claims already cover the legs this thesis stands on."

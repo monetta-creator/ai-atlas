@@ -1,8 +1,9 @@
 import Image from 'next/image';
 import { getLobbyStats, getPipelinePrefs, getTextCoverage, listGeneratedReports } from '@/lib/data';
 import { isAdmin } from '@/lib/auth';
-import { NAV_TREE } from '@/lib/nav';
+import { portalGroups } from '@/lib/nav';
 import { DATASETS } from '@/lib/datasets/registry';
+import { ATLAS_ONE_LINER } from '@/lib/brand';
 import Showcase, { type ShowSlide } from '@/components/showcase/Showcase';
 
 export const dynamic = 'force-dynamic';
@@ -23,8 +24,9 @@ export const metadata = { title: 'Showcase · The AI Atlas', robots: { index: fa
 
 type DeckSlide = ShowSlide & { admin?: boolean };
 
-// The portals are the NAV_TREE groups minus the home hub.
-const PORTALS = NAV_TREE.filter((g) => g.key !== 'home');
+// The portals: the nine product surfaces, in rail order (not every NAV_TREE
+// group; that also includes non-portal groups like Ask and Education).
+const PORTALS = portalGroups();
 function portalKicker(key: string): string {
   const i = PORTALS.findIndex((g) => g.key === key);
   return `Portal ${i + 1} of ${PORTALS.length}`;
@@ -107,7 +109,7 @@ export default async function ShowcasePage() {
         <>
           <div className="show-kicker">The AI Atlas · {datelineET()}</div>
           <div className="show-rule" />
-          <h2>A map of the AI-economy debate.</h2>
+          <h2>{ATLAS_ONE_LINER}</h2>
           <p className="show-lede">
             An orientation tool for the AI-economy debate: the open questions, the claims they turn
             on, and the evidence as it lands. Every statistic in this deck is a live read from the

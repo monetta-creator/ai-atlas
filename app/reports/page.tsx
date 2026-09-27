@@ -3,6 +3,7 @@ import { listSavedReports, getLatestThesisReports, listGeneratedReports, getTarg
 import { getEditContext } from '@/lib/content';
 import Editable from '@/components/Editable';
 import PageTop from '@/components/PageTop';
+import { descriptionFor } from '@/lib/page-info';
 import SheetConsole from '@/components/reports/SheetConsole';
 import ReportGrid from '@/components/reports/ReportGrid';
 import {
@@ -14,7 +15,7 @@ import { visibleDecks } from '@/lib/reports/decks';
 export const dynamic = 'force-dynamic';
 // Hosts the sheet-generation server actions (pack + two model legs + save).
 export const maxDuration = 60;
-export const metadata = { title: 'Report Portal · The AI Atlas' };
+export const metadata = { title: 'Report Portal · The AI Atlas', description: descriptionFor('/reports') };
 
 const VALID_KINDS = new Set([...REPORT_KIND_FILTERS.map((f) => f.key), DRAFTS_FILTER.key]);
 

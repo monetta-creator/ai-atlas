@@ -70,7 +70,7 @@ export const PAGE_INFO_A: Record<string, PageInfoContent> = {
   '/map': {
     title: 'How Claims & Theses reads',
     summary:
-      'The standing theses, the falsifiable claims they stand on, and the six open questions where those claims settle.',
+      'The standing theses, the falsifiable claims they stand on, and the open questions where those claims settle.',
     sections: [
       {
         heading: 'Three layers',

@@ -1,5 +1,5 @@
 // One-time (then periodic) backfill for the embeddings table (migration
-// 0066): reads every embeddable record across all eleven kinds, chunks it,
+// 0066): reads every embeddable record across all twelve kinds, chunks it,
 // embeds each new-or-changed chunk via OpenRouter, and upserts.
 //
 // Loading constraint (same family as scripts/backfill-relevance-votes.mjs and
@@ -34,6 +34,9 @@ config({ path: '.env.local' });
 
 import pg from 'pg';
 import { chunkRecord } from '../lib/embed/chunk.ts';
+// The report sectioner is pure (zero imports), so it loads here directly and
+// the report kind needs no hand-mirrored logic.
+import { reportSections, reportPrefix, EDITION_WINDOW_DAYS } from '../lib/embed/report-sections.ts';
 
 const scriptStart = Date.now();
 const EMBED_FEATURE = 'embed_index';
@@ -60,7 +63,7 @@ const args = parseArgs(process.argv.slice(2));
 
 const ALL_KINDS = [
   'signal', 'candidate', 'scan_item', 'intel_item', 'intel_fact',
-  'paper', 'claim', 'bridge', 'stance', 'concept', 'thread',
+  'paper', 'claim', 'bridge', 'stance', 'concept', 'thread', 'report',
 ];
 for (const k of args.kinds) {
   if (!ALL_KINDS.includes(k)) {
@@ -196,6 +199,19 @@ const FETCHERS = {
       `select slug, title, question, synthesis from research_threads${limitClause()}`
     );
     return rows.map((r) => ({ record_id: r.slug, title: r.title, text: j(r.question, stripHtml(r.synthesis)) }));
+  },
+  // mirrors embeddableReports (one record per section, '<uuid>:<key>')
+  async report() {
+    const { rows } = await client.query(
+      `select id::text as id, kind::text as kind, scope_to::text as scope_to, title, narrative
+         from generated_reports
+        where is_published
+          and (kind = 'savant' or kind = 'roundup'
+               or (kind = 'edition' and scope_to >= current_date - ${EDITION_WINDOW_DAYS}))${limitClause()}`
+    );
+    return rows.flatMap((r) => reportSections(r).map((s) => ({
+      record_id: `${r.id}:${s.key}`, title: reportPrefix(r.kind, r.scope_to, s.label), text: s.text,
+    })));
   },
 };
 

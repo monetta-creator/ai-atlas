@@ -84,7 +84,8 @@ body:has(> .ask-page) { height: 100dvh; min-height: 0; display: flex; flex-direc
 .ask-cite[data-kind="stance"] { --cite-tint: var(--supports); }
 .ask-cite[data-kind="concept"] { --cite-tint: var(--siglens-society); }
 .ask-cite[data-kind="bridge"] { --cite-tint: var(--siglens-geopolitics); }
-/* claims, questions, datasets keep the cobalt default */
+.ask-cite[data-kind="report"] { --cite-tint: var(--siglens-labor); }
+/* claims, questions, items, facts, datasets keep the cobalt default */
 
 /* The composer is the lobby launch box, verbatim: same ink-bordered plate,
    same resting accent caret, floating on the page ground (no white band, no

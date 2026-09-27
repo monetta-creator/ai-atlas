@@ -214,6 +214,22 @@ export async function getSpendWidgetData(): Promise<{
   };
 }
 
+// ---- Spend by feature, trailing N days (the ops board's "Spend by feature"
+// widget) ---------------------------------------------------------------------
+export interface FeatureSpendRow { feature: string; usd: number; calls: number }
+
+export async function getSpendByFeature(days = 7): Promise<FeatureSpendRow[]> {
+  return q<FeatureSpendRow>(
+    `select feature, sum(cost_usd)::float8 usd, count(*)::int calls
+       from ai_cost_log
+      where created_at > now() - ($1::int * interval '1 day')
+      group by feature
+      order by usd desc
+      limit 12`,
+    [days]
+  );
+}
+
 // The fixed platform subscriptions, the other half of the monthly bill (the
 // metered half is getMonthlyBill). A code constant on purpose: it changes
 // only when a subscription changes, and both /costs and the cost deck must
