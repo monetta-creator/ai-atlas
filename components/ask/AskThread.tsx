@@ -29,9 +29,9 @@ function hostOf(url: string): string {
 // before the peek opens.
 const KIND_TO_PEEK: Record<CitationKind, PeekKind> = {
   claim: 'claim', bridge: 'bridge', stance: 'stance', Q: 'question', concept: 'concept', signal: 'signal',
-  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact', report: 'report',
+  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact', report: 'report', history: 'history',
 };
-const MAP_KINDS = new Set<CitationKind>(['signal', 'paper', 'item', 'fact', 'report']);
+const MAP_KINDS = new Set<CitationKind>(['signal', 'paper', 'item', 'fact', 'report', 'history']);
 
 // The message thread. Auto-scroll stays pinned to the bottom while streaming
 // unless the reader scrolled up (tracked in a ref from the scroll handler;

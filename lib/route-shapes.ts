@@ -51,15 +51,16 @@ export function isMalformedDetailPath(pathname: string): boolean {
   }
   if (path.startsWith('/blotter/')) {
     const seg = path.slice('/blotter/'.length).split('/')[0];
-    if (!seg || seg === 'archive' || seg === 'desk') return false;
+    if (!seg || seg === 'archive' || seg === 'desk' || seg === 'record') return false;
     return !isRealDay(seg);
   }
   // The Savant weekly issue: /savant (latest), /savant/archive, /savant/desk
-  // (the admin console) are static siblings; everything else under /savant/
+  // (the admin console) and /savant/record (the company record) are static
+  // siblings; everything else under /savant/
   // is a week-ending day, exactly like /blotter/<day>.
   if (path.startsWith('/savant/')) {
     const seg = path.slice('/savant/'.length).split('/')[0];
-    if (!seg || seg === 'archive' || seg === 'desk') return false;
+    if (!seg || seg === 'archive' || seg === 'desk' || seg === 'record') return false;
     return !isRealDay(seg);
   }
   // The company intel deck: /intel/deck (latest) and /intel/deck/<day>[/pdf].

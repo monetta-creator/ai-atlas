@@ -296,3 +296,25 @@ a.sv-fig-card-name:hover { color: var(--accent); }
 .sv-run { margin-top: 10px; }
 .sv-run-lede { font-family: var(--font-mono); font-size: 11.5px; color: var(--dim); margin: 12px 0 6px; }
 .sv-run-msg { font-size: 13px; color: var(--dim); margin: 8px 0 0; }
+
+/* ---- /savant/record: the company record ---- */
+.sr-note { font-size: 13px; color: var(--dim); margin: 0 0 12px; max-width: 60ch; }
+.sr-sentences { margin: 0; padding: 0 0 0 20px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.6; color: var(--ink); }
+.sr-sources { margin-left: 4px; white-space: nowrap; }
+.sr-sources a { color: var(--accent); font-family: var(--font-mono); font-size: 11.5px; margin-right: 3px; }
+.sr-year { margin-bottom: 18px; }
+.sr-year-label { font-family: var(--font-headline); font-size: 16px; color: var(--accent); margin-bottom: 8px; }
+.sr-year-events { display: flex; flex-direction: column; gap: 10px; }
+.sr-event { display: flex; gap: 14px; align-items: flex-start; }
+.sr-event-date { font-family: var(--font-mono); font-size: 11.5px; color: var(--faint-ink); white-space: nowrap; min-width: 74px; }
+.sr-event-body { min-width: 0; }
+.sr-event-headline { font-size: 14px; color: var(--ink); font-weight: 600; }
+.sr-event-text { font-size: 13px; color: var(--dim); margin: 4px 0; line-height: 1.5; }
+.sr-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 14px; }
+.sr-filters a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; font-family: var(--font-mono); font-size: 11.5px; color: var(--dim); text-decoration: none; }
+.sr-filters a[data-active="true"] { border-color: var(--accent); color: var(--accent); }
+.sr-filter-sep { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
+.sr-table td, .sr-table th { vertical-align: top; }
+.sr-chip { font-family: var(--font-mono); font-size: 11px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; white-space: nowrap; }
+.sr-ai-badge { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: var(--accent); border: 1px solid var(--accent); border-radius: 3px; padding: 1px 5px; }
+.sr-summary { font-size: 12.5px; color: var(--dim); max-width: 42ch; }

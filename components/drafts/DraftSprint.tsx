@@ -4,19 +4,21 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { sprintDecisionAction } from '@/lib/actions';
-import { dateLabel, touchHref, SIGNAL_LENS_LABEL, SIGNIFICANCE_LABEL } from '@/lib/format';
+import { dateLabel, asOfLabel, touchHref, SIGNAL_LENS_LABEL, SIGNIFICANCE_LABEL } from '@/lib/format';
 import type { Signal } from '@/lib/types';
 
 // One draft at a time: title, summary, source, every claim touch with its
 // direction and reason, and three decisions. P publishes (the human gate:
 // evidence materializes), A archives (set aside, kept), S skips to the next
 // and parks this one at the end of the session's queue. Left arrow steps
-// back to a skipped draft. Sorted high significance first, newest first.
+// back to a skipped draft. Sorted high significance first, newest first (or,
+// in the backfill batch, oldest article first).
 export default function DraftSprint({
-  drafts, statements,
+  drafts, statements, batch = 'live',
 }: {
   drafts: Signal[];
   statements: Record<string, string>;
+  batch?: 'live' | 'backfill';
 }) {
   const router = useRouter();
   const [queue, setQueue] = useState<Signal[]>(drafts);
@@ -118,6 +120,9 @@ export default function DraftSprint({
       </div>
 
       <article className="ds-card" data-sig={current.significance}>
+        {batch === 'backfill' && (
+          <div className="ds-backfill-date">From {asOfLabel(current.published_at) ?? dateLabel(current.published_at)}</div>
+        )}
         <div className="ds-meta">
           <span className="ds-sig">{SIGNIFICANCE_LABEL[current.significance]}</span>
           {current.lenses.map((l) => <span key={l} className="ds-lens">{SIGNAL_LENS_LABEL[l]}</span>)}

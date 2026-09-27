@@ -112,12 +112,16 @@ export async function loadStoryItems(day: string): Promise<{
     // published_at, the editorial date: pipeline drafts carry the article's
     // date and are published hours or days later, by a human or the promotion
     // policy. Every publishing writer stamps it and 0059 backfilled the rest.
+    // origin <> 'backfill' excludes the history-canon drafts (mig 0076): a
+    // human publishes those from the drafts desk's backfill batch, but their
+    // article dates are years old and would otherwise flood the day's window.
     q<SignalRow>(
       `select s.id, s.title, s.summary, to_char(s.published_at, 'YYYY-MM-DD') as published_date,
               s.claim_touches, src.url as source_url
          from signals s
          left join sources src on src.id = s.source_id
         where s.is_published = true
+          and s.origin <> 'backfill'
           and s.first_published_at >= $1::timestamptz
           and s.first_published_at < $2::timestamptz
         order by s.first_published_at desc`,
@@ -199,6 +203,7 @@ export async function buildEditionPack(day: string): Promise<EditionPack> {
         `select count(*)::int as n from papers p
           where p.triage_status = 'kept' and p.extraction is not null
             and p.review_status <> 'dismissed'
+            and p.origin <> 'backfill'
             and p.created_at >= $1::timestamptz and p.created_at < $2::timestamptz`,
         [w.from, w.to]
       ),
@@ -361,6 +366,9 @@ interface PaperRow {
 // select rigor_prior (the maintainer's personal prior), review_note,
 // agent_* or raw_content: this pack is public. Reads 12, keeps the 8
 // heaviest; the refresh script (scripts/refresh-edition.mts) calls it too.
+// origin <> 'backfill' excludes the research canon (mig 0076): those papers
+// were triaged by a script, not the daily engine, and would otherwise flood
+// a quiet day's Research strip with years-old findings.
 export async function loadEditionPapers(w: { from: string; to: string }, limit = 8): Promise<EditionPaper[]> {
   const rows = await q<PaperRow>(
     `select p.id, p.title, p.extraction->>'headline_claim' as headline_claim, p.extraction->'who_cares' as who_cares,
@@ -373,6 +381,7 @@ export async function loadEditionPapers(w: { from: string; to: string }, limit =
        from papers p
       where p.triage_status = 'kept' and p.extraction is not null
         and p.review_status <> 'dismissed'
+        and p.origin <> 'backfill'
         and p.created_at >= $1::timestamptz and p.created_at < $2::timestamptz
       order by (p.review_status in ('tracked','noted')) desc, p.created_at desc
       limit $3`,

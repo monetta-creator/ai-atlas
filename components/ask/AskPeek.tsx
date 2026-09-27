@@ -137,6 +137,23 @@ export default function AskPeek({
             </button>
           )}
 
+          {data.kind === 'history' && data.source?.url && (
+            <div>
+              <a
+                className="btn btn--primary"
+                style={{ display: 'block', textAlign: 'center' }}
+                href={data.source.url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open the article ↗
+              </a>
+              <p style={{ fontSize: 11.5, color: 'var(--faint-ink)', textAlign: 'center', marginTop: 6, fontFamily: 'var(--font-mono)' }}>
+                {[data.source.outlet ?? data.source.title, data.source.published_on].filter(Boolean).join(' · ')}
+              </p>
+            </div>
+          )}
+
           {data.kind === 'paper' && data.source?.url && (
             <div>
               <a
@@ -241,14 +258,16 @@ export default function AskPeek({
             </Section>
           )}
 
-          <Link
-            className={data.kind === 'signal' && data.source?.url ? 'btn btn--ghost btn--sm' : 'btn btn--primary btn--sm'}
-            style={{ textAlign: 'center' }}
-            href={data.internal}
-            prefetch={false}
-          >
-            {data.kind === 'report' ? 'Open in the report' : 'Open in the Atlas'}
-          </Link>
+          {data.kind !== 'history' && (
+            <Link
+              className={data.kind === 'signal' && data.source?.url ? 'btn btn--ghost btn--sm' : 'btn btn--primary btn--sm'}
+              style={{ textAlign: 'center' }}
+              href={data.internal}
+              prefetch={false}
+            >
+              {data.kind === 'report' ? 'Open in the report' : 'Open in the Atlas'}
+            </Link>
+          )}
         </>
       )}
     </div>

@@ -25,16 +25,27 @@ function domainOf(url: string | null): string | null {
   try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return null; }
 }
 
+// Every evidence read here excludes rows carried by a backfill-origin signal
+// (the left join lets source-anchored evidence with no signal_id through
+// unaffected): those drafts are a separate batch a human reviews on purpose,
+// and their evidence would otherwise flood a week's "what moved" with
+// years-old moves the day the backlog gets a publish pass.
 async function loadMoved(w: { from: string; to: string }): Promise<SavantMoved> {
   const [dir, lens, claims, signals] = await Promise.all([
     q<{ direction: string; n: number }>(
-      `select direction::text as direction, count(*)::int as n from evidence
-        where created_at >= $1::timestamptz and created_at < $2::timestamptz group by 1`,
+      `select e.direction::text as direction, count(*)::int as n from evidence e
+         left join signals s on s.id = e.signal_id
+        where e.created_at >= $1::timestamptz and e.created_at < $2::timestamptz
+          and coalesce(s.origin::text, '') <> 'backfill'
+        group by 1`,
       [w.from, w.to]
     ),
     q<{ lens: string | null; n: number }>(
-      `select lens::text as lens, count(*)::int as n from evidence
-        where created_at >= $1::timestamptz and created_at < $2::timestamptz group by 1`,
+      `select e.lens::text as lens, count(*)::int as n from evidence e
+         left join signals s on s.id = e.signal_id
+        where e.created_at >= $1::timestamptz and e.created_at < $2::timestamptz
+          and coalesce(s.origin::text, '') <> 'backfill'
+        group by 1`,
       [w.from, w.to]
     ),
     q<MovedClaim>(
@@ -42,12 +53,14 @@ async function loadMoved(w: { from: string; to: string }): Promise<SavantMoved> 
               count(*) filter (where e.direction = 'supports')::int as supports,
               count(*) filter (where e.direction = 'contradicts')::int as contradicts
          from evidence e
+         left join signals s on s.id = e.signal_id
          join lateral (
            select c.code, c.statement, '/claim/' || c.code as href from claims c where e.target_type = 'claim' and c.id = e.target_id
            union all
            select b.code, b.statement, '/bridge/' || b.code as href from bridge_claims b where e.target_type = 'bridge_claim' and b.id = e.target_id
          ) t on true
         where e.created_at >= $1::timestamptz and e.created_at < $2::timestamptz
+          and coalesce(s.origin::text, '') <> 'backfill'
         group by t.code, t.statement, t.href
         order by evidence desc, t.code
         limit 10`,
@@ -57,7 +70,8 @@ async function loadMoved(w: { from: string; to: string }): Promise<SavantMoved> 
       `select s.id::text as id, s.title, s.lenses::text[] as lenses, s.significance::text as significance,
               to_char(s.first_published_at, 'YYYY-MM-DD') as published_date, src.url
          from signals s left join sources src on src.id = s.source_id
-        where s.is_published and s.first_published_at >= $1::timestamptz and s.first_published_at < $2::timestamptz
+        where s.is_published and s.origin <> 'backfill'
+          and s.first_published_at >= $1::timestamptz and s.first_published_at < $2::timestamptz
         order by (s.significance = 'high') desc, s.first_published_at desc
         limit 30`,
       [w.from, w.to]
@@ -86,7 +100,7 @@ async function loadRegulation(w: { from: string; to: string }): Promise<SavantBr
     q<{ id: string; title: string; published_date: string | null; url: string | null }>(
       `select s.id::text as id, s.title, to_char(s.first_published_at, 'YYYY-MM-DD') as published_date, src.url
          from signals s left join sources src on src.id = s.source_id
-        where s.is_published and 'regulatory' = any(s.lenses)
+        where s.is_published and s.origin <> 'backfill' and 'regulatory' = any(s.lenses)
           and s.first_published_at >= $1::timestamptz and s.first_published_at < $2::timestamptz
         order by (s.significance = 'high') desc, s.first_published_at desc limit 8`,
       [w.from, w.to]
@@ -150,6 +164,7 @@ export async function buildSavantPack(weekEnd: string): Promise<SavantPack> {
       one<{ n: number }>(
         `select count(*)::int as n from papers p
           where p.triage_status = 'kept' and p.extraction is not null and p.review_status <> 'dismissed'
+            and p.origin <> 'backfill'
             and p.created_at >= $1::timestamptz and p.created_at < $2::timestamptz`,
         [w.from, w.to]
       ),
@@ -163,8 +178,9 @@ export async function buildSavantPack(weekEnd: string): Promise<SavantPack> {
            (select count(distinct d) from (
               select source_domain as d from scan_items where created_at >= $1::timestamptz and created_at < $2::timestamptz and source_domain is not null
               union select source_domain from intel_items where created_at >= $1::timestamptz and created_at < $2::timestamptz and source_domain is not null) x) as outlets,
-           (select count(*) from papers where created_at >= $1::timestamptz and created_at < $2::timestamptz and triage_status = 'kept') as papers,
-           (select count(*) from evidence where created_at >= $1::timestamptz and created_at < $2::timestamptz) as evidence,
+           (select count(*) from papers where created_at >= $1::timestamptz and created_at < $2::timestamptz and triage_status = 'kept' and origin <> 'backfill') as papers,
+           (select count(*) from evidence e left join signals s on s.id = e.signal_id
+             where e.created_at >= $1::timestamptz and e.created_at < $2::timestamptz and coalesce(s.origin::text, '') <> 'backfill') as evidence,
            (select count(distinct company_slug) from intel_items where created_at >= $1::timestamptz and created_at < $2::timestamptz) as companies`,
         [w.from, w.to]
       ),

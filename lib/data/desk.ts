@@ -17,7 +17,7 @@ async function loadNavCounts(): Promise<{
           join pipeline_runs r on r.id = sc.run_id
          where r.status = 'running' and sc.triage_status = 'pending')::int as pipeline,
        (select count(*) from signals
-         where is_published = false and archived_at is null)::int as drafts,
+         where is_published = false and archived_at is null and origin <> 'backfill')::int as drafts,
        (select count(*) from papers
          where triage_status = 'kept' and review_status = 'pending')::int as papers,
        (select count(*) from companies where status = 'queued')::int as scout,

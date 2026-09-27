@@ -87,9 +87,15 @@ export const SUBSYSTEMS: Record<string, SubsystemGroup> = {
   // Savant, the autonomous weekly research report (0068): its notebook,
   // hypotheses ledger and prefs sit with the editions.
   savant_notebook: 'editions', savant_hypotheses: 'editions', savant_prefs: 'editions',
+  // The one-time since-ChatGPT backfill (0076): the history search's own
+  // triage queue, the reader organization's public record and AI timeline,
+  // and the backfill script's checkpoint. Grouped with Savant, the one
+  // surface that reads the record and cites it.
+  history_items: 'editions', self_record: 'editions', self_timeline: 'editions', backfill_units: 'editions',
 
   // ---- prefs & site meta ------------------------------------------------
-  content_blocks: 'prefs-and-meta', home_prefs: 'prefs-and-meta',
+  content_blocks: 'prefs-and-meta', home_prefs: 'prefs-and-meta', board_prefs: 'prefs-and-meta',
+  ui_jobs: 'prefs-and-meta',
   ai_cost_log: 'prefs-and-meta', ai_rate_cards: 'prefs-and-meta',
   tickets: 'prefs-and-meta', ticket_images: 'prefs-and-meta',
   // ---- ask (retrieval) ------------------------------------------------------
@@ -204,10 +210,16 @@ export const ACCESS_TIER: Record<string, TierInfo> = {
   savant_notebook: { tier: 'admin', reason: 'Savant’s working notebook; the issue renders a curated appendix from it, the rows themselves stay admin' },
   savant_hypotheses: { tier: 'key', reason: 'the hypotheses ledger is printed in every key-gated Savant issue' },
   savant_prefs: { tier: 'admin', reason: 'the Savant config singleton' },
+  history_items: { tier: 'key', reason: 'the since-ChatGPT backfill’s own triage queue; its kept rows draft into the signals dataset once published' },
+  self_record: { tier: 'key', reason: 'the reader organization’s public record; Savant’s cited profile draws on it, key-gated like the rest of Savant' },
+  self_timeline: { tier: 'key', reason: 'the reader organization’s AI timeline; printed only inside the key-gated /savant/record page' },
+  backfill_units: { tier: 'admin', reason: 'the one-time backfill script’s own checkpoint, never read outside it' },
 
   // prefs-and-meta
   content_blocks: { tier: 'admin', reason: 'edited only in edit mode; treated as admin working content' },
   home_prefs: { tier: 'admin', reason: 'the lobby widget-board layout singleton' },
+  board_prefs: { tier: 'admin', reason: 'the lobby and /ops widget layouts, one row per board' },
+  ui_jobs: { tier: 'admin', reason: 'the model-run registry; a keyholder sees only their own runs through /api/jobs' },
   ai_cost_log: { tier: 'admin', reason: 'per-call spend log behind /costs' },
   ai_rate_cards: { tier: 'admin', reason: 'pricing config behind /costs' },
   tickets: { tier: 'admin', reason: 'feedback-box submissions, reviewed only at /tickets' },

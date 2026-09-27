@@ -1,5 +1,5 @@
 // One-time (then periodic) backfill for the embeddings table (migration
-// 0066): reads every embeddable record across all twelve kinds, chunks it,
+// 0066): reads every embeddable record across all thirteen kinds, chunks it,
 // embeds each new-or-changed chunk via OpenRouter, and upserts.
 //
 // Loading constraint (same family as scripts/backfill-relevance-votes.mjs and
@@ -63,7 +63,7 @@ const args = parseArgs(process.argv.slice(2));
 
 const ALL_KINDS = [
   'signal', 'candidate', 'scan_item', 'intel_item', 'intel_fact',
-  'paper', 'claim', 'bridge', 'stance', 'concept', 'thread', 'report',
+  'paper', 'claim', 'bridge', 'stance', 'concept', 'thread', 'report', 'history_item',
 ];
 for (const k of args.kinds) {
   if (!ALL_KINDS.includes(k)) {
@@ -212,6 +212,18 @@ const FETCHERS = {
     return rows.flatMap((r) => reportSections(r).map((s) => ({
       record_id: `${r.id}:${s.key}`, title: reportPrefix(r.kind, r.scope_to, s.label), text: s.text,
     })));
+  },
+  // mirrors embeddableHistoryItems
+  async history_item() {
+    const { rows } = await client.query(
+      `select id::text as id, title, to_char(published_date, 'YYYY-MM-DD') as published_date,
+              lens::text as lens, snippet
+         from history_items where triage = 'kept'${limitClause()}`
+    );
+    return rows.map((r) => ({
+      record_id: r.id, title: r.title,
+      text: `${r.title}\n${r.published_date} · ${r.lens}\n${r.snippet ?? ''}`,
+    }));
   },
 };
 

@@ -120,6 +120,22 @@ export const PAGE_INFO_C: Record<string, PageInfoContent> = {
       },
     ],
   },
+  '/savant/record': {
+    title: 'The company record',
+    summary:
+      'Everything public about the reader organization since ChatGPT: filings, press releases, news, research, ' +
+      'patents and the regulatory record, with the AI timeline and the cited profile Savant reads.',
+    sections: [
+      {
+        heading: 'Where it comes from',
+        body: 'A one-time backfill of public sources, keyed to each document\'s own publish date, never the maintainer\'s notes or anything not already public.',
+      },
+      {
+        heading: 'Who can read it',
+        body: 'An access key or the admin password, the same gate as the rest of Savant.',
+      },
+    ],
+  },
   '/savant/desk': {
     title: 'Savant desk',
     summary:

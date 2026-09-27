@@ -73,11 +73,42 @@ export async function getHypotheses(limit = 40): Promise<Hypothesis[]> {
 
 // The reader organization: the registry's `self` row, public fields only.
 // Null when the registry has none (a fresh install); Savant then writes for a
-// generic banking reader.
+// generic banking reader. `public_profile` (mig 0076: {sentences: [{text,
+// record_ids}]}) and the latest 12 self_timeline events are resolved against
+// self_record so every sentence and event carries its cited public urls
+// rather than bare ids; a record no longer present just drops from the list.
 export async function getSelfCompany(): Promise<SelfCompany | null> {
-  return one<SelfCompany>(
-    `select slug, name, public_blurb from intel_companies where tier = 'self' and active order by slug limit 1`
+  const row = await one<{ slug: string; name: string; public_blurb: string | null; public_profile: { sentences?: { text: string; record_ids: string[] }[] } | null }>(
+    `select slug, name, public_blurb, public_profile from intel_companies where tier = 'self' and active order by slug limit 1`
   );
+  if (!row) return null;
+
+  const [timelineRows, recordRows] = await Promise.all([
+    q<{ event_date: string; headline: string; record_ids: string[] }>(
+      `select event_date::text as event_date, headline, record_ids
+         from self_timeline where company_slug = $1
+         order by event_date desc limit 12`,
+      [row.slug]
+    ),
+    // Every record for the citation gate (allowlist.ts): a sentence can then
+    // link a public record neither the profile nor the recent timeline has
+    // picked up yet.
+    q<{ id: string; url: string }>(`select id::text as id, url from self_record where company_slug = $1`, [row.slug]),
+  ]);
+
+  const sentences = row.public_profile?.sentences ?? [];
+  const urlById = new Map<string, string>(recordRows.map((r) => [r.id, r.url]));
+  const hrefsFor = (ids: string[] | null | undefined): string[] =>
+    (ids ?? []).map((id) => urlById.get(id)).filter((u): u is string => Boolean(u));
+
+  return {
+    slug: row.slug,
+    name: row.name,
+    public_blurb: row.public_blurb,
+    profile: sentences.map((s) => ({ text: s.text, hrefs: hrefsFor(s.record_ids) })),
+    timeline: timelineRows.map((t) => ({ date: t.event_date, headline: t.headline, hrefs: hrefsFor(t.record_ids) })),
+    recordUrls: recordRows.map((r) => r.url),
+  };
 }
 
 // Company names + aliases, for the teaser scrub (Phase 2) and for the

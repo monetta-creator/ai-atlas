@@ -15,17 +15,20 @@ import { REPORT_RECORD_RE } from '@/lib/embed/report-sections';
 // datasets, so fetchRecord returns null for a guest even on a well-formed id.
 // 'report' (a section of the Atlas's own editorial reports) is guest-safe: a
 // guest gets the passage scrubbed of tracked-company names, or null for a
-// portal-only section (Savant's peer watch).
+// portal-only section (Savant's peer watch). 'history' (a dated news item
+// backfilled since ChatGPT, migration 0076) is portal/admin only, same as
+// 'item'/'fact': fetchRecord returns null for a guest even on a well-formed
+// (bare uuid) id.
 export const dynamic = 'force-dynamic';
 
-const KINDS = new Set<string>(['claim', 'bridge', 'stance', 'question', 'concept', 'signal', 'paper', 'thread', 'item', 'fact', 'report']);
+const KINDS = new Set<string>(['claim', 'bridge', 'stance', 'question', 'concept', 'signal', 'paper', 'thread', 'item', 'fact', 'report', 'history']);
 const CODE_RE = /^[A-Za-z0-9.\-]{1,20}$/;
 const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 const ITEM_ID_RE = /^(scan|intel):[0-9a-f-]{36}$/i;
 
 function validId(kind: PeekKind, id: string): boolean {
-  if (kind === 'signal' || kind === 'paper' || kind === 'fact') return UUID_RE.test(id);
+  if (kind === 'signal' || kind === 'paper' || kind === 'fact' || kind === 'history') return UUID_RE.test(id);
   if (kind === 'item') return ITEM_ID_RE.test(id);
   if (kind === 'report') return REPORT_RECORD_RE.test(id);
   if (kind === 'question' || kind === 'concept' || kind === 'thread') return SLUG_RE.test(id);

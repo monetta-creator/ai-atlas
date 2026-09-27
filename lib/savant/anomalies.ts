@@ -88,7 +88,8 @@ async function loadLensCounts(weekFrom: string, weekTo: string): Promise<Record<
   const rows = await q<{ lens: string; n: number }>(
     `select l.lens::text as lens, count(*)::int as n
        from signals s, unnest(s.lenses) as l(lens)
-      where s.is_published and s.first_published_at >= $1::timestamptz and s.first_published_at < $2::timestamptz
+      where s.is_published and s.origin <> 'backfill'
+        and s.first_published_at >= $1::timestamptz and s.first_published_at < $2::timestamptz
       group by 1`,
     [weekFrom, weekTo]
   );

@@ -162,6 +162,8 @@ export interface TavilyResult {
   title?: string;
   url?: string;
   published_date?: string;
+  content?: string; // Tavily's snippet (read by the history backfill's triage)
+  score?: number;
 }
 
 export function mapTavilyResults(

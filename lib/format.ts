@@ -37,6 +37,21 @@ export const SIGNAL_LENS_SLUGS: SignalLens[] = [
   'market', 'labor', 'geopolitics', 'regulatory', 'capability', 'society',
 ];
 
+// self_record.source (mig 0076), for the /savant/record page's source chips
+// and filter links.
+export const SELF_RECORD_SOURCE_LABEL: Record<string, string> = {
+  sec_filing: 'SEC filing',
+  sec_exhibit: 'SEC exhibit',
+  news: 'News',
+  newsroom: 'Newsroom',
+  paper: 'Research',
+  patent: 'Patent',
+  enforcement: 'Enforcement',
+  comment_letter: 'Comment letter',
+  merger: 'Merger',
+  testimony: 'Testimony',
+};
+
 export const SIGNAL_LENS_LABEL: Record<SignalLens, string> = {
   market: 'Market & Valuation',
   labor: 'Labor & Knowledge Work',

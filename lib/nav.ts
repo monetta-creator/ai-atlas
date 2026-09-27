@@ -68,6 +68,7 @@ export const NAV_TREE: NavGroup[] = [
     children: [
       { href: '/savant', label: 'Latest issue', access: 'portal' },
       { href: '/savant/archive', label: 'Archive', access: 'portal' },
+      { href: '/savant/record', label: 'Company record', access: 'portal' },
       { href: '/savant/desk', label: 'Desk', access: 'admin' },
     ],
   },

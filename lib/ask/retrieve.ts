@@ -272,6 +272,10 @@ export async function buildAskContext(
   // Report passages (R...): keyed by the descriptor the client resolves to a
   // page and anchor, 'report:<kind>:<scope>:<uuid>:<section>'.
   const reportTags = new Map<string, string>();
+  // History items (H...): keyed by '<uuid>|<url>' so the client can build the
+  // "Open the article" link and the peek panel's id without a second DB round
+  // trip (history_items has no Atlas page of its own; see deep.ts/verify.ts).
+  const historyTags = new Map<string, string>();
   const tagFor = (id: string) => {
     let t = signalTags.get(id);
     if (!t) { t = `S${++tagCount}`; signalTags.set(id, t); }
@@ -295,6 +299,11 @@ export async function buildAskContext(
   const reportTagFor = (descriptor: string) => {
     let t = reportTags.get(descriptor);
     if (!t) { t = `R${++tagCount}`; reportTags.set(descriptor, t); }
+    return t;
+  };
+  const historyTagFor = (descriptor: string) => {
+    let t = historyTags.get(descriptor);
+    if (!t) { t = `H${++tagCount}`; historyTags.set(descriptor, t); }
     return t;
   };
 
@@ -556,7 +565,7 @@ export async function buildAskContext(
       maxSim = vecHits[0]?.sim ?? 0;
       if (retrievalMode === 'hybrid' && vecHits.length) {
         if (!explicit) {
-          const vecKeyOrder = await materializeVectorBlocks(vecHits, push, tagFor, ptagFor, itemTagFor, factTagFor, reportTagFor);
+          const vecKeyOrder = await materializeVectorBlocks(vecHits, push, tagFor, ptagFor, itemTagFor, factTagFor, reportTagFor, historyTagFor);
           reportVecOrder = vecKeyOrder.filter((k) => k.startsWith('report:'));
           // Sorted by each block's own ts_rank, not push order: the fts*
           // helpers push in rank order WITHIN one call (claims, then bridges,
@@ -572,7 +581,7 @@ export async function buildAskContext(
           fusedKeyOrder = fuseOrder([ftsKeyOrder, vecKeyOrder], undefined, { boost: (k) => (k.startsWith('report:') ? 1.5 : 1) });
         } else {
           // Explicit match: append vector-only material, no reordering.
-          const vecKeyOrder = await materializeVectorBlocks(vecHits, push, tagFor, ptagFor, itemTagFor, factTagFor, reportTagFor);
+          const vecKeyOrder = await materializeVectorBlocks(vecHits, push, tagFor, ptagFor, itemTagFor, factTagFor, reportTagFor, historyTagFor);
           reportVecOrder = vecKeyOrder.filter((k) => k.startsWith('report:'));
         }
       }
@@ -648,7 +657,7 @@ export async function buildAskContext(
     detail += b.text + '\n\n';
   }
 
-  const signalRefs = [...signalTags, ...paperTags, ...itemTags, ...factTags, ...reportTags].map(([id, tag]) => ({ tag, id }));
+  const signalRefs = [...signalTags, ...paperTags, ...itemTags, ...factTags, ...reportTags, ...historyTags].map(([id, tag]) => ({ tag, id }));
 
   const retrievedKeys: { kind: string; key: string }[] = [];
   const seenRecord = new Set<string>();
@@ -682,6 +691,7 @@ function keyToRecord(key: string): { kind: string; key: string } | null {
     case 'paper': return { kind: 'paper', key: parts[1] };
     case 'fact': return { kind: 'intel_fact', key: parts[1] };
     case 'report': return { kind: 'report', key: `${parts[1]}:${parts[2]}` };
+    case 'hist': return { kind: 'history_item', key: parts[1] };
     case 'item':
       if (parts[1] === 'scan') return { kind: 'scan_item', key: parts[2] };
       if (parts[1] === 'intel') return { kind: 'intel_item', key: parts[2] };
@@ -712,7 +722,7 @@ async function vectorSearch(qvec: number[], admin: boolean): Promise<VecHit[]> {
              where sc.id = record_id::uuid))
           or (kind = 'paper' and exists (
             select 1 from papers p where p.id = record_id::uuid and p.triage_status = 'kept' and p.review_status <> 'dismissed'))
-          or kind in ('scan_item', 'intel_item', 'intel_fact', 'claim', 'bridge', 'stance', 'concept', 'thread')
+          or kind in ('scan_item', 'intel_item', 'intel_fact', 'history_item', 'claim', 'bridge', 'stance', 'concept', 'thread')
           -- The Atlas's published editorial reports, per section. Savant's
           -- peer watch section is included: buildAskContext only ever runs for
           -- the admin or a keyholder, who may read it.
@@ -738,14 +748,15 @@ async function materializeVectorBlocks(
   ptagFor: (id: string) => string,
   itemTagFor: (id: string) => string,
   factTagFor: (id: string) => string,
-  reportTagFor: (descriptor: string) => string
+  reportTagFor: (descriptor: string) => string,
+  historyTagFor: (descriptor: string) => string
 ): Promise<string[]> {
   const need = {
     claim: new Set<string>(), bridge: new Set<string>(), stance: new Set<string>(),
     concept: new Set<string>(), thread: new Set<string>(), signal: new Set<string>(),
     paper: new Set<string>(), candidate: new Set<string>(),
     scan_item: new Set<string>(), intel_item: new Set<string>(), intel_fact: new Set<string>(),
-    report: new Set<string>(),
+    report: new Set<string>(), history_item: new Set<string>(),
   };
   for (const h of hits) need[h.kind as keyof typeof need]?.add(h.record_id);
 
@@ -897,6 +908,18 @@ async function materializeVectorBlocks(
     }
   }
 
+  if (need.history_item.size) {
+    const rows = await q<{ id: string; title: string; url: string; snippet: string | null; published_date: string; lens: string }>(
+      `select id::text as id, title, url, snippet, to_char(published_date, 'YYYY-MM-DD') as published_date, lens::text as lens
+         from history_items where id = any($1::uuid[]) and triage = 'kept'`,
+      [[...need.history_item]]
+    );
+    for (const r of rows) {
+      const tag = historyTagFor(`${r.id}|${r.url}`);
+      push(`hist:${r.id}`, `[history ${tag}] "${clip(r.title, 150)}" (${r.published_date} · ${r.lens}): ${clip(r.snippet, 300)}`);
+    }
+  }
+
   const order: string[] = [];
   for (const h of hits) {
     switch (h.kind) {
@@ -912,6 +935,7 @@ async function materializeVectorBlocks(
       case 'scan_item': order.push(`item:scan:${h.record_id}`); break;
       case 'intel_item': order.push(`item:intel:${h.record_id}`); break;
       case 'intel_fact': order.push(`fact:${h.record_id}`); break;
+      case 'history_item': order.push(`hist:${h.record_id}`); break;
     }
   }
   return order;

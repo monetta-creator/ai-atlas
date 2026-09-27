@@ -12,7 +12,8 @@ export async function upcomingFromCorpus(window: { from: string; to: string }, t
     q<{ id: string; title: string; summary: string | null; brief: string | null; url: string | null }>(
       `select s.id::text as id, s.title, s.summary, s.brief, src.url
          from signals s left join sources src on src.id = s.source_id
-        where s.is_published and s.first_published_at >= $1::timestamptz and s.first_published_at < $2::timestamptz`,
+        where s.is_published and s.origin <> 'backfill'
+          and s.first_published_at >= $1::timestamptz and s.first_published_at < $2::timestamptz`,
       [window.from, window.to]
     ),
     q<{ id: string; headline: string | null; summary: string | null; url: string }>(

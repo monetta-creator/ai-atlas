@@ -15,8 +15,10 @@
 // signal/paper (migration 0066's vector leg); they never get a claim code's
 // "F<n>" shorthand (F1 is already a real frame-claim code — see 'claims.code'
 // seeding — so facts had to take a different letter). 'report' (a section of
-// the Atlas's own editorial reports, tagged R<n>) shares the same counter.
-export type CitationKind = 'claim' | 'bridge' | 'stance' | 'Q' | 'concept' | 'signal' | 'paper' | 'thread' | 'item' | 'fact' | 'report';
+// the Atlas's own editorial reports, tagged R<n>) shares the same counter,
+// and so does 'history' (a dated news item backfilled since ChatGPT,
+// migration 0076, tagged H<n>; no Atlas page of its own, like item/fact).
+export type CitationKind = 'claim' | 'bridge' | 'stance' | 'Q' | 'concept' | 'signal' | 'paper' | 'thread' | 'item' | 'fact' | 'report' | 'history';
 
 // The serializable, static namespace passed from the server page to the client.
 // (Signals are not here: they are per-request and arrive via the SignalMap below.)
@@ -56,15 +58,30 @@ function reportHref(kind: string, id: string, scope: string | null, key: string)
   return `/reports/sheet/${id}#${key}`;
 }
 
+// A history tag's map value is '<uuid>|<url>' (retrieve.ts/search.ts mint it
+// that way so the client can build the "Open the article" link without a
+// second DB round trip). Pure string parsing, no import: this module stays
+// client-safe.
+function parseHistoryDescriptor(v: string): { id: string; url: string } | null {
+  const i = v.indexOf('|');
+  if (i === -1) return null;
+  return { id: v.slice(0, i), url: v.slice(i + 1) };
+}
+
 // The peek/fetch id for a citation's underlying record, from its SignalMap
 // value: unchanged for item/fact (already the composite/bare id the peek
 // route expects) and for signal/paper (already the bare uuid); a report's
 // full descriptor collapses to '<uuid>:<section>', what /api/ask/peek and
-// fetchRecord's 'report' kind expect.
+// fetchRecord's 'report' kind expect; a history descriptor collapses to the
+// bare uuid, what fetchRecord's 'history' kind and the peek route expect.
 export function toPeekId(kind: CitationKind, mapValue: string): string {
   if (kind === 'report') {
     const d = parseReportDescriptor(mapValue);
     return d ? `${d.id}:${d.key}` : mapValue;
+  }
+  if (kind === 'history') {
+    const d = parseHistoryDescriptor(mapValue);
+    return d ? d.id : mapValue;
   }
   return mapValue;
 }
@@ -85,12 +102,12 @@ interface CitationSpan {
 
 const KIND_WORDS: Record<string, CitationKind> = {
   claim: 'claim', bridge: 'bridge', stance: 'stance', q: 'Q', concept: 'concept', signal: 'signal',
-  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact', report: 'report',
+  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact', report: 'report', history: 'history',
 };
 // A token that is unambiguously a code, so a bracket without a kind word (e.g.
 // [3.3], [B1, S2]) is recognized as a citation while ordinary prose like [note]
 // is left alone. Slugs are intentionally excluded here (too word-like).
-const STRONG = /^(S\d+|P\d+|I\d+|X\d+|R\d+|B\d+|F\d+|\d+(?:\.\d+)?|Q\d+-S\d+[A-Za-z]?)$/i;
+const STRONG = /^(S\d+|P\d+|I\d+|X\d+|R\d+|H\d+|B\d+|F\d+|\d+(?:\.\d+)?|Q\d+-S\d+[A-Za-z]?)$/i;
 const BRACKET = /\[([^\]]+)\]/g;
 
 function hrefFor(kind: CitationKind, id: string, ids: ValidIdsPlain, sig: SignalMap): string | null {
@@ -136,6 +153,14 @@ function hrefFor(kind: CitationKind, id: string, ids: ValidIdsPlain, sig: Signal
       const d = parseReportDescriptor(raw);
       return d ? reportHref(d.kind, d.id, d.scope, d.key) : null;
     }
+    // history_items has no Atlas page of its own; the citation links straight
+    // to the original article (the map's value carries it, see toPeekId above).
+    case 'history': {
+      const raw = sig[id];
+      if (!raw) return null;
+      const d = parseHistoryDescriptor(raw);
+      return d ? d.url : null;
+    }
   }
 }
 
@@ -145,11 +170,16 @@ function hrefFor(kind: CitationKind, id: string, ids: ValidIdsPlain, sig: Signal
 function classify(token: string, ids: ValidIdsPlain, sig: SignalMap): ParsedCode {
   let kind: CitationKind | null = null;
   // The tag map holds S-tags (signals), P-tags (papers), I-tags (scan/intel
-  // items), X-tags (intel facts) and R-tags (report passages); the prefix
-  // says which record kind the id belongs to.
+  // items), X-tags (intel facts), R-tags (report passages) and H-tags
+  // (history items); the prefix says which record kind the id belongs to.
   if (token in sig) {
     const t = token.toUpperCase();
-    kind = t.startsWith('P') ? 'paper' : t.startsWith('I') ? 'item' : t.startsWith('X') ? 'fact' : t.startsWith('R') ? 'report' : 'signal';
+    kind = t.startsWith('P') ? 'paper'
+      : t.startsWith('I') ? 'item'
+        : t.startsWith('X') ? 'fact'
+          : t.startsWith('R') ? 'report'
+            : t.startsWith('H') ? 'history'
+              : 'signal';
   }
   else if (ids.claims.includes(token)) kind = 'claim';
   else if (ids.bridges.includes(token)) kind = 'bridge';
@@ -166,10 +196,11 @@ function classify(token: string, ids: ValidIdsPlain, sig: SignalMap): ParsedCode
         : /^I\d+$/i.test(token) ? 'item'
           : /^X\d+$/i.test(token) ? 'fact'
             : /^R\d+$/i.test(token) ? 'report'
-              : /^B\d+$/i.test(token) ? 'bridge'
-                : /-S\d+/i.test(token) ? 'stance'
-                  : /^(F\d+|\d+(?:\.\d+)?)$/i.test(token) ? 'claim'
-                    : 'concept';
+              : /^H\d+$/i.test(token) ? 'history'
+                : /^B\d+$/i.test(token) ? 'bridge'
+                  : /-S\d+/i.test(token) ? 'stance'
+                    : /^(F\d+|\d+(?:\.\d+)?)$/i.test(token) ? 'claim'
+                      : 'concept';
   return { kind: inferred, id: token, valid: false, href: null };
 }
 

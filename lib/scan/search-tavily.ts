@@ -35,9 +35,15 @@ import { TAVILY_QUOTA_STATUS, markTavilyQuotaExhausted } from './tavily-breaker'
 // is otherwise optional so a 'general' call need not fabricate one.
 // `timeRange` (Tavily's `time_range`) is an alternative recency knob for a
 // 'general' search. `maxResults` is clamped to Tavily's 20-result ceiling.
+// `startDate`/`endDate` (YYYY-MM-DD) pin an absolute window instead of `days`
+// (which counts back from NOW, so it cannot reach a past month): the one-time
+// history backfill (scripts/history-backfill.mts) is their only caller.
 export async function tavilyQuery(opts: {
   query: string;
   days?: number;
+  startDate?: string;
+  endDate?: string;
+  exactMatch?: boolean;
   topic?: 'news' | 'general';
   timeRange?: 'day' | 'week' | 'month' | 'year';
   maxResults?: number;
@@ -56,7 +62,10 @@ export async function tavilyQuery(opts: {
       body: JSON.stringify({
         query: opts.query,
         topic,
-        ...(topic === 'news' && opts.days != null ? { days: opts.days } : {}),
+        ...(topic === 'news' && opts.days != null && !opts.startDate ? { days: opts.days } : {}),
+        ...(opts.startDate ? { start_date: opts.startDate } : {}),
+        ...(opts.endDate ? { end_date: opts.endDate } : {}),
+        ...(opts.exactMatch ? { exact_match: true } : {}),
         ...(opts.timeRange ? { time_range: opts.timeRange } : {}),
         max_results: Math.min(20, opts.maxResults ?? 12),
         ...(opts.includeDomains?.length ? { include_domains: opts.includeDomains } : {}),

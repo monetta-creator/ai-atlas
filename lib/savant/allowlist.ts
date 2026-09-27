@@ -47,6 +47,10 @@ export function allowlistForSavant(pack: SavantPack): CitationAllowlist {
   for (const h of [...(pack.hypotheses.fresh ? [pack.hypotheses.fresh] : []), ...pack.hypotheses.open]) {
     for (const u of h.updates) for (const href of u.hrefs) add(href);
   }
+  // Every self_record url for the reader organization (mig 0076), not only
+  // the ones the cited profile or recent timeline already picked up, so a
+  // sentence written from the record can still link its source.
+  for (const u of pack.self?.recordUrls ?? []) add(u);
   for (const m of pack.mapHrefs) { hrefs.add(m.href); tagByHref.set(m.href, m.code); }
   // The Atlas's own question pages are always fair to link.
   for (const slug of ['capability', 'build-out', 'unit-economics', 'mispricing', 'rent', 'geopolitics', 'labor']) hrefs.add(`/q/${slug}`);

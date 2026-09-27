@@ -20,9 +20,9 @@ export const RESULT_CAP = 1500;
 export const INPUT_TOKEN_CAP = 40_000;
 
 // S = signal tags, P = paper tags, I = scan/intel item tags, X = intel fact
-// tags, R = report-passage tags; one shared counter mints all five (see
-// retrieve.ts).
-const TAG_RE = /^[SPIXR]\d{1,4}$/i;
+// tags, R = report-passage tags, H = history-item tags; one shared counter
+// mints all six (see retrieve.ts).
+const TAG_RE = /^[SPIXRH]\d{1,4}$/i;
 const CODE_RE = /^[A-Za-z0-9.\-]{1,20}$/;
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,79}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -31,6 +31,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // <uuid>:<section>' (scope may be empty, between two colons).
 const REPORT_DESCRIPTOR_RE =
   /^report:(?:edition|roundup|savant):[0-9-]{0,10}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[A-Za-z0-9-]{1,24}$/i;
+// A history tag's id (map value) is '<history_items uuid>|<article url>', not
+// a bare uuid: history_items has no Atlas page, so the client needs the
+// original URL to build the "Open the article" link without a DB round trip
+// (lib/ask/verify.ts's hrefFor/toPeekId split it back apart).
+const HISTORY_DESCRIPTOR_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\|https?:\/\/\S{1,2000}$/i;
 
 // ---------------------------------------------------------------- tagger
 // Signals have no stable short code; the conversation-scoped tag map (S1, S2,
@@ -43,6 +49,7 @@ interface SignalTagger {
   itemTagFor(id: string): string;
   factTagFor(id: string): string;
   reportTagFor(descriptor: string): string;
+  historyTagFor(descriptor: string): string;
   idFor(tag: string): string | null;
   refs(): { tag: string; id: string }[];
 }
@@ -50,15 +57,21 @@ interface SignalTagger {
 export function createTagger(seed: Record<string, string>, offset: number): SignalTagger {
   // One byId map per kind (a signal uuid and a paper uuid can never collide,
   // but keeping them separate keeps each mint idempotent per kind); one shared
-  // byTag map and ONE shared counter so S/P/I/X/R sequences never reuse a number.
+  // byTag map and ONE shared counter so S/P/I/X/R/H sequences never reuse a number.
   const sById = new Map<string, string>();
   const pById = new Map<string, string>();
   const iById = new Map<string, string>(); // item ids are composite "scan:<uuid>" / "intel:<uuid>"
   const xById = new Map<string, string>(); // intel_facts ids are bare uuids
   const rById = new Map<string, string>(); // report ids are the full descriptor
+  const hById = new Map<string, string>(); // history ids are '<uuid>|<url>'
   const byTag = new Map<string, string>();
   const byIdMap = (t: string) =>
-    t.startsWith('P') ? pById : t.startsWith('I') ? iById : t.startsWith('X') ? xById : t.startsWith('R') ? rById : sById;
+    t.startsWith('P') ? pById
+      : t.startsWith('I') ? iById
+        : t.startsWith('X') ? xById
+          : t.startsWith('R') ? rById
+            : t.startsWith('H') ? hById
+              : sById;
   let max = Number.isFinite(offset) ? Math.max(0, Math.floor(offset)) : 0;
   for (const [tag, id] of Object.entries(seed)) {
     const t = tag.toUpperCase();
@@ -68,7 +81,7 @@ export function createTagger(seed: Record<string, string>, offset: number): Sign
     const n = Number(t.slice(1));
     if (n > max) max = n;
   }
-  const mint = (byId: Map<string, string>, prefix: 'S' | 'P' | 'I' | 'X' | 'R') => (id: string): string => {
+  const mint = (byId: Map<string, string>, prefix: 'S' | 'P' | 'I' | 'X' | 'R' | 'H') => (id: string): string => {
     let t = byId.get(id);
     if (!t) {
       t = `${prefix}${++max}`;
@@ -83,11 +96,12 @@ export function createTagger(seed: Record<string, string>, offset: number): Sign
     itemTagFor: mint(iById, 'I'),
     factTagFor: mint(xById, 'X'),
     reportTagFor: mint(rById, 'R'),
+    historyTagFor: mint(hById, 'H'),
     idFor(tag: string): string | null {
       return byTag.get(tag.trim().toUpperCase()) ?? null;
     },
     refs(): { tag: string; id: string }[] {
-      return [...sById, ...pById, ...iById, ...xById, ...rById].map(([id, tag]) => ({ tag, id }));
+      return [...sById, ...pById, ...iById, ...xById, ...rById, ...hById].map(([id, tag]) => ({ tag, id }));
     },
   };
 }
@@ -110,7 +124,9 @@ export function parseSignalMap(v: unknown): Record<string, string> {
       ? (UUID_RE.test(id) || COMPOSITE_ITEM_RE.test(id))
       : t.startsWith('R')
         ? REPORT_DESCRIPTOR_RE.test(id)
-        : UUID_RE.test(id);
+        : t.startsWith('H')
+          ? HISTORY_DESCRIPTOR_RE.test(id)
+          : UUID_RE.test(id);
     if (validId) {
       out[t] = id;
       kept++;
@@ -122,15 +138,15 @@ export function parseSignalMap(v: unknown): Record<string, string> {
 // ---------------------------------------------------------------- tools
 // Questions are absent from search_atlas on purpose: they have no search_tsv
 // column (0020 skipped them) and all seven are always in the skeleton.
-const SEARCH_KINDS = ['claim', 'bridge', 'stance', 'concept', 'signal', 'paper', 'thread', 'item', 'fact', 'report'] as const;
-const FETCH_KINDS = ['claim', 'bridge', 'stance', 'question', 'concept', 'signal', 'paper', 'thread', 'item', 'fact', 'report'] as const;
+const SEARCH_KINDS = ['claim', 'bridge', 'stance', 'concept', 'signal', 'paper', 'thread', 'item', 'fact', 'report', 'history'] as const;
+const FETCH_KINDS = ['claim', 'bridge', 'stance', 'question', 'concept', 'signal', 'paper', 'thread', 'item', 'fact', 'report', 'history'] as const;
 type FetchKind = (typeof FETCH_KINDS)[number];
 
 export const DEEP_TOOLS: Anthropic.Tool[] = [
   {
     name: 'search_atlas',
     description:
-      'Full-text search over the Atlas records: claims, bridge claims, stances, concepts, signals, research papers, research threads, the Atlas\'s own editorial reports (Daily Edition, research roundup, Savant), and, for tracked companies, company intelligence items and extracted facts. Returns matching records labeled with the exact bracketed IDs to cite. Questions are not searchable here; all seven are already in the map you were given.',
+      'Full-text search over the Atlas records: claims, bridge claims, stances, concepts, signals, research papers, research threads, the Atlas\'s own editorial reports (Daily Edition, research roundup, Savant), a backfilled history of dated news items from December 2022 through August 2026, and, for tracked companies, company intelligence items and extracted facts. Returns matching records labeled with the exact bracketed IDs to cite. Questions are not searchable here; all seven are already in the map you were given.',
     input_schema: {
       type: 'object',
       properties: {
@@ -151,7 +167,7 @@ export const DEEP_TOOLS: Anthropic.Tool[] = [
   {
     name: 'fetch_record',
     description:
-      'Fetch one record in full detail: a claim or bridge with its falsifying test, evidence rows, and touching signals; a stance, question, or concept in full; a signal with its brief, counterpoint, and source; a research paper with its structured finding; a research thread with its synthesis and member papers; a company intelligence item; an extracted fact; or a passage of an Atlas editorial report. Use the ID exactly as labeled: a claim or bridge code like 2.3 or B1, a stance code like Q1-S1A, a question, concept, or thread slug, a signal tag like S3, a paper tag like P4, an item tag like I3, a fact tag like X31, or a report tag like R7 from earlier results.',
+      'Fetch one record in full detail: a claim or bridge with its falsifying test, evidence rows, and touching signals; a stance, question, or concept in full; a signal with its brief, counterpoint, and source; a research paper with its structured finding; a research thread with its synthesis and member papers; a company intelligence item; an extracted fact; a passage of an Atlas editorial report; or a dated history item with its snippet and article link. Use the ID exactly as labeled: a claim or bridge code like 2.3 or B1, a stance code like Q1-S1A, a question, concept, or thread slug, a signal tag like S3, a paper tag like P4, an item tag like I3, a fact tag like X31, a report tag like R7, or a history tag like H3 from earlier results.',
     input_schema: {
       type: 'object',
       properties: {
@@ -233,6 +249,10 @@ export function parseFetchRecordInput(v: unknown): FetchRecordInput | string {
   }
   if (kind === 'report') {
     if (!/^R\d{1,4}$/i.test(raw)) return 'For reports, id must be a tag like R7 from an earlier result in this conversation.';
+    return { kind, id: raw.toUpperCase() };
+  }
+  if (kind === 'history') {
+    if (!/^H\d{1,4}$/i.test(raw)) return 'For history items, id must be a tag like H3 from an earlier result in this conversation.';
     return { kind, id: raw.toUpperCase() };
   }
   if (kind === 'question' || kind === 'concept' || kind === 'thread') {
@@ -526,11 +546,11 @@ export function parseVerifyOutput(
 // rework is the DEFAULT admin chat, not a toggle). Never an em dash in any of
 // this.
 export const DEEP_ADDENDUM = `You research every question before answering. Your tools:
-- search_atlas finds records by topic across claims, bridges, stances, concepts, signals, research papers, research threads, the Atlas's own editorial reports (Daily Edition, research roundup, Savant), and, for tracked companies, company intelligence items and extracted facts.
-- fetch_record pulls one record in full: evidence rows, falsifying tests, touching signals, the article source behind a signal, the full text of a company intelligence item or fact, or a report passage.
+- search_atlas finds records by topic across claims, bridges, stances, concepts, signals, research papers, research threads, the Atlas's own editorial reports (Daily Edition, research roundup, Savant), a backfilled history of dated news items from December 2022 through August 2026, and, for tracked companies, company intelligence items and extracted facts.
+- fetch_record pulls one record in full: evidence rows, falsifying tests, touching signals, the article source behind a signal, the full text of a company intelligence item or fact, a report passage, or a history item's snippet and article link.
 - search_articles searches the retained full text of the articles behind published signals, for primary-source language.
 
-Work in rounds: search broadly first, then fetch the records that look load-bearing, then check article text when the exact wording matters. Results are capped, so make each call count; a handful of well-chosen calls beats many shallow ones. When you have enough, stop calling tools and write the final answer following every rule above. Cite only IDs that appear in the map or in your tool results, exactly as labeled there. Signal tags like S3, item tags like I3, fact tags like X31, and report tags like R7 all stay valid across the whole conversation. When a claim's story runs through tracked developments, cite the touching signals by tag alongside the claim, not just the claim. A question about a specific tracked company (its financial results, a filing, a product, a deal) is best answered from its intel items and facts: search_atlas with kinds ["item","fact"] and cite the facts directly. When a report passage covers the question, lean on it as the Atlas's own reading, then cite the records it rests on as the receipts.
+Work in rounds: search broadly first, then fetch the records that look load-bearing, then check article text when the exact wording matters. Results are capped, so make each call count; a handful of well-chosen calls beats many shallow ones. When you have enough, stop calling tools and write the final answer following every rule above. Cite only IDs that appear in the map or in your tool results, exactly as labeled there. Signal tags like S3, item tags like I3, fact tags like X31, report tags like R7, and history tags like H3 all stay valid across the whole conversation. When a claim's story runs through tracked developments, cite the touching signals by tag alongside the claim, not just the claim. A question about a specific tracked company (its financial results, a filing, a product, a deal) is best answered from its intel items and facts: search_atlas with kinds ["item","fact"] and cite the facts directly. When a report passage covers the question, lean on it as the Atlas's own reading, then cite the records it rests on as the receipts. A "what happened when" question about the period before the Atlas's engines started, December 2022 through August 2026, is best answered from history items: search_atlas with kinds ["history"] and cite them directly.
 
 The reader asks one question and expects the full picture in one answer. Write it comprehensive, pinpoint, and self-contained: never ask a follow-up question, never defer material to a next turn, and never pad. If you state which way the records lean, open that sentence with "One reading:" and name the strongest record on the other side in the same paragraph; never present a lean as the Atlas's verdict.
 

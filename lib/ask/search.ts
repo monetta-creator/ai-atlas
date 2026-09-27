@@ -23,7 +23,10 @@ export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 // with a well-formed id, never a 404 that would confirm the id's shape.
 // 'report' is a section of the Atlas's own editorial reports (Daily Edition,
 // research roundup, Savant); its id is '<report uuid>:<section key>'.
-export type PeekKind = 'claim' | 'bridge' | 'stance' | 'question' | 'concept' | 'signal' | 'paper' | 'thread' | 'item' | 'fact' | 'report';
+// 'history' is a dated news item backfilled since ChatGPT (migration 0076,
+// history_items): portal/admin only, same reasoning as 'item'/'fact' (no
+// Atlas page of its own).
+export type PeekKind = 'claim' | 'bridge' | 'stance' | 'question' | 'concept' | 'signal' | 'paper' | 'thread' | 'item' | 'fact' | 'report' | 'history';
 
 interface PeekEvidence {
   direction: string;
@@ -315,6 +318,31 @@ export async function fetchRecord(
     return p;
   }
 
+  // history: a dated news item from the "since ChatGPT" backfill (migration
+  // 0076), portal/admin only (no Atlas page of its own, same reasoning as
+  // 'item'/'fact' above). id is the bare history_items uuid.
+  if (kind === 'history') {
+    if (!opts.admin && !opts.portal) return null;
+    const rows = await q<{ id: string; title: string; url: string; snippet: string | null; published_date: string; lens: string; domain: string | null }>(
+      `select id::text as id, title, url, snippet, to_char(published_date, 'YYYY-MM-DD') as published_date,
+              lens::text as lens, domain
+         from history_items where id = $1::uuid and triage = 'kept'`,
+      [id]
+    );
+    const r = rows[0];
+    if (!r) return null;
+    const p = empty('history', r.title, r.url);
+    const month = new Date(`${r.published_date}T00:00:00Z`).toLocaleDateString('en-US', {
+      month: 'long', year: 'numeric', timeZone: 'UTC',
+    });
+    p.subtitle = `News record · ${month}`;
+    p.body = r.snippet;
+    p.published_on = r.published_date;
+    p.lenses = [r.lens];
+    p.source = { title: r.title, url: r.url, outlet: r.domain, published_on: r.published_date };
+    return p;
+  }
+
   // report: a section of the Atlas's own editorial reports (Daily Edition,
   // research roundup, Savant). id is '<report uuid>:<section key>'. Row
   // visibility is admin-widened (an unpublished report resolves for admins
@@ -451,6 +479,10 @@ export async function searchAtlas(
     // ('report:<kind>:<scope>:<uuid>:<section>'), so a tag minted here and one
     // minted by retrieval resolve identically for the rest of the conversation.
     reportTagFor?: (descriptor: string) => string;
+    // Dated news items backfilled since ChatGPT (migration 0076, no
+    // search_tsv) mint H-tags on the shared counter. Guest-unsafe: only
+    // searched when admin or portal, same as items/facts above.
+    historyTagFor?: (descriptor: string) => string;
   }
 ): Promise<AtlasSearchHit[]> {
   const want = new Set(opts.kinds);
@@ -611,6 +643,24 @@ export async function searchAtlas(
         kind: 'fact',
         id: ftag(r.id),
         snippet: `${r.company_slug} · ${r.dimension}: ${snip(r.fact, 220)}${r.value_text ? ` (${snip(r.value_text, 80)})` : ''}${r.as_of ? ` as of ${r.as_of}` : ''}`,
+      });
+    }
+  }
+
+  if (want.has('history') && canSeeIntel && opts.historyTagFor && words.length) {
+    const htag = opts.historyTagFor;
+    const rows = await q<{ id: string; title: string; url: string; snippet: string | null; published_date: string; lens: string }>(
+      `select id::text as id, title, url, snippet, to_char(published_date, 'YYYY-MM-DD') as published_date, lens::text as lens
+         from history_items
+        where triage = 'kept' and (title ilike any($1::text[]) or snippet ilike any($1::text[]))
+        order by published_date desc limit ${lim}`,
+      [words.map((w) => `%${w}%`)]
+    );
+    for (const r of rows) {
+      hits.push({
+        kind: 'history',
+        id: htag(`${r.id}|${r.url}`),
+        snippet: `"${snip(r.title, 150)}" (${r.published_date} · ${r.lens}): ${snip(r.snippet, 220)}`,
       });
     }
   }

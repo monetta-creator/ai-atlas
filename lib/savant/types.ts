@@ -109,11 +109,22 @@ export interface SavantPrefs {
 }
 
 // The reader organization: the intel registry's `self` row, public fields
-// only. The name never appears in code; it is read from this row.
+// only. The name never appears in code; it is read from this row. `profile`
+// is the cited public_profile (mig 0076: {sentences}, each sentence's
+// record_ids resolved to their self_record urls); `timeline` is the recent
+// self_timeline events with their own record urls. Both empty when absent
+// (a fresh install, or before the backfill has run).
 export interface SelfCompany {
   slug: string;
   name: string;
   public_blurb: string | null;
+  profile: { text: string; hrefs: string[] }[];
+  timeline: { date: string; headline: string; hrefs: string[] }[];
+  // Every self_record url for this company (not only the ones the profile or
+  // timeline already cite), so the citation gate can admit a sentence that
+  // links a record neither has picked up yet. allowlist.ts reads this list;
+  // it never queries the database itself.
+  recordUrls: string[];
 }
 
 // ---------------------------------------------------------------- Phase 2: the issue

@@ -75,6 +75,14 @@ check('tagger: refs covers seeded and minted', () => {
   const refs = Object.fromEntries(t.refs().map((r) => [r.tag, r.id]));
   assert.deepEqual(refs, { S1: U1, S2: U2 });
 });
+check('tagger: historyTagFor mints on the shared H prefix and rediscovers', () => {
+  const t = createTagger({}, 0);
+  const descriptor = `${U1}|https://example.com/a`;
+  assert.equal(t.historyTagFor(descriptor), 'H1');
+  assert.equal(t.historyTagFor(descriptor), 'H1');
+  assert.equal(t.tagFor(U2), 'S2'); // shared counter keeps advancing
+  assert.equal(t.idFor('H1'), descriptor);
+});
 
 // ---- parseSignalMap ----------------------------------------------------------
 check('parseSignalMap: keeps well-shaped entries only', () => {
@@ -86,13 +94,18 @@ check('parseSignalMap: junk input is empty', () => {
   assert.deepEqual(parseSignalMap([1, 2]), {});
   assert.deepEqual(parseSignalMap('S1'), {});
 });
+check('parseSignalMap: history tags need the "<uuid>|<url>" descriptor shape', () => {
+  const ok = `${U1}|https://example.com/a`;
+  const out = parseSignalMap({ H1: ok, H2: U1, H3: `${U1}|not-a-url` });
+  assert.deepEqual(out, { H1: ok });
+});
 
 // ---- tool input validation ---------------------------------------------------
 check('search input: defaults and clamps', () => {
   const p = parseSearchAtlasInput({ query: '  capex  ' });
   assert.equal(p.query, 'capex');
   assert.equal(p.limit, 5);
-  assert.equal(p.kinds.length, 10); // claim, bridge, stance, concept, signal, paper, thread, item, fact, report
+  assert.equal(p.kinds.length, 11); // claim, bridge, stance, concept, signal, paper, thread, item, fact, report, history
   assert.equal(parseSearchAtlasInput({ query: 'x', limit: 99 }).limit, 8);
 });
 check('search input: kind filtering', () => {
@@ -110,6 +123,7 @@ check('fetch input: codes, slugs, tags', () => {
   assert.deepEqual(parseFetchRecordInput({ kind: 'signal', id: 's3' }), { kind: 'signal', id: 'S3' });
   assert.deepEqual(parseFetchRecordInput({ kind: 'item', id: 'i3' }), { kind: 'item', id: 'I3' });
   assert.deepEqual(parseFetchRecordInput({ kind: 'fact', id: 'x31' }), { kind: 'fact', id: 'X31' });
+  assert.deepEqual(parseFetchRecordInput({ kind: 'history', id: 'h3' }), { kind: 'history', id: 'H3' });
 });
 check('fetch input: bad shapes rejected as strings', () => {
   assert.equal(typeof parseFetchRecordInput({ kind: 'signal', id: '2.3' }), 'string');
@@ -118,6 +132,7 @@ check('fetch input: bad shapes rejected as strings', () => {
   assert.equal(typeof parseFetchRecordInput({ kind: 'claim' }), 'string');
   assert.equal(typeof parseFetchRecordInput({ kind: 'item', id: '2.3' }), 'string');
   assert.equal(typeof parseFetchRecordInput({ kind: 'fact', id: 'S3' }), 'string');
+  assert.equal(typeof parseFetchRecordInput({ kind: 'history', id: '2.3' }), 'string');
 });
 check('articles input: query required', () => {
   assert.deepEqual(parseSearchArticlesInput({ query: 'tokens' }), { query: 'tokens' });
@@ -176,6 +191,23 @@ check('renderRecord: a report payload prints its section and passage, not subtit
   assert.ok(out.includes('Front page, top story'));
   assert.ok(out.includes('The passage text.'));
   assert.ok(!out.includes('should not print'));
+});
+check('renderRecord: a history payload prints its kicker, snippet and lens', () => {
+  const t = createTagger({}, 0);
+  const payload = {
+    kind: 'history', title: 'Upstart backfill headline', code: null, subtitle: 'News record · March 2023',
+    body: 'A Tavily-sourced snippet.', test: null, brief: null, counterpoint: null, significance: null,
+    lenses: ['market'], published_on: '2023-03-01',
+    source: { title: 'Upstart backfill headline', url: 'https://example.com/a', outlet: 'example.com', published_on: '2023-03-01' },
+    evidence: [], signals: [], stances: [], prerequisites: [], builds_toward: [], finding: [], members: [],
+    internal: 'https://example.com/a', section: null, passage: null, report: null,
+  };
+  const out = renderRecord(payload, 'H3', t.tagFor);
+  assert.ok(out.startsWith('[history H3] Upstart backfill headline'));
+  assert.ok(out.includes('News record · March 2023'));
+  assert.ok(out.includes('A Tavily-sourced snippet.'));
+  assert.ok(out.includes('Lenses: market'));
+  assert.ok(out.includes('Published: 2023-03-01'));
 });
 
 // ---- NDJSON protocol ---------------------------------------------------------
@@ -250,6 +282,30 @@ await acheck('searchAtlas: item/fact skip the DB when the query has no word-shap
     itemTagFor: () => 'I1', factTagFor: () => 'X1',
   });
   assert.equal(calls, 0);
+});
+await acheck('searchAtlas: history kind skipped without admin/portal or a minter', async () => {
+  let calls = 0;
+  const q = async () => { calls++; return []; };
+  await searchAtlas(q, 'upstart profitability', { kinds: ['history'], limit: 5, tagFor: () => 'S1' });
+  assert.equal(calls, 0, 'no minter, no admin/portal: guest-unsafe, must not query');
+  await searchAtlas(q, 'upstart profitability', {
+    kinds: ['history'], limit: 5, tagFor: () => 'S1', historyTagFor: () => 'H1',
+  });
+  assert.equal(calls, 0, 'minter present but neither admin nor portal: still must not query');
+});
+await acheck('searchAtlas: history kind hits history_items for admin and mints H-tags', async () => {
+  const rows = [
+    [{ id: 'h1', title: 'Upstart backfill headline', url: 'https://example.com/a', snippet: 'sum', published_date: '2023-03-01', lens: 'market' }],
+  ];
+  const hits = await searchAtlas(fakeQ(rows), 'upstart profitability', {
+    kinds: ['history'], limit: 5, admin: true, tagFor: () => 'S1',
+    historyTagFor: (id) => `H:${id}`,
+  });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].kind, 'history');
+  assert.equal(hits[0].id, 'H:h1|https://example.com/a');
+  assert.ok(hits[0].snippet.includes('Upstart backfill headline'));
+  assert.ok(hits[0].snippet.includes('market'));
 });
 await acheck('searchAtlas: report kind hits generated_reports and mints R-tags', async () => {
   const narrative = {

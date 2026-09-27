@@ -21,6 +21,9 @@
 //     one record PER SECTION ('<uuid>:<section>', lib/embed/report-sections.ts).
 //     Savant's peer watch section is embedded too; retrieval serves it to
 //     keyholders and the admin only, and the public peek refuses it.
+//   - history_item (migration 0076): the "since ChatGPT" backfill of dated
+//     news items, kept-triage only. Keyholder/admin only, same reasoning as
+//     scan_item/intel_item above (Ask never reaches these for a guest).
 //   - claim / bridge / stance / concept / thread: no personal-layer columns
 //     are ever selected (statement/test/definition/synthesis only, never
 //     domain_note, confidence, or review notes).
@@ -29,11 +32,11 @@ export type Q = <T>(sql: string, params?: unknown[]) => Promise<T[]>;
 
 export type EmbedKind =
   | 'signal' | 'candidate' | 'scan_item' | 'intel_item' | 'intel_fact'
-  | 'paper' | 'claim' | 'bridge' | 'stance' | 'concept' | 'thread' | 'report';
+  | 'paper' | 'claim' | 'bridge' | 'stance' | 'concept' | 'thread' | 'report' | 'history_item';
 
 export const EMBED_KINDS: EmbedKind[] = [
   'signal', 'candidate', 'scan_item', 'intel_item', 'intel_fact',
-  'paper', 'claim', 'bridge', 'stance', 'concept', 'thread', 'report',
+  'paper', 'claim', 'bridge', 'stance', 'concept', 'thread', 'report', 'history_item',
 ];
 
 export interface EmbeddableRecord {
@@ -205,6 +208,25 @@ export async function embeddableReports(q: Q, ids?: string[]): Promise<Embeddabl
   })));
 }
 
+// Kept-triage only (rejected/duplicate/pending rows never embed); text is the
+// exact format lib/history/core.ts's own record shape gives us, since the
+// backfill writes no full text: title, then date + lens, then the Tavily
+// snippet.
+export async function embeddableHistoryItems(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
+  const rows = await q<{ id: string; title: string; published_date: string; lens: string; snippet: string | null }>(
+    `select id::text as id, title, to_char(published_date, 'YYYY-MM-DD') as published_date,
+            lens::text as lens, snippet
+       from history_items where triage = 'kept'
+       ${ids ? 'and id = any($1::uuid[])' : ''}`,
+    ids ? [ids] : []
+  );
+  return rows.map((r) => ({
+    record_id: r.id,
+    title: r.title,
+    text: `${r.title}\n${r.published_date} · ${r.lens}\n${r.snippet ?? ''}`,
+  }));
+}
+
 export async function getEmbeddable(kind: EmbedKind, q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   switch (kind) {
     case 'signal': return embeddableSignals(q, ids);
@@ -219,6 +241,7 @@ export async function getEmbeddable(kind: EmbedKind, q: Q, ids?: string[]): Prom
     case 'concept': return embeddableConcepts(q, ids);
     case 'thread': return embeddableThreads(q, ids);
     case 'report': return embeddableReports(q, ids);
+    case 'history_item': return embeddableHistoryItems(q, ids);
   }
 }
 

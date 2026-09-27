@@ -8,6 +8,7 @@ import {
   parseFetchRecordInput, parseSearchArticlesInput, parseSearchAtlasInput,
   renderArticleHits, renderRecord, renderSearchHits,
 } from '../ask/deep';
+import { selfRecordBlock } from './self-record-block';
 import type { SavantPack, QueryLogEntry, PlanPayload } from './types';
 
 // Savant's lead research (2026-09-26): a bounded tool-use loop over the same
@@ -81,6 +82,7 @@ function planBrief(plan: PlanPayload | null, pack: SavantPack): string {
     `WHAT WOULD SETTLE IT: ${plan.hypothesis.what_would_settle_it.join('; ')}`,
     `WATCH: ${plan.hypothesis.watch.join('; ')}`,
     pack.self ? `READER ORGANIZATION (public description only): ${pack.self.name}. ${pack.self.public_blurb ?? ''}`.trim() : '',
+    pack.self ? selfRecordBlock(pack.self) : '',
   ].filter(Boolean).join('\n');
 }
 

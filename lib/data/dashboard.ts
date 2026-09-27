@@ -102,7 +102,7 @@ export async function getPipelineAnalytics(): Promise<PipelineAnalytics> {
          from pipeline_runs r
          left join signal_candidates sc on sc.run_id = r.id
          left join signals sig on sig.id = sc.signal_id
-        where r.cadence <> 'source'
+        where r.cadence not in ('source', 'backfill')
         group by r.id
         order by r.triggered_at asc`
     ),

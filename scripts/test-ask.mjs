@@ -203,6 +203,32 @@ check('toPeekId: a malformed report descriptor passes through unchanged', () => 
   assert.equal(toPeekId('report', 'not-a-descriptor'), 'not-a-descriptor');
 });
 
+// ---- verify: history tags (H<n>), the "<uuid>|<url>" descriptor ------------
+const HIST_H = { H3: '11111111-1111-4111-8111-111111111111|https://example.com/article' };
+check('parseCitations: [history H3] classifies as history with a bracket kind word, href is the article url', () => {
+  const spans = parseCitations('See [history H3].', IDS, HIST_H);
+  const c = spans[0].codes[0];
+  assert.equal(c.kind, 'history');
+  assert.equal(c.valid, true);
+  assert.equal(c.href, 'https://example.com/article');
+});
+check('parseCitations: bare [H3] (no kind word) still resolves via STRONG', () => {
+  const spans = parseCitations('See [H3].', IDS, HIST_H);
+  assert.equal(spans[0].codes[0].kind, 'history');
+  assert.equal(spans[0].codes[0].valid, true);
+});
+check('parseCitations: an unknown history tag flags invalid with no href', () => {
+  const spans = parseCitations('[history H99]', IDS, HIST_H);
+  assert.equal(spans[0].codes[0].valid, false);
+  assert.equal(spans[0].codes[0].href, null);
+});
+check('toPeekId: history descriptor collapses to the bare uuid', () => {
+  assert.equal(toPeekId('history', HIST_H.H3), '11111111-1111-4111-8111-111111111111');
+});
+check('toPeekId: a malformed history descriptor passes through unchanged', () => {
+  assert.equal(toPeekId('history', 'not-a-descriptor'), 'not-a-descriptor');
+});
+
 // ---- store -------------------------------------------------------------------
 check('store: create, append, title truncation, maps, offset', () => {
   const longFirst = 'a very long opening question that definitely exceeds the sixty character title cap for rails';
@@ -408,6 +434,14 @@ check('prompt.ts: system text teaches item/fact citation syntax', () => {
   assert.ok(/labeled I<n>|item.*labeled I/i.test(src), 'should describe the item tag');
   assert.ok(/labeled X<n>|fact.*labeled X/i.test(src), 'should describe the fact tag');
   assert.ok(!src.includes('—'), 'no em dash in prompt.ts');
+});
+check('prompt.ts: system text teaches history citation syntax', () => {
+  const src = readFileSync(
+    fileURLToPath(new URL('../lib/ask/prompt.ts', import.meta.url)),
+    'utf8'
+  );
+  assert.ok(src.includes('[history H3]'), 'citation example list should include [history H3]');
+  assert.ok(/labeled H<n>|history.*labeled H/i.test(src), 'should describe the history tag');
 });
 
 if (failures) {

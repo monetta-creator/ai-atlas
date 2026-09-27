@@ -123,7 +123,7 @@ export async function POST(req: Request): Promise<Response> {
             kinds: p.kinds, limit: p.limit, admin: true,
             tagFor: tagger.tagFor, paperTagFor: tagger.paperTagFor,
             itemTagFor: tagger.itemTagFor, factTagFor: tagger.factTagFor,
-            reportTagFor: tagger.reportTagFor,
+            reportTagFor: tagger.reportTagFor, historyTagFor: tagger.historyTagFor,
           });
           emit(ndStatus(deDash(statusSearch(p.query, hits.length))));
           return { text: renderSearchHits(hits) };
@@ -148,6 +148,15 @@ export async function POST(req: Request): Promise<Response> {
             }
             const parts = descriptor.split(':');
             dbId = parts.length === 5 ? `${parts[3]}:${parts[4]}` : descriptor;
+          } else if (p.kind === 'history') {
+            // The map value is '<uuid>|<url>' (retrieve.ts/search.ts mint it
+            // this way so the client can build the article link without a DB
+            // round trip); fetchRecord's 'history' kind wants just the uuid.
+            const raw = tagger.idFor(p.id);
+            if (!raw) {
+              return { text: `Unknown history tag ${p.id}. Use a tag from a result in this conversation.`, isError: true };
+            }
+            dbId = raw.split('|')[0];
           }
           const payload = await fetchRecord(q, p.kind, dbId, { admin: true });
           if (!payload) return { text: `No ${p.kind} found with id ${p.id}.`, isError: true };

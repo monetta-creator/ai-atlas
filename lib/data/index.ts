@@ -26,4 +26,5 @@ export * from './portal-views';
 export * from './ops';
 export * from './savant';
 export * from './savant-issues';
+export * from './self-record';
 export * from './jobs';

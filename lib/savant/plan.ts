@@ -5,6 +5,7 @@ import { clusterStories } from '../edition/cluster';
 import { isAiStory } from '../edition/desks';
 import { fallbackPlan, validatePlan } from './plan-core';
 import { getNotebook, getOpenHypotheses } from '../data/savant';
+import { selfRecordBlock } from './self-record-block';
 import type { Hypothesis, PlanPayload, SavantPrefs, SelfCompany } from './types';
 import { previousWeekEnd } from './week';
 
@@ -103,6 +104,7 @@ export async function makeMondayPlan(input: {
   const user = [
     `WEEK ENDING: ${weekEnd} (planning on ${day})`,
     self ? `READER ORGANIZATION (public description): ${self.name}. ${self.public_blurb ?? ''}`.trim() : 'READER ORGANIZATION: a large regulated financial-services company (no further context).',
+    self ? selfRecordBlock(self) : '',
     '',
     'QUESTIONS (slug: title):',
     ...questions.map((qu) => `- ${qu.slug}: ${qu.title}`),

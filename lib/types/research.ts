@@ -3,7 +3,7 @@ import type { RunStatus, SignalLens } from './core';
 // The arXiv intake + research library. Papers carry ADVISORY claim touches only:
 // nothing here writes evidence — promotion to a signal (papers.signal_id) and the
 // publish gate remain the only road into the Argument Map.
-type PaperOrigin = 'arxiv' | 'manual';
+type PaperOrigin = 'arxiv' | 'manual' | 'backfill';
 export type PaperTriageStatus = 'pending' | 'kept' | 'rejected';
 export type PaperReviewStatus = 'pending' | 'noted' | 'tracked' | 'dismissed';
 export type ThreadStatus = 'open' | 'settled' | 'dormant';

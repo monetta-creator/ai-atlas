@@ -22,7 +22,7 @@ export async function getRuns(limit = 20): Promise<PipelineRun[]> {
   // Discovery runs only — single-source ('source') runs are an implementation detail of the
   // manual "Turn into signal" flow and would otherwise flood the history / "latest run" panel.
   return q<PipelineRun>(
-    `select * from pipeline_runs where cadence <> 'source' order by triggered_at desc limit $1`,
+    `select * from pipeline_runs where cadence not in ('source', 'backfill') order by triggered_at desc limit $1`,
     [limit]
   );
 }
@@ -253,7 +253,7 @@ export async function countPendingCandidates(runId: string): Promise<number> {
 // runs (single manual sources) — they would otherwise shrink the next discovery window.
 export async function getLastCompletedRunAt(): Promise<string | null> {
   const row = await one<{ triggered_at: string }>(
-    `select triggered_at from pipeline_runs where status = 'completed' and cadence <> 'source' order by triggered_at desc limit 1`
+    `select triggered_at from pipeline_runs where status = 'completed' and cadence not in ('source', 'backfill') order by triggered_at desc limit 1`
   );
   return (row?.triggered_at as unknown as string) ?? null;
 }

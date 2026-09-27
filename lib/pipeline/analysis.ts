@@ -5,7 +5,7 @@ import { fetchCandidateText, MIN_READABLE_CHARS } from './web';
 import { SIGNAL_LENS_SLUGS, SIGNAL_LENS_LABEL } from '../format';
 import * as m from '../mutations';
 import { getCandidate, getTargets, getSourceMeta } from '../data';
-import type { AnalyzedSignal, Direction, EvidenceType, Significance, SignalLens } from '../types';
+import type { AnalyzedSignal, Direction, EvidenceType, Significance, SignalLens, SignalOrigin } from '../types';
 
 const DIRECTIONS: Direction[] = ['supports', 'contradicts', 'neutral'];
 const EVIDENCE_TYPES: EvidenceType[] = [
@@ -80,7 +80,16 @@ interface AnalysisResult {
   analysis: AnalyzedSignal;
 }
 
-export async function analyzeCandidate(candidateId: string, model?: string): Promise<AnalysisResult | null> {
+// `opts` exists for the one-time history backfill (scripts/history-backfill.mts):
+// it logs under its own feature slug so no live budget checker counts it, and
+// its drafts carry origin 'backfill' so the auto-publish sweep (origin
+// 'pipeline' only) never touches them.
+export async function analyzeCandidate(
+  candidateId: string,
+  model?: string,
+  opts: { feature?: string; origin?: SignalOrigin } = {}
+): Promise<AnalysisResult | null> {
+  const feature = opts.feature ?? 'pipeline_analysis';
   const cand = await getCandidate(candidateId);
   if (!cand) throw new Error('Candidate not found.');
   if (cand.triage_status !== 'approved') throw new Error('Candidate is not approved for analysis.');
@@ -163,7 +172,7 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
         user: sourceBlock,
         maxTokens: 2000,
         timeoutMs: 45_000,
-        feature: 'pipeline_analysis',
+        feature,
         pipelineRunId: cand.run_id,
         metadata: { candidate_id: candidateId, lens: cand.lens },
       })
@@ -175,7 +184,7 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
         schema: buildSchema(codes),
         maxTokens: 2000,
         effort: 'medium',
-        feature: 'pipeline_analysis',
+        feature,
         pipelineRunId: cand.run_id,
         metadata: { candidate_id: candidateId, lens: cand.lens },
         // Bound the model leg and disable in-call SDK retries so one analyze call
@@ -259,7 +268,7 @@ Reply with ONLY a single JSON object, no prose and no code fence, with exactly t
       ),
       source_id: sourceId,
       published_at: cand.published_date || null,
-      origin: cand.source_id ? 'manual' : 'pipeline',
+      origin: opts.origin ?? (cand.source_id ? 'manual' : 'pipeline'),
       drafted_by: openrouter ? (model as string) : anthropicOverride ?? SONNET,
     },
     candidateId

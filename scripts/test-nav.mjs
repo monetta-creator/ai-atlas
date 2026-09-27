@@ -214,8 +214,8 @@ check("Savant is its own group: /savant/<week> belongs to it, tabs are Latest is
   assert.equal(group?.key, 'savant');
   assert.equal(groupFor('/savant/desk')?.key, 'savant');
   assert.deepEqual(tabsFor('/savant', guest), []);
-  assert.deepEqual(tabsFor('/savant', holder).map((l) => l.label), ['Latest issue', 'Archive']);
-  assert.deepEqual(tabsFor('/savant/desk', admin).map((l) => l.label), ['Latest issue', 'Archive', 'Desk']);
+  assert.deepEqual(tabsFor('/savant', holder).map((l) => l.label), ['Latest issue', 'Archive', 'Company record']);
+  assert.deepEqual(tabsFor('/savant/desk', admin).map((l) => l.label), ['Latest issue', 'Archive', 'Company record', 'Desk']);
   assert.equal(publicParentFor('/savant/desk').href, '/savant');
   assert.ok(!tabsFor('/reports', admin).some((l) => l.href === '/savant'), 'the Report Portal no longer carries a Savant tab');
   assert.ok(!tabsFor('/blotter', admin).some((l) => l.href === '/savant/desk'), 'the News Blotter no longer carries the desk');

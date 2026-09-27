@@ -158,6 +158,10 @@ a.touch-chip:hover { color: var(--accent); border-color: color-mix(in oklab, var
 .dbb .dot, .ds .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--faint-ink); opacity: .6; display: inline-block; }
 
 .ds { margin-top: 12px; }
+.ds-batch { display: flex; gap: 8px; margin-bottom: 14px; }
+.ds-batch a { padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; font-family: var(--font-mono); font-size: 12px; color: var(--dim); text-decoration: none; }
+.ds-batch a[data-active="true"] { border-color: var(--accent); color: var(--accent); }
+.ds-backfill-date { font-family: var(--font-mono); font-size: 13px; letter-spacing: .04em; color: var(--accent); text-transform: uppercase; }
 .ds-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-family: var(--font-mono); font-size: 12px; color: var(--faint-ink); margin-bottom: 10px; }
 .ds-card { background: var(--surface); border: 1px solid var(--frame); padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; border-left-width: 4px; }
 .ds-card[data-sig="high"] { border-left-color: var(--heat-4); }

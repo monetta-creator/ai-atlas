@@ -15,7 +15,7 @@ export type ConfidenceLabel = 'settled' | 'leaning' | 'contested' | 'thin' | nul
 export type Significance = 'high' | 'medium' | 'low';
 export type SignalLens =
   | 'market' | 'labor' | 'geopolitics' | 'regulatory' | 'capability' | 'society';
-export type SignalOrigin = 'manual' | 'pipeline';
+export type SignalOrigin = 'manual' | 'pipeline' | 'backfill';
 // What KIND of evidence a signal is, not what it is about (migration 0065).
 // Nullable: an unclassified signal stays honestly null.
 export type EvidenceType =
@@ -26,7 +26,7 @@ export type EvidenceType =
 export type TriageStatus = 'pending' | 'approved' | 'rejected' | 'duplicate';
 // 'source' (migration 0015) = a single-source run created when an admin turns one manual
 // source into a signal; kept out of discovery history/analytics and the lookback window.
-export type RunCadence = 'manual' | 'daily' | 'weekly' | 'source';
+export type RunCadence = 'manual' | 'daily' | 'weekly' | 'source' | 'backfill';
 export type RunStatus = 'running' | 'completed' | 'failed';
 export type RunStep = 'discovery' | 'triage' | 'analysis' | 'complete';
 // Per-candidate analysis outcome (migration 0007). 'drafted' = became a draft signal;

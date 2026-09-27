@@ -317,17 +317,41 @@ export async function getRelatedSignals(
 // Every ACTIVE draft with its touch details, high significance first, newest
 // first, so the one-at-a-time review works the most consequential drafts
 // before the queue's long tail. Admin-only by construction (the caller gates).
-export async function getSprintDrafts(limit = 500): Promise<Signal[]> {
+// `batch` (mig 0076) splits the live queue from the history-canon backfill
+// drafts, a separate batch Kevin reviews on purpose: 'live' (the default)
+// excludes origin 'backfill'; 'backfill' shows only that origin, oldest
+// article first (published_at ascending), since the review reads like
+// history rather than triaging the newest thing first.
+export async function getSprintDrafts(limit = 500, batch: 'live' | 'backfill' = 'live'): Promise<Signal[]> {
+  if (batch === 'backfill') {
+    return q<Signal>(
+      `select ${SIGNAL_COLUMNS}, s.touch_details, s.drafted_by
+         from signals s
+         left join sources src on src.id = s.source_id
+        where s.is_published = false and s.archived_at is null and s.origin = 'backfill'
+        order by s.published_at asc, s.created_at asc
+        limit $1`,
+      [Math.max(1, Math.min(2000, limit))]
+    );
+  }
   return q<Signal>(
     `select ${SIGNAL_COLUMNS}, s.touch_details, s.drafted_by
        from signals s
        left join sources src on src.id = s.source_id
-      where s.is_published = false and s.archived_at is null
+      where s.is_published = false and s.archived_at is null and s.origin <> 'backfill'
       order by case s.significance when 'high' then 0 when 'medium' then 1 else 2 end,
                s.created_at desc
       limit $1`,
     [Math.max(1, Math.min(2000, limit))]
   );
+}
+
+// Count of active backfill drafts, for the batch-switch chip's badge.
+export async function getBackfillDraftCount(): Promise<number> {
+  const row = await one<{ n: number }>(
+    `select count(*)::int as n from signals where is_published = false and archived_at is null and origin = 'backfill'`
+  );
+  return row?.n ?? 0;
 }
 
 export interface DraftBacklogStats {
@@ -344,21 +368,24 @@ export interface DraftBacklogStats {
 }
 
 // The backlog bar's counts: what each judgment-free cut would archive, and how
-// many drafts the promotion policy would publish on its next sweep.
+// many drafts the promotion policy would publish on its next sweep. Every
+// filter excludes origin 'backfill' (mig 0076): the bulk cuts and the
+// promotion policy both skip those rows (a separate batch Kevin reviews on
+// purpose), so this bar's counts describe the live queue only.
 export async function getDraftBacklogStats(policy: {
   afterHours: number; from: string;
 }, staleDays = 45): Promise<DraftBacklogStats> {
   const row = await one<Omit<DraftBacklogStats, 'staleDays'>>(
     `select
-       count(*) filter (where not is_published and archived_at is null)::int as active,
-       count(*) filter (where not is_published and archived_at is not null)::int as archived,
-       count(*) filter (where not is_published and archived_at is null
+       count(*) filter (where not is_published and archived_at is null and origin <> 'backfill')::int as active,
+       count(*) filter (where not is_published and archived_at is not null and origin <> 'backfill')::int as archived,
+       count(*) filter (where not is_published and archived_at is null and origin <> 'backfill'
                           and coalesce(array_length(claim_touches,1),0) = 0)::int as "noTouches",
-       count(*) filter (where not is_published and archived_at is null and significance = 'low')::int as low,
-       count(*) filter (where not is_published and archived_at is null
+       count(*) filter (where not is_published and archived_at is null and origin <> 'backfill' and significance = 'low')::int as low,
+       count(*) filter (where not is_published and archived_at is null and origin <> 'backfill'
                           and created_at < now() - ($1::int * interval '1 day'))::int as stale,
-       count(*) filter (where not is_published and archived_at is null and significance = 'high')::int as high,
-       count(*) filter (where not is_published and archived_at is null and significance = 'medium')::int as medium,
+       count(*) filter (where not is_published and archived_at is null and origin <> 'backfill' and significance = 'high')::int as high,
+       count(*) filter (where not is_published and archived_at is null and origin <> 'backfill' and significance = 'medium')::int as medium,
        count(*) filter (where not is_published and archived_at is null and origin = 'pipeline'
                           and significance = 'high' and coalesce(array_length(claim_touches,1),0) >= 1
                           and created_at >= $2::timestamptz

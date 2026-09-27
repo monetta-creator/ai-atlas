@@ -1,5 +1,6 @@
 import { marked } from 'marked';
 import { routedStructured } from '../model-route';
+import { selfRecordBlock } from './self-record-block';
 import type { SavantPack, HypothesisReading, SavantDepartment, Hypothesis } from './types';
 import type { LeadResult } from './lead';
 
@@ -212,13 +213,14 @@ export async function writePeers(pack: SavantPack, model: string): Promise<Savan
     return `- ${r.isSelf ? 'READER ORGANIZATION: ' : ''}${r.name} (${r.tier}): ${cells.join('; ') || 'no metrics'}; AI-related items this week ${r.aiItems} vs trailing ${r.aiItemsTrailing}/week; facts extracted ${r.facts}; CFPB complaints ${r.cfpb.latest ?? 'n/a'} in ${r.cfpb.period ?? 'n/a'} vs ${r.cfpb.prev ?? 'n/a'} prior month [${r.cfpb.sourceUrl ?? ''}]; open AI/ML roles ${r.hiring.aiMl ?? 'n/a'}${r.filings.length ? `; filings this week: ${r.filings.map((f) => `"${f.title}" ${f.url}`).join(', ')}` : ''}`;
   });
   const user = [
-    `WEEK ENDING ${pack.weekEnd}. Write the peer and market watch, 200 to 400 words in two or three paragraphs, from the table below and nothing else.`,
+    `WEEK ENDING ${pack.weekEnd}. Write the peer and market watch, 200 to 400 words in two or three paragraphs, from the table below (and the reader organization's public record, if given) and nothing else.`,
     pack.self ? `The reader organization is ${pack.self.name} (public description: ${pack.self.public_blurb ?? 'none given'}). Compare it to its tiers where the numbers allow; where it lacks a series, say so in a clause and move on.` : 'No reader organization is set; compare the tiers to each other.',
+    pack.self ? selfRecordBlock(pack.self) : '',
     'Lead with what changed, not with the level. Every figure you write must appear in the table; link each source series the first time you use it (the bracketed url after each cell). Do not editorialize about any company\'s intentions; describe what the public numbers show.',
     '',
     'TABLE:',
     ...table,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
   const out = await routedStructured<{ peers_md?: unknown }>({
     model, system: `You are Savant, writing the peer and market watch of its weekly report. ${VOICE}`, user,
     toolName: 'submit_peers', toolDescription: 'Return the peer and market watch as markdown.',

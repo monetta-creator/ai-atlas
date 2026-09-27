@@ -28,14 +28,14 @@ const MAX_RECORDS = 12;
 
 const KIND_TO_PEEK: Record<CitationKind, PeekKind> = {
   claim: 'claim', bridge: 'bridge', stance: 'stance', Q: 'question', concept: 'concept', signal: 'signal',
-  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact', report: 'report',
+  paper: 'paper', thread: 'thread', item: 'item', fact: 'fact', report: 'report', history: 'history',
 };
 
 // Kinds resolved through the request's tag -> map-value SignalMap, rather
-// than cited by their own stable code (signal/paper/item/fact/report all
-// mint per-request tags; see lib/ask/verify.ts's toPeekId for what each
+// than cited by their own stable code (signal/paper/item/fact/report/history
+// all mint per-request tags; see lib/ask/verify.ts's toPeekId for what each
 // kind's map value needs to become before fetchRecord/the peek route accept it).
-const MAP_KINDS = new Set<CitationKind>(['signal', 'paper', 'item', 'fact', 'report']);
+const MAP_KINDS = new Set<CitationKind>(['signal', 'paper', 'item', 'fact', 'report', 'history']);
 
 export async function POST(req: Request): Promise<Response> {
   if (!(await isAdmin())) return new Response('Unauthorized', { status: 401 });

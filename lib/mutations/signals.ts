@@ -290,7 +290,10 @@ export async function deleteSignal(id: string): Promise<void> {
 // the third cut. `minAgeDays` (0056, the Atlas Agent) additionally restricts
 // the cut to drafts older than N days — the agent's auto-tier
 // `drafts.archive_no_touches` remedy passes 3 so a same-day draft never gets
-// swept before a human has seen it.
+// swept before a human has seen it. `origin <> 'backfill'` (mig 0076) keeps
+// the history-canon drafts out of every cut: they are a separate batch Kevin
+// reviews on purpose on the drafts desk's backfill view, not the live queue's
+// judgment-free sweeps.
 export type BulkArchiveKind = 'no_touches' | 'low' | 'stale';
 
 export async function archiveDraftsBulk(kind: BulkArchiveKind, staleDays = 45, minAgeDays?: number): Promise<number> {
@@ -306,7 +309,7 @@ export async function archiveDraftsBulk(kind: BulkArchiveKind, staleDays = 45, m
   const r = await q<{ id: string }>(
     `update signals
         set archived_at = now(), archive_reason = $1, updated_at = now()
-      where is_published = false and archived_at is null and ${where}
+      where is_published = false and archived_at is null and origin <> 'backfill' and ${where}
       returning id`,
     params
   );
@@ -318,7 +321,10 @@ export async function archiveDraftsBulk(kind: BulkArchiveKind, staleDays = 45, m
 // one claim touch, still active (not archived = not vetoed), created at or
 // after the policy start, and older than the veto window. Each publish runs
 // syncSignalEvidence so evidence materializes exactly as a human click would;
-// auto_published_at records that the policy did it.
+// auto_published_at records that the policy did it. `origin = 'pipeline'`
+// also excludes the history-canon drafts (origin 'backfill', mig 0076): those
+// are a separate batch a human reviews on purpose on the drafts desk, never
+// auto-published.
 export async function publishDueDrafts(opts: {
   afterHours: number; from: string; limit?: number;
 }): Promise<string[]> {

@@ -51,7 +51,9 @@ export async function missEntries(weekFrom: string, dayTo: string, isFriday: boo
               (select count(*) from evidence e join claims c on c.id = e.target_id and e.target_type = 'claim'
                  join edges ed on ed.from_type = 'claim' and ed.from_id = c.id and ed.to_type = 'stance'
                  join stances st on st.id = ed.to_id and st.question_id = qu.id
-                where e.created_at >= $1::timestamptz and e.created_at < $2::timestamptz)::int as n
+                 left join signals s on s.id = e.signal_id
+                where e.created_at >= $1::timestamptz and e.created_at < $2::timestamptz
+                  and coalesce(s.origin::text, '') <> 'backfill')::int as n
          from questions qu order by qu.sort_order`,
       [weekFrom, dayTo]
     );
