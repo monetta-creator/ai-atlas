@@ -13,16 +13,17 @@ The Atlas is written for people doing AI transformation inside one regulated fin
 | Merger filings (S-4, 425) | `self-sec` | recorded as `merger` | none |
 | News and newsroom | `self-news` | Tavily news per month with the exact quoted name, plus the company's own domain; URL-deduped against the intel engine's items | Tavily |
 | Research | `self-research` | OpenAlex works credited to the institution (resolved from the name) since 2022-11-30 | none |
-| Patents | `self-patents` | USPTO PatentSearch by assignee; AI patents flagged by CPC G06N and AI terms, all patents counted per quarter | `PATENTSVIEW_API_KEY` |
+| Patents | `self-patents` | the USPTO Open Data Portal's patent search by first applicant and grant date (PatentsView's API moved there on 2026-03-20; the ODP carries title, grant date, applicant and CPC codes but no abstract); AI patents flagged by CPC G06N or AI terms in the title and recorded one row each, all grants counted per quarter | `PATENTSVIEW_API_KEY` (an ODP key) |
 | Enforcement and merger orders | `self-regulatory` | searches restricted to regulator domains (OCC, Federal Reserve, FDIC, CFPB, DOJ, FTC); a page must name the organization to be kept | Tavily |
-| Comment letters, testimony | `self-regulatory` | regulations.gov and govinfo | `DATA_GOV_API_KEY` |
+| Comment letters | `self-regulatory` | regulations.gov comments whose title starts with the organization's name (a plain name search returns hundreds of consumer comments that only mention it), each with its docket title and the attached letter's text | `DATA_GOV_API_KEY` |
+| Congressional hearings | `self-regulatory` | govinfo, collection CHRG only (court opinions are dominated by consumer suits), naming the organization alongside AI; the filing pass then drops hearings that only mention it | `DATA_GOV_API_KEY` |
 | CFPB complaint history | `scripts/backfill-intel-metrics.mjs --months=46 --only-source=cfpb` | extended back to late 2022 in `intel_metrics`, same table and code as the live engine | none |
 
 `self-summarize` then files every row with the utility model: whether it is really about the organization (off-topic news is deleted; filings, papers and patents are kept), whether it concerns AI, an intel dimension, and a one- or two-sentence factual summary.
 
 ## What it produces
 
-- **The AI timeline** (`self_timeline`, phase `self-timeline`): per year, Sonnet reads the AI-related records and writes dated events, each citing at least one record. Events whose citations do not resolve are dropped (`validateTimeline`).
+- **The AI timeline** (`self_timeline`, phase `self-timeline`): per year, Sonnet reads every non-patent AI record (up to 140, spread across the year) plus an even sample of 24 AI patents and the year's patent count by quarter, and writes 8 to 25 dated events, each citing at least one record; the patent stream gets at most two events. A thin year from a rich record set is retried once. Events whose citations do not resolve are dropped (`validateTimeline`). (Feeding the first 160 rows by date let a thousand patents crowd out everything after spring.)
 - **The cited profile** (`intel_companies.public_profile`, phase `self-profile`): 8 to 15 sentences over the timeline and the latest annual report's AI passages, each with its record ids (`validateProfile`). Savant reads it in place of the empty one-line `public_blurb`; `public_blurb` stays the maintainer's own line.
 - **The page** `/savant/record` (keyholders and admin): the profile, the timeline by year, and the filterable record list.
 
@@ -39,4 +40,4 @@ The Atlas is written for people doing AI transformation inside one regulated fin
 
 ## Rebuilding
 
-Every phase is idempotent. To refresh the synthesis after adding sources (for example once the patent and data.gov keys exist): run the missing source phase, then `self-summarize`, `self-timeline`, `self-profile`. The timeline phase replaces the organization's events wholesale; the profile phase overwrites `public_profile`.
+Every phase is idempotent; a unit skipped for a missing key runs once the key exists. To refresh the synthesis after adding sources: run the source phase, then `self-summarize`, `self-timeline`, `self-profile`. The two keys are needed only where the script runs (locally), never on Vercel. The timeline phase replaces the organization's events wholesale; the profile phase overwrites `public_profile`.

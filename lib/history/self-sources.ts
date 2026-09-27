@@ -167,11 +167,14 @@ export async function listOpenAlexWorks(institutionId: string, since: string, ma
   return out;
 }
 
-// ---- USPTO PatentSearch (the PatentsView API) -----------------------------------------
-// Needs a free key (PATENTSVIEW_API_KEY). Granted patents assigned to the
-// organization since the window start, with CPC groups so AI patents can be
-// flagged (G06N = computing arrangements based on specific computational
-// models, i.e. machine learning).
+// ---- USPTO Open Data Portal (patents) ------------------------------------------------
+// PatentsView's PatentSearch API moved into the USPTO Open Data Portal on
+// 2026-03-20 (search.patentsview.org no longer resolves) and its old keys do
+// not work there. The ODP key lives in PATENTSVIEW_API_KEY (or USPTO_API_KEY).
+// The patent file wrapper search takes a Lucene-style `q`, `fields`, `limit`
+// (100 per page) and `offset`; it carries title, grant date, first applicant
+// and CPC codes but no abstract. AI patents are flagged by CPC G06N (machine
+// learning and computational models) or AI terms in the title.
 
 export interface Patent {
   number: string;
@@ -179,82 +182,126 @@ export interface Patent {
   date: string;
   abstract: string;
   cpc: string[];
+  applicant: string;
   url: string;
 }
 
-export async function listPatents(assignee: string, since: string, max = 2000): Promise<Patent[]> {
-  const key = process.env.PATENTSVIEW_API_KEY;
-  if (!key) throw new Error('PATENTSVIEW_API_KEY is not set');
+const ODP_SEARCH = 'https://api.uspto.gov/api/v1/patent/applications/search';
+
+export function usptoKey(): string | undefined {
+  return process.env.USPTO_API_KEY || process.env.PATENTSVIEW_API_KEY || undefined;
+}
+
+export async function listPatents(assignee: string, since: string, max = 6000): Promise<Patent[]> {
+  const key = usptoKey();
+  if (!key) throw new Error('PATENTSVIEW_API_KEY (a USPTO Open Data Portal key) is not set');
+  const today = new Date().toISOString().slice(0, 10);
+  const q = `applicationMetaData.firstApplicantName:"${assignee.replace(/"/g, '')}" AND applicationMetaData.grantDate:[${since} TO ${today}]`;
+  const fields = ['applicationMetaData.patentNumber', 'applicationMetaData.grantDate', 'applicationMetaData.inventionTitle',
+    'applicationMetaData.cpcClassificationBag', 'applicationMetaData.firstApplicantName'].join(',');
   const out: Patent[] = [];
-  let after: string | null = null;
-  while (out.length < max) {
-    const body = {
-      q: { _and: [{ _gte: { patent_date: since } }, { _contains: { 'assignees.assignee_organization': assignee } }] },
-      f: ['patent_id', 'patent_title', 'patent_date', 'patent_abstract', 'cpc_current.cpc_group_id'],
-      s: [{ patent_id: 'asc' }],
-      o: { size: 1000, ...(after ? { after } : {}) },
+  for (let offset = 0; offset < max; offset += 100) {
+    const url = `${ODP_SEARCH}?q=${encodeURIComponent(q)}&fields=${encodeURIComponent(fields)}&limit=100&offset=${offset}`;
+    const res = await fetch(url, { headers: { 'X-API-KEY': key, Accept: 'application/json' } });
+    if (res.status === 404) break; // the ODP answers 404 past the last page
+    if (!res.ok) throw new Error(`USPTO ODP ${res.status}: ${(await res.text()).slice(0, 160)}`);
+    const r = (await res.json()) as {
+      count?: number;
+      patentFileWrapperDataBag?: { applicationMetaData?: { patentNumber?: string; grantDate?: string; inventionTitle?: string; cpcClassificationBag?: string[]; firstApplicantName?: string } }[];
     };
-    const res = await fetch('https://search.patentsview.org/api/v1/patent/', {
-      method: 'POST', headers: { 'X-Api-Key': key, 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`PatentSearch ${res.status}: ${(await res.text()).slice(0, 160)}`);
-    const r = (await res.json()) as { patents?: { patent_id: string; patent_title: string; patent_date: string; patent_abstract?: string; cpc_current?: { cpc_group_id: string }[] }[] };
-    const page = r.patents ?? [];
-    for (const p of page) {
+    const page = r.patentFileWrapperDataBag ?? [];
+    for (const row of page) {
+      const m = row.applicationMetaData;
+      if (!m?.patentNumber || !m.grantDate) continue;
       out.push({
-        number: p.patent_id, title: p.patent_title, date: p.patent_date, abstract: (p.patent_abstract ?? '').slice(0, 2000),
-        cpc: [...new Set((p.cpc_current ?? []).map((c) => c.cpc_group_id))],
-        url: `https://patents.google.com/patent/US${p.patent_id}`,
+        number: m.patentNumber, title: (m.inventionTitle ?? '').trim(), date: m.grantDate, abstract: '',
+        cpc: [...new Set((m.cpcClassificationBag ?? []).map((c) => c.replace(/\s+/g, ' ').trim()))],
+        applicant: m.firstApplicantName ?? '',
+        url: `https://patents.google.com/patent/US${m.patentNumber}`,
       });
     }
-    if (page.length < 1000) break;
-    after = page[page.length - 1].patent_id;
-    await sleep(1500); // 45 requests per minute
+    if (page.length < 100 || (r.count != null && offset + 100 >= r.count)) break;
+    await sleep(600);
   }
   return out;
 }
 
 // ---- regulations.gov + govinfo (api.data.gov key) ----------------------------------------
 
-export interface RegDoc { id: string; title: string; date: string | null; url: string; agency: string | null; kind: string }
+export interface RegDoc {
+  id: string; title: string; date: string | null; url: string; agency: string | null; kind: string;
+  docket?: string | null; docketTitle?: string | null; attachmentUrl?: string | null; organization?: string | null;
+}
 
+// Comment letters the ORGANIZATION filed. A search for its quoted name also
+// returns hundreds of consumer comments that merely mention it (1,572 hits on
+// 2026-09-27, mostly individuals on a merger docket), so only comments whose
+// title starts with the name are kept (regulations.gov titles an organization's
+// letter with the organization), then each one's detail supplies the docket and
+// the attached letter.
 export async function listCommentLetters(name: string, since: string): Promise<RegDoc[]> {
   const key = process.env.DATA_GOV_API_KEY;
   if (!key) throw new Error('DATA_GOV_API_KEY is not set');
-  const out: RegDoc[] = [];
-  for (let page = 1; page <= 10; page++) {
+  const own = (t: string) => t.toLowerCase().startsWith(name.toLowerCase());
+  const hits: { id: string; title: string; date: string | null; agency: string | null }[] = [];
+  for (let page = 1; page <= 20; page++) {
     const url = `https://api.regulations.gov/v4/comments?filter[searchTerm]=${encodeURIComponent(`"${name}"`)}`
       + `&filter[postedDate][ge]=${since}&page[size]=250&page[number]=${page}&api_key=${key}`;
     const r = JSON.parse(await fetchText(url)) as { data?: { id: string; attributes?: { title?: string; postedDate?: string; agencyId?: string } }[] };
     const data = r.data ?? [];
     for (const d of data) {
-      out.push({
-        id: d.id, title: d.attributes?.title ?? d.id, date: d.attributes?.postedDate?.slice(0, 10) ?? null,
-        url: `https://www.regulations.gov/comment/${d.id}`, agency: d.attributes?.agencyId ?? null, kind: 'comment_letter',
-      });
+      const t = d.attributes?.title ?? '';
+      if (own(t)) hits.push({ id: d.id, title: t, date: d.attributes?.postedDate?.slice(0, 10) ?? null, agency: d.attributes?.agencyId ?? null });
     }
     if (data.length < 250) break;
     await sleep(400);
   }
+  const docketTitles = new Map<string, string | null>();
+  const out: RegDoc[] = [];
+  for (const h of hits) {
+    await sleep(400);
+    const d = JSON.parse(await fetchText(`https://api.regulations.gov/v4/comments/${h.id}?include=attachments&api_key=${key}`)) as {
+      data?: { attributes?: { docketId?: string; organization?: string } };
+      included?: { attributes?: { fileFormats?: { fileUrl?: string; format?: string }[] } }[];
+    };
+    const docket = d.data?.attributes?.docketId ?? null;
+    if (docket && !docketTitles.has(docket)) {
+      await sleep(400);
+      try {
+        const dk = JSON.parse(await fetchText(`https://api.regulations.gov/v4/dockets/${docket}?api_key=${key}`)) as { data?: { attributes?: { title?: string } } };
+        docketTitles.set(docket, dk.data?.attributes?.title ?? null);
+      } catch { docketTitles.set(docket, null); }
+    }
+    const files = (d.included ?? []).flatMap((x) => x.attributes?.fileFormats ?? []);
+    const pdf = files.find((f) => /pdf/i.test(f.format ?? f.fileUrl ?? '')) ?? files[0];
+    out.push({
+      id: h.id, title: h.title, date: h.date, agency: h.agency, kind: 'comment_letter',
+      url: `https://www.regulations.gov/comment/${h.id}`, docket, docketTitle: docket ? docketTitles.get(docket) ?? null : null,
+      attachmentUrl: pdf?.fileUrl ?? null, organization: d.data?.attributes?.organization ?? null,
+    });
+  }
   return out;
 }
 
+// Congressional hearings (govinfo collection CHRG) that name the organization
+// alongside AI: testimony and the record around it. Court opinions are left out
+// on purpose (they are dominated by consumer suits that mention the name).
 export async function listTestimony(name: string, since: string): Promise<RegDoc[]> {
   const key = process.env.DATA_GOV_API_KEY;
   if (!key) throw new Error('DATA_GOV_API_KEY is not set');
   const res = await fetch(`https://api.govinfo.gov/search?api_key=${key}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      query: `"${name}" AND (artificial intelligence OR machine learning) AND publishdate:range(${since},)`,
+      query: `collection:(CHRG) AND "${name}" AND ("artificial intelligence" OR "machine learning") AND publishdate:range(${since},)`,
       pageSize: 100, offsetMark: '*', sorts: [{ field: 'publishdate', sortOrder: 'DESC' }],
     }),
   });
   if (!res.ok) throw new Error(`govinfo ${res.status}`);
-  const r = (await res.json()) as { results?: { packageId: string; title: string; dateIssued?: string; collectionCode?: string; resultLink?: string }[] };
+  const r = (await res.json()) as { results?: { packageId: string; title: string; dateIssued?: string; collectionCode?: string; pdfLink?: string; download?: { pdfLink?: string } }[] };
   return (r.results ?? []).map((x) => ({
     id: x.packageId, title: x.title, date: x.dateIssued ?? null, agency: x.collectionCode ?? null, kind: 'testimony',
     url: `https://www.govinfo.gov/app/details/${x.packageId}`,
+    attachmentUrl: x.download?.pdfLink ? `${x.download.pdfLink}?api_key=${key}` : null,
   }));
 }
 

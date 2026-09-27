@@ -91,6 +91,12 @@ async function unitDone(key: string): Promise<boolean> {
   const r = await one<{ status: string }>(`select status from backfill_units where key = $1`, [key]);
   return r?.status === 'done' || r?.status === 'skipped';
 }
+// A unit skipped for a missing key runs once the key exists: 'skipped' only
+// counts as done while the key is still absent.
+async function unitDoneOrStillBlocked(key: string, keyPresent: boolean): Promise<boolean> {
+  const r = await one<{ status: string }>(`select status from backfill_units where key = $1`, [key]);
+  return r?.status === 'done' || (r?.status === 'skipped' && !keyPresent);
+}
 async function markUnit(key: string, p: string, status: string, extra: { credits?: number; items?: number; note?: string; cost?: number } = {}) {
   await exec(
     `insert into backfill_units (key, phase, status, credits, items, note, cost_usd)
@@ -547,12 +553,12 @@ async function selfResearch() {
 
 async function selfPatents() {
   const self = await selfRow();
-  if (!process.env.PATENTSVIEW_API_KEY) {
-    await markUnit('self-patents:uspto', 'self-patents', 'skipped', { note: 'PATENTSVIEW_API_KEY not set' });
+  if (!src.usptoKey()) {
+    await markUnit('self-patents:uspto', 'self-patents', 'skipped', { note: 'PATENTSVIEW_API_KEY (USPTO ODP key) not set' });
     console.log('self-patents: skipped, PATENTSVIEW_API_KEY not set'); return;
   }
   const pats = await src.listPatents(self.name, core.HISTORY_START);
-  const ai = pats.filter((p) => p.cpc.some((c) => c.startsWith('G06N')) || core.AI_TERMS_RE.test(`${p.title} ${p.abstract}`));
+  const ai = pats.filter((p) => p.cpc.some((c) => c.replace(/\s+/g, '').startsWith('G06N')) || core.AI_TERMS_RE.test(p.title));
   console.log(`self-patents: ${pats.length} granted since ${core.HISTORY_START}, ${ai.length} AI-related`);
   if (DRY) return;
   // Every AI patent is a record; the rest are counted per quarter on one summary row's metadata.
@@ -560,8 +566,8 @@ async function selfPatents() {
   for (const p of ai) {
     if (await insertRecord(self.slug, {
       source: 'patent', title: p.title, url: p.url, published_date: p.date,
-      summary: p.abstract.split(/(?<=\.)\s/)[0]?.slice(0, 500) ?? null, ai_passages: [p.abstract.slice(0, 1200)],
-      text_excerpt: p.abstract, metadata: { patent: p.number, cpc: p.cpc.slice(0, 12) },
+      summary: null, ai_passages: [p.title], // no abstract in the ODP; the title marks it AI-related
+      text_excerpt: null, metadata: { patent: p.number, cpc: p.cpc.slice(0, 12), applicant: p.applicant },
     })) n += 1;
   }
   const perQuarter: Record<string, { all: number; ai: number }> = {};
@@ -610,12 +616,32 @@ async function selfRegulatory() {
     ['self-reg:comments', src.listCommentLetters, 'comment_letter'],
     ['self-reg:testimony', src.listTestimony, 'testimony'],
   ] as const) {
-    if (await unitDone(key)) continue;
+    if (await unitDoneOrStillBlocked(key, Boolean(process.env.DATA_GOV_API_KEY))) continue;
     if (!process.env.DATA_GOV_API_KEY) { await markUnit(key, 'self-regulatory', 'skipped', { note: 'DATA_GOV_API_KEY not set' }); continue; }
     try {
       const docs = await fn(self.name, core.HISTORY_START);
+      console.log(`  ${key}: ${docs.length} documents`);
       let n = 0;
-      for (const d of docs) if (await insertRecord(self.slug, { source, title: d.title, url: d.url, published_date: d.date, metadata: { agency: d.agency, id: d.id } })) n += 1;
+      for (const d of docs) {
+        // The letter or hearing text: the attached PDF when there is one. A
+        // hearing transcript is long; only its AI paragraphs and the passages
+        // that name the organization are kept.
+        let text = '';
+        if (d.attachmentUrl) {
+          try { text = (await fetchCandidateText(d.attachmentUrl, { timeoutMs: 45_000, allowFallback: false, maxChars: 400_000 })).text; } catch { /* keep the title */ }
+        }
+        const passages = core.extractAiPassages(text, { max: source === 'testimony' ? 8 : 10 });
+        if (source === 'testimony' && !passages.some((p) => p.toLowerCase().includes(self.name.toLowerCase()))
+          && !text.toLowerCase().includes(self.name.toLowerCase())) continue;
+        const title = source === 'comment_letter'
+          ? `Comment letter to ${d.agency ?? 'a regulator'}${d.docketTitle ? ` on ${d.docketTitle}` : ''}`
+          : d.title;
+        if (await insertRecord(self.slug, {
+          source, title, url: d.url, published_date: d.date, ai_passages: passages,
+          text_excerpt: text ? text.slice(0, 8000) : null,
+          metadata: { agency: d.agency, id: d.id, docket: d.docket ?? null, docket_title: d.docketTitle ?? null, attachment: d.attachmentUrl ? d.attachmentUrl.replace(/api_key=[^&]+/, 'api_key=') : null },
+        })) n += 1;
+      }
       await markUnit(key, 'self-regulatory', 'done', { items: n });
     } catch (e) {
       await markUnit(key, 'self-regulatory', 'failed', { note: (e as Error).message.slice(0, 200) });
@@ -699,10 +725,25 @@ async function selfTimeline() {
   const years = ['2022', '2023', '2024', '2025', '2026'];
   const all: TimelineEvent[] = [];
   for (const y of years) {
-    const recs = await q<{ id: string; source: string; title: string; published_date: string; summary: string | null; ai_passages: string[] }>(
-      `select id, source, title, published_date::text, summary, ai_passages from self_record
-        where company_slug = $1 and ai_related and published_date between $2::date and $3::date
-        order by published_date limit 160`, [self.slug, `${y}-01-01`, `${y}-12-31`]);
+    // Every AI record except patents (spread evenly across the year when there
+    // are more than 140), plus an even sample of the year's AI patents and
+    // their count by quarter. Patents are a thousand-row stream; taking the
+    // first 160 rows by date let them crowd out everything after spring.
+    type Rec = { id: string; source: string; title: string; published_date: string; summary: string | null; ai_passages: string[] };
+    const spread = <T,>(xs: T[], n: number): T[] => (xs.length <= n ? xs : Array.from({ length: n }, (_, i) => xs[Math.floor((i * xs.length) / n)]));
+    const range = [self.slug, `${y}-01-01`, `${y}-12-31`];
+    const docs = await q<Rec>(`select id, source, title, published_date::text, summary, ai_passages from self_record
+        where company_slug = $1 and ai_related and source <> 'patent' and published_date between $2::date and $3::date
+        order by published_date`, range);
+    const pats = await q<Rec>(`select id, source, title, published_date::text, summary, ai_passages from self_record
+        where company_slug = $1 and ai_related and source = 'patent' and published_date between $2::date and $3::date
+        order by published_date`, range);
+    const recs = [...spread(docs, 140), ...spread(pats, 24)].sort((a, b) => a.published_date.localeCompare(b.published_date));
+    const perQuarter = pats.reduce<Record<string, number>>((m, p) => {
+      const qk = `Q${Math.floor((Number(p.published_date.slice(5, 7)) - 1) / 3) + 1}`;
+      m[qk] = (m[qk] ?? 0) + 1; return m;
+    }, {});
+    const patentLine = pats.length ? `AI PATENTS GRANTED IN ${y}: ${pats.length} (${Object.entries(perQuarter).map(([k, v]) => `${k} ${v}`).join(', ')}); a sample is listed below. Give the patent stream at most two of your events (never one per patent); every other event comes from the non-patent records.\n` : '';
     console.log(`self-timeline ${y}: ${recs.length} AI records`);
     if (DRY || !recs.length) continue;
     await assertBudget();
@@ -710,12 +751,24 @@ async function selfTimeline() {
     const list = recs.map((r) => `id=${r.id} [${r.published_date} · ${r.source}] ${r.title}\n  ${(r.summary ?? r.ai_passages?.[0] ?? '').replace(/\s+/g, ' ').slice(0, 400)}`).join('\n');
     const out = await routedStructured<{ events: TimelineEventIn[] }>({
       model: SYNTH_MODEL,
-      system: `You write the dated timeline of ${self.name}'s public AI moves in ${y}: launches, public statements, hires and leadership roles, papers, patents, partnerships, regulatory events, acquisitions, investments. Merge records about the same event into one entry citing all of them. Skip routine boilerplate (risk-factor language repeated each quarter) unless it changed. 6 to 25 events for the year, dated by the event itself. ${PUBLIC_ONLY}`,
-      user: `RECORDS (${y}):\n${list}`,
+      system: `You write the dated timeline of ${self.name}'s public AI moves in ${y}: launches, public statements, hires and leadership roles, papers, partnerships, regulatory events, acquisitions, investments, and the patent stream. Merge records about the same event into one entry citing all of them. Skip routine boilerplate (risk-factor language repeated each quarter) unless it changed. 8 to 25 events spread across the whole year, dated by the event itself. ${PUBLIC_ONLY}`,
+      user: `${patentLine}RECORDS (${y}):\n${list}`,
       toolName: 'submit_timeline', toolDescription: 'The year\'s AI timeline.', schema: TIMELINE_SCHEMA,
       maxTokens: 8000, timeoutMs: 180_000, feature: 'self_record_timeline', metadata: { year: y, records: recs.length },
     });
-    const events = core.validateTimeline(out.events ?? [], known);
+    let events = core.validateTimeline(out.events ?? [], known);
+    if (events.length < 6 && docs.length >= 20) {
+      // A thin year from a rich record set is a misread instruction, not a quiet year: ask once more.
+      const again = await routedStructured<{ events: TimelineEventIn[] }>({
+        model: SYNTH_MODEL,
+        system: `You write the dated timeline of ${self.name}'s public AI moves in ${y}. Write 12 to 25 events spread across the whole year from the non-patent records (launches, statements, hires, papers, partnerships, regulatory events, acquisitions, investments), plus at most two events summarizing the patent stream. ${PUBLIC_ONLY}`,
+        user: `${patentLine}RECORDS (${y}):\n${list}`,
+        toolName: 'submit_timeline', toolDescription: 'The year\'s AI timeline.', schema: TIMELINE_SCHEMA,
+        maxTokens: 8000, timeoutMs: 180_000, feature: 'self_record_timeline', metadata: { year: y, records: recs.length, retry: true },
+      });
+      const second = core.validateTimeline(again.events ?? [], known);
+      if (second.length > events.length) events = second;
+    }
     console.log(`  ${events.length} events kept of ${(out.events ?? []).length}`);
     all.push(...events);
   }
