@@ -3,8 +3,8 @@ import type { OpsJobStatus, OpsState } from '@/lib/data/ops';
 
 // Shared, server-safe pieces for the ops board widgets: the family
 // grouping, the job card, the timeline, and their small formatters. Lifted
-// out of the old OpsRefresh client island (now OpsBoardRefresh, which only
-// polls) so OpsJobs.tsx and OpsTimeline.tsx can render them as plain server
+// out of the old OpsRefresh client island (the board no longer polls at all)
+// so OpsJobs.tsx and OpsTimeline.tsx can render them as plain server
 // components with no hooks.
 
 export const FAMILY_LABEL: Record<string, string> = {

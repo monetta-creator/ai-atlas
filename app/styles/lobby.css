@@ -438,3 +438,16 @@ body:has(> .lobby-page) { min-height: 100dvh; display: flex; flex-direction: col
 }
 .lw-hyp-posed { font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink); }
 
+/* ============================================================
+   WIDGET SKELETON — components/lobby/WidgetBoard.tsx: the placeholder a
+   widget shows inside its own Suspense boundary until its data arrives.
+   ============================================================ */
+.lw-skel { display: flex; flex-direction: column; gap: 10px; }
+.lw-skel > span {
+  display: block; height: 10px; border-radius: 2px; background: var(--line);
+  animation: lwSkel 1.4s ease-in-out infinite;
+}
+.lw-skel > span:nth-of-type(2) { width: 82%; }
+.lw-skel > span:nth-of-type(3) { width: 64%; }
+@keyframes lwSkel { 0%, 100% { opacity: .45; } 50% { opacity: .9; } }
+@media (prefers-reduced-motion: reduce) { .lw-skel > span { animation: none; } }

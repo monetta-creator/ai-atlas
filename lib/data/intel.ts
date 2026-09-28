@@ -406,19 +406,23 @@ export async function getTavilyQuota(): Promise<TavilyQuota> {
          from ai_cost_log
         where model = 'tavily-search' and created_at >= date_trunc('month', now())`
     ),
+    // "Cap hit" is judged from each engine's LATEST run only. Reading every
+    // run this month kept the September 22 outage's quota notes alive, so the
+    // agent flagged the cap as hit (high) for the rest of the month while
+    // usage sat at half the plan (2026-09-28).
     q<{ note: string }>(
       `select n as note from scan_runs, unnest(notes) as n
-        where day >= date_trunc('month', now())::date`
+        where day = (select max(day) from scan_runs) and day >= date_trunc('month', now())::date`
     ),
     q<{ note: string }>(
       `select n as note from intel_runs, unnest(notes) as n
-        where day >= date_trunc('month', now())::date`
+        where day = (select max(day) from intel_runs) and day >= date_trunc('month', now())::date`
     ),
     // tooling_runs.day is weekly-keyed (the Monday UTC) or a pull's start
-    // day, still comparable against the month boundary the same way.
+    // day; the latest run by day stands for the tooling engine.
     q<{ note: string }>(
       `select n as note from tooling_runs, unnest(notes) as n
-        where day >= date_trunc('month', now())::date`
+        where day = (select max(day) from tooling_runs) and day >= date_trunc('month', now())::date`
     ),
   ]);
   const used = usedRow?.n ?? 0;

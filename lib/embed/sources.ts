@@ -51,6 +51,35 @@ const j = (...xs: (string | null | undefined)[]): string => xs.filter((x) => !!x
 const stripHtml = (s: string | null | undefined): string | null =>
   s ? s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : null;
 
+// Each kind's "what counts as embeddable" predicate, written ONCE and used by
+// both the text fetchers below and countMissingEmbeddings' id-only anti-join.
+// `from` carries its own where clause so a fetcher can append `and ...`;
+// `id` is the record_id expression (a text value). Empty text is excluded
+// with `<> ''`, which Postgres answers from the stored length without
+// detoasting the article (a whitespace regex read ~50 MB of scan text and cost
+// 10x; there were zero whitespace-only rows on 2026-09-28). The fetchers keep
+// their JS trim, so a whitespace-only row would still never embed.
+// Reports are absent: their record ids are per-section, computed in code by
+// reportSections(), so they are counted on the fetch path (38 rows).
+const NONBLANK = (col: string) => `${col} is not null and ${col} <> ''`;
+export const EMBED_SOURCES: Record<Exclude<EmbedKind, 'report'>, { from: string; id: string }> = {
+  signal: { from: `from signals where is_published = true`, id: 'id::text' },
+  candidate: {
+    from: `from signal_candidates sc join signals g on g.id = sc.signal_id and g.is_published = true where ${NONBLANK('sc.raw_content')}`,
+    id: 'sc.id::text',
+  },
+  scan_item: { from: `from scan_items where ${NONBLANK('raw_content')}`, id: 'id::text' },
+  intel_item: { from: `from intel_items where ${NONBLANK('raw_content')}`, id: 'id::text' },
+  intel_fact: { from: `from intel_facts where true`, id: 'id::text' },
+  paper: { from: `from papers where triage_status = 'kept' and review_status <> 'dismissed'`, id: 'id::text' },
+  claim: { from: `from claims where code is not null and is_frame = false`, id: 'code' },
+  bridge: { from: `from bridge_claims where code is not null`, id: 'code' },
+  stance: { from: `from stances where code is not null`, id: 'code' },
+  concept: { from: `from concepts where true`, id: 'slug' },
+  thread: { from: `from research_threads where true`, id: 'slug' },
+  history_item: { from: `from history_items where triage = 'kept'`, id: 'id::text' },
+};
+
 export async function embeddableSignals(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{
     id: string; title: string; summary: string | null;
@@ -62,7 +91,7 @@ export async function embeddableSignals(q: Q, ids?: string[]): Promise<Embeddabl
             brief->>'why_it_matters' as why_it_matters,
             brief->>'whats_contested' as whats_contested,
             counterpoint->>'the_other_read' as counterpoint
-       from signals where is_published = true
+       ${EMBED_SOURCES.signal.from}
        ${ids ? 'and id = any($1::uuid[])' : ''}`,
     ids ? [ids] : []
   );
@@ -76,9 +105,7 @@ export async function embeddableSignals(q: Q, ids?: string[]): Promise<Embeddabl
 export async function embeddableCandidates(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ id: string; title: string; raw_content: string | null }>(
     `select sc.id::text as id, g.title, sc.raw_content
-       from signal_candidates sc
-       join signals g on g.id = sc.signal_id and g.is_published = true
-      where sc.raw_content is not null
+       ${EMBED_SOURCES.candidate.from}
       ${ids ? 'and sc.id = any($1::uuid[])' : ''}`,
     ids ? [ids] : []
   );
@@ -89,8 +116,8 @@ export async function embeddableCandidates(q: Q, ids?: string[]): Promise<Embedd
 
 export async function embeddableScanItems(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ id: string; headline: string | null; summary: string | null; raw_content: string | null }>(
-    `select id::text as id, headline, summary, raw_content from scan_items
-      where raw_content is not null ${ids ? 'and id = any($1::uuid[])' : ''}`,
+    `select id::text as id, headline, summary, raw_content ${EMBED_SOURCES.scan_item.from}
+      ${ids ? 'and id = any($1::uuid[])' : ''}`,
     ids ? [ids] : []
   );
   return rows
@@ -100,8 +127,8 @@ export async function embeddableScanItems(q: Q, ids?: string[]): Promise<Embedda
 
 export async function embeddableIntelItems(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ id: string; headline: string | null; summary: string | null; raw_content: string | null }>(
-    `select id::text as id, headline, summary, raw_content from intel_items
-      where raw_content is not null ${ids ? 'and id = any($1::uuid[])' : ''}`,
+    `select id::text as id, headline, summary, raw_content ${EMBED_SOURCES.intel_item.from}
+      ${ids ? 'and id = any($1::uuid[])' : ''}`,
     ids ? [ids] : []
   );
   return rows
@@ -111,8 +138,8 @@ export async function embeddableIntelItems(q: Q, ids?: string[]): Promise<Embedd
 
 export async function embeddableIntelFacts(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ id: string; fact: string; value_text: string | null; dimension: string; company_slug: string }>(
-    `select id::text as id, fact, value_text, dimension, company_slug from intel_facts
-      ${ids ? 'where id = any($1::uuid[])' : ''}`,
+    `select id::text as id, fact, value_text, dimension, company_slug ${EMBED_SOURCES.intel_fact.from}
+      ${ids ? 'and id = any($1::uuid[])' : ''}`,
     ids ? [ids] : []
   );
   return rows.map((r) => ({
@@ -125,7 +152,7 @@ export async function embeddableIntelFacts(q: Q, ids?: string[]): Promise<Embedd
 export async function embeddablePapers(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ id: string; title: string; abstract: string | null; extraction: Record<string, unknown> | null }>(
     `select id::text as id, title, abstract, extraction
-       from papers where triage_status = 'kept' and review_status <> 'dismissed'
+       ${EMBED_SOURCES.paper.from}
        ${ids ? 'and id = any($1::uuid[])' : ''}`,
     ids ? [ids] : []
   );
@@ -146,7 +173,7 @@ export async function embeddablePapers(q: Q, ids?: string[]): Promise<Embeddable
 
 export async function embeddableClaims(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ code: string; statement: string; test: string | null }>(
-    `select code, statement, test from claims where code is not null and is_frame = false
+    `select code, statement, test ${EMBED_SOURCES.claim.from}
      ${ids ? 'and code = any($1::text[])' : ''}`,
     ids ? [ids] : []
   );
@@ -155,7 +182,7 @@ export async function embeddableClaims(q: Q, ids?: string[]): Promise<Embeddable
 
 export async function embeddableBridges(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ code: string; statement: string; test: string | null }>(
-    `select code, statement, test from bridge_claims where code is not null
+    `select code, statement, test ${EMBED_SOURCES.bridge.from}
      ${ids ? 'and code = any($1::text[])' : ''}`,
     ids ? [ids] : []
   );
@@ -164,7 +191,7 @@ export async function embeddableBridges(q: Q, ids?: string[]): Promise<Embeddabl
 
 export async function embeddableStances(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ code: string; title: string; summary: string | null; test: string | null }>(
-    `select code, title, summary, test from stances where code is not null
+    `select code, title, summary, test ${EMBED_SOURCES.stance.from}
      ${ids ? 'and code = any($1::text[])' : ''}`,
     ids ? [ids] : []
   );
@@ -173,8 +200,8 @@ export async function embeddableStances(q: Q, ids?: string[]): Promise<Embeddabl
 
 export async function embeddableConcepts(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ slug: string; name: string; short_definition: string; explanation: string | null }>(
-    `select slug, name, short_definition, explanation from concepts
-     ${ids ? 'where slug = any($1::text[])' : ''}`,
+    `select slug, name, short_definition, explanation ${EMBED_SOURCES.concept.from}
+     ${ids ? 'and slug = any($1::text[])' : ''}`,
     ids ? [ids] : []
   );
   return rows.map((r) => ({ record_id: r.slug, title: r.name, text: j(r.short_definition, r.explanation) }));
@@ -182,8 +209,8 @@ export async function embeddableConcepts(q: Q, ids?: string[]): Promise<Embeddab
 
 export async function embeddableThreads(q: Q, ids?: string[]): Promise<EmbeddableRecord[]> {
   const rows = await q<{ slug: string; title: string; question: string; synthesis: string | null }>(
-    `select slug, title, question, synthesis from research_threads
-     ${ids ? 'where slug = any($1::text[])' : ''}`,
+    `select slug, title, question, synthesis ${EMBED_SOURCES.thread.from}
+     ${ids ? 'and slug = any($1::text[])' : ''}`,
     ids ? [ids] : []
   );
   return rows.map((r) => ({ record_id: r.slug, title: r.title, text: j(r.question, stripHtml(r.synthesis)) }));
@@ -216,7 +243,7 @@ export async function embeddableHistoryItems(q: Q, ids?: string[]): Promise<Embe
   const rows = await q<{ id: string; title: string; published_date: string; lens: string; snippet: string | null }>(
     `select id::text as id, title, to_char(published_date, 'YYYY-MM-DD') as published_date,
             lens::text as lens, snippet
-       from history_items where triage = 'kept'
+       ${EMBED_SOURCES.history_item.from}
        ${ids ? 'and id = any($1::uuid[])' : ''}`,
     ids ? [ids] : []
   );
@@ -245,27 +272,37 @@ export async function getEmbeddable(kind: EmbedKind, q: Q, ids?: string[]): Prom
   }
 }
 
-// Per-kind count of records satisfying the kind's predicate above but with
-// no embeddings row for the given model yet (embeddings.missing agent
-// check). Full-table diff, not a hook-time check: cheap enough at Atlas
-// scale (a few thousand rows per kind) for an hourly cron, and keeps the
-// "what counts as embeddable" logic in exactly the predicates above rather
-// than re-derived in SQL.
+// Per-kind count of records satisfying the kind's predicate (EMBED_SOURCES)
+// with no embeddings row for the given model yet: the embeddings.missing agent
+// check, its backfill remedy, and the /ops Background widget. An id-only
+// anti-join per kind that never reads a record's text. (Until 2026-09-28 this
+// fetched every embeddable record's FULL text to diff ids in JS: about 93 MB
+// per call, 6 to 7 seconds, on every /ops load and every hourly agent tick.)
+// Reports keep the fetch path because their record ids are per-section.
 export async function countMissingEmbeddings(q: Q, model: string): Promise<Record<EmbedKind, number>> {
   const out = {} as Record<EmbedKind, number>;
-  for (const kind of EMBED_KINDS) {
-    const records = await getEmbeddable(kind, q);
-    if (!records.length) {
-      out[kind] = 0;
-      continue;
-    }
-    const ids = records.map((r) => r.record_id);
-    const existing = await q<{ record_id: string }>(
-      `select distinct record_id from embeddings where kind = $1 and model = $2 and record_id = any($3::text[])`,
-      [kind, model, ids]
+  // One round trip for every SQL-countable kind (13 sequential queries cost
+  // ~0.7 s on the one-connection production pool), plus the report path.
+  const kinds = Object.keys(EMBED_SOURCES) as (keyof typeof EMBED_SOURCES)[];
+  const union = kinds.map((kind) => {
+    const src = EMBED_SOURCES[kind];
+    return `select '${kind}' as kind, count(*)::int as n from (select ${src.id} as record_id ${src.from}) s
+             where not exists (select 1 from embeddings e where e.kind = '${kind}' and e.model = $1 and e.record_id = s.record_id)`;
+  }).join('\n union all\n');
+  const [rows, reportIds] = await Promise.all([
+    q<{ kind: EmbedKind; n: number }>(union, [model]),
+    embeddableReports(q).then((rs) => rs.map((r) => r.record_id)),
+  ]);
+  for (const r of rows) out[r.kind] = r.n;
+  if (reportIds.length) {
+    const have = await q<{ n: number }>(
+      `select count(distinct record_id)::int as n from embeddings where kind = 'report' and model = $1 and record_id = any($2::text[])`,
+      [model, reportIds]
     );
-    const have = new Set(existing.map((e) => e.record_id));
-    out[kind] = ids.filter((id) => !have.has(id)).length;
+    out.report = reportIds.length - (have[0]?.n ?? 0);
+  } else {
+    out.report = 0;
   }
+  for (const k of EMBED_KINDS) out[k] ??= 0;
   return out;
 }
