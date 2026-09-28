@@ -213,6 +213,100 @@ body:has(> .ask-page) { height: 100dvh; min-height: 0; display: flex; flex-direc
 .ask-decline-q span { color: var(--faint-ink); }
 .ask-decline-starters { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* ---- Field Report (2026-09-28): the plan/run/done cards a Field Report
+   turn renders in place of the normal answer body. One shared .fr-card frame
+   (echoes .ask-decline's plate), plus the plan editor, the live run's pending
+   states, and the finished report's provenance bar. Provenance colors: atlas
+   = --accent (the map's own hue), web = --siglens-capability (teal, already
+   the "web-shaped" tint elsewhere in Ask's citation pills), mixed = a
+   diagonal stripe of the two, analysis = --faint-ink (unsourced reasoning
+   reads as quiet, not as a citation). ---- */
+.fr-card {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 18px 20px; display: flex; flex-direction: column; gap: 12px;
+  background: var(--surface);
+}
+.fr-kicker {
+  margin: 0; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--faint-ink);
+}
+.fr-title { font-family: var(--font-display); font-weight: 600; font-size: 18px; margin: 0; }
+.fr-summary { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; line-height: 1.6; color: var(--ink); }
+.fr-error { margin: 0; font-size: 13px; color: var(--heat-4); }
+.fr-error-card { gap: 6px; }
+.fr-pending {
+  display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--dim);
+  margin: 0;
+}
+
+/* the provenance bar: one segmented strip, widths proportional to share */
+.fr-prov-bar {
+  display: flex; height: 6px; border-radius: 3px; overflow: hidden;
+  background: var(--ink-faint);
+}
+.fr-prov-seg { display: block; height: 100%; }
+.fr-prov-seg[data-kind="atlas"] { background: var(--accent); }
+.fr-prov-seg[data-kind="web"] { background: var(--siglens-capability); }
+.fr-prov-seg[data-kind="mixed"] {
+  background: repeating-linear-gradient(135deg, var(--accent) 0 5px, var(--siglens-capability) 5px 10px);
+}
+.fr-prov-seg[data-kind="analysis"] { background: var(--faint-ink); }
+.fr-prov-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.fr-prov-legend-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--dim);
+}
+.fr-prov-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.fr-prov-dot[data-kind="atlas"] { background: var(--accent); }
+.fr-prov-dot[data-kind="web"] { background: var(--siglens-capability); }
+.fr-prov-dot[data-kind="mixed"] {
+  background: repeating-linear-gradient(135deg, var(--accent) 0 3px, var(--siglens-capability) 3px 6px);
+}
+.fr-prov-dot[data-kind="analysis"] { background: var(--faint-ink); }
+
+.fr-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fr-cost { margin-left: auto; font-family: var(--font-mono); font-size: 11.5px; color: var(--faint-ink); }
+
+/* the live run: paused / failed states get their own short block (the
+   working state itself is .mr-panel, from ModelRunPanel) */
+.fr-run { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.fr-run p { margin: 0; color: var(--dim); }
+.fr-run--failed p { color: var(--heat-4); }
+
+/* the plan editor */
+.fr-plan { gap: 16px; }
+.fr-plan-field { display: flex; flex-direction: column; gap: 6px; }
+.fr-plan-label {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--faint-ink);
+}
+.fr-plan-textarea { resize: vertical; min-height: 44px; font-family: var(--font-body); }
+.fr-plan-list { display: flex; flex-direction: column; gap: 6px; }
+.fr-plan-list-row { display: flex; align-items: center; gap: 6px; }
+.fr-plan-input { flex: 1; }
+.fr-plan-icon-btn {
+  background: none; border: 1px solid var(--line); border-radius: 4px; width: 26px; height: 26px;
+  color: var(--dim); cursor: pointer; font-size: 13px; line-height: 1; flex: none;
+}
+.fr-plan-icon-btn:hover { color: var(--ink); border-color: var(--accent); }
+.fr-plan-icon-btn:disabled { opacity: .35; cursor: default; }
+.fr-plan-reorder { display: flex; gap: 2px; flex: none; }
+
+.fr-size-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.fr-size-opt {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+  padding: 8px 14px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); cursor: pointer;
+}
+.fr-size-opt[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 6%, var(--surface)); }
+.fr-size-name { font-weight: 600; font-size: 13.5px; color: var(--ink); }
+.fr-size-est { font-size: 11.5px; color: var(--dim); }
+.fr-cap-note { margin: 2px 0 0; font-size: 11.5px; color: var(--faint-ink); }
+
+.fr-plan-regen { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.fr-plan-regen .input { flex: 1; min-width: 180px; }
+.fr-plan-run { display: flex; }
+
 /* citation peek panel: desktop third column, mobile right sheet (one instance;
    the media block below repositions it). Backdrop exists only on mobile. */
 .ask-peek {

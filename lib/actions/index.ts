@@ -24,3 +24,4 @@ export * from './edition';
 export * from './portal';
 export * from './savant';
 export * from './jobs';
+export * from './field-reports';

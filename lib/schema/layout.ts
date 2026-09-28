@@ -81,6 +81,10 @@ export const SUBSYSTEMS: Record<string, SubsystemGroup> = {
 
   // ---- reports --------------------------------------------------------------
   reports: 'reports', generated_reports: 'reports',
+  // Field Report (migs 0078-0079): its runs and its desk prefs sit with the
+  // rest of the Report Portal, alongside generated_reports (the kind it saves
+  // its rows as).
+  field_report_runs: 'reports', field_report_prefs: 'reports',
 
   // ---- editions -------------------------------------------------------------
   edition_prefs: 'editions',
@@ -204,6 +208,8 @@ export const ACCESS_TIER: Record<string, TierInfo> = {
   // reports
   reports: { tier: 'public', reason: 'a saved period report is public the moment it is saved' },
   generated_reports: { tier: 'public', reason: 'a published generated report is public; drafts stay admin (or portal for tooling reports)' },
+  field_report_runs: { tier: 'key', reason: 'a keyholder sees only their own runs through the Field Report routes' },
+  field_report_prefs: { tier: 'admin', reason: 'the model-pick and cap config singleton behind /field-reports/desk' },
 
   // editions
   edition_prefs: { tier: 'admin', reason: 'the Daily Edition config singleton' },

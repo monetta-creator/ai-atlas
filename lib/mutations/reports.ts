@@ -84,7 +84,7 @@ export async function saveGeneratedReport(input: {
   kind:
     | 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup'
     | 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features'
-    | 'edition' | 'intel_deck' | 'savant';
+    | 'edition' | 'intel_deck' | 'savant' | 'field_report';
   subject: string | null;
   title: string;
   scope_from: string | null;
@@ -93,15 +93,16 @@ export async function saveGeneratedReport(input: {
   narrative: unknown;
   generated_at: string;
   isPublished?: boolean;
+  createdBy?: string | null; // 'key:<id>' for a keyholder's Field Report (mig 0079); null otherwise
 }): Promise<string> {
   const row = await one<{ id: string }>(
-    `insert into generated_reports (kind, subject, title, scope_from, scope_to, pack, narrative, generated_at, is_published)
-     values ($1::report_kind_t, $2, $3, $4::date, $5::date, $6::jsonb, $7::jsonb, $8::timestamptz, $9)
+    `insert into generated_reports (kind, subject, title, scope_from, scope_to, pack, narrative, generated_at, is_published, created_by)
+     values ($1::report_kind_t, $2, $3, $4::date, $5::date, $6::jsonb, $7::jsonb, $8::timestamptz, $9, $10)
      returning id`,
     [
       input.kind, input.subject, input.title, input.scope_from, input.scope_to,
       JSON.stringify(input.pack), JSON.stringify(input.narrative), input.generated_at,
-      input.isPublished ?? false,
+      input.isPublished ?? false, input.createdBy ?? null,
     ]
   );
   if (ASK_KINDS.has(input.kind) && input.isPublished) embedLater('report', [row!.id]);

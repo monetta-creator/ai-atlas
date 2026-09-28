@@ -105,8 +105,16 @@ const SECTIONS = [
           <li>Period reports, which are public as soon as the admin saves one.</li>
         </ul>
         <p>
+          Field Reports are a separate case: research reports written on request. The person asking (the admin, or a
+          holder of a personal access key) edits the research plan and starts the run; Claude models then research the
+          Atlas records, search the web for gaps, and write the report, labeling every paragraph by whether it rests on
+          Atlas records, web sources, both, or the model&rsquo;s own analysis. A report stays visible to the person who
+          ran it and the admin until the admin publishes it to other access-key holders. Field Reports are never public
+          and are never added to Ask&rsquo;s shared corpus. Each access key has a daily spending allowance for them.
+        </p>
+        <p>
           The Daily Edition, the research roundup, the tooling reports, the generated sheets, the thesis reports, Savant,
-          and the company intel deck pass a citation gate, so a link the records cannot vouch for is stripped. Period
+          Field Reports, and the company intel deck pass a citation gate, so a link the records cannot vouch for is stripped. Period
           reports are edited by the admin before saving; a signal draft’s claim touches are checked against live claim
           codes but its text is not link-gated. A confidence on the argument map never moves without a human-written
           rationale.

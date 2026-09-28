@@ -21,12 +21,18 @@ import type { ToolingMaturity, ToolingEventKind } from './tooling';
 // back via lib/data/savant-issues.ts's SavedSavantIssue, not
 // getGeneratedReport/SavedSheet. The kind is added here only so
 // GeneratedReportMeta.kind type-checks for a savant row.
+// 'field_report' (migration 0078) rides here for typing only, the same
+// reasoning again: Field Report's own FieldReportPack/FieldReportNarrative
+// shapes (lib/field-report/core.ts) do NOT join AnySheetPack below and are
+// read back via lib/data/field-reports.ts's SavedFieldReport, not
+// getGeneratedReport/SavedSheet.
 export type SheetKind =
   | 'claim' | 'bridge' | 'lens' | 'atlas' | 'roundup'
   | 'tooling_landscape' | 'tooling_brief' | 'tooling_entrants' | 'tooling_features'
   | 'edition'
   | 'intel_deck'
-  | 'savant';
+  | 'savant'
+  | 'field_report';
 
 // 'YYYY-MM-DD' bounds; both null = the full corpus.
 export interface SheetScope { from: string | null; to: string | null }

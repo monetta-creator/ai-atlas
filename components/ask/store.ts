@@ -5,6 +5,7 @@ import type { SignalMap } from '@/lib/ask/verify';
 import type { VerifyReport } from '@/lib/ask/deep';
 import type { AskCostReport, AskWebSource } from '@/lib/ask/history';
 import type { DeclinePayload, Lane } from '@/lib/ask/lanes';
+import type { FieldReportCard, FieldReportPlan, FieldReportPlanResponse, FieldReportSize } from '@/lib/field-report/core';
 
 // The Ask workspace's conversation store: browser-only localStorage, no
 // accounts, no server persistence. Pattern copied from SiteNav's visited-store:
@@ -18,6 +19,23 @@ import type { DeclinePayload, Lane } from '@/lib/ask/lanes';
 // All mutators are called from event handlers or async completion code, never
 // effect bodies (React Compiler rules).
 
+// A Field Report message's lifecycle (2026-09-28): 'plan' (the editable plan
+// just came back), 'run' (Run was clicked, a background ui_jobs run is under
+// way), 'done' (the saved report), 'error' (the plan or run step failed
+// outright, e.g. a keyholder's daily cap). Persisted on the message like every
+// other field, so a reload resumes whichever card the stage calls for.
+export interface FieldReportState {
+  stage: 'plan' | 'run' | 'done' | 'error';
+  runId: string;
+  plan?: FieldReportPlan;
+  estimates?: FieldReportPlanResponse['estimates'];
+  capRoomUsd?: number | null;
+  size?: FieldReportSize;
+  jobId?: string;
+  report?: FieldReportCard;
+  error?: string;
+}
+
 export interface AskMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -29,6 +47,7 @@ export interface AskMessage {
   cost?: AskCostReport;    // assistant only: what this turn cost (tokens, searches, USD)
   lane?: Lane;             // assistant only: the classified lane (2026-09-23)
   decline?: DeclinePayload; // assistant only: a coded decline, no model call ran
+  fieldReport?: FieldReportState; // assistant only: a Field Report in progress or done (2026-09-28)
   stopped?: boolean;       // aborted mid-stream; partial kept
   error?: boolean;         // failed turn; enables Retry
 }
@@ -167,6 +186,29 @@ export function setMessageVerify(convoId: string, index: number, verify: VerifyR
       return {
         ...c,
         messages: c.messages.map((m, i) => (i === index ? { ...m, verify } : m)),
+        updatedAt: Date.now(),
+      };
+    }),
+  });
+}
+
+// Merges a patch into one message's Field Report state (the plan card editing
+// a field, Run/Resume/Retry advancing the stage, the run card landing the
+// finished report, Publish flipping isPublished). A message with no prior
+// fieldReport takes the patch as the whole state (the initial append already
+// supplies a full FieldReportState, so this path is defensive only).
+export function setMessageFieldReport(convoId: string, index: number, patch: Partial<FieldReportState>): void {
+  const s = read();
+  persist({
+    v: 1,
+    convos: s.convos.map((c) => {
+      if (c.id !== convoId) return c;
+      if (index < 0 || index >= c.messages.length) return c;
+      return {
+        ...c,
+        messages: c.messages.map((m, i) =>
+          i === index ? { ...m, fieldReport: m.fieldReport ? { ...m.fieldReport, ...patch } : (patch as FieldReportState) } : m
+        ),
         updatedAt: Date.now(),
       };
     }),

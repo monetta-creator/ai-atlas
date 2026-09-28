@@ -109,7 +109,7 @@ export default function SavantView({ saved }: { saved: SavedSavantIssue }) {
   const allow = allowlistForSavant(pack);
   const summaryGated = narrative.summary.map((html) => enforceCitations(html, allow).html).filter((h): h is string => !!h);
   const figures = narrative.figures ?? [];
-  const sectionOrder: FigureSection[] = ['lead', ...narrative.departments.map((d) => d.key)];
+  const sectionOrder: string[] = ['lead', ...narrative.departments.map((d) => d.key)];
   const numbered = [...figures].sort((a, b) => sectionOrder.indexOf(a.section) - sectionOrder.indexOf(b.section) || a.after - b.after);
   const figureNumber = (id: string) => numbered.findIndex((f) => f.id === id) + 1;
   const figuresFor = (section: FigureSection) => figures.filter((f) => f.section === section);

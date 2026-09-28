@@ -32,6 +32,7 @@
 @import "./styles/reports.css"; /* /reports cover grid (.rp-*) */
 @import "./styles/datasets.css"; /* /datasets hub filter plate + card grid (.dp-*) */
 @import "./styles/ops.css";      /* /ops the operations console (.ops-*) */
+@import "./styles/field-report.css"; /* /field-reports read view (.frv-*) */
 
 /* Re-base the app's semantic Tailwind color/font utilities onto the design
    tokens so any utility usage (layout helpers, admin tooling, etc.) stays

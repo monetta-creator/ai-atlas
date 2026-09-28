@@ -236,6 +236,20 @@
 .rp-cover[data-kind^="tooling_"] .rp-cover-kicker { color: #4fae9f; }
 .rp-cover[data-kind="roundup"] .rp-cover-kicker { color: #b26a00; }
 
+/* ---- Field Report: paper-white like the default card, plus its deep-green
+   topographic watermark (the same deterministic generator the read view and
+   the PDF cover draw from, keyed on the report id). ---- */
+.rp-field-contour { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.rp-cover--field .rp-cover-wordmark,
+.rp-cover--field .rp-cover-title,
+.rp-cover--field .rp-cover-subject,
+.rp-cover--field .rp-cover-meta,
+.rp-cover--field .rp-cover-foot,
+.rp-cover--field .rp-cover-rule,
+.rp-cover--field .rp-cover-kicker { position: relative; z-index: 1; }
+.rp-field-rule { background: #1f6f4a !important; }
+.rp-field-kicker { color: #1f6f4a; }
+
 .rp-info { display: flex; flex-direction: column; gap: 4px; }
 .rp-kicker {
   font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;

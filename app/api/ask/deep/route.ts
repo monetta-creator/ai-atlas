@@ -7,6 +7,7 @@ import { askSystem, laneReminder, deepConversationMessages } from '@/lib/ask/pro
 import { splitBeyond } from '@/lib/ask/lanes';
 import { resolveLane } from '@/lib/ask/resolve-lane';
 import { clampHistory, clampSignalOffset, createWebSourceCollector, parseAskBody } from '@/lib/ask/history';
+import { fieldReportContextBlock } from '@/lib/field-report/followup';
 import { fetchRecord, searchArticles, searchAtlas } from '@/lib/ask/search';
 import {
   DEEP_ADDENDUM, DEEP_TOOLS, DEEP_WEB_ADDENDUM, INPUT_TOKEN_CAP, MAX_CALLS_PER_ROUND, MAX_ROUNDS,
@@ -66,13 +67,21 @@ export async function POST(req: Request): Promise<Response> {
   // detail is discarded, since the loop below does its own digging with the
   // search_atlas/fetch_record tools. Trimming that retrieval to a signals-only
   // pass is a separate decision.
-  const { ns, ctx, cls, lane, autoWeb, decline } = await resolveLane(msgs, { mode: 'admin' });
+  const [resolved, reportBlock] = await Promise.all([
+    resolveLane(msgs, { mode: 'admin' }),
+    fieldReportContextBlock((body as { fieldReportIds?: unknown })?.fieldReportIds, { admin: true, keyId: null }),
+  ]);
+  const { ns, ctx, cls, autoWeb } = resolved;
+  // A follow-up about a Field Report in this conversation is on-topic by
+  // definition: it never takes the off-topic decline.
+  const lane = reportBlock && resolved.lane === 'unrelated' ? 'thin' : resolved.lane;
+  const decline = reportBlock ? null : resolved.decline;
   const useWeb = webOn || autoWeb;
 
   const system: Anthropic.TextBlockParam[] = [
     {
       type: 'text',
-      text: `${askSystem(useWeb, lane, cls.fresh)}\n\n${DEEP_ADDENDUM}${useWeb ? `\n\n${DEEP_WEB_ADDENDUM}` : ''}`,
+      text: `${askSystem(useWeb, lane, cls.fresh)}\n\n${DEEP_ADDENDUM}${useWeb ? `\n\n${DEEP_WEB_ADDENDUM}` : ''}${reportBlock ? `\n\n${reportBlock}` : ''}`,
       cache_control: { type: 'ephemeral' },
     },
   ];

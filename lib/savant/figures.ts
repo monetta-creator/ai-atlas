@@ -18,13 +18,13 @@ import {
 // keep. Favicons for entity cards are baked once here as PNG data URIs so
 // the PDF route makes no network calls (the intel deck's discipline).
 
-const BANNED = /\b(bridge-claim|argument map|logic tree|confidence (?:level|score|number)s?|the claim that|this claim|claim \d)\b/i;
+export const BANNED = /\b(bridge-claim|argument map|logic tree|confidence (?:level|score|number)s?|the claim that|this claim|claim \d)\b/i;
 
 // Strict tool schemas compile to a grammar, and a union of six nested
 // figure shapes was too large for the API ("The compiled grammar is too
 // large"). The per-kind body therefore travels as a JSON string the
 // validator parses; the shapes are spelled out in SPEC_SHAPES below.
-const FIGURES_SCHEMA = {
+export const figuresSchema = (sections: readonly string[]) => ({
   type: 'object', additionalProperties: false,
   properties: {
     figures: {
@@ -34,7 +34,7 @@ const FIGURES_SCHEMA = {
         type: 'object', additionalProperties: false,
         properties: {
           kind: { type: 'string', description: 'entities | map | relation | timeline | compare | steps' },
-          section: { type: 'string', description: FIGURE_SECTIONS.join(' | ') },
+          section: { type: 'string', description: sections.join(' | ') },
           after: { type: 'integer', description: 'the block number of the section the figure follows (blocks are numbered in the input); -1 puts it at the end' },
           title: { type: 'string', description: 'a short title, 4 to 10 words' },
           caption: { type: 'string', description: 'one sentence: the reading the figure supports' },
@@ -45,9 +45,10 @@ const FIGURES_SCHEMA = {
     },
   },
   required: ['figures'],
-};
+});
+const FIGURES_SCHEMA = figuresSchema(FIGURE_SECTIONS);
 
-const SPEC_SHAPES =
+export const SPEC_SHAPES =
   `spec_json shapes by kind (a JSON object, hrefs EXACTLY as in the catalog or "" for none):\n` +
   `entities: {"entities":[{"label":"","href":"","note":"one line","bullets":["up to 3, each under 60 characters"]}]} (2 to 6 cards)\n` +
   `map: {"x":{"label":"","low":"","high":""},"y":{"label":"","low":"","high":""},"points":[{"label":"","href":"","x":0.0,"y":0.0}]} (x and y between 0 and 1; 2 to 10 points)\n` +
@@ -137,21 +138,26 @@ export async function planFigures(
     feature: 'savant_figures', metadata: { week_end: opts.weekEnd, leg: 'figures' },
   });
   if (!out || !Array.isArray(out.figures)) throw new Error('the figure leg returned no parsable figures (truncated or malformed tool input)');
-  const raw = out.figures.map((f) => {
+  const { figures, dropped } = validateFigures(unpackSpecs(out.figures), allowed, catalog, BANNED);
+  await bakeLogos(figures);
+  return { figures, dropped };
+}
+
+// The per-kind body travels as a JSON string (see figuresSchema); merge it
+// back into each raw figure before validation.
+export function unpackSpecs(list: { spec_json?: unknown }[]): Record<string, unknown>[] {
+  return list.map((f) => {
     let body: Record<string, unknown> = {};
     if (typeof f.spec_json === 'string') {
       try { body = JSON.parse(f.spec_json) as Record<string, unknown>; } catch { body = {}; }
     }
     return { ...body, ...f, spec_json: undefined };
   });
-  const { figures, dropped } = validateFigures(raw, allowed, catalog, BANNED);
-  await bakeLogos(figures);
-  return { figures, dropped };
 }
 
 // Entity cards carry their favicon as a data URI for the PDF; the web path
 // fetches favicons live by domain and ignores the baked copy.
-async function bakeLogos(figures: SavantFigure[]): Promise<void> {
+export async function bakeLogos(figures: SavantFigure[]): Promise<void> {
   const targets: { domain: string; set: (uri: string | null) => void }[] = [];
   for (const f of figures) {
     if (f.kind !== 'entities') continue;

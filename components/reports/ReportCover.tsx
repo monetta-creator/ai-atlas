@@ -1,5 +1,6 @@
 import { Sacramento } from "next/font/google";
 import type { ReportCard } from "@/lib/reports/cards";
+import { contourLines } from "@/lib/field-report/contour";
 
 // The Savant imprint's script signature for its cover card; the /savant
 // subtree loads the same face for its masthead (next/font dedupes it).
@@ -14,6 +15,7 @@ export default function ReportCover({ card }: { card: ReportCard }) {
   if (card.family === 'deck') return <DeckCover card={card} />;
   if (card.kind === 'savant') return <SavantCover card={card} />;
   if (card.kind === 'intel_deck') return <IntelDeckCover card={card} />;
+  if (card.kind === 'field_report') return <FieldReportCover card={card} />;
   return (
     <div
       className="rp-cover"
@@ -93,6 +95,41 @@ function SavantCover({ card }: { card: ReportCard }) {
           <span className="rp-sv-title">{card.title}</span>
         </div>
         <div className="rp-sv-band">Written by Savant, reviewed by an independent editor. For access-key holders.</div>
+        {!card.isPublished && <div className="rp-cover-ribbon">Draft</div>}
+      </div>
+    </div>
+  );
+}
+
+// Field Report's own imprint: a paper-white miniature like the default
+// card, plus its topographic contour motif (the same deterministic
+// generator the read view and the PDF cover use, keyed on the report id so
+// every card differs slightly) and a deep-green accent, visibly distinct
+// from Savant's cobalt cover.
+function FieldReportCover({ card }: { card: ReportCard }) {
+  const lines = contourLines(card.id, { cx: 300, cy: 260, maxR: 240 });
+  return (
+    <div className="rp-cover rp-cover--field" data-kind="field_report" data-draft={!card.isPublished || undefined} aria-hidden="true">
+      <div className="rp-cover-page">
+        <svg className="rp-field-contour" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid slice">
+          {lines.map((line) => (
+            <path key={line.ring} d={line.d} fill="none" stroke="#1f6f4a" strokeWidth={1.2} strokeOpacity={0.12 + line.ring * 0.045} />
+          ))}
+        </svg>
+        <div className="rp-cover-wordmark">THE AI ATLAS</div>
+        <div className="rp-cover-rule"><i className="rp-field-rule" /><i className="rp-field-rule" /></div>
+        <div className="rp-cover-kicker rp-field-kicker">Field Report</div>
+        <div className="rp-cover-title">{card.title}</div>
+        {card.subject && <div className="rp-cover-subject">{card.subject}</div>}
+        <div className="rp-cover-meta">
+          {card.metaLines.map((l) => (
+            <div key={l}>{l}</div>
+          ))}
+        </div>
+        <div className="rp-cover-foot">
+          Research the Atlas writes on request: the Atlas records first, then the web for gaps, every paragraph
+          labeled by where it came from.
+        </div>
         {!card.isPublished && <div className="rp-cover-ribbon">Draft</div>}
       </div>
     </div>

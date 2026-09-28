@@ -5,7 +5,13 @@
 // view + its PDF route (app/reports/sheet/[id]) 404 a guest on them. Savant
 // joins the list for the same reason it is key-gated in the first place: it
 // names the reader organization and its peers by tier.
-export const PORTAL_ONLY_KINDS: readonly string[] = ['intel_deck', 'savant'];
+// 'field_report' joins this list too, but note it is STRICTER than the other
+// two: intel_deck/savant are visible to every keyholder once published,
+// while a Field Report stays visible only to its own keyholder plus admin
+// until admin explicitly publishes it wider (lib/data/field-reports.ts is
+// the extra, row-level gate that enforces that narrower rule; this list only
+// keeps it off the guest listing, same as the others).
+export const PORTAL_ONLY_KINDS: readonly string[] = ['intel_deck', 'savant', 'field_report'];
 
 export type ReportViewer = { admin: boolean; portal: boolean };
 

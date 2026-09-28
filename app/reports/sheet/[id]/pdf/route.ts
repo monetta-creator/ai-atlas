@@ -27,6 +27,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   // renderer for its pack shape (this route's renderSheetPdf only knows the
   // AnySheetPack union, which savant's pack does not join).
   if (saved.kind === 'savant' && saved.scope_to) return NextResponse.redirect(new URL(`/savant/${saved.scope_to}/pdf`, req.url));
+  // Field Report's own PDF route carries the correct renderer and the
+  // stricter own-draft-or-published gate.
+  if (saved.kind === 'field_report') return NextResponse.redirect(new URL(`/field-reports/${saved.id}/pdf`, req.url));
   const admin = await isAdmin();
   const isTooling = String(saved.kind).startsWith('tooling_');
   const keyed = await isPortal(); // revocation-aware (lib/auth.ts)

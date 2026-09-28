@@ -174,9 +174,24 @@ check('toSheetCard: the company intel deck reads on /intel/deck/<day>, is portal
 check('REPORT_KIND_FILTERS / DRAFTS_FILTER: keys are stable and in order', () => {
   assert.deepEqual(
     REPORT_KIND_FILTERS.map((f) => f.key),
-    ['all', 'claim', 'bridge', 'lens', 'atlas', 'roundup', 'edition', 'intel_deck', 'savant', 'tooling', 'period', 'thesis', 'deck']
+    ['all', 'claim', 'bridge', 'lens', 'atlas', 'roundup', 'edition', 'intel_deck', 'savant', 'field_report', 'tooling', 'period', 'thesis', 'deck']
   );
   assert.equal(DRAFTS_FILTER.key, 'drafts');
+});
+
+check('toSheetCard: a Field Report reads on /field-reports/<id>, is portal-only, and its own kindLabel', () => {
+  const c = toSheetCard(makeClaimMeta({
+    id: 'fr-1', kind: 'field_report', subject: 'What happens to underwriting jobs?',
+    title: 'Field Report: what happens to underwriting jobs?',
+    scope_from: null, scope_to: null, stats: null, health: null,
+  }));
+  assert.equal(c.href, '/field-reports/fr-1');
+  assert.equal(c.pdfHref, '/field-reports/fr-1/pdf');
+  assert.equal(c.access, 'portal');
+  assert.equal(c.kindLabel, 'Field Report');
+  assert.equal(c.subject, 'What happens to underwriting jobs?');
+  assert.ok(REPORT_KIND_FILTERS.find((f) => f.key === 'field_report').match(c));
+  assert.ok(!REPORT_KIND_FILTERS.find((f) => f.key === 'savant').match(c));
 });
 
 check('toSheetCard: the Savant weekly issue reads on /savant/<week>, is portal-only, and chips its numbers', () => {

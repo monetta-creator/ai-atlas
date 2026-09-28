@@ -308,6 +308,7 @@ export const SHEET_KIND_LABEL: Record<SheetKind, string> = {
   edition: 'Daily edition',
   intel_deck: 'Company intel deck',
   savant: 'Savant weekly',
+  field_report: 'Field Report',
 };
 
 // edition's own section labels (front / the column / things happen) do not
@@ -327,6 +328,10 @@ export const SHEET_SECTION_TITLES: Record<SheetKind, { reading: string; connecti
   edition: { reading: 'Front', connections: 'The column', watch: 'Things happen' },
   intel_deck: { reading: 'The day', connections: 'By company', watch: 'Quiet' },
   savant: { reading: 'The lead', connections: "Savant's hypotheses", watch: 'The week ahead' },
+  // Field Report's own narrative (summary + sections + editor) does not
+  // route through this reading/connections/watch shape either — the entry
+  // exists only so the Record stays exhaustive over SheetKind.
+  field_report: { reading: 'The findings', connections: 'How it wires into the argument', watch: 'Open questions' },
 };
 
 export function featureLabel(slug: string): string {

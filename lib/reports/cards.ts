@@ -123,14 +123,18 @@ export function toSheetCard(meta: GeneratedReportMeta): ReportCard {
     href: meta.kind === 'edition' && meta.scope_to ? `/blotter/${meta.scope_to}`
       : meta.kind === 'intel_deck' && meta.scope_to ? `/intel/deck/${meta.scope_to}`
       : meta.kind === 'savant' && meta.scope_to ? `/savant/${meta.scope_to}`
+      : meta.kind === 'field_report' ? `/field-reports/${meta.id}`
       : `/reports/sheet/${meta.id}`,
     pdfHref: meta.kind === 'edition' && meta.scope_to ? `/blotter/${meta.scope_to}/pdf`
       : meta.kind === 'intel_deck' && meta.scope_to ? `/intel/deck/${meta.scope_to}/pdf`
       : meta.kind === 'savant' && meta.scope_to ? `/savant/${meta.scope_to}/pdf`
+      : meta.kind === 'field_report' ? `/field-reports/${meta.id}/pdf`
       : `/reports/sheet/${meta.id}/pdf`,
     // The company intel deck and Savant name tracked companies / the reader
-    // organization's peers: keyholders and admin only.
-    ...(meta.kind === 'intel_deck' || meta.kind === 'savant' ? { access: 'portal' as const } : {}),
+    // organization's peers; a Field Report is a keyholder's own report
+    // (stricter still: lib/data/field-reports.ts also checks its owner).
+    // All three: keyholders and admin only.
+    ...(meta.kind === 'intel_deck' || meta.kind === 'savant' || meta.kind === 'field_report' ? { access: 'portal' as const } : {}),
     isPublished: meta.is_published,
   };
 }
@@ -231,6 +235,7 @@ export const REPORT_KIND_FILTERS: ReportKindFilter[] = [
   { key: 'edition', label: 'Edition', match: (c) => c.kind === 'edition' },
   { key: 'intel_deck', label: 'Intel deck', match: (c) => c.kind === 'intel_deck' },
   { key: 'savant', label: 'Savant', match: (c) => c.kind === 'savant' },
+  { key: 'field_report', label: 'Field Report', match: (c) => c.kind === 'field_report' },
   { key: 'tooling', label: 'Tooling', match: (c) => c.kind.startsWith('tooling_') },
   { key: 'period', label: 'Period', match: (c) => c.kind === 'period' },
   { key: 'thesis', label: 'Thesis', match: (c) => c.kind === 'thesis' },

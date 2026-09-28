@@ -6,11 +6,15 @@ import { useState } from 'react';
 // event target (never a ref read in render); Enter sends, Shift+Enter breaks
 // the line, and the house Cmd/Ctrl+Enter still works. Since the 2026-08-21
 // rework the admin chat ALWAYS researches (the old Deep research toggle is
-// gone); the one remaining toggle is Web search, for admin and portal
-// keyholders (each search is budget-metered).
+// gone); the second toggle is Web search, for admin and portal keyholders
+// (each search is budget-metered). Field Report (2026-09-28) is a third mode,
+// same admin/portal-only availability: on, it replaces the normal send with a
+// plan-then-run flow and hides Web search (a report always uses the web to
+// fill gaps, so the standalone toggle would be redundant).
 export default function AskComposer({
   streaming, onSend, onStop, researchMode,
   webAvailable, web, onToggleWeb,
+  fieldReportAvailable, fieldReport, onToggleFieldReport,
 }: {
   streaming: boolean;
   onSend: (text: string) => void;
@@ -20,6 +24,9 @@ export default function AskComposer({
   webAvailable: boolean;
   web: boolean;
   onToggleWeb: () => void;
+  fieldReportAvailable: boolean;
+  fieldReport: boolean;
+  onToggleFieldReport: () => void;
 }) {
   const [text, setText] = useState('');
 
@@ -31,13 +38,15 @@ export default function AskComposer({
   }
 
   const freshNote = ' Recent-events questions still search the web automatically.';
-  const hint = researchMode
-    ? web
-      ? 'researches the Atlas, then the web, before answering · sources listed under the answer'
-      : `researches the Atlas in rounds before answering, may take a minute.${freshNote}`
-    : web
-      ? 'web search on: the Atlas stays primary, the web fills gaps, sources listed under the answer'
-      : `grounded in the Atlas database · enter to send, shift+enter for a new line.${freshNote}`;
+  const hint = fieldReport
+    ? 'drafts a research plan first, you edit it and pick Brief or Full, then it runs in the background · enter to send'
+    : researchMode
+      ? web
+        ? 'researches the Atlas, then the web, before answering · sources listed under the answer'
+        : `researches the Atlas in rounds before answering, may take a minute.${freshNote}`
+      : web
+        ? 'web search on: the Atlas stays primary, the web fills gaps, sources listed under the answer'
+        : `grounded in the Atlas database · enter to send, shift+enter for a new line.${freshNote}`;
 
   return (
     <div className="ask-composer">
@@ -46,7 +55,7 @@ export default function AskComposer({
         <textarea
           className="input"
           rows={1}
-          placeholder="Ask the Atlas anything it tracks"
+          placeholder={fieldReport ? 'Ask for a Field Report: the Atlas drafts a research plan first' : 'Ask the Atlas anything it tracks'}
           value={text}
           onChange={(e) => {
             setText(e.target.value);
@@ -74,7 +83,19 @@ export default function AskComposer({
         )}
       </div>
       <div className="ask-composer-foot">
-        {webAvailable && (
+        {fieldReportAvailable && (
+          <button
+            type="button"
+            className="ask-deep-toggle"
+            aria-pressed={fieldReport}
+            onClick={onToggleFieldReport}
+            disabled={streaming}
+            title="Draft an editable research plan, then run a longer report with citations, a PDF, and a place in the Report Portal"
+          >
+            Field Report
+          </button>
+        )}
+        {webAvailable && !fieldReport && (
           <button
             type="button"
             className="ask-deep-toggle"

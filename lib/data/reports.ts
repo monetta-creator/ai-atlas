@@ -180,7 +180,7 @@ export function textExcerpt(html: string | null | undefined, max: number): strin
 
 export async function listGeneratedReports(
   publishedOnly: boolean,
-  opts?: { portal?: boolean }
+  opts?: { portal?: boolean; keyId?: string | null }
 ): Promise<GeneratedReportMeta[]> {
   // The row-expansion preview projects only the small parts of the stored jsonb:
   // the bottom line (stripped to plain text below, so it carries no links and
@@ -189,16 +189,25 @@ export async function listGeneratedReports(
   // (publishedOnly=false is the admin's own listing, which ignores opts and
   // sees everything): a portal keyholder also sees unpublished tooling_*
   // reports (mirroring /tooling/reports's own inline-unlock gate, so the
-  // Report Portal shelf doesn't hide what that page already shows them) and
-  // the portal-only kinds (lib/reports/access.ts PORTAL_ONLY_KINDS: the
-  // company intel deck names tracked companies); a guest gets neither.
+  // Report Portal shelf doesn't hide what that page already shows them),
+  // their OWN unpublished Field Reports (opts.keyId, 'key:<id>' against
+  // created_by; never another keyholder's draft), and every published
+  // portal-only kind (lib/reports/access.ts PORTAL_ONLY_KINDS: the company
+  // intel deck and Savant name tracked companies/peers, Field Report is a
+  // keyholder's own report); a guest gets none of PORTAL_ONLY_KINDS, ever.
   const portalAccess = !!opts?.portal;
-  const guestClause = publishedOnly && !portalAccess ? ` and kind::text <> all($1::text[])` : '';
-  const where = publishedOnly
-    ? (portalAccess
-        ? "where (is_published = true or kind::text like 'tooling_%')"
-        : 'where is_published = true') + guestClause
-    : '';
+  const ownedBy = opts?.keyId ? `key:${opts.keyId}` : null;
+  let where = '';
+  let params: unknown[] = [];
+  if (publishedOnly && portalAccess) {
+    where = ownedBy
+      ? `where (is_published = true or kind::text like 'tooling_%' or (kind::text = 'field_report' and created_by = $1))`
+      : `where (is_published = true or kind::text like 'tooling_%')`;
+    params = ownedBy ? [ownedBy] : [];
+  } else if (publishedOnly) {
+    where = `where is_published = true and kind::text <> all($1::text[])`;
+    params = [PORTAL_ONLY_KINDS];
+  }
   const rows = await q<GeneratedReportMeta & { bottom_line: string | null }>(
     `select ${GEN_REPORT_META},
             narrative->>'bottomLine' as bottom_line,
@@ -209,7 +218,7 @@ export async function listGeneratedReports(
        from generated_reports
        ${where}
       order by generated_at desc, id`,
-    guestClause ? [PORTAL_ONLY_KINDS] : []
+    params
   );
   return rows.map(({ bottom_line, ...r }) => ({
     ...r,

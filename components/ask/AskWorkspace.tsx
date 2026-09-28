@@ -7,10 +7,13 @@ import type { DatasetSuggestionMeta } from '@/components/datasets/AskDatasetCard
 import type { VerifyReport } from '@/lib/ask/deep';
 import {
   appendMessage, createConvo, deleteConvo, dropLastAssistant, getConvo,
-  maxSignalSuffix, mergedSignalMap, setMessageVerify, useAskConvos,
+  maxSignalSuffix, mergedSignalMap, setMessageFieldReport, setMessageVerify, useAskConvos,
+  type AskMessage,
 } from '@/components/ask/store';
 import { extractCostReport, extractWebSources, parseCostReport, type AskCostReport, type AskWebSource } from '@/lib/ask/history';
 import { extractDecline, parseLane, type DeclinePayload, type Lane } from '@/lib/ask/lanes';
+import { fieldReportContext } from '@/components/ask/field-report-context';
+import type { FieldReportPlanResponse } from '@/lib/field-report/core';
 import AskRail from '@/components/ask/AskRail';
 import AskThread from '@/components/ask/AskThread';
 import AskComposer from '@/components/ask/AskComposer';
@@ -27,6 +30,21 @@ const DATASET_TOKEN = /\[dataset\s+([a-z0-9-]+)\]/gi;
 // conversation, the streaming turn, and the mobile history sheet. Conversations
 // persist in localStorage (components/ask/store.ts); the in-flight answer lives
 // in state here and is committed to the store once, at completion/abort/error.
+// A Field Report message carries no answer text; on the wire it becomes a
+// short line with the report's title and summary so the model sees it in the
+// history, and the report ids travel beside the messages so the Ask routes can
+// add the report's sections as context (lib/field-report/followup.ts).
+function wireMessage(m: AskMessage): { role: AskMessage['role']; content: string } {
+  const r = m.fieldReport?.report;
+  if (m.role === 'assistant' && r) {
+    return { role: m.role, content: `[I wrote a Field Report: "${r.title}". Summary: ${r.summary.join(' ')}]` };
+  }
+  return { role: m.role, content: m.content };
+}
+function reportIdsIn(messages: AskMessage[]): string[] {
+  return messages.map((m) => m.fieldReport?.report?.id).filter((id): id is string => Boolean(id)).slice(-3);
+}
+
 export default function AskWorkspace({
   mode, validIds, datasets, initialQuestion, keyState,
 }: {
@@ -45,6 +63,8 @@ export default function AskWorkspace({
   const [draftSteps, setDraftSteps] = useState<string[]>([]);
   const [draftLane, setDraftLane] = useState<Lane | undefined>(undefined);
   const [webOn, setWebOn] = useState(false);
+  const [fieldReportOn, setFieldReportOn] = useState(false);
+  const [frPlanning, setFrPlanning] = useState(false);
   const [verifyingIndex, setVerifyingIndex] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
   const [activePeek, setActivePeek] = useState<{ kind: PeekKind; id: string } | null>(null);
@@ -58,6 +78,7 @@ export default function AskWorkspace({
   // since 2026-08-21); the portal stays on the quick route for budget reasons.
   const researchMode = mode === 'admin';
   const webAvailable = mode !== 'locked'; // admin + portal key; each search is budget-metered
+  const fieldReportAvailable = mode !== 'locked'; // admin + portal key; the run itself is budget-metered per key
   const locked = mode === 'locked';
   const active = activeId ? convos.find((c) => c.id === activeId) ?? null : null;
 
@@ -136,10 +157,68 @@ export default function AskWorkspace({
     return runPlain(convoId);
   }
 
+  // Field Report's first leg (2026-09-28): the user turn is already appended
+  // by send(); this drafts the plan and appends it as a fieldReport-carrying
+  // assistant message with no content (the card renders in its place, see
+  // AskThread). frPlanning stands in for `streaming` here so the composer
+  // stays disabled and the thread shows a pending line, without touching the
+  // quick/deep streaming state machines at all.
+  async function runFieldReportPlan(convoId: string) {
+    const convo = getConvo(convoId);
+    if (!convo) return;
+    const last = convo.messages[convo.messages.length - 1];
+    const question = last?.role === 'user' ? last.content : '';
+    const context = fieldReportContext(convo, convo.messages.length - 1);
+    setFrPlanning(true);
+    try {
+      const res = await fetch('/api/field-report/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, context: context || undefined }),
+      });
+      const data = (await res.json().catch(() => null)) as (FieldReportPlanResponse & { error?: string; reason?: string }) | null;
+      if (!res.ok || !data?.plan) {
+        const capped = res.status === 402 || data?.reason === 'cap';
+        appendMessage(convoId, {
+          role: 'assistant',
+          content: '',
+          fieldReport: {
+            stage: 'error',
+            runId: (data && typeof data.runId === 'string' && data.runId) || '',
+            error: capped
+              ? 'The daily limit for Field Reports on this access key is reached. Try again tomorrow.'
+              : (data && typeof data.error === 'string' && data.error) || 'Something went wrong drafting the plan. Please try again.',
+          },
+        });
+        return;
+      }
+      appendMessage(convoId, {
+        role: 'assistant',
+        content: '',
+        fieldReport: {
+          stage: 'plan',
+          runId: data.runId,
+          plan: data.plan,
+          estimates: data.estimates,
+          capRoomUsd: data.capRoomUsd ?? null,
+        },
+      });
+    } catch {
+      appendMessage(convoId, {
+        role: 'assistant',
+        content: '',
+        fieldReport: { stage: 'error', runId: '', error: 'Something went wrong drafting the plan. Please try again.' },
+      });
+    } finally {
+      setFrPlanning(false);
+    }
+  }
+
   async function runPlain(convoId: string) {
     const convo = getConvo(convoId);
     if (!convo || streaming) return;
-    const wire = convo.messages.map((m) => ({ role: m.role, content: m.content }));
+    const wire = convo.messages.map(wireMessage);
+    const fieldReportIds = reportIdsIn(convo.messages);
     const priorMap = mergedSignalMap(convo);
     const ac = new AbortController();
     abortRef.current = ac;
@@ -155,7 +234,7 @@ export default function AskWorkspace({
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: wire, signalOffset: maxSignalSuffix(convo), web: webAvailable && webOn }),
+        body: JSON.stringify({ messages: wire, signalOffset: maxSignalSuffix(convo), web: webAvailable && webOn, fieldReportIds }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
@@ -239,7 +318,8 @@ export default function AskWorkspace({
   async function runDeep(convoId: string) {
     const convo = getConvo(convoId);
     if (!convo || streaming) return;
-    const wire = convo.messages.map((m) => ({ role: m.role, content: m.content }));
+    const wire = convo.messages.map(wireMessage);
+    const fieldReportIds = reportIdsIn(convo.messages);
     const priorMap = mergedSignalMap(convo);
     const ac = new AbortController();
     abortRef.current = ac;
@@ -303,7 +383,7 @@ export default function AskWorkspace({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: wire, signalOffset: maxSignalSuffix(convo), signalMap: priorMap,
+          messages: wire, signalOffset: maxSignalSuffix(convo), signalMap: priorMap, fieldReportIds,
           web: webAvailable && webOn,
         }),
         signal: ac.signal,
@@ -390,7 +470,7 @@ export default function AskWorkspace({
 
   function send(text: string) {
     const content = text.trim();
-    if (!content || streaming || locked) return;
+    if (!content || streaming || frPlanning || locked) return;
     let convoId = activeId;
     if (!convoId || !getConvo(convoId)) {
       convoId = createConvo(content);
@@ -398,7 +478,11 @@ export default function AskWorkspace({
     } else {
       appendMessage(convoId, { role: 'user', content });
     }
-    void run(convoId);
+    if (fieldReportOn) {
+      void runFieldReportPlan(convoId);
+    } else {
+      void run(convoId);
+    }
   }
 
   function pickStarter(question: string) {
@@ -488,6 +572,7 @@ export default function AskWorkspace({
         <AskThread
           convo={active}
           streaming={streaming}
+          frPlanning={frPlanning}
           draft={draft}
           draftMap={draftMap}
           draftSteps={draftSteps}
@@ -495,6 +580,7 @@ export default function AskWorkspace({
           validIds={validIds}
           datasets={datasets}
           locked={locked}
+          admin={mode === 'admin'}
           canVerify={mode === 'admin'}
           verifyingIndex={verifyingIndex}
           onPickStarter={pickStarter}
@@ -502,6 +588,7 @@ export default function AskWorkspace({
           onGenerate={() => { if (activeId) void run(activeId); }}
           onCite={openPeek}
           onVerify={(i) => { void verifyMessage(i); }}
+          onFieldReportUpdate={(i, patch) => { if (activeId) setMessageFieldReport(activeId, i, patch); }}
         />
 
         {locked ? (
@@ -512,13 +599,16 @@ export default function AskWorkspace({
           </div>
         ) : (
           <AskComposer
-            streaming={streaming}
+            streaming={streaming || frPlanning}
             onSend={send}
             onStop={stop}
             researchMode={researchMode}
             webAvailable={webAvailable}
             web={webOn}
             onToggleWeb={() => setWebOn((v) => !v)}
+            fieldReportAvailable={fieldReportAvailable}
+            fieldReport={fieldReportOn}
+            onToggleFieldReport={() => setFieldReportOn((v) => !v)}
           />
         )}
       </div>

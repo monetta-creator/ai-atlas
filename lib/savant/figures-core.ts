@@ -34,7 +34,7 @@ export interface FigureEntity {
 
 export interface FigureBase {
   id: string;
-  section: FigureSection;
+  section: string;            // a FigureSection on Savant; a Field Report section key there
   after: number;              // insert after this block of the section's html; -1 = at the end
   title: string;
   caption: string;            // one sentence under the figure: the reading Savant wants taken
@@ -98,7 +98,8 @@ export function validateFigures(
   raw: unknown,
   allowed: Set<string>,
   catalog: Map<string, FigureCatalogEntry> = new Map(),
-  banned: RegExp | null = null
+  banned: RegExp | null = null,
+  sections: readonly string[] = FIGURE_SECTIONS
 ): ValidateResult {
   const dropped: string[] = [];
   const out: SavantFigure[] = [];
@@ -107,11 +108,11 @@ export function validateFigures(
   for (let i = 0; i < list.length; i += 1) {
     const r = (list[i] ?? {}) as Record<string, unknown>;
     const kind = r.kind as FigureKind;
-    const section = r.section as FigureSection;
+    const section = typeof r.section === 'string' ? r.section : '';
     const title = clip(r.title, 90);
     const caption = clip(r.caption, 240);
     const where = `figure ${i + 1} (${typeof kind === 'string' ? kind : 'unknown'})`;
-    if (!FIGURE_SECTIONS.includes(section)) { dropped.push(`${where}: unknown section`); continue; }
+    if (!sections.includes(section)) { dropped.push(`${where}: unknown section`); continue; }
     if (!title) { dropped.push(`${where}: no title`); continue; }
     if (banned && (banned.test(title) || banned.test(caption))) { dropped.push(`${where}: banned words in title or caption`); continue; }
     if (out.length >= MAX_FIGURES_PER_ISSUE) { dropped.push(`${where}: issue cap of ${MAX_FIGURES_PER_ISSUE} reached`); continue; }

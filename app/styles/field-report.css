@@ -1,0 +1,282 @@
+/* ============================================================
+   AI ATLAS · FIELD REPORT (.frv-*) — /field-reports, Ask's research-report
+   mode. Its own imprint: a paper-white cover with a deep-green topographic
+   contour motif, deliberately distinct from Savant's cobalt cover. The
+   cover stays paper-white in both themes (it previews as a printed report,
+   like the Report Portal's covers); the body below it is theme-aware via
+   the tokens already redefined for dark mode in tokens.css.
+   Class map:
+     .frv-wrap                 page container
+     .frv-cover / -contour / -cover-body / -wordmark / -kicker / -headline / -objective
+     .frv-actions / -status    PDF + publish row, non-admin status line
+     .frv-toc / -toc-head      contents, from the plan's sub-questions
+     .frv-provbar* / -provlegend*   the provenance bar + legend
+     .frv-section / -h2        a report section
+     .frv-block[data-kind][data-prov] / -block-body / -chip[data-prov]
+     .frv-editor*              the editor's note (Full runs)
+     .frv-table / -appendix-stat / -dropped / -sub   Appendix A
+     .frv-sources / -source-host   Appendix B
+     .frv-lockplate*           the keyholders-only plate (guest)
+     .frv-index*               the /field-reports list
+   ============================================================ */
+
+:root {
+  --frv-accent: #1f6f4a;
+}
+
+.frv-wrap { max-width: 100%; }
+
+/* ---- cover: fixed paper-white palette in both themes ---- */
+.frv-cover {
+  position: relative;
+  overflow: hidden;
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid var(--frame);
+  padding: 40px 36px 32px;
+  margin-bottom: 28px;
+}
+.frv-contour {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+.frv-cover-body { position: relative; z-index: 1; max-width: 640px; }
+.frv-wordmark {
+  font-family: var(--font-headline);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  margin: 0 0 10px;
+}
+.frv-kicker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--frv-accent);
+  margin: 0 0 14px;
+}
+.frv-headline {
+  font-family: var(--font-headline);
+  font-size: clamp(26px, 4vw, 38px);
+  line-height: 1.08;
+  margin: 0 0 14px;
+  letter-spacing: -0.005em;
+}
+.frv-objective {
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: #5b6675;
+  margin: 0 0 18px;
+  max-width: 56ch;
+}
+.frv-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.frv-status { font-size: 12px; color: #5b6675; }
+.frv-status[data-published] { color: var(--frv-accent); }
+
+/* ---- contents ---- */
+.frv-toc { margin: 0 0 24px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.frv-toc-head {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint-ink);
+  margin: 0 0 8px;
+}
+.frv-toc ol { margin: 0; padding-left: 20px; }
+.frv-toc li { margin-bottom: 4px; font-size: 13.5px; }
+.frv-toc a { color: var(--ink); }
+.frv-toc a:hover { color: var(--frv-accent); }
+
+/* ---- provenance bar ---- */
+.frv-provbar-wrap { margin: 0 0 28px; }
+.frv-provbar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--line);
+  margin-bottom: 8px;
+}
+.frv-provbar-seg { display: block; height: 100%; }
+.frv-provbar-seg[data-prov="atlas"] { background: var(--frv-accent); }
+.frv-provbar-seg[data-prov="web"] { background: var(--accent); }
+.frv-provbar-seg[data-prov="mixed"] { background: #b8860b; }
+.frv-provbar-seg[data-prov="analysis"] { background: var(--faint-ink); }
+.frv-provlegend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: var(--dim); }
+.frv-provlegend-item { display: inline-flex; align-items: center; gap: 5px; }
+.frv-provlegend-item i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  font-style: normal;
+}
+.frv-provlegend-item i[data-prov="atlas"] { background: var(--frv-accent); }
+.frv-provlegend-item i[data-prov="web"] { background: var(--accent); }
+.frv-provlegend-item i[data-prov="mixed"] { background: #b8860b; }
+.frv-provlegend-item i[data-prov="analysis"] { background: var(--faint-ink); }
+.frv-provlegend-n { color: var(--faint-ink); }
+
+/* ---- sections ---- */
+.frv-section { margin-bottom: 30px; }
+.frv-h2 {
+  font-family: var(--font-headline);
+  font-size: 19px;
+  margin: 0 0 14px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ---- blocks: provenance chip in a left rail, content to the right ---- */
+.frv-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.frv-block-body { flex: 1; min-width: 0; font-size: 14px; line-height: 1.65; }
+.frv-block-body p { margin: 0 0 8px; }
+.frv-block-body p:last-child { margin-bottom: 0; }
+.frv-block-body ul, .frv-block-body ol { margin: 0 0 8px; padding-left: 22px; }
+.frv-block-body a { color: var(--accent); }
+.frv-block[data-kind="h3"] .frv-block-body { font-weight: 600; font-size: 14.5px; }
+.frv-block[data-prov="analysis"] {
+  background: color-mix(in oklab, var(--faint-ink) 10%, transparent);
+  border-left: 2px solid var(--faint-ink);
+  padding: 10px 12px;
+  margin-left: -12px;
+}
+.frv-chip {
+  flex: none;
+  width: 58px;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: right;
+  color: var(--faint-ink);
+}
+.frv-chip[data-prov="atlas"] { color: var(--frv-accent); }
+.frv-chip[data-prov="web"] { color: var(--accent); }
+.frv-chip[data-prov="mixed"] { color: #b8860b; }
+
+/* ---- editor's note ---- */
+.frv-editor { border-top: 1px solid var(--line); padding-top: 18px; }
+.frv-editor-verdict {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--frv-accent);
+  margin: 0 0 8px;
+}
+.frv-editor-note { font-size: 14px; line-height: 1.6; color: var(--dim); margin: 0 0 8px; }
+.frv-editor-sig { font-size: 12px; color: var(--faint-ink); margin: 0; }
+
+/* ---- appendices ---- */
+.frv-appendix-stat { font-size: 13px; color: var(--dim); margin: 0 0 12px; }
+.frv-digest { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 12px; }
+.frv-digest-q { margin: 0; font-weight: 600; font-size: 14px; }
+.frv-digest-n { margin: 2px 0 0; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint-ink); }
+.frv-digest-queries { margin: 4px 0 0; font-size: 12.5px; color: var(--dim); }
+.frv-log { margin-bottom: 12px; }
+.frv-log > summary { cursor: pointer; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); margin-bottom: 8px; }
+.frv-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-bottom: 12px; }
+.frv-table th, .frv-table td { text-align: left; padding: 5px 8px 5px 0; border-bottom: 1px solid var(--line); }
+.frv-table th { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint-ink); }
+.frv-sub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint-ink);
+  margin: 12px 0 6px;
+}
+.frv-dropped ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--dim); }
+.frv-sources { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.frv-sources li { padding: 5px 0; border-bottom: 1px solid var(--line); }
+.frv-sources a { color: var(--ink); }
+.frv-sources a:hover { color: var(--frv-accent); }
+.frv-source-host { color: var(--faint-ink); font-size: 12px; }
+
+.frv-empty { color: var(--faint-ink); font-size: 13.5px; }
+.frv-colophon {
+  font-size: 11.5px;
+  color: var(--faint-ink);
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+/* ---- keyholders-only plate ---- */
+.frv-lockplate { max-width: 560px; }
+.frv-lock-head { font-family: var(--font-headline); font-size: 18px; margin: 0 0 8px; }
+.frv-lock-body { font-size: 13.5px; line-height: 1.6; color: var(--dim); margin: 0 0 16px; }
+.frv-lock-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ---- index ---- */
+.frv-index { list-style: none; margin: 0; padding: 0; }
+.frv-index-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.frv-index-main { min-width: 0; }
+.frv-index-title { display: block; font-weight: 600; font-size: 14.5px; color: var(--ink); margin-bottom: 4px; }
+.frv-index-title:hover { color: var(--frv-accent); }
+.frv-index-question { font-size: 13px; color: var(--dim); margin: 0 0 6px; }
+.frv-index-meta { font-family: var(--font-mono); font-size: 11px; color: var(--faint-ink); margin: 0; }
+.frv-index-meta [data-published] { color: var(--frv-accent); }
+.frv-index-actions { flex: none; display: flex; gap: 8px; }
+
+/* ============================================================
+   FIELD REPORT DESK (.frd-*) — /field-reports/desk, the admin console.
+   Reuses the Savant desk's generic .sv-desk / .sv-section / .sv-h2 /
+   .sv-table / .sv-empty / .sv-prefs shell (app/styles/savant.css); these
+   rules cover only what is specific to Field Report's own form.
+   ============================================================ */
+
+.frd-size-block {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.frd-size-h3 {
+  font-family: var(--font-headline);
+  font-size: 15px;
+  margin: 0 0 10px;
+  color: var(--ink);
+}
+.frd-size-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--faint-ink);
+  margin-left: 8px;
+}
+.frd-estimate {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--dim);
+  margin: 10px 0 0;
+}
+
+.frd-status { font-size: 12.5px; }
+.frd-status[data-kind="ok"] { color: var(--supports); }
+.frd-status[data-kind="error"] { color: var(--contradicts); }
+
+.frd-run-status { font-size: 12.5px; }
+.frd-run-status[data-status="planned"] { color: var(--faint-ink); }
+.frd-run-status[data-status="running"] { color: var(--dim); }
+.frd-run-status[data-status="paused"] { color: var(--dim); }
+.frd-run-status[data-status="done"] { color: var(--supports); }
+.frd-run-status[data-status="failed"] { color: var(--contradicts); }

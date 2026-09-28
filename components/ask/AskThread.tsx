@@ -6,12 +6,16 @@ import { toPeekId, type CitationKind, type ParsedCode, type ValidIdsPlain, type 
 import type { PeekKind } from '@/lib/ask/search';
 import type { Lane } from '@/lib/ask/lanes';
 import { LANE_LABEL } from '@/lib/ask/lanes';
-import type { AskConvo } from '@/components/ask/store';
+import type { AskConvo, FieldReportState } from '@/components/ask/store';
 import { renderAnswer } from '@/components/ask/answer';
 import AskStarters from '@/components/ask/AskStarters';
 import AskVerify from '@/components/ask/AskVerify';
 import AskCost from '@/components/ask/AskCost';
 import AskDatasetCard, { type DatasetSuggestionMeta } from '@/components/datasets/AskDatasetCard';
+import FieldReportPlanCard from '@/components/ask/FieldReportPlanCard';
+import FieldReportRunCard from '@/components/ask/FieldReportRunCard';
+import FieldReportResultCard from '@/components/ask/FieldReportCard';
+import { fieldReportContext } from '@/components/ask/field-report-context';
 
 const DATASET_TOKEN = /\[dataset\s+([a-z0-9-]+)\]/gi;
 
@@ -37,12 +41,13 @@ const MAP_KINDS = new Set<CitationKind>(['signal', 'paper', 'item', 'fact', 'rep
 // unless the reader scrolled up (tracked in a ref from the scroll handler;
 // the ref is only read inside the effect, per the React Compiler rules).
 export default function AskThread({
-  convo, streaming, draft, draftMap, draftSteps, draftLane, validIds, datasets, locked,
-  canVerify, verifyingIndex,
-  onPickStarter, onRegenerate, onGenerate, onCite, onVerify,
+  convo, streaming, frPlanning, draft, draftMap, draftSteps, draftLane, validIds, datasets, locked,
+  admin, canVerify, verifyingIndex,
+  onPickStarter, onRegenerate, onGenerate, onCite, onVerify, onFieldReportUpdate,
 }: {
   convo: AskConvo | null;
   streaming: boolean;
+  frPlanning?: boolean; // a Field Report plan request is in flight (2026-09-28)
   draft: string;
   draftMap: SignalMap;
   draftSteps: string[];
@@ -50,6 +55,7 @@ export default function AskThread({
   validIds: ValidIdsPlain;
   datasets: DatasetSuggestionMeta[];
   locked: boolean;
+  admin: boolean;
   canVerify: boolean;
   verifyingIndex: number | null;
   onPickStarter: (q: string) => void;
@@ -57,6 +63,7 @@ export default function AskThread({
   onGenerate: () => void;
   onCite?: (kind: PeekKind, id: string, msgIndex?: number) => void;
   onVerify: (index: number) => void;
+  onFieldReportUpdate: (msgIndex: number, patch: Partial<FieldReportState>) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
@@ -78,7 +85,7 @@ export default function AskThread({
   const last = convo?.messages[convo.messages.length - 1];
   const showGenerate = !!convo && !streaming && last?.role === 'user';
   const showRegenerate =
-    !!convo && !streaming && last?.role === 'assistant' && !last.error && !last.stopped;
+    !!convo && !streaming && last?.role === 'assistant' && !last.error && !last.stopped && !last.fieldReport;
 
   return (
     <div
@@ -98,6 +105,66 @@ export default function AskThread({
           {convo.messages.map((m, i) => {
             if (m.role === 'user') {
               return <div key={i} className="ask-msg--user">{m.content}</div>;
+            }
+            if (m.fieldReport) {
+              const fr = m.fieldReport;
+              const update = (patch: Partial<FieldReportState>) => onFieldReportUpdate(i, patch);
+              if (fr.stage === 'error') {
+                return (
+                  <div key={i} className="fr-card fr-error-card">
+                    <p className="fr-kicker">FIELD REPORT</p>
+                    <p className="fr-error">{fr.error ?? 'Something went wrong. Please try again.'}</p>
+                  </div>
+                );
+              }
+              if (fr.stage === 'plan' && fr.plan) {
+                let question = '';
+                for (let j = i - 1; j >= 0; j--) {
+                  if (convo.messages[j].role === 'user') { question = convo.messages[j].content; break; }
+                }
+                return (
+                  <FieldReportPlanCard
+                    key={fr.runId}
+                    runId={fr.runId}
+                    plan={fr.plan}
+                    estimates={fr.estimates}
+                    capRoomUsd={fr.capRoomUsd}
+                    question={question}
+                    context={fieldReportContext(convo, i)}
+                    onUpdate={update}
+                  />
+                );
+              }
+              if (fr.stage === 'run' && fr.jobId) {
+                return (
+                  <FieldReportRunCard
+                    key={fr.jobId}
+                    runId={fr.runId}
+                    jobId={fr.jobId}
+                    plan={fr.plan}
+                    size={fr.size}
+                    onUpdate={update}
+                  />
+                );
+              }
+              if (fr.stage === 'done' && fr.report) {
+                return (
+                  <FieldReportResultCard
+                    key={i}
+                    report={fr.report}
+                    admin={admin}
+                    onPublishedChange={(isPublished) => update({ report: { ...fr.report!, isPublished } })}
+                  />
+                );
+              }
+              // A stage/data mismatch (a truncated or corrupted stored message):
+              // fall through to the ordinary error line rather than crash.
+              return (
+                <div key={i} className="fr-card fr-error-card">
+                  <p className="fr-kicker">FIELD REPORT</p>
+                  <p className="fr-error">This report could not be displayed. Please try again.</p>
+                </div>
+              );
             }
             const map = m.signalMap ?? {};
             const lane = m.lane && <span className="ask-lane" data-lane={m.lane}>{LANE_LABEL[m.lane]}</span>;
@@ -218,6 +285,10 @@ export default function AskThread({
               </div>
             );
           })}
+
+          {frPlanning && (
+            <p className="fr-pending"><span className="spinner" aria-hidden="true" /> Drafting a research plan…</p>
+          )}
 
           {streaming && (
             <div>

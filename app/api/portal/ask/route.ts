@@ -5,6 +5,7 @@ import { encodeDecline } from '@/lib/ask/lanes';
 import { laneHeaders, resolveLane } from '@/lib/ask/resolve-lane';
 import { streamQuickAnswer } from '@/lib/ask/quick-stream';
 import { clampHistory, clampSignalOffset, parseAskBody } from '@/lib/ask/history';
+import { fieldReportContextBlock } from '@/lib/field-report/followup';
 import { checkKeyBudget, checkPortalBudget, PORTAL_CLASSIFY_FEATURE, PORTAL_FEATURE } from '@/lib/portal/budget';
 import { identityFromRequest, touchKey, unauthorizedMessage } from '@/lib/portal/identity';
 import { logPortalUsage } from '@/lib/mutations/portal';
@@ -73,9 +74,14 @@ export async function POST(req: Request): Promise<Response> {
   }
   const metadata = keyId ? { portal_key_id: keyId } : undefined;
 
-  const { ctx, cls, lane, autoWeb, decline } = await resolveLane(msgs, {
-    mode: 'portal', tagStart, classifyFeature: PORTAL_CLASSIFY_FEATURE, classifyMetadata: metadata,
-  });
+  const [resolved, reportBlock] = await Promise.all([
+    resolveLane(msgs, { mode: 'portal', tagStart, classifyFeature: PORTAL_CLASSIFY_FEATURE, classifyMetadata: metadata }),
+    fieldReportContextBlock((body as { fieldReportIds?: unknown })?.fieldReportIds, { admin: identity.tier === 'admin', keyId }),
+  ]);
+  const { ctx, cls, autoWeb } = resolved;
+  // A follow-up about a Field Report in this conversation never takes the off-topic decline.
+  const lane = reportBlock && resolved.lane === 'unrelated' ? 'thin' : resolved.lane;
+  const decline = reportBlock ? null : resolved.decline;
   const useWeb = webOn || autoWeb;
   const headers = { ...TEXT_HEADERS, ...laneHeaders(lane, ctx.signalRefs) };
 
@@ -101,7 +107,7 @@ export async function POST(req: Request): Promise<Response> {
   return new Response(streamQuickAnswer({
     client,
     model: MODEL,
-    system: askSystem(useWeb, lane, cls.fresh),
+    system: reportBlock ? `${askSystem(useWeb, lane, cls.fresh)}\n\n${reportBlock}` : askSystem(useWeb, lane, cls.fresh),
     messages: conversationMessages(msgs, ctx, { web: useWeb, lane }),
     useWeb,
     feature: PORTAL_FEATURE,

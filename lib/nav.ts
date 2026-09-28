@@ -93,6 +93,8 @@ export const NAV_TREE: NavGroup[] = [
     children: [
       { href: '/reports', label: 'Portal', access: 'public' },
       { href: '/intel/deck', label: 'Intel deck', access: 'portal' },
+      { href: '/field-reports', label: 'Field Reports', access: 'portal' },
+      { href: '/field-reports/desk', label: 'Field Report desk', access: 'admin' },
       { href: '/reports/period', label: 'Period generator', access: 'admin' },
     ],
   },

@@ -1,4 +1,6 @@
-import { isAdmin, isPortal } from '@/lib/auth';
+import { isAdmin } from '@/lib/auth';
+import { getPortalIdentity } from '@/lib/portal/identity';
+import { jobViewerFor } from '@/lib/jobs/core';
 import { listSavedReports, getLatestThesisReports, listGeneratedReports, getTargets, getFeatureStats, getRecentJobOfKind } from '@/lib/data';
 import { getEditContext } from '@/lib/content';
 import Editable from '@/components/Editable';
@@ -32,12 +34,17 @@ export default async function ReportPortal({
   searchParams: Promise<{ q?: string; kind?: string; page?: string; generate?: string; code?: string }>;
 }) {
   const [admin, sp] = await Promise.all([isAdmin(), searchParams]);
-  const portal = await isPortal();
+  const identity = await getPortalIdentity();
+  const portal = identity.active;
+  // A keyholder's own unpublished Field Reports need their key id (never
+  // another keyholder's draft); jobViewerFor is the one shared identity->
+  // {admin, keyId} mapping (also used by the ui_jobs registry).
+  const keyId = jobViewerFor(identity).keyId;
   const { editing, txt } = await getEditContext();
   const [reports, theses, generated, targets, runStats, lastRun] = await Promise.all([
     listSavedReports(),
     getLatestThesisReports(50),
-    listGeneratedReports(!admin, { portal }),
+    listGeneratedReports(!admin, { portal, keyId }),
     admin ? getTargets() : Promise.resolve({ claims: [], bridges: [] }),
     // The generator's run panel: the usual time and cost per step, and a run
     // still going (or just ended) when the admin comes back to this page.

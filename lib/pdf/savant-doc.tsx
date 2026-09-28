@@ -113,7 +113,7 @@ export async function renderSavantPdf(saved: SavedSavantIssue, origin: string): 
 
   const gate = (html: string | null) => enforceCitations(html, allow).html;
   const figures = narrative.figures ?? [];
-  const sectionOrder: FigureSection[] = ['lead', ...narrative.departments.map((d) => d.key)];
+  const sectionOrder: string[] = ['lead', ...narrative.departments.map((d) => d.key)];
   const numbered = [...figures].sort((a, b) => sectionOrder.indexOf(a.section) - sectionOrder.indexOf(b.section) || a.after - b.after);
   const figureNumber = (id: string) => numbered.findIndex((f) => f.id === id) + 1;
   // A section's html with its figures between the blocks (the web view's Illustrated).

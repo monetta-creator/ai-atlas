@@ -148,4 +148,54 @@ export const PAGE_INFO_C: Record<string, PageInfoContent> = {
       },
     ],
   },
+  '/field-reports': {
+    title: 'How Field Report works',
+    summary:
+      'Research reports the Atlas writes on request: it drafts a plan you edit, researches the Atlas records ' +
+      'first, then the web for gaps, and labels every paragraph by where it came from.',
+    sections: [
+      {
+        heading: 'Starting one',
+        body: 'Field Report is a mode of the Ask workspace: ask a question, pick Brief (a few minutes, under a dollar) or Full (longer, an editor review and figures), edit the plan the Atlas proposes, then run it. The run happens in the background, so closing the tab does not lose it.',
+      },
+      {
+        heading: 'Sourcing and labeling',
+        body: 'Every paragraph is marked Atlas, Web, Mixed, or the Atlas\'s own analysis, both inline and in the provenance bar at the top of the report, so a reader always knows where a claim came from.',
+      },
+      {
+        heading: 'Who can read one',
+        body: 'A keyholder sees their own reports and any the admin has published; admin sees every run. A report is never visible to a guest, published or not.',
+      },
+    ],
+  },
+  '/field-reports/desk': {
+    title: 'Field Report desk',
+    summary:
+      'The admin console for Field Report: the enabled switch, the model each size uses per role, effort, web ' +
+      'searches, both daily caps, a live cost estimate, and recent runs.',
+    sections: [
+      {
+        heading: 'Models',
+        body: 'Research, writer and editor call the Anthropic Messages API directly for their tool loop and adaptive thinking, so those three pickers offer Anthropic models only. Figures goes through the routed structured call and can pick any catalog model.',
+      },
+      {
+        heading: 'Money',
+        body: 'A keyholder is capped per key per day; all keyholders together share a second, higher cap. Admin runs are uncapped. Both are read from today\'s ai_cost_log rows for Field Report\'s features.',
+      },
+    ],
+  },
+  '/field-reports/[id]': {
+    title: 'Reading a Field Report',
+    summary: 'A cited research report: the plan\'s sub-questions as the contents, a provenance chip on every paragraph, and two appendices covering how it was researched and what it cites.',
+    sections: [
+      {
+        heading: 'Provenance',
+        body: 'Atlas means the paragraph rests on a tracked record; Web means a public source the run found while filling a gap; Mixed draws on both; Analysis is the Atlas\'s own reasoning, never presented as sourced.',
+      },
+      {
+        heading: 'Appendices',
+        body: 'Appendix A lists every research round and query the run made. Appendix B lists every source the report actually cites, in reading order.',
+      },
+    ],
+  },
 };

@@ -99,6 +99,10 @@ export const PUBLIC_API_PREFIXES: readonly string[] = [
   // The model-run registry (lib/jobs): admin and keyholders poll their own
   // running jobs; both routes gate in-route on identityFromRequest.
   '/api/jobs/',
+  // Field Report (Ask's research-report mode): admin and per-person keyholders
+  // plan, run and poll their own reports; every route gates in-route on
+  // identityFromRequest (lib/field-report/access.ts fieldReportActor).
+  '/api/field-report/',
 ];
 
 export function isPublicApiPath(pathname: string): boolean {
