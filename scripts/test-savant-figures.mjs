@@ -2,6 +2,7 @@
 // allow-list, the caps, block splitting and interleaving, and the layouts'
 // bounds. Run: node scripts/test-savant-figures.mjs
 import assert from 'node:assert/strict';
+import { collectCitedSources, breakableUrl, displayUrl, hostOf, fallbackLabel } from '../lib/savant/sources-core.ts';
 import {
   validateFigures, splitBlocks, interleave, layoutFigure, wrapText, domainOf, MAX_FIGURES_PER_ISSUE, FIG_W,
 } from '../lib/savant/figures-core.ts';
@@ -113,6 +114,37 @@ test('wrapText and domainOf', () => {
   assert.deepEqual(wrapText('one two three four five six', 9, 2), ['one two', 'three…']);
   assert.equal(domainOf('https://www.Example.com/x?y'), 'example.com');
   assert.equal(domainOf('/tooling/acme'), null);
+});
+
+test('appendix B lists cited links once, in reading order, only when the gate allows them', () => {
+  const narrative = {
+    summary: ['<p>Cost fell (<a href="https://www.anthropic.com/claude-opus-5-5">Opus 5.5</a>).</p>'],
+    lead: { html: '<p><a href="https://arxiv.org/abs/2609.30058">a new paper</a> and <a href="https://evil.example/x">junk</a> and <a href="/signals/abc">the signal</a> and again <a href="https://www.anthropic.com/claude-opus-5-5">Opus</a>.</p>' },
+    departments: [{ key: 'tools', html: '<p><a href="https://github.com/truefoundry">https://github.com/truefoundry</a> &amp; more</p>' }],
+    figures: [{ spec: { entities: [{ href: 'https://nope.example' }] } }],
+  };
+  const allowed = new Set(['https://www.anthropic.com/claude-opus-5-5', 'https://arxiv.org/abs/2609.30058', '/signals/abc', 'https://github.com/truefoundry']);
+  const out = collectCitedSources(narrative, allowed);
+  assert.deepEqual(out.map((o) => o.href), ['https://www.anthropic.com/claude-opus-5-5', 'https://arxiv.org/abs/2609.30058', '/signals/abc', 'https://github.com/truefoundry']);
+  assert.equal(out[0].label, 'Opus 5.5');
+  assert.equal(out[2].host, 'The AI Atlas');
+  assert.equal(out[3].label, 'github.com/truefoundry', 'a bare-URL label falls back to the readable URL');
+  assert.equal(hostOf('https://www.cnbc.com/2026/09/22/x.html'), 'cnbc.com');
+});
+
+test('footnote numbers and dates are not labels: a later mention or a readable fallback wins', () => {
+  const narrative = { a: '<a href="/claim/1.3">3</a> then <a href="/claim/1.3">inference cost per unit</a>', b: '<a href="/bridge/B5">5</a> <a href="https://www.sec.gov/Archives/edgar/data/1/2/x.htm">2026-09-24</a>' };
+  const out = collectCitedSources(narrative, new Set(['/claim/1.3', '/bridge/B5', 'https://www.sec.gov/Archives/edgar/data/1/2/x.htm']));
+  assert.deepEqual(out.map((o) => o.label), ['inference cost per unit', 'Bridge-claim B5', 'SEC filing']);
+  assert.equal(fallbackLabel('/tooling/kong-ai-gateway'), 'Tool: kong ai gateway');
+});
+
+test('long URLs get zero-width break points and lose their scheme', () => {
+  const u = 'https://www.frbsf.org/research-and-insights/publications/system-research';
+  assert.equal(displayUrl(u), 'frbsf.org/research-and-insights/publications/system-research');
+  const b = breakableUrl(displayUrl(u));
+  assert.ok(b.includes('/\u200B'));
+  assert.equal(b.replace(/\u200B/g, ''), displayUrl(u), 'only zero-width spaces are added');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -8,6 +8,7 @@ import { interleave, type FigureSection } from '../savant/figures-core';
 import { PdfFigure } from './savant-figures';
 import { allowlistForSavant } from '../savant/allowlist';
 import { enforceCitations } from '../citations';
+import { collectCitedSources, breakableUrl, displayUrl } from '../savant/sources-core';
 import { dateLabel } from '../format';
 
 // Savant's branded weekly PDF: a full-bleed cobalt cover (the signature, the
@@ -64,8 +65,10 @@ const p = StyleSheet.create({
   hypoStatement: { fontWeight: 'bold', fontSize: 10 },
   hypoDirection: { fontFamily: 'JetBrains', fontSize: 7.5, letterSpacing: 0.6, textTransform: 'uppercase', marginLeft: 6 },
   hypoRow: { marginBottom: 10, paddingBottom: 8, borderBottomWidth: 0.5, borderBottomColor: LINE },
-  sourcesCol: { width: '50%', paddingRight: 10, marginBottom: 3 },
-  sourcesHost: { fontSize: 7, fontWeight: 'bold', color: DIM, marginBottom: 1 },
+  sourcesCol: { width: '50%', paddingRight: 14, marginBottom: 7, flexDirection: 'row' },
+  sourcesN: { width: 18, fontFamily: 'JetBrains', fontSize: 6.5, color: COBALT, paddingTop: 1 },
+  sourcesLabel: { fontSize: 7.5, lineHeight: 1.3, color: INK, textDecoration: 'none' },
+  sourcesUrl: { fontSize: 6, lineHeight: 1.3, color: FAINT, marginTop: 1.5, textDecoration: 'none' },
 });
 
 const direction = (d: string) => (d === 'strengthened' ? UP : d === 'weakened' ? DOWN : DIM);
@@ -123,7 +126,11 @@ export async function renderSavantPdf(saved: SavedSavantIssue, origin: string): 
         : <Html key={i} html={piece.html} origin={origin} />
     ));
   };
-  const sourceCount = [...allow.hrefs].filter((h) => /^https?:\/\//.test(h)).length;
+  // Appendix B lists what the issue actually cites, in reading order (not the
+  // whole allow-list); the cover's source count counts the same list.
+  const cited = collectCitedSources(narrative, allow.hrefs);
+  const sourceCount = cited.length;
+  const absolute = (href: string) => (href.startsWith('/') ? `${origin}${href}` : href);
   const deptDetail = new Map(narrative.departments.map((d) => [d.key, d.html] as const));
   const firstSentence = (html: string | null | undefined): string | undefined => {
     if (!html) return undefined;
@@ -280,9 +287,15 @@ export async function renderSavantPdf(saved: SavedSavantIssue, origin: string): 
 
         <Text id="appendix-b" style={s.sectionHead}>Appendix B: sources</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
-          {[...allow.hrefs].filter((h) => /^https?:\/\//.test(h)).slice(0, 60).map((href) => (
-            <View key={href} style={p.sourcesCol}>
-              <Link src={href} style={[s.small, { color: COBALT }]}>{href}</Link>
+          {cited.map((src, i) => (
+            <View key={src.href} style={p.sourcesCol} wrap={false}>
+              <Text style={p.sourcesN}>{String(i + 1)}</Text>
+              <View style={{ flex: 1 }}>
+                <Link src={absolute(src.href)} style={p.sourcesLabel}>{src.label}</Link>
+                <Link src={absolute(src.href)} style={p.sourcesUrl}>
+                  {breakableUrl(src.host === 'The AI Atlas' ? `The AI Atlas · ${src.href}` : displayUrl(src.href))}
+                </Link>
+              </View>
             </View>
           ))}
         </View>
