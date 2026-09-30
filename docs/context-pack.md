@@ -22,8 +22,7 @@ full record ships as section rows instead.
 
 ## Where to get it
 
-`/datasets/briefcase`, a tab of the Data Portal, and the band at the top of
-`/datasets`. One card per company with three download buttons. Key-gated: the
+`/datasets/briefcase`, the Briefcase tab of the Data Portal. One card per company with three download buttons. Key-gated: the
 registry is private, so a guest sees the explainer and the unlock and never a
 company name.
 
@@ -140,7 +139,7 @@ per year, one profile call).
 | `lib/context-pack/load.ts` | the one DB reader, injected query function |
 | `lib/context-pack/briefs.ts` | the weekly model leg |
 | `lib/mutations/context-pack.ts` | the one writer |
-| `app/datasets/briefcase/page.tsx`, `components/briefcase/*` | the page and the hub band |
+| `app/datasets/briefcase/page.tsx`, `components/briefcase/*` | the page and its download buttons |
 | `app/api/datasets/[slug]/route.ts` | the `format=md` branch |
 | `scripts/render-context-pack.mts` | local render with exact token counts |
 | `scripts/context-pack-briefs.mts` | write briefs by hand |

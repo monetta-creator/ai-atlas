@@ -8,9 +8,7 @@ import { descriptionFor } from '@/lib/page-info';
 import Editable from '@/components/Editable';
 import RenewalNotice, { type RenewalState } from '@/components/portal/RenewalNotice';
 import DatasetCatalog from '@/components/datasets/DatasetCatalog';
-import BriefcaseBand from '@/components/briefcase/BriefcaseBand';
-import { listPackCompanies } from '@/lib/context-pack/load';
-import { q as dbq } from '@/lib/db';
+
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Data Portal · The AI Atlas', description: descriptionFor('/datasets') };
@@ -38,11 +36,6 @@ export default async function DatasetsPage({
       ? { state: sp.key, expiresAt: null }
       : null;
   const { editing, txt } = await getEditContext();
-  // The Briefcase band: a keyholder gets the reader organization's downloads
-  // in place. The registry is read only for an unlocked viewer.
-  const unlocked = admin || portal;
-  const packCompanies = unlocked ? await listPackCompanies(dbq) : [];
-  const selfCompany = packCompanies.find((c) => c.tier === 'self') ?? null;
   const cards = DATASETS.map(toDatasetCard);
   const access: DatasetAccessFilter = sp.access === 'public' || sp.access === 'key' ? sp.access : 'all';
   const q = (typeof sp.q === 'string' ? sp.q : '').slice(0, 120);
@@ -72,12 +65,6 @@ export default async function DatasetsPage({
         />
 
         <RenewalNotice identity={notice} style={{ marginBottom: 24 }} />
-
-        <BriefcaseBand
-          unlocked={unlocked}
-          self={selfCompany ? { slug: selfCompany.slug, name: selfCompany.name } : null}
-          companies={packCompanies.length}
-        />
 
         <DatasetCatalog
           cards={cards}
