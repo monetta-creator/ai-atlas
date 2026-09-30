@@ -246,6 +246,16 @@ const FIELD_FACTS: Record<string, { type: 'string' | 'number'; nullable: boolean
   },
   event_source: { type: 'string', nullable: false, enum: ['feed', 'deepdive', 'discover', 'manual'] },
   feature: { type: 'string', nullable: false },
+  // ---- context-pack (the Briefcase) ---------------------------------------
+  section_id: { type: 'string', nullable: false },
+  section_title: { type: 'string', nullable: false },
+  section_kind: { type: 'string', nullable: false },
+  provenance: { type: 'string', nullable: false, enum: ['record', 'model'] },
+  in_base: { type: 'string', nullable: false, enum: ['yes', 'no'] },
+  in_brief: { type: 'string', nullable: false, enum: ['yes', 'no'] },
+  position: { type: 'number', nullable: false },
+  token_estimate: { type: 'number', nullable: false },
+  markdown: { type: 'string', nullable: false },
 };
 
 // The one-line human type description used in every handoff's field table

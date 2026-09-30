@@ -31,6 +31,7 @@
 @import "./styles/tooling.css"; /* /tooling hub + product pages (.tl-*) */
 @import "./styles/reports.css"; /* /reports cover grid (.rp-*) */
 @import "./styles/datasets.css"; /* /datasets hub filter plate + card grid (.dp-*) */
+@import "./styles/briefcase.css"; /* /datasets/briefcase + the hub band: company context packs (.bc-*) */
 @import "./styles/ops.css";      /* /ops the operations console (.ops-*) */
 @import "./styles/field-report.css"; /* /field-reports read view (.frv-*) */
 

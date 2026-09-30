@@ -7,7 +7,7 @@ import type { RawScanItem } from './web';
 // Sonnet + web_search call, because that call's own prompt forbade judgment
 // and returned only url/headline/date lists — exactly what a search API
 // returns directly. One API call per query (a topic sends at most two). The
-// account is on the 4,000-credit plan since 2026-09-23: the free 1,000 ran
+// account is on the 5,000-credit plan since 2026-09-29 (4,000 from 09-23): the free 1,000 ran
 // out on 09-22 (about 60 queries per weekday across scan, pipeline, intel and
 // tooling is ~1,300 a month).
 //

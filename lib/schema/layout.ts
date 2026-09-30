@@ -96,6 +96,9 @@ export const SUBSYSTEMS: Record<string, SubsystemGroup> = {
   // and the backfill script's checkpoint. Grouped with Savant, the one
   // surface that reads the record and cites it.
   history_items: 'editions', self_record: 'editions', self_timeline: 'editions', backfill_units: 'editions',
+  // The Briefcase (0080): the weekly model-written section briefs of the
+  // company context packs, beside the record they are written from.
+  context_pack_briefs: 'editions',
 
   // ---- prefs & site meta ------------------------------------------------
   content_blocks: 'prefs-and-meta', home_prefs: 'prefs-and-meta', board_prefs: 'prefs-and-meta',
@@ -220,6 +223,7 @@ export const ACCESS_TIER: Record<string, TierInfo> = {
   self_record: { tier: 'key', reason: 'the reader organization’s public record; Savant’s cited profile draws on it, key-gated like the rest of Savant' },
   self_timeline: { tier: 'key', reason: 'the reader organization’s AI timeline; printed only inside the key-gated /savant/record page' },
   backfill_units: { tier: 'admin', reason: 'the one-time backfill script’s own checkpoint, never read outside it' },
+  context_pack_briefs: { tier: 'key', reason: 'model-written section briefs of the company context packs; shipped only inside the key-gated context-pack dataset' },
 
   // prefs-and-meta
   content_blocks: { tier: 'admin', reason: 'edited only in edit mode; treated as admin working content' },
@@ -256,6 +260,7 @@ export const DATASET_TABLES: Record<string, string[]> = {
   'intel-facts': ['intel_facts', 'intel_companies', 'intel_items'],
   'company-record': ['self_record', 'self_timeline', 'intel_companies'],
   'intel-metrics': ['intel_metrics', 'intel_companies'],
+  'context-pack': ['intel_companies', 'self_record', 'self_timeline', 'intel_facts', 'intel_items', 'intel_metrics', 'context_pack_briefs'],
   'tooling-products': ['tooling_products', 'tooling_categories'],
   'tooling-events': ['tooling_events', 'tooling_products'],
   'tooling-features': ['tooling_products'],

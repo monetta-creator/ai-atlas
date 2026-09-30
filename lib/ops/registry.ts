@@ -148,6 +148,17 @@ export const OPS_JOBS: OpsJob[] = [
     readLatest: 'intel-deck',
   }),
   job({
+    key: 'context-pack',
+    label: 'Briefcase briefs',
+    family: 'publisher',
+    paths: ['/api/cron/context-pack'],
+    describe: 'Mondays 17:40 UTC: the week’s model-written section briefs for every company context pack with a public record. The packs themselves render on download.',
+    consoleHref: '/datasets/briefcase',
+    deadmanEnv: 'HC_PING_URL_CONTEXT_PACK',
+    dayBoundary: 'utc-midnight',
+    readLatest: 'context-pack',
+  }),
+  job({
     key: 'edition',
     label: 'Daily Edition',
     family: 'publisher',

@@ -89,6 +89,7 @@ export default async function DatasetPage({
             <>
               <a className="btn btn--primary btn--sm" href={`/api/datasets/${def.slug}`}>Download CSV</a>
               <a className="btn btn--ghost btn--sm" href={`/api/datasets/${def.slug}?format=json`}>JSON</a>
+              {def.markdown && <Link className="btn btn--ghost btn--sm" href="/datasets/briefcase">Markdown packs</Link>}
             </>
           ) : (
             <>

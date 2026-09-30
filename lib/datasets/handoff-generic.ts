@@ -55,6 +55,51 @@ ${line401}
   build and does not help.`;
 }
 
+// The context pack's own section: what the markdown documents are, how the
+// rows relate to them, and how a model-facing intake should treat each.
+function markdownSection(def: DatasetDef, origin: string): string {
+  return `## 9. The markdown documents and how to load a pack
+
+This dataset also downloads as ONE markdown document per company, ready to
+place in a model's context:
+
+Base, about 10,000 tokens: ${origin}/api/datasets/${def.slug}?format=md&company=<slug>&size=base
+Brief, about 50,000 tokens: ${origin}/api/datasets/${def.slug}?format=md&company=<slug>&size=brief
+Section rows for one company: ${origin}/api/datasets/${def.slug}?format=json&company=<slug>&download=1
+
+format=md takes company and size only; the filter grammar applies to the
+rows, not to a document. The token figure in each document's header and in
+token_estimate is characters / 4 x 1.3, a ceiling; count with your own
+tokenizer before relying on it.
+
+Which file for which job:
+- Base: standing context, placed in the system prompt of every call about
+  the company.
+- Brief: a single deep task about one company, on a model that reads
+  50,000 tokens well. Smaller open-weight models recall poorly from the
+  middle of a long context; prefer base plus retrieval for them.
+- Section rows: the retrieval corpus. Index the markdown column for
+  full-text search and embed it for vector search. A row is about 2,000
+  tokens or less and carries its own heading, company name and source list,
+  so a retrieved row stands alone.
+
+Loading rules:
+- The key of a row is (company_slug, section_id). Section ids are stable,
+  but a numbered part can disappear when a section shrinks, so replace all
+  of a company's rows on each load rather than upserting.
+- provenance = model rows are weekly briefs written by a language model.
+  Rank them below record rows in retrieval, show them as orientation, and
+  never cite them as a source: cite the record rows and their URLs.
+- section_kind = check rows are questions with known answers for testing a
+  model. Keep them out of every prompt and every index. Run them with no
+  context, with base, with brief, and with base plus retrieval, and compare.
+- Every figure in a pack was rendered by code from a public data series.
+  Series labeled year to date or mixed periods must not be differenced.
+- A pack holds public records only. If it and a primary source disagree,
+  the primary source is right.
+`;
+}
+
 export function buildDatasetHandoff(def: DatasetDef, opts: { origin: string }): string {
   const { origin } = opts;
   const schemaJson = JSON.stringify(envelopeJsonSchema(def, buildRowJsonSchema(def)), null, 2);
@@ -125,5 +170,5 @@ import. The CSV variant of this file is the same contract flattened:
 identical keys as headers, UTF-8 BOM, CRLF rows, RFC-4180 quoting, and any
 list-shaped column pre-joined with a semicolon. Prefer JSON; it needs no
 quoting rules.
-`;
+${def.markdown ? `\n${markdownSection(def, origin)}` : ''}`;
 }

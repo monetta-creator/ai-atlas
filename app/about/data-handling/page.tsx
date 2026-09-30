@@ -40,7 +40,7 @@ const SECTIONS = [
           <li>Tooling Monitor: Tavily search, the Hacker News front page via Algolia, GitHub repository search, Product Hunt when an API token is configured, and Anthropic’s web search tool for category enumeration pulls and product deep dives.</li>
           <li>Startup Scout: Anthropic’s web search tool for company discovery and research sweeps.</li>
           <li>The Daily Edition: the Hacker News front page and a market strip from Yahoo Finance’s chart endpoint, an unofficial feed that can stop working without notice.</li>
-          <li>The one-time history (September 2026): Tavily news search month by month back to November 2022, for the AI economy before the engines started. The public record of the organization Savant writes for, kept for access-key holders, adds SEC EDGAR filings and their press-release exhibits, OpenAlex for research credited to it, the USPTO patent search when a key is configured, regulator websites (OCC, Federal Reserve, FDIC, CFPB, the Justice Department and the FTC), and regulations.gov and govinfo when a key is configured.</li>
+          <li>The one-time history (September 2026): Tavily news search month by month back to November 2022, for the AI economy before the engines started. The public record of the organization Savant writes for and of a few chosen peers, kept for access-key holders, adds SEC EDGAR filings and their press-release exhibits, OpenAlex for research credited to it, the USPTO patent search when a key is configured, regulator websites (OCC, Federal Reserve, FDIC, CFPB, the Justice Department and the FTC), and regulations.gov and govinfo when a key is configured.</li>
           <li>Fetching: article pages are fetched directly; when a host blocks the fetch, Jina Reader (r.jina.ai) is tried as a fallback.</li>
         </ul>
       </>
@@ -93,7 +93,7 @@ const SECTIONS = [
       <>
         <p>
           Most of what the models produce is a proposal a human then commits or discards. Eight things publish without
-          a human step:
+          a human step, and a ninth is handed to access-key holders unreviewed:
         </p>
         <ul>
           <li>The Daily Edition, written each weekday from what the engines already stored, by default by a GLM model via OpenRouter (the model is a setting).</li>
@@ -103,6 +103,7 @@ const SECTIONS = [
           <li>High-significance pipeline signal drafts that touch at least one claim, published after a veto window (48 hours by default) unless a human archives them first.</li>
           <li>Tooling products scored at or above the catalog threshold, which enter the public catalog automatically.</li>
           <li>Period reports, which are public as soon as the admin saves one.</li>
+          <li>The Briefcase&rsquo;s section briefs: each Monday a Claude model writes a short orientation paragraph for sections of the company context packs that have a public record behind them. The packs themselves are rendered by code from public records; the briefs sit under a label that says a model wrote them, keep only links to their own section&rsquo;s sources, and lose any sentence stating a figure the section does not. They go to access-key holders and the admin only.</li>
         </ul>
         <p>
           Field Reports are a separate case: research reports written on request. The person asking (the admin, or a
@@ -114,7 +115,7 @@ const SECTIONS = [
         </p>
         <p>
           The Daily Edition, the research roundup, the tooling reports, the generated sheets, the thesis reports, Savant,
-          Field Reports, and the company intel deck pass a citation gate, so a link the records cannot vouch for is stripped. Period
+          Field Reports, the Briefcase&rsquo;s briefs, and the company intel deck pass a citation gate, so a link the records cannot vouch for is stripped. Period
           reports are edited by the admin before saving; a signal draft’s claim touches are checked against live claim
           codes but its text is not link-gated. A confidence on the argument map never moves without a human-written
           rationale.

@@ -97,6 +97,7 @@ export default async function SavantRecordPage({
             <a className="btn btn--sm" href={`${EXPORT_URL}?format=csv&download=1`}>CSV</a>
             <a className="btn btn--sm" href={`${EXPORT_URL}?format=json&download=1`}>JSON</a>
             <Link className="btn btn--quiet btn--sm" href="/datasets/company-record">Dataset</Link>
+            <Link className="btn btn--quiet btn--sm" href="/datasets/briefcase">Context packs</Link>
           </div>
         }
       />

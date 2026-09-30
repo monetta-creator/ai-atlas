@@ -1,6 +1,7 @@
 import { cache } from 'react';
 import { one, q } from '../db';
 import { checkSavantBudget } from '../savant/budget';
+import { checkPackBriefBudget } from '../context-pack/briefs';
 import { OPS_JOBS, type OpsJob, todaysFires, nextFire, fmtEt } from '../ops/registry';
 import { PIPELINE_DAY_START_SQL } from '../pipeline/config';
 import { getDailyJobStatus, type DailyJobStatus } from './readiness';
@@ -202,6 +203,23 @@ async function snapshotFor(job: OpsJob, now: Date): Promise<{ snap: RawSnapshot 
       return {
         snap: row && { status: 'completed', step: null, error: null, notes: [], day: row.day, startedAt: null, finishedAt: null, summary: 'brief written' },
         spentUsd: null, capUsd: null,
+      };
+    }
+    case 'context-pack': {
+      // No run row: the week "ran" when it wrote briefs. Spend is per issue
+      // week (the feature's cost rows carry week_end).
+      const weekEnd = fridayOnOrAfterUTC(now);
+      const row = await one<{ n: number; companies: number; last: string | null }>(
+        `select count(*)::int as n, count(distinct company_slug)::int as companies, max(created_at)::text as last
+           from context_pack_briefs where week_end = $1::date`,
+        [weekEnd]
+      );
+      const budget = await checkPackBriefBudget(weekEnd);
+      return {
+        snap: row && row.n > 0
+          ? { status: 'completed', step: null, error: null, notes: [], day: weekEnd, startedAt: null, finishedAt: row.last, summary: `${row.n} briefs · ${row.companies} ${row.companies === 1 ? 'company' : 'companies'}` }
+          : null,
+        spentUsd: budget.spentUsd, capUsd: budget.capUsd,
       };
     }
     case 'savant-issue': {
@@ -467,6 +485,21 @@ export async function getOpsHistory(days = 14, now: Date = new Date()): Promise<
         const rowsB = await q<{ day: string }>(`select day::text as day from agent_briefs where day >= $1::date`, [dayList[0]]);
         const present = new Set(rowsB.map((r) => r.day));
         cells = new Map(dayList.map((day) => [day, present.has(day) ? 'completed' as const : 'none' as const]));
+        break;
+      }
+      case 'context-pack': {
+        // A Monday job: the cell is lit on the day the week's briefs were written.
+        const rowsC = await q<{ day: string }>(
+          `select distinct created_at::date::text as day from context_pack_briefs where created_at >= $1::date`,
+          [dayList[0]]
+        );
+        const present = new Set(rowsC.map((r) => r.day));
+        cells = new Map(
+          dayList.map((day) => {
+            if (present.has(day)) return [day, 'completed' as const];
+            return [day, new Date(`${day}T00:00:00Z`).getUTCDay() === 1 ? 'none' as const : 'off' as const];
+          })
+        );
         break;
       }
       case 'savant-issue': {

@@ -5,6 +5,8 @@ import { isPositiveInt } from './core.ts';
 // specifiers. The bundler resolves it identically.
 import { domainOfUrl, normalizeUrl } from '../pack-shared.ts';
 import { priorityOf, isSourceTier, isContentKind } from '../scan/source-tiers.ts';
+import { loadPackInputs } from '../context-pack/load.ts';
+import { buildSections } from '../context-pack/core.ts';
 
 // Dataset builders. See core.ts for the contract: injected Q, deterministic
 // ordering, guest-safe by construction (no personal-layer column ever appears in
@@ -1064,6 +1066,38 @@ export async function buildToolingCatalog(q: Q, opts: DatasetOpts = {}): Promise
   );
 }
 
+export async function buildContextPack(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
+  // The company context pack as rows (docs/context-pack.md): one row per
+  // section of each active registry company, rendered by lib/context-pack
+  // from public rows only (intel_companies.notes and .dossier are never
+  // read). The same sections, trimmed to a token budget, make the base and
+  // brief markdown documents the route serves with ?format=md. `as_of` is the
+  // build day, so two builds on one day are byte-identical.
+  const inputs = await loadPackInputs(q, opts.company ?? null);
+  const rows: DatasetRow[] = [];
+  for (const input of inputs) {
+    for (const s of buildSections(input)) {
+      rows.push({
+        company_slug: input.company.slug,
+        company_name: input.company.name,
+        tier: input.company.tier,
+        section_id: s.id,
+        section_title: s.title,
+        section_kind: s.kind,
+        provenance: s.provenance,
+        in_base: s.inBase ? 'yes' : 'no',
+        in_brief: s.inBrief ? 'yes' : 'no',
+        position: s.position,
+        token_estimate: s.tokens,
+        markdown: s.markdown,
+        cite_urls: s.citeUrls.length ? s.citeUrls.join(' ') : null,
+        as_of: input.asOf,
+      });
+    }
+  }
+  return isPositiveInt(opts.limit) ? rows.slice(0, opts.limit) : rows;
+}
+
 export async function buildCompanyRecord(q: Q, opts: DatasetOpts = {}): Promise<DatasetRow[]> {
   // The reader organization's public record (mig 0076, docs/self-record.md) in
   // ONE row shape for a firewall intake: every document (filing, press
@@ -1074,14 +1108,18 @@ export async function buildCompanyRecord(q: Q, opts: DatasetOpts = {}): Promise<
   // organization's name comes from the registry row, never from code. The
   // engine's ongoing news, facts and metrics for the same company ship in
   // intel-items / intel-facts / intel-metrics with ?company=<slug>.
-  const params: unknown[] = [];
+  // ?company=<slug> serves another company's record once the backfill has
+  // been run for it (the Briefcase's deep packs); without it, the reader
+  // organization's.
+  const params: unknown[] = [opts.company ?? null];
   let limitClause = '';
   if (isPositiveInt(opts.limit)) {
     params.push(opts.limit);
     limitClause = ` limit $${params.length}`;
   }
   return q<DatasetRow>(
-    `with self as (select slug, name, public_profile from intel_companies where tier = 'self' limit 1),
+    `with self as (select slug, name, public_profile from intel_companies
+                    where ($1::text is null and tier = 'self') or slug = $1::text limit 1),
      docs as (
        select 'document' as record_type, r.id::text as record_id, r.company_slug, s.name as company_name,
               to_char(r.published_date, 'YYYY-MM-DD') as date, r.source, r.title,

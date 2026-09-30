@@ -33,6 +33,25 @@ export function datasetToCSV(
 // needs a second request to interpret a download. `columns` reflects a
 // requested projection; `filter` is the normalized filter spec (null when
 // nothing in the grammar was requested).
+// A large body as a stream of slices: Vercel refuses a buffered function
+// response over 4.5 MB, while a streamed body has no such cap.
+export function streamString(body: string, slice = 256 * 1024): ReadableStream<Uint8Array> {
+  const enc = new TextEncoder();
+  let at = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (at >= body.length) { controller.close(); return; }
+      let end = Math.min(body.length, at + slice);
+      // Never end a slice on a high surrogate: splitting a pair would encode
+      // both halves as U+FFFD and corrupt the character.
+      const last = body.charCodeAt(end - 1);
+      if (end < body.length && last >= 0xd800 && last <= 0xdbff) end -= 1;
+      controller.enqueue(enc.encode(body.slice(at, end)));
+      at = end;
+    },
+  });
+}
+
 export function datasetToJSON(
   def: DatasetDef, rows: DatasetRow[],
   opts: {
@@ -65,6 +84,11 @@ export function datasetToJSON(
 // and dedupes by itself: the served day for day-filtered datasets, the since
 // date for incremental pulls, and otherwise the UTC date the file was
 // generated (signals-export, intel-facts, and the other whole-corpus sets).
+// The context pack's markdown documents: one company, one size, one day.
+export function packFileName(company: string, size: string, asOf: string): string {
+  return `atlas-context-${company}-${size}-${asOf}.md`;
+}
+
 export function datasetFileName(
   def: DatasetDef, format: 'csv' | 'json', lens?: string, day?: string, since?: string,
   filtered?: boolean

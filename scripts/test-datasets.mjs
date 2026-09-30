@@ -186,9 +186,14 @@ check('helpers: isSignalLens + datasetFileName', () => {
 // Registry-only and SQL-shape checks, no DB: mirrors scripts/test-intel-datasets.mjs's
 // captureQ mock, which drives a builder directly and records the SQL/params it
 // was called with.
-check('registry: filters.company is declared only on the three intel defs', () => {
+check('registry: filters.company is declared only on the company-keyed defs', () => {
   const withCompany = DATASETS.filter((d) => d.filters?.company).map((d) => d.slug).sort();
-  assert.deepEqual(withCompany, ['intel-facts', 'intel-items', 'intel-metrics']);
+  assert.deepEqual(withCompany, ['company-record', 'context-pack', 'intel-facts', 'intel-items', 'intel-metrics']);
+});
+check('registry: only the context pack downloads as markdown, and it is key-gated and heavy', () => {
+  const md = DATASETS.filter((d) => d.markdown);
+  assert.deepEqual(md.map((d) => d.slug), ['context-pack']);
+  assert.ok(md[0].keyGated && md[0].heavy && md[0].filters?.company);
 });
 {
   let capturedSql = '';

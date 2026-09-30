@@ -241,9 +241,9 @@ check("groupFor('/datasets/schema').key === 'datasets' and the leaf beats Catalo
   assert.equal(leaf?.access, 'public');
 });
 
-check('tabsFor(/datasets, guest) = Catalog + Schema map', () => {
+check('tabsFor(/datasets, guest) = Catalog + Briefcase + Schema map', () => {
   const tabs = tabsFor('/datasets', guest).map((l) => l.label);
-  assert.deepEqual(tabs, ['Catalog', 'Schema map']);
+  assert.deepEqual(tabs, ['Catalog', 'Briefcase', 'Schema map']);
 });
 
 check("pathwayFor('/datasets/schema', 'Schema map') = Data Portal(link), Schema map(null)", () => {

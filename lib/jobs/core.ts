@@ -226,6 +226,7 @@ export const JOB_KIND_HREF: Record<string, string> = {
   period_report: '/reports/period',
   thesis: '/theses',
   savant_issue: '/savant/desk',
+  context_pack_briefs: '/datasets/briefcase',
   field_report: '/field-reports',
   'engine:scan': '/scan',
   'engine:intel': '/intel',

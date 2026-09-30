@@ -426,8 +426,8 @@ export async function getTavilyQuota(): Promise<TavilyQuota> {
     ),
   ]);
   const used = usedRow?.n ?? 0;
-  // The 4,000-credit plan since 2026-09-23 (the free 1,000 ran out on 09-22).
-  const cap = Number(process.env.TAVILY_MONTHLY_CAP || 4000);
+  // The 5,000-credit plan since 2026-09-29 (4,000 from 09-23; the free 1,000 ran out on 09-22).
+  const cap = Number(process.env.TAVILY_MONTHLY_CAP || 5000);
   const now = new Date();
   const dayOfMonth = now.getUTCDate();
   const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();

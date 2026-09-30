@@ -379,6 +379,29 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       },
     ],
   },
+  '/datasets/briefcase': {
+    title: 'How the Briefcase works',
+    summary:
+      'Company context you can carry to a model that cannot reach the Atlas: everything public the Atlas holds about a tracked company, compiled into markdown a model can read and rows a search index can load.',
+    sections: [
+      {
+        heading: 'Three files per company',
+        body: 'Base is about 10,000 tokens, sized to sit in every prompt. Brief is about 50,000 tokens, for one deep task on a model that reads long context well. Sections is the whole pack as rows of about 2,000 tokens each, for full-text and vector search.',
+      },
+      {
+        heading: 'What is in a pack',
+        body: 'A cited profile and timeline where a public record has been built, public metrics, a peer table, extracted facts, recent developments, and the record itself: filings, papers, patents, news. Every statement carries the URL it came from and every figure is rendered by code from a public data series.',
+      },
+      {
+        heading: 'What a model wrote',
+        body: 'The profile, the timeline and the weekly section briefs are model-written from cited records. Briefs sit under a label that says so, keep only links to their own section\'s sources, and lose any sentence that states a figure the section does not. Read them as orientation and cite the records.',
+      },
+      {
+        heading: 'Deep and light',
+        body: 'A deep pack has a backfilled public record behind it. A light pack is built from the Intel Desk\'s recent news, facts and metrics only, and says so at the top.',
+      },
+    ],
+  },
   '/datasets/request': {
     title: 'Requesting an access key',
     summary: 'An access key unlocks the key-gated datasets, the natural-language query builder, and the Ask chat on this site. Ask for one here; the maintainer reviews each request by hand.',

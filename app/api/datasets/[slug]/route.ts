@@ -5,7 +5,9 @@ import { logPortalUsage } from '@/lib/mutations/portal';
 import { isSignalLens } from '@/lib/datasets/core';
 import type { DatasetRow } from '@/lib/datasets/core';
 import { getDataset } from '@/lib/datasets/registry';
-import { datasetFileName, datasetToCSV, datasetToJSON } from '@/lib/datasets/serialize';
+import { datasetFileName, datasetToCSV, datasetToJSON, packFileName, streamString } from '@/lib/datasets/serialize';
+import { loadPackInput } from '@/lib/context-pack/load';
+import { renderTier } from '@/lib/context-pack/core';
 import {
   applyFilterSpec, guardFilterRequest, isFilterRequested, isNarrowed, parseFilterSpec, projectColumns,
 } from '@/lib/datasets/filter';
@@ -68,7 +70,7 @@ export async function GET(
 
   if (def.keyGated && !identity.active) {
     const denied = unauthorizedMessage(identity);
-    if (sp.get('format') === 'csv') {
+    if (sp.get('format') === 'csv' || sp.get('format') === 'md') {
       return new Response(denied.body.message, {
         status: denied.status,
         headers: { ...denied.headers, 'Content-Type': 'text/plain; charset=utf-8' },
@@ -271,6 +273,55 @@ export async function GET(
     );
   }
 
+  // ?format=md (the context pack only, declared with `markdown: true`): one
+  // company's pack as ONE markdown document, trimmed to a token budget by
+  // lib/context-pack/core.ts. size=base is about 10,000 tokens, size=brief
+  // about 50,000. It needs company=; the filter grammar does not apply to a
+  // document, so where/cols/sort/q are refused rather than ignored. A dataset
+  // that does not declare markdown keeps the old behavior (an unknown format
+  // is CSV).
+  if (def.markdown && sp.get('format') === 'md') {
+    if (!company) {
+      return Response.json({ error: 'format=md needs company=<slug>.' }, { status: 400 });
+    }
+    const size = sp.get('size') ?? 'base';
+    if (size !== 'base' && size !== 'brief') {
+      return Response.json({ error: 'Bad size. Use base or brief.' }, { status: 400 });
+    }
+    if (filterRequested || isPreview) {
+      return Response.json({ error: 'format=md takes company and size only.' }, { status: 400 });
+    }
+    const input = await loadPackInput(q, company);
+    if (!input) {
+      return Response.json({ error: 'Unknown company.' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
+    }
+    const doc = renderTier(input, size);
+    if (identity.active && identity.tier !== 'none') {
+      const tier = identity.tier;
+      after(() => Promise.all([
+        logPortalUsage({
+          keyId: identity.keyId,
+          identity: tier,
+          kind: 'dataset',
+          datasetSlug: def.slug,
+          spec: { format: 'md', company, size, tokens: doc.tokens },
+          rows: 1,
+          status: 200,
+          ua,
+        }),
+        touchKey(identity.keyId),
+      ]));
+    }
+    const disposition = sp.get('download') === '0' ? 'inline' : 'attachment';
+    return new Response(streamString(doc.markdown), {
+      headers: {
+        'Content-Type': 'text/markdown; charset=utf-8',
+        'Content-Disposition': `${disposition}; filename="${packFileName(company, size, input.asOf)}"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
   // Guardrail (before the fetch): intel-metrics runs to about two million
   // rows, so an unbounded JS-side filter/sort request never triggers the
   // full fetch (guardFilterRequest, lib/datasets/filter.ts).
@@ -399,21 +450,4 @@ export async function GET(
   }
 
   return new Response('﻿' + datasetToCSV(def, outRows, { columns: projected }), { headers });
-}
-
-function streamString(body: string, slice = 256 * 1024): ReadableStream<Uint8Array> {
-  const enc = new TextEncoder();
-  let at = 0;
-  return new ReadableStream<Uint8Array>({
-    pull(controller) {
-      if (at >= body.length) { controller.close(); return; }
-      let end = Math.min(body.length, at + slice);
-      // Never end a slice on a high surrogate: splitting a pair would encode
-      // both halves as U+FFFD and corrupt the character.
-      const last = body.charCodeAt(end - 1);
-      if (end < body.length && last >= 0xd800 && last <= 0xdbff) end -= 1;
-      controller.enqueue(enc.encode(body.slice(at, end)));
-      at = end;
-    },
-  });
 }

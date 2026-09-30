@@ -103,6 +103,7 @@ export const NAV_TREE: NavGroup[] = [
     detailPrefixes: ['/datasets/'],
     children: [
       { href: '/datasets', label: 'Catalog', access: 'public' },
+      { href: '/datasets/briefcase', label: 'Briefcase', access: 'public' },
       { href: '/datasets/schema', label: 'Schema map', access: 'public' },
     ],
   },

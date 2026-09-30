@@ -63,7 +63,7 @@ export interface DatasetOpts {
   day?: string;           // validated as YYYY-MM-DD in the route before it reaches a builder
   since?: string;         // validated as YYYY-MM-DD in the route before it reaches a builder; an incremental lower bound on fetched_at
   source?: string;        // validated against /^[a-z0-9_]{1,32}$/ in the route before it reaches a builder; a single source code
-  company?: string;       // validated against /^[a-z0-9-]{1,64}$/ in the route before it reaches a builder; a single company slug (the three intel datasets only)
+  company?: string;       // validated against /^[a-z0-9-]{1,64}$/ in the route before it reaches a builder; a single company slug (the datasets that declare filters.company)
   host?: string;          // request origin (https://host), for builders that mint absolute Atlas links
   limit?: number;         // preview row cap; clamped to 1..100 in the route before it reaches a builder
 }
@@ -77,6 +77,7 @@ export interface DatasetDef {
   columns: DatasetColumn[];
   formats: ('csv' | 'json')[];
   heavy?: boolean;        // no explorer, truncated preview, download-only posture
+  markdown?: boolean;     // also downloads as one markdown document per company (?format=md&company=&size=); the context pack only
   keyGated?: boolean;     // requires the portal key (bulk third-party article text)
   filters?: { lens?: boolean; day?: boolean; since?: boolean; source?: boolean; company?: boolean };  // declares supported download query params
   build: (q: Q, opts?: DatasetOpts) => Promise<DatasetRow[]>;

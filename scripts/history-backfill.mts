@@ -5,6 +5,13 @@
 //
 // Usage: npx -y tsx scripts/history-backfill.mts <phase> [--dry-run] [--limit=N]
 //          [--month=YYYY-MM] [--concurrency=N] [--model=<openrouter id>]
+//          [--company=<slug>] [--applicant="Legal Name"] [--institution="Name" | --institution-id=I123]
+//          [--skip-summarize=patent,paper] [--cap=USD]
+//
+// --company runs the self-* phases for another registry company (a deep pack
+// in the Briefcase, docs/context-pack.md): its checkpoint keys are prefixed
+// with the slug and its records are unique per company (mig 0081). Run
+// --dry-run first and read the matched applicant and institution names.
 //
 // Phases, in order:
 //   status        units by phase, Tavily credits this month, spend so far
@@ -62,7 +69,21 @@ const CAP_USD = Number(flag('cap') ?? 25);
 // Triage and filing run on Haiku by default: the forced tool parses reliably, where the
 // flash model dropped most verdicts and failed to parse the busiest batches (2026-09-27).
 const UTILITY_MODEL = flag('model') ?? 'claude-haiku-4-5';
-const TAVILY_CAP = Number(process.env.TAVILY_MONTHLY_CAP || 4000);
+const TAVILY_CAP = Number(process.env.TAVILY_MONTHLY_CAP || 5000);
+// --company=<slug> runs the self-* phases for another registry company (the
+// Briefcase's deep packs). Without it they run for the reader organization.
+const COMPANY = flag('company');
+// Name overrides for the two sources that match on a name: the registry
+// name is the brand, the patent applicant and the OpenAlex institution are
+// often the legal entity. Check a --dry-run before trusting either.
+const APPLICANT = flag('applicant');
+const INSTITUTION = flag('institution');
+// OpenAlex types some banks as 'other', which the name search skips:
+// --institution-id=I<digits> names the institution outright.
+const INSTITUTION_ID = flag('institution-id');
+// --skip-summarize=patent,paper files those sources by rule (tech_ai, the
+// title and abstract they already carry) instead of a model call.
+const SKIP_SUMMARIZE = (flag('skip-summarize') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
 
 // ------------------------------------------------------------------ shared
 export const FEATURE_LIKE = `(feature like 'history\\_%' or feature like 'self\\_record\\_%')`;
@@ -87,17 +108,27 @@ async function assertBudget(creditsNeeded = 0): Promise<void> {
 }
 class StopError extends Error {}
 
-async function unitDone(key: string): Promise<boolean> {
+// Checkpoint keys of the self-* phases belong to a company. The reader
+// organization keeps its original bare keys (so nothing reruns); any other
+// company's are prefixed with its slug. Without this a second company would
+// find every unit already done.
+let UNIT_SCOPE = '';
+const scoped = (key: string) => (UNIT_SCOPE && key.startsWith('self-') ? `${UNIT_SCOPE}:${key}` : key);
+
+async function unitDone(rawKey: string): Promise<boolean> {
+  const key = scoped(rawKey);
   const r = await one<{ status: string }>(`select status from backfill_units where key = $1`, [key]);
   return r?.status === 'done' || r?.status === 'skipped';
 }
 // A unit skipped for a missing key runs once the key exists: 'skipped' only
 // counts as done while the key is still absent.
-async function unitDoneOrStillBlocked(key: string, keyPresent: boolean): Promise<boolean> {
+async function unitDoneOrStillBlocked(rawKey: string, keyPresent: boolean): Promise<boolean> {
+  const key = scoped(rawKey);
   const r = await one<{ status: string }>(`select status from backfill_units where key = $1`, [key]);
   return r?.status === 'done' || (r?.status === 'skipped' && !keyPresent);
 }
-async function markUnit(key: string, p: string, status: string, extra: { credits?: number; items?: number; note?: string; cost?: number } = {}) {
+async function markUnit(rawKey: string, p: string, status: string, extra: { credits?: number; items?: number; note?: string; cost?: number } = {}) {
+  const key = scoped(rawKey);
   await exec(
     `insert into backfill_units (key, phase, status, credits, items, note, cost_usd)
      values ($1, $2, $3, $4, $5, $6, $7)
@@ -138,9 +169,13 @@ function windows() {
 }
 
 async function selfRow() {
-  const r = await one<{ slug: string; name: string; aliases: string[]; domain: string | null; cik: string | null; fdic_cert: string | null; rssd_id: string | null; cfpb_name: string | null }>(
-    `select slug, name, aliases, domain, cik, fdic_cert, rssd_id, cfpb_name from intel_companies where tier = 'self' and active limit 1`);
-  if (!r) throw new StopError('no active self row in intel_companies');
+  type Row = { slug: string; name: string; tier: string; aliases: string[]; domain: string | null; cik: string | null; fdic_cert: string | null; rssd_id: string | null; cfpb_name: string | null };
+  const cols = 'slug, name, tier::text as tier, aliases, domain, cik, fdic_cert, rssd_id, cfpb_name';
+  const r = COMPANY
+    ? await one<Row>(`select ${cols} from intel_companies where slug = $1 and active`, [COMPANY])
+    : await one<Row>(`select ${cols} from intel_companies where tier = 'self' and active limit 1`);
+  if (!r) throw new StopError(COMPANY ? `no active company '${COMPANY}' in intel_companies` : 'no active self row in intel_companies');
+  UNIT_SCOPE = r.tier === 'self' ? '' : r.slug;
   return r;
 }
 
@@ -159,9 +194,16 @@ async function status() {
   const hist = await q<{ triage: string; n: number; landmarks: number; drafted: number }>(
     `select triage, count(*)::int n, count(*) filter (where landmark)::int landmarks, count(signal_id)::int drafted from history_items group by 1`);
   if (hist.length) console.table(hist);
-  const rec = await q<{ source: string; n: number; ai: number }>(
-    `select source, count(*)::int n, count(*) filter (where ai_related)::int ai from self_record group by 1 order by 2 desc`);
+  const rec = await q<{ company: string; source: string; n: number; ai: number; unfiled: number }>(
+    `select company_slug as company, source, count(*)::int n, count(*) filter (where ai_related)::int ai,
+            count(*) filter (where dimension is null)::int unfiled
+       from self_record ${COMPANY ? 'where company_slug = $1' : ''} group by 1, 2 order by 1, 3 desc`, COMPANY ? [COMPANY] : []);
   if (rec.length) console.table(rec);
+  const synth = await q<{ company: string; events: number; profile: number }>(
+    `select c.slug as company, (select count(*)::int from self_timeline t where t.company_slug = c.slug) as events,
+            coalesce(jsonb_array_length(c.public_profile->'sentences'), 0)::int as profile
+       from intel_companies c where exists (select 1 from self_record r where r.company_slug = c.slug) order by 1`);
+  if (synth.length) console.table(synth);
 }
 
 // ------------------------------------------------------------------ probe
@@ -436,7 +478,7 @@ async function insertRecord(slug: string, r: {
   const row = await one<{ id: string }>(
     `insert into self_record (company_slug, source, title, url, published_date, summary, ai_related, ai_passages, text_excerpt, metadata)
      values ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10)
-     on conflict (url) do nothing returning id`,
+     on conflict (company_slug, url) do nothing returning id`,
     [slug, r.source, (clean(r.title) ?? '').slice(0, 400), r.url, r.published_date, clean(r.summary), passages.length > 0,
       passages, r.text_excerpt ? (clean(r.text_excerpt) ?? '').slice(0, 8000) : null, r.metadata ?? {}]);
   return Boolean(row);
@@ -509,7 +551,7 @@ async function selfNews() {
       try {
         res = await tavilyQuery({ query: r.query, topic: r.topic, startDate: p.w.start, endDate: p.w.end, maxResults: 20, includeDomains: r.domains, exactMatch: true });
       } finally {
-        await recordApiCall({ feature: 'history_search', model: 'tavily-search', usage: null, wallMs: Date.now() - t0, metadata: { queries: 1, window: p.w.start, self: true } });
+        await recordApiCall({ feature: 'history_search', model: 'tavily-search', usage: null, wallMs: Date.now() - t0, metadata: { queries: 1, window: p.w.start, self: true, company: self.slug } });
       }
       for (const x of res) {
         if (!x.url || !x.title) continue;
@@ -530,9 +572,11 @@ async function selfNews() {
 
 async function selfResearch() {
   const self = await selfRow();
-  const inst = await src.resolveInstitution(self.name);
+  const inst = INSTITUTION_ID && /^I\d+$/.test(INSTITUTION_ID)
+    ? { id: INSTITUTION_ID, display: `${INSTITUTION_ID} (named by --institution-id)`, works: 0 }
+    : await src.resolveInstitution(INSTITUTION ?? self.name);
   if (!inst) { await markUnit('self-research:openalex', 'self-research', 'skipped', { note: 'no institution match' }); console.log('no OpenAlex institution matched'); return; }
-  console.log(`OpenAlex institution: ${inst.id} (${inst.works} works overall)`);
+  console.log(`OpenAlex institution: ${inst.id} "${inst.display}" (${inst.works} works overall). Check the name: a wrong match files another organization's papers.`);
   const works = await src.listOpenAlexWorks(inst.id, core.HISTORY_START);
   console.log(`self-research: ${works.length} works since ${core.HISTORY_START}`);
   if (DRY) { works.slice(0, 10).forEach((w) => console.log(`  ${w.published} ${w.title.slice(0, 90)}`)); return; }
@@ -557,7 +601,9 @@ async function selfPatents() {
     await markUnit('self-patents:uspto', 'self-patents', 'skipped', { note: 'PATENTSVIEW_API_KEY (USPTO ODP key) not set' });
     console.log('self-patents: skipped, PATENTSVIEW_API_KEY not set'); return;
   }
-  const pats = await src.listPatents(self.name, core.HISTORY_START);
+  const pats = await src.listPatents(APPLICANT ?? self.name, core.HISTORY_START);
+  const applicants = [...new Set(pats.map((p) => p.applicant))].slice(0, 6);
+  console.log(`self-patents: first applicant name(s) matched: ${applicants.join(' | ') || 'none'}`);
   const ai = pats.filter((p) => p.cpc.some((c) => c.replace(/\s+/g, '').startsWith('G06N')) || core.AI_TERMS_RE.test(p.title));
   console.log(`self-patents: ${pats.length} granted since ${core.HISTORY_START}, ${ai.length} AI-related`);
   if (DRY) return;
@@ -593,6 +639,9 @@ async function selfRegulatory() {
   ];
   console.log(`self-regulatory: ${queries.length} regulator-domain searches + comment letters + testimony`);
   if (DRY) return;
+  // A page counts when it names the company by its registry name or an alias.
+  const names = [self.name, ...(self.aliases ?? [])].map((n) => n.toLowerCase()).filter((n) => n.length > 3);
+  const namesIt = (text: string) => { const t = text.toLowerCase(); return names.some((n) => t.includes(n)); };
   const w = { start: core.HISTORY_START, end: TODAY };
   for (const r of queries) {
     if (await unitDone(r.key)) continue;
@@ -603,7 +652,7 @@ async function selfRegulatory() {
       if (!x.url || !x.title) continue;
       let text = x.content ?? '';
       try { text = (await fetchCandidateText(x.url, { timeoutMs: 25_000, allowFallback: false })).text; } catch { /* keep the snippet */ }
-      if (!text.toLowerCase().includes(self.name.toLowerCase())) continue; // a regulator page that never names it
+      if (!namesIt(text)) continue; // a regulator page that never names it
       if (await insertRecord(self.slug, {
         source: r.source, title: x.title, url: x.url, published_date: core.isoDay(x.published_date),
         ai_passages: core.extractAiPassages(text, { max: 4 }), text_excerpt: text.slice(0, 6000),
@@ -631,8 +680,7 @@ async function selfRegulatory() {
           try { text = (await fetchCandidateText(d.attachmentUrl, { timeoutMs: 45_000, allowFallback: false, maxChars: 400_000 })).text; } catch { /* keep the title */ }
         }
         const passages = core.extractAiPassages(text, { max: source === 'testimony' ? 8 : 10 });
-        if (source === 'testimony' && !passages.some((p) => p.toLowerCase().includes(self.name.toLowerCase()))
-          && !text.toLowerCase().includes(self.name.toLowerCase())) continue;
+        if (source === 'testimony' && !passages.some(namesIt) && !namesIt(text)) continue;
         const title = source === 'comment_letter'
           ? `Comment letter to ${d.agency ?? 'a regulator'}${d.docketTitle ? ` on ${d.docketTitle}` : ''}`
           : d.title;
@@ -663,10 +711,16 @@ const SUM_SCHEMA = {
 };
 async function selfSummarize() {
   const self = await selfRow();
+  if (SKIP_SUMMARIZE.length && !DRY) {
+    const n = await exec(
+      `update self_record set dimension = 'tech_ai' where company_slug = $1 and dimension is null and source = any($2)`,
+      [self.slug, SKIP_SUMMARIZE]);
+    console.log(`self-summarize: ${n} ${SKIP_SUMMARIZE.join('/')} records filed by rule, no model call`);
+  }
   const todo = await q<{ id: string; source: string; title: string; published_date: string | null; ai_passages: string[]; text_excerpt: string | null; summary: string | null }>(
     `select id, source, title, published_date::text, ai_passages, text_excerpt, summary from self_record
-      where company_slug = $1 and dimension is null order by published_date nulls last`, [self.slug]);
-  console.log(`self-summarize: ${todo.length} records`);
+      where company_slug = $1 and dimension is null and not (source = any($2)) order by published_date nulls last`, [self.slug, SKIP_SUMMARIZE]);
+  console.log(`self-summarize: ${todo.length} records, ${Math.ceil(todo.length / 12)} model calls, about $${(Math.ceil(todo.length / 12) * 0.0085).toFixed(2)}`);
   if (DRY || !todo.length) return;
   const batches: typeof todo[] = [];
   for (let i = 0; i < todo.length; i += 12) batches.push(todo.slice(i, i + 12));
@@ -687,7 +741,7 @@ Return every index exactly once.`;
     try {
       out = await routedStructured<SumOut>({
         model: UTILITY_MODEL, system, user: list, toolName: 'submit_filing', toolDescription: 'File each document.',
-        schema: SUM_SCHEMA, maxTokens: 3500, timeoutMs: 90_000, feature: 'self_record_summarize', metadata: { n: b.length },
+        schema: SUM_SCHEMA, maxTokens: 3500, timeoutMs: 90_000, feature: 'self_record_summarize', metadata: { n: b.length, company: self.slug },
       });
     } catch (e) { console.warn(`  summarize batch failed: ${(e as Error).message.slice(0, 120)}`); return; }
     const byIdx = new Map((out.items ?? []).map((d) => [Number(d.i), d]));
@@ -754,7 +808,7 @@ async function selfTimeline() {
       system: `You write the dated timeline of ${self.name}'s public AI moves in ${y}: launches, public statements, hires and leadership roles, papers, partnerships, regulatory events, acquisitions, investments, and the patent stream. Merge records about the same event into one entry citing all of them. Skip routine boilerplate (risk-factor language repeated each quarter) unless it changed. 8 to 25 events spread across the whole year, dated by the event itself. ${PUBLIC_ONLY}`,
       user: `${patentLine}RECORDS (${y}):\n${list}`,
       toolName: 'submit_timeline', toolDescription: 'The year\'s AI timeline.', schema: TIMELINE_SCHEMA,
-      maxTokens: 8000, timeoutMs: 180_000, feature: 'self_record_timeline', metadata: { year: y, records: recs.length },
+      maxTokens: 8000, timeoutMs: 180_000, feature: 'self_record_timeline', metadata: { year: y, records: recs.length, company: self.slug },
     });
     let events = core.validateTimeline(out.events ?? [], known);
     if (events.length < 6 && docs.length >= 20) {
@@ -764,7 +818,7 @@ async function selfTimeline() {
         system: `You write the dated timeline of ${self.name}'s public AI moves in ${y}. Write 12 to 25 events spread across the whole year from the non-patent records (launches, statements, hires, papers, partnerships, regulatory events, acquisitions, investments), plus at most two events summarizing the patent stream. ${PUBLIC_ONLY}`,
         user: `${patentLine}RECORDS (${y}):\n${list}`,
         toolName: 'submit_timeline', toolDescription: 'The year\'s AI timeline.', schema: TIMELINE_SCHEMA,
-        maxTokens: 8000, timeoutMs: 180_000, feature: 'self_record_timeline', metadata: { year: y, records: recs.length, retry: true },
+        maxTokens: 8000, timeoutMs: 180_000, feature: 'self_record_timeline', metadata: { year: y, records: recs.length, retry: true, company: self.slug },
       });
       const second = core.validateTimeline(again.events ?? [], known);
       if (second.length > events.length) events = second;
@@ -806,12 +860,12 @@ async function selfProfile() {
   ].join('\n');
   const out = await routedStructured<{ sentences: unknown[] }>({
     model: SYNTH_MODEL,
-    system: `You write a cited public profile of ${self.name}'s AI work since November 2022 for a research agent that writes about banking and AI: what it has built and shipped, how it describes AI in its filings, its research and patents, its partnerships and talent, and its regulatory context. 8 to 15 sentences, each a self-contained factual statement with the record ids that support it. ${PUBLIC_ONLY}`,
+    system: `You write a cited public profile of ${self.name}'s AI work since November 2022 for a research agent that writes about financial services and AI: what it has built and shipped, how it describes AI in its filings, its research and patents, its partnerships and talent, and its regulatory context. 8 to 15 sentences, each a self-contained factual statement with the record ids that support it. ${PUBLIC_ONLY}`,
     user,
     toolName: 'submit_profile', toolDescription: 'The cited profile.',
     schema: { type: 'object', additionalProperties: false, properties: { sentences: { type: 'array', items: { type: 'object', additionalProperties: false, properties: {
       text: { type: 'string' }, record_ids: { type: 'array', items: { type: 'string' } } }, required: ['text', 'record_ids'] } } }, required: ['sentences'] },
-    maxTokens: 4000, timeoutMs: 180_000, feature: 'self_record_profile', metadata: { events: events.length },
+    maxTokens: 4000, timeoutMs: 180_000, feature: 'self_record_profile', metadata: { events: events.length, company: self.slug },
   });
   const sentences = core.validateProfile(out.sentences, known);
   if (sentences.length < 4) throw new StopError(`profile too thin after the citation gate (${sentences.length} sentences)`);

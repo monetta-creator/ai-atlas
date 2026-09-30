@@ -1,0 +1,102 @@
+/* ============================================================
+   BRIEFCASE (.bc-*): /datasets/briefcase and the band on the
+   Data Portal hub. Company context packs: an object of its own,
+   so the band is ink-filled where every dataset card is paper.
+   Everything wraps at 375px; nothing forces horizontal scroll.
+   ============================================================ */
+
+/* ---- the hub band ------------------------------------------ */
+.bc-band {
+  display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px;
+  align-items: center;
+  padding: 26px 28px; margin: 0 0 30px;
+  background: var(--ink); color: var(--bg);
+  border-left: 4px solid var(--accent);
+}
+[data-theme="dark"] .bc-band { background: #16223b; color: var(--ink); }
+.bc-kicker {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: color-mix(in oklab, var(--accent) 70%, #fff); margin: 0 0 8px;
+}
+.bc-band-title {
+  font-family: var(--font-headline); font-weight: 400; font-size: 30px; line-height: 1.05;
+  letter-spacing: 0.01em; text-transform: uppercase; margin: 0 0 10px; color: inherit;
+}
+.bc-band-line { font-size: 14px; line-height: 1.6; margin: 0; opacity: 0.78; max-width: 46ch; }
+.bc-band-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.bc-band-for { font-family: var(--font-mono); font-size: 11.5px; margin: 0; opacity: 0.7; }
+.bc-band-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bc-band-all { font-size: 12.5px; color: inherit; opacity: 0.8; text-decoration: underline; text-underline-offset: 3px; }
+.bc-band-all:hover { opacity: 1; }
+.bc-band .bc-dl { background: transparent; border-color: color-mix(in oklab, currentColor 30%, transparent); color: inherit; }
+.bc-band .bc-dl:hover { border-color: currentColor; background: color-mix(in oklab, currentColor 10%, transparent); }
+.bc-band .bc-dl--base { background: var(--accent); border-color: var(--accent); color: #fff; }
+.bc-band .bc-dl--base:hover { background: color-mix(in oklab, var(--accent) 86%, #000); border-color: var(--accent); }
+.bc-band .bc-dl-meta { color: inherit; opacity: 0.7; }
+@media (max-width: 767px) {
+  .bc-band { grid-template-columns: minmax(0, 1fr); padding: 22px 18px; gap: 18px; }
+  .bc-band-title { font-size: 25px; }
+}
+
+/* ---- downloads --------------------------------------------- */
+.bc-downloads { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.bc-dl {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  padding: 9px 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  transition: border-color 0.15s var(--ease-soft), background 0.15s var(--ease-soft);
+}
+.bc-dl:hover { border-color: var(--ink); text-decoration: none; }
+.bc-dl--base { border-color: color-mix(in oklab, var(--accent) 45%, var(--line)); }
+.bc-dl-name { font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+.bc-dl-name i { font-family: var(--font-mono); font-style: normal; font-weight: 400; font-size: 10.5px; color: var(--faint-ink); }
+.bc-band .bc-dl-name i { color: inherit; opacity: 0.7; }
+.bc-dl-meta {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+@media (max-width: 479px) { .bc-downloads { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- the page ---------------------------------------------- */
+.bc-lede { font-size: 15px; line-height: 1.6; color: var(--dim); max-width: 62ch; margin: 0 0 22px; }
+.bc-explain {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0;
+  border: 1px solid var(--line); background: var(--surface); margin-bottom: 36px;
+}
+.bc-explain-item { padding: 16px 18px; border-left: 1px solid var(--line); }
+.bc-explain-item:first-child { border-left: 0; }
+.bc-explain-item p { font-size: 13px; line-height: 1.55; color: var(--dim); margin: 0; }
+.bc-explain-item .bc-explain-name { font-weight: 600; font-size: 14px; color: var(--ink); margin-bottom: 5px; }
+.bc-explain-name span { font-family: var(--font-mono); font-weight: 400; font-size: 10.5px; color: var(--faint-ink); margin-left: 6px; }
+@media (max-width: 767px) {
+  .bc-explain { grid-template-columns: minmax(0, 1fr); }
+  .bc-explain-item { border-left: 0; border-top: 1px solid var(--line); }
+  .bc-explain-item:first-child { border-top: 0; }
+}
+
+.bc-group { margin-bottom: 38px; }
+.bc-group-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.bc-group-title { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin: 0; }
+.bc-group-note { font-size: 12.5px; color: var(--faint-ink); margin: 0; }
+
+.bc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); }
+@media (max-width: 1099px) { .bc-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 719px) { .bc-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.bc-card {
+  display: flex; flex-direction: column; gap: 16px; min-width: 0;
+  padding: 18px; background: var(--surface); border: 1px solid var(--frame);
+}
+.bc-card--self { border-left: 4px solid var(--accent); grid-column: 1 / -1; }
+.bc-card--self .bc-downloads { max-width: 620px; }
+.bc-card-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.bc-card-name { min-width: 0; flex: 1; }
+.bc-card-name h3 { font-size: 15.5px; font-weight: 650; margin: 0; overflow-wrap: anywhere; }
+.bc-card-name p { font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink); margin: 3px 0 0; }
+.bc-tag {
+  flex: none; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 3px 7px; border: 1px solid var(--line); color: var(--faint-ink);
+}
+.bc-tag--deep { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 40%, var(--line)); }
+
+.bc-handoff { margin-top: 10px; padding-top: 26px; border-top: 1px solid var(--line); }
+.bc-handoff .bc-group-note { margin: 6px 0 16px; max-width: 62ch; }

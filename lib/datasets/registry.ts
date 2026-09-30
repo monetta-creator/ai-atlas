@@ -4,6 +4,7 @@ import { isPositiveInt } from './core.ts';
 // stripping) can load this module chain; the bundler resolves it the same.
 import {
   buildArgumentEdges, buildArgumentNodes, buildArticlesFullText, buildCompanyRecord, buildConcepts,
+  buildContextPack,
   buildEvidenceLedger, buildExternalScan, buildIntelCompanies, buildIntelFacts,
   buildIntelItems, buildIntelMetrics, buildResearchExport, buildResearchPapers,
   buildScoutCompanies, buildScoutEvents, buildSignals, buildSignalsByClaim,
@@ -579,11 +580,12 @@ const BASE: DatasetDef[] = [
     description:
       'Everything public about the organization the Atlas is written for, since ChatGPT: its SEC filings and press releases, news, research papers, AI patents, comment letters and regulatory documents, plus the AI timeline and the cited profile built from them, in one row shape.',
     methodology:
-      'Built once on 2026-09-27 by a local backfill (docs/self-record.md) and refreshed when it is rerun. One row per document (record_type document), per AI timeline event (timeline_event) and per sentence of the cited profile (profile_sentence). Documents carry the AI paragraphs found in them and a text excerpt; events and profile sentences carry the ids of the documents they cite (cites) and those documents\' URLs (cite_urls). Public sources only; every event and sentence traces to a document row. The engine\'s ongoing news, facts and metrics for the same organization are in intel-items, intel-facts and intel-metrics with ?company=<slug>. This is a working corpus, not a redistribution channel. Downloading requires an access key.',
+      'Built once on 2026-09-27 by a local backfill (docs/self-record.md) and refreshed when it is rerun. One row per document (record_type document), per AI timeline event (timeline_event) and per sentence of the cited profile (profile_sentence). Documents carry the AI paragraphs found in them and a text excerpt; events and profile sentences carry the ids of the documents they cite (cites) and those documents\' URLs (cite_urls). Public sources only; every event and sentence traces to a document row. With ?company=<slug> the same record is served for another tracked company, where one has been built. The engine\'s ongoing news, facts and metrics for the same organization are in intel-items, intel-facts and intel-metrics with ?company=<slug>. This is a working corpus, not a redistribution channel. Downloading requires an access key.',
     category: 'intel',
     formats: ['csv', 'json'],
     heavy: true,
     keyGated: true,
+    filters: { company: true },
     columns: [
       col('record_type', 'Record type', 'enum', 'document, timeline_event, or profile_sentence.', ['document', 'timeline_event', 'profile_sentence']),
       col('record_id', 'Record ID', 'text', 'Stable id: a document or event UUID, or <slug>:profile:<n> for a profile sentence.'),
@@ -603,6 +605,37 @@ const BASE: DatasetDef[] = [
       col('metadata', 'Metadata', 'text', 'For a document: source-specific fields as JSON (form and accession, patent number and CPC codes, DOI and venue, agency and docket).'),
     ],
     build: buildCompanyRecord,
+  },
+  {
+    slug: 'context-pack',
+    title: 'Briefcase: company context packs',
+    description:
+      'Everything public the Atlas holds about each tracked company, compiled for a model to read: a cited profile and timeline, public metrics, a peer table, extracted facts, recent developments and the public record, one row per section. The same content downloads as a base or brief markdown document per company.',
+    methodology:
+      'Rendered by code from public rows on every download (lib/context-pack): the company record, the Intel Desk\'s items and facts, and the curated metric series. Every figure comes from a public data series and every statement cites its source URL. Rows with provenance model are weekly section briefs written by a language model, gated so that every link is one of the section\'s own sources and every figure appears in the section; treat them as orientation and cite the record rows. Rows of kind check are questions with known answers for testing a model and never appear in a markdown document. in_base and in_brief say whether any part of a row appears in the 10,000-token base document or the 50,000-token brief document (?format=md&company=<slug>&size=base|brief). Section ids are stable; replace a company\'s rows on each load. Private registry fields are never read. Downloading requires an access key.',
+    category: 'intel',
+    formats: ['csv', 'json'],
+    heavy: true,
+    keyGated: true,
+    markdown: true,
+    filters: { company: true },
+    columns: [
+      col('company_slug', 'Company slug', 'text', 'The company the section is about; joins intel-companies.'),
+      col('company_name', 'Company', 'text', 'Company name, from the registry.'),
+      col('tier', 'Tier', 'enum', 'The company\'s registry tier.'),
+      col('section_id', 'Section ID', 'text', 'Stable id, unique within a company: a section, a section and group (a year, a month, a dimension), or a numbered part of one.'),
+      col('section_title', 'Section title', 'text', 'Display title of the section.'),
+      col('section_kind', 'Section kind', 'enum', 'guide, profile, timeline, metrics, peers, facts, news, record, brief, or check.', ['guide', 'profile', 'timeline', 'metrics', 'peers', 'facts', 'news', 'record', 'brief', 'check']),
+      col('provenance', 'Provenance', 'enum', 'record when code rendered the row from public records, model when a language model wrote it.', ['record', 'model']),
+      col('in_base', 'In base', 'enum', 'yes when any part of the row appears in the base markdown document.', ['yes', 'no']),
+      col('in_brief', 'In brief', 'enum', 'yes when any part of the row appears in the brief markdown document.', ['yes', 'no']),
+      col('position', 'Position', 'number', 'Reading order within the company, from 1.'),
+      col('token_estimate', 'Token estimate', 'number', 'Estimated tokens in the markdown: characters / 4 x 1.3, a ceiling.'),
+      col('markdown', 'Markdown', 'longtext', 'The section as markdown, with numbered references and its own source list.'),
+      col('cite_urls', 'Cited URLs', 'text', 'The public URLs the section cites, separated by spaces.'),
+      col('as_of', 'As of', 'date', 'The day the pack was built (YYYY-MM-DD).'),
+    ],
+    build: buildContextPack,
   },
   {
     slug: 'tooling-products',
