@@ -35,8 +35,10 @@ By URL (the same key gate as every key-gated dataset, cookie or header):
 /api/datasets/context-pack/handoff
 ```
 
-`format=md` takes `company` and `size` only. The rows take the whole query
-grammar. The handoff is the orientation document for the intake on the other
+`/api/datasets/context-pack?format=zip[&company=<slug>]` is every company's
+three files, the handoff and a manifest in one archive, the "Download all"
+button at the top of the page. `format=md` takes `company` and `size` only;
+`format=zip` takes `company` only. The rows take the whole query grammar. The handoff is the orientation document for the intake on the other
 side; the page has a copy button for it.
 
 ## What a pack holds
@@ -78,6 +80,15 @@ flag can drift from it.
   in a fixed order. The token estimate is characters / 4 x 1.3, a ceiling:
   measured against an exact o200k count, the base pack estimates 9.6k and
   counts 9.0k.
+
+## When a pack changes
+
+A pack is rendered from the live rows at download time, so it is as fresh as
+the engines: the Intel Desk each weekday (items, facts, metrics), the public
+record when its backfill is rerun. The briefs are the only stored part and are
+rewritten on Mondays. The page's status line and each card show when a
+company's data and briefs last changed (`loadPackFreshness`); /ops carries the
+briefs job with the latest week written.
 
 ## The briefs, the one model-written part
 

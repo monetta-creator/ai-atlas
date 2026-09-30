@@ -5,9 +5,11 @@ import { logPortalUsage } from '@/lib/mutations/portal';
 import { isSignalLens } from '@/lib/datasets/core';
 import type { DatasetRow } from '@/lib/datasets/core';
 import { getDataset } from '@/lib/datasets/registry';
-import { datasetFileName, datasetToCSV, datasetToJSON, packFileName, streamString } from '@/lib/datasets/serialize';
-import { loadPackInput } from '@/lib/context-pack/load';
-import { renderTier } from '@/lib/context-pack/core';
+import { datasetFileName, datasetToCSV, datasetToJSON, packFileName, streamBytes, streamString } from '@/lib/datasets/serialize';
+import { loadPackInput, loadPackInputs } from '@/lib/context-pack/load';
+import { renderTier, buildSections } from '@/lib/context-pack/core';
+import { buildDatasetHandoff } from '@/lib/datasets/handoff-generic';
+import { zipFiles } from '@/lib/zip';
 import {
   applyFilterSpec, guardFilterRequest, isFilterRequested, isNarrowed, parseFilterSpec, projectColumns,
 } from '@/lib/datasets/filter';
@@ -70,7 +72,7 @@ export async function GET(
 
   if (def.keyGated && !identity.active) {
     const denied = unauthorizedMessage(identity);
-    if (sp.get('format') === 'csv' || sp.get('format') === 'md') {
+    if (sp.get('format') === 'csv' || sp.get('format') === 'md' || sp.get('format') === 'zip') {
       return new Response(denied.body.message, {
         status: denied.status,
         headers: { ...denied.headers, 'Content-Type': 'text/plain; charset=utf-8' },
@@ -317,6 +319,66 @@ export async function GET(
       headers: {
         'Content-Type': 'text/markdown; charset=utf-8',
         'Content-Disposition': `${disposition}; filename="${packFileName(company, size, input.asOf)}"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
+  // ?format=zip (the context pack only): every company's base, brief and
+  // section rows in one archive, plus the importer handoff and a manifest,
+  // for the weekly hand-carried download. company= narrows it to one.
+  if (def.markdown && sp.get('format') === 'zip') {
+    if (filterRequested || isPreview) {
+      return Response.json({ error: 'format=zip takes company only.' }, { status: 400 });
+    }
+    const inputs = await loadPackInputs(q, company ?? null);
+    if (!inputs.length) {
+      return Response.json({ error: 'Unknown company.' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
+    }
+    const asOf = inputs[0].asOf;
+    const files: { name: string; text: string }[] = [];
+    const manifest: Record<string, unknown>[] = [];
+    for (const input of inputs) {
+      const slug = input.company.slug;
+      const base = renderTier(input, 'base');
+      const brief = renderTier(input, 'brief');
+      const sections = buildSections(input);
+      files.push(
+        { name: `${slug}/${packFileName(slug, 'base', asOf)}`, text: base.markdown },
+        { name: `${slug}/${packFileName(slug, 'brief', asOf)}`, text: brief.markdown },
+        { name: `${slug}/atlas-context-${slug}-sections-${asOf}.json`, text: datasetToJSON(def, sections.map((s) => ({
+          company_slug: slug, company_name: input.company.name, tier: input.company.tier, section_id: s.id, section_title: s.title,
+          section_kind: s.kind, provenance: s.provenance, in_base: s.inBase ? 'yes' : 'no', in_brief: s.inBrief ? 'yes' : 'no',
+          position: s.position, token_estimate: s.tokens, markdown: s.markdown, cite_urls: s.citeUrls.length ? s.citeUrls.join(' ') : null, as_of: asOf,
+        })), { columns: def.columns, filter: null }) },
+      );
+      manifest.push({
+        company_slug: slug, company_name: input.company.name, tier: input.company.tier, deep_record: input.company.deepRecord,
+        base_tokens: base.tokens, brief_tokens: brief.tokens, sections: sections.length, briefs: input.briefs.length,
+        brief_week: input.briefs.map((b) => b.weekEnd).sort().pop() ?? null,
+      });
+    }
+    files.push(
+      { name: 'README.md', text: buildDatasetHandoff(def, { origin: req.nextUrl.origin }) },
+      { name: 'manifest.json', text: JSON.stringify({ built: asOf, companies: manifest }, null, 2) },
+    );
+    const zip = zipFiles(files, asOf);
+    if (identity.active && identity.tier !== 'none') {
+      const tier = identity.tier;
+      after(() => Promise.all([
+        logPortalUsage({
+          keyId: identity.keyId, identity: tier, kind: 'dataset', datasetSlug: def.slug,
+          spec: { format: 'zip', company, companies: inputs.length, bytes: zip.length }, rows: files.length, status: 200, ua,
+        }),
+        touchKey(identity.keyId),
+      ]));
+    }
+    // Streamed in slices like the heavy JSON: a buffered function response
+    // over 4.5 MB is refused, and six deep packs pass that.
+    return new Response(streamBytes(zip), {
+      headers: {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="atlas-briefcase-${company ?? 'all'}-${asOf}.zip"`,
         'Cache-Control': 'no-store',
       },
     });

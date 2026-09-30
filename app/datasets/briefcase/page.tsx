@@ -6,9 +6,10 @@ import { getPortalIdentity } from '@/lib/portal/identity';
 import { descriptionFor } from '@/lib/page-info';
 import { getDataset } from '@/lib/datasets/registry';
 import { buildDatasetHandoff } from '@/lib/datasets/handoff-generic';
-import { loadPackInputs } from '@/lib/context-pack/load';
+import { loadPackInputs, loadPackFreshness } from '@/lib/context-pack/load';
 import { briefAddsContent, buildSections, renderTier } from '@/lib/context-pack/core';
 import { dateLabel } from '@/lib/format';
+import { BRIEFABLE } from '@/lib/context-pack/core';
 import PageTop from '@/components/PageTop';
 import EntityLogo from '@/components/EntityLogo';
 import PortalUnlock from '@/components/datasets/PortalUnlock';
@@ -67,13 +68,22 @@ export default async function BriefcasePage() {
     );
   }
 
-  const inputs = await loadPackInputs(q, null);
+  const [inputs, freshness] = await Promise.all([loadPackInputs(q, null), loadPackFreshness(q)]);
+  const freshBy = new Map(freshness.map((f) => [f.slug, f]));
+  const stamp = (iso: string | null) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return `${d.toISOString().slice(0, 10)} ${d.toISOString().slice(11, 16)} UTC`;
+  };
   const cards = inputs.map((input) => {
     const base = renderTier(input, 'base');
     const brief = renderTier(input, 'brief');
     const sections = buildSections(input).filter((s) => s.kind !== 'check');
     const briefWeek = input.briefs.map((b) => b.weekEnd).sort().pop() ?? null;
+    const fresh = freshBy.get(input.company.slug);
     return {
+      briefsAt: fresh?.briefsWrittenAt ?? null, briefCount: fresh?.briefCount ?? 0,
+      dataAt: [fresh?.intelAt, fresh?.recordAt].filter((x): x is string => Boolean(x)).sort().pop() ?? null,
       slug: input.company.slug, name: input.company.name, tier: input.company.tier, domain: input.company.domain ?? null,
       deep: input.company.deepRecord, showBrief: briefAddsContent(base, brief), briefWeek,
       records: input.records.length, facts: input.facts.length, items: input.items.length,
@@ -94,7 +104,9 @@ export default async function BriefcasePage() {
   const def = getDataset('context-pack');
   const handoff = def ? buildDatasetHandoff(def, { origin }) : '';
   const asOf = inputs[0]?.asOf ?? null;
-  const lastBrief = cards.map((c) => c.briefWeek).filter((w): w is string => Boolean(w)).sort().pop() ?? null;
+  const lastBriefAt = cards.map((c) => c.briefsAt).filter((w): w is string => Boolean(w)).sort().pop() ?? null;
+  const lastDataAt = cards.map((c) => c.dataAt).filter((w): w is string => Boolean(w)).sort().pop() ?? null;
+  const briefed = cards.filter((c) => c.briefCount > 0).length;
 
   return (
     <section className="wrap bc-page" style={{ paddingBottom: 100 }}>
@@ -103,13 +115,21 @@ export default async function BriefcasePage() {
         label="Briefcase"
         viewer={viewer}
         title={<h1>Briefcase</h1>}
-        action={<Link className="btn btn--quiet btn--sm" href="/datasets/context-pack">Dataset and query builder</Link>}
+        action={
+          <>
+            <Link className="btn btn--quiet btn--sm" href="/datasets/context-pack">Dataset and query builder</Link>
+            {/* The whole Briefcase in one file: every company's three files, the handoff, a manifest. A file download, never client navigation. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a className="btn btn--primary btn--sm" href="/api/datasets/context-pack?format=zip">Download all, .zip</a>
+          </>
+        }
       >
         {[
           `${cards.length} companies`,
           `${cards.filter((c) => c.deep).length} deep`,
-          asOf ? `built ${dateLabel(asOf)}` : null,
-          lastBrief ? `briefs for the week of ${dateLabel(lastBrief)}` : 'no briefs written yet',
+          asOf ? `packs render on download, built ${dateLabel(asOf)}` : null,
+          lastDataAt ? `newest data ${stamp(lastDataAt)}` : null,
+          lastBriefAt ? `briefs updated ${stamp(lastBriefAt)} for ${briefed} ${briefed === 1 ? 'company' : 'companies'}` : 'no briefs written yet',
         ].filter(Boolean).join(' · ')}
       </PageTop>
       <p className="bc-lede">
@@ -140,6 +160,14 @@ export default async function BriefcasePage() {
                   </div>
                   <span className={`bc-tag${c.deep ? ' bc-tag--deep' : ''}`}>{c.deep ? 'Deep' : 'Light'}</span>
                 </header>
+                <p className="bc-card-fresh">
+                  {[
+                    c.dataAt ? `data ${stamp(c.dataAt)}` : 'no data yet',
+                    c.deep
+                      ? (c.briefsAt ? `briefs ${stamp(c.briefsAt)} (${c.briefCount} of ${BRIEFABLE.length})` : 'briefs not written yet')
+                      : null,
+                  ].filter(Boolean).join(' · ')}
+                </p>
                 <PackDownloads slug={c.slug} sizes={c.sizes} showBrief={c.showBrief} />
               </article>
             ))}

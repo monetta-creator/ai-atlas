@@ -57,6 +57,7 @@
 .bc-card-name { min-width: 0; flex: 1; }
 .bc-card-name h3 { font-size: 15.5px; font-weight: 650; margin: 0; overflow-wrap: anywhere; }
 .bc-card-name p { font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink); margin: 3px 0 0; }
+.bc-card-fresh { font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink); margin: -6px 0 0; }
 .bc-tag {
   flex: none; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
   padding: 3px 7px; border: 1px solid var(--line); color: var(--faint-ink);

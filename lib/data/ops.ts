@@ -209,15 +209,14 @@ async function snapshotFor(job: OpsJob, now: Date): Promise<{ snap: RawSnapshot 
       // No run row: the week "ran" when it wrote briefs. Spend is per issue
       // week (the feature's cost rows carry week_end).
       const weekEnd = fridayOnOrAfterUTC(now);
-      const row = await one<{ n: number; companies: number; last: string | null }>(
-        `select count(*)::int as n, count(distinct company_slug)::int as companies, max(created_at)::text as last
-           from context_pack_briefs where week_end = $1::date`,
-        [weekEnd]
+      const row = await one<{ week: string | null; n: number; companies: number; last: string | null }>(
+        `select week_end::text as week, count(*)::int as n, count(distinct company_slug)::int as companies, max(created_at)::text as last
+           from context_pack_briefs where week_end = (select max(week_end) from context_pack_briefs) group by week_end`
       );
       const budget = await checkPackBriefBudget(weekEnd);
       return {
         snap: row && row.n > 0
-          ? { status: 'completed', step: null, error: null, notes: [], day: weekEnd, startedAt: null, finishedAt: row.last, summary: `${row.n} briefs · ${row.companies} ${row.companies === 1 ? 'company' : 'companies'}` }
+          ? { status: 'completed', step: null, error: null, notes: [], day: row.week ?? weekEnd, startedAt: null, finishedAt: row.last, summary: `${row.n} briefs · ${row.companies} ${row.companies === 1 ? 'company' : 'companies'} · week of ${row.week}${row.week === weekEnd ? '' : ' (not yet this week)'}` }
           : null,
         spentUsd: budget.spentUsd, capUsd: budget.capUsd,
       };

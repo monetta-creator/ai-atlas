@@ -211,3 +211,37 @@ export async function loadPackInput(q: Q, slug: string, asOf?: string): Promise<
   const [input] = await loadPackInputs(q, slug, asOf);
   return input ?? null;
 }
+
+// When each company's pack last changed: the newest brief written, the
+// newest intel row collected, the newest public record added. For the
+// Briefcase page's status line and cards, and the /ops snapshot.
+export interface PackFreshness {
+  slug: string;
+  briefsWrittenAt: string | null;   // ISO timestamp
+  briefWeek: string | null;         // YYYY-MM-DD, the issue week of the latest briefs
+  briefCount: number;
+  intelAt: string | null;           // newest intel item or fact
+  recordAt: string | null;          // newest self_record row
+}
+
+export async function loadPackFreshness(q: Q): Promise<PackFreshness[]> {
+  const rows = await q<{ slug: string; briefs_at: string | null; brief_week: string | null; brief_count: number; intel_at: string | null; record_at: string | null }>(
+    `select c.slug,
+            b.at::text as briefs_at, b.week::text as brief_week, coalesce(b.n, 0)::int as brief_count,
+            greatest(i.at, f.at)::text as intel_at, r.at::text as record_at
+       from intel_companies c
+       left join lateral (
+         select max(created_at) as at, max(week_end) as week, count(*) as n
+           from context_pack_briefs x
+          where x.company_slug = c.slug and x.week_end = (select max(week_end) from context_pack_briefs y where y.company_slug = c.slug)
+       ) b on true
+       left join lateral (select max(created_at) as at from intel_items i where i.company_slug = c.slug) i on true
+       left join lateral (select max(created_at) as at from intel_facts f where f.company_slug = c.slug) f on true
+       left join lateral (select max(created_at) as at from self_record r where r.company_slug = c.slug) r on true
+      where c.active`
+  );
+  return rows.map((r) => ({
+    slug: r.slug, briefsWrittenAt: r.briefs_at, briefWeek: r.brief_week ? r.brief_week.slice(0, 10) : null,
+    briefCount: r.brief_count, intelAt: r.intel_at, recordAt: r.record_at,
+  }));
+}

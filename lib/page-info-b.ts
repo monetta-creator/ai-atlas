@@ -382,8 +382,12 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
   '/datasets/briefcase': {
     title: 'How the Briefcase works',
     summary:
-      'Company context you can carry to a model that cannot reach the Atlas: everything public the Atlas holds about a tracked company, compiled into markdown a model can read and rows a search index can load.',
+      'Company context you can carry to a model that cannot reach the Atlas: everything public the Atlas holds about a tracked company, compiled into markdown a model can read and rows a search index can load. Grab a competitor\'s pack before a working session in Claude or Gemini and the model starts with the record instead of its memory.',
     sections: [
+      {
+        heading: 'How to use a pack',
+        body: 'Working in a chat model: open a new conversation, attach or paste the Base file, then ask. The model now answers from a cited record of the company, with a numbered source list it can point you to. For a longer piece of work, attach the Brief instead, or put Base in a project\'s standing instructions or knowledge so every conversation starts with it. Building a tool: load the Sections file into your own search index; each row is a self-contained section with its sources. Comparing companies: attach two or three Base files at once and ask across them. Download all packs as one zip from the top of the page.',
+      },
       {
         heading: 'Three files per company',
         body: 'Base is about 10,000 tokens, sized to sit in every prompt. Brief is about 50,000 tokens, for one deep task on a model that reads long context well. Sections is the whole pack as rows of about 2,000 tokens each, for full-text and vector search.',
@@ -399,6 +403,14 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
       {
         heading: 'Deep and light',
         body: 'A deep pack has a backfilled public record behind it. A light pack is built from the Intel Desk\'s recent news, facts and metrics only, and says so at the top.',
+      },
+      {
+        heading: 'When packs change',
+        body: 'Packs are rendered from the live rows at the moment you download, so a pack is as fresh as the engines that feed it: the Intel Desk each weekday, the public record when its backfill is rerun. The section briefs are rewritten by a model every Monday; each card shows when its data and its briefs last changed.',
+      },
+      {
+        heading: 'Public records only',
+        body: 'Everything in a pack comes from public sources with its URL. Nothing confidential enters the Atlas, and a pack is not a substitute for the primary document: when a pack and a filing disagree, the filing is right.',
       },
     ],
   },

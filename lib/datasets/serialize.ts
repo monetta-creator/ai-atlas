@@ -52,6 +52,18 @@ export function streamString(body: string, slice = 256 * 1024): ReadableStream<U
   });
 }
 
+export function streamBytes(body: Uint8Array, slice = 256 * 1024): ReadableStream<Uint8Array> {
+  let at = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (at >= body.length) { controller.close(); return; }
+      const end = Math.min(body.length, at + slice);
+      controller.enqueue(body.subarray(at, end));
+      at = end;
+    },
+  });
+}
+
 export function datasetToJSON(
   def: DatasetDef, rows: DatasetRow[],
   opts: {
