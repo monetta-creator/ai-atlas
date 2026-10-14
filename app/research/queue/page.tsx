@@ -17,6 +17,10 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 export const metadata = { title: 'Research review desk · The AI Atlas' };
 
+// Papers the sprint loads per page view (each carries its abstract and
+// finding); the empty state offers the next batch while the queue is bigger.
+const SPRINT_LOAD = 400;
+
 // The research review desk (admin, migration 0082): the signal draft desk's
 // shape applied to papers. The backlog bar clears what needs no reading (the
 // auto-dismiss policy and the judgment-free cuts), the sprint walks the rest
@@ -33,7 +37,7 @@ export default async function ResearchQueuePage() {
   const prefs = await getResearchPrefs();
   const [stats, papers, targets, threadDigest, steering, unprocessed, agentSummary] = await Promise.all([
     getResearchQueueStats(prefs),
-    getSprintPapers(400),
+    getSprintPapers(SPRINT_LOAD),
     getTargets(),
     getThreadDigest(),
     getSteeringNote(),
@@ -74,9 +78,10 @@ export default async function ResearchQueuePage() {
       />
 
       <div className="section-label" style={{ marginTop: 24 }}>Review sprint · agent track picks first</div>
-      <PaperSprint papers={papers} statements={statements} threads={threads} />
+      <PaperSprint papers={papers} total={stats.pending} statements={statements} threads={threads} />
 
-      <details className="ds-list" style={{ marginTop: 34 }}>
+      {/* Open while the agent has unread papers: reading them is step one of a backlog. */}
+      <details className="ds-list" style={{ marginTop: 34 }} open={agentSummary.none > 0}>
         <summary>Queue agent: the steering note and a fresh pass over the queue</summary>
         <div style={{ marginTop: 14 }}>
           <QueueAgentPanel steering={steering} unprocessed={unprocessed} summary={agentSummary} />

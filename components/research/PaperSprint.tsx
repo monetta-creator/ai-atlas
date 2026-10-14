@@ -21,9 +21,10 @@ type Decision = 'tracked' | 'noted' | 'dismissed';
 const REC_LABEL: Record<string, string> = { tracked: 'track', noted: 'note', dismissed: 'dismiss' };
 
 export default function PaperSprint({
-  papers, statements, threads,
+  papers, total, statements, threads,
 }: {
   papers: SprintPaper[];
+  total: number; // the whole pending queue; the page loads only the first SPRINT_LOAD
   statements: Record<string, string>;
   threads: Record<string, string>;
 }) {
@@ -112,15 +113,19 @@ export default function PaperSprint({
   });
 
   const decided = done.tracked + done.noted + done.dismissed;
+  const unloaded = Math.max(0, total - papers.length);
 
   if (!current) {
     return (
       <div className="ds ds-empty">
         <p>
-          Queue clear. This session: {done.tracked} tracked · {done.noted} noted · {done.dismissed} dismissed
+          {unloaded > 0 ? `Batch done; ${unloaded} more wait in the queue. ` : 'Queue clear. '}
+          This session: {done.tracked} tracked · {done.noted} noted · {done.dismissed} dismissed
           {decided > 0 ? ` · agreed with the agent on ${done.agreed} of ${decided}` : ''}.
         </p>
-        <button type="button" className="btn btn--ghost btn--sm" onClick={() => router.refresh()}>Refresh</button>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={() => router.refresh()}>
+          {unloaded > 0 ? 'Load the next batch' : 'Refresh'}
+        </button>
       </div>
     );
   }
@@ -133,7 +138,7 @@ export default function PaperSprint({
     <div className="ds">
       <div className="ds-head">
         <span className="ds-progress">
-          {queue.length} to review · {done.tracked} tracked · {done.noted} noted · {done.dismissed} dismissed
+          {queue.length} to review{unloaded > 0 ? ` (${unloaded} more after this batch)` : ''} · {done.tracked} tracked · {done.noted} noted · {done.dismissed} dismissed
           {done.skipped ? ` · ${done.skipped} skipped` : ''}
           {decided > 0 ? ` · agreed ${done.agreed}/${decided}` : ''}
         </span>

@@ -436,11 +436,12 @@ export async function getNotedPapers(limit = 60): Promise<Paper[]> {
 // The run button processes ALL pending papers each time (already-recommended
 // rows are refreshed too), so editing the steering note and re-running never
 // leaves stale recommendations behind. Idempotent; a full pass costs cents.
-export async function getAllPendingPaperIds(limit = 400): Promise<{ id: string; title: string }[]> {
-  return q<{ id: string; title: string }>(
-    `select id, title from papers
+// unread = the agent has never recommended on it (the "Read the unread" pass).
+export async function getAllPendingPaperIds(limit = 3000): Promise<{ id: string; title: string; unread: boolean }[]> {
+  return q<{ id: string; title: string; unread: boolean }>(
+    `select id, title, agent_recommendation is null as unread from papers
       where triage_status = 'kept' and review_status = 'pending'
-      order by published_at desc nulls last
+      order by (agent_recommendation is null) desc, published_at desc nulls last
       limit $1`,
     [limit]
   );

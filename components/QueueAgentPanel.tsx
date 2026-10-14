@@ -24,7 +24,7 @@ export default function QueueAgentPanel({
   steering, unprocessed, summary,
 }: {
   steering: string | null;
-  unprocessed: { id: string; title: string }[];
+  unprocessed: { id: string; title: string; unread: boolean }[];
   summary: Record<string, number>;
 }) {
   const router = useRouter();
@@ -33,9 +33,14 @@ export default function QueueAgentPanel({
   // Shared between the two model runs below (only one is ever active, since
   // the buttons that start them disable while the other is busy).
   const stopRef = useRef(false);
+  // Which papers the queue run reads: only the ones the agent has never read
+  // (the backlog case), or every pending paper (a refresh after a steering
+  // edit). Set by the button just before start(); read inside the run.
+  const unread = unprocessed.filter((p) => p.unread);
+  const targetRef = useRef<{ id: string }[]>(unread.length ? unread : unprocessed);
 
   const recommended = summary.tracked + summary.noted + summary.dismissed;
-  const chunkCount = Math.max(1, Math.ceil(unprocessed.length / CHUNK));
+  const chunkCount = Math.max(1, Math.ceil((unread.length || unprocessed.length) / CHUNK));
 
   const QUEUE_STEPS: StepSpec[] = [
     {
@@ -46,15 +51,16 @@ export default function QueueAgentPanel({
 
   const queueRun = useModelRun({
     kind: 'research_queue_agent',
-    label: `Process the research queue (${unprocessed.length})`,
+    label: 'Process the research queue',
     steps: QUEUE_STEPS,
     run: async (ctx) => {
       stopRef.current = false;
       const totals = { processed: 0, tracked: 0, noted: 0, dismissed: 0 };
+      const target = targetRef.current;
       const chunks: { id: string }[][] = [];
-      for (let i = 0; i < unprocessed.length; i += CHUNK) chunks.push(unprocessed.slice(i, i + CHUNK));
+      for (let i = 0; i < target.length; i += CHUNK) chunks.push(target.slice(i, i + CHUNK));
       await ctx.step('chunks', async () => {
-        ctx.note(`Processing ${unprocessed.length} papers in ${chunks.length} chunks…`);
+        ctx.note(`Processing ${target.length} papers in ${chunks.length} chunks…`);
         for (let i = 0; i < chunks.length; i++) {
           if (stopRef.current) { ctx.note('Stopped; already-processed recommendations are saved.'); break; }
           let done = false;
@@ -159,12 +165,19 @@ export default function QueueAgentPanel({
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
-        <button type="button" className="btn btn--primary btn--sm"
-          disabled={busy || unprocessed.length === 0} onClick={() => void queueRun.start()}>
-          ✦ Process the queue ({unprocessed.length})
+        {unread.length > 0 && (
+          <button type="button" className="btn btn--primary btn--sm" disabled={busy}
+            onClick={() => { targetRef.current = unread; void queueRun.start(); }}>
+            ✦ Read the {unread.length} unread
+          </button>
+        )}
+        <button type="button" className={unread.length > 0 ? 'btn btn--quiet btn--sm' : 'btn btn--primary btn--sm'}
+          disabled={busy || unprocessed.length === 0}
+          onClick={() => { targetRef.current = unprocessed; void queueRun.start(); }}>
+          ✦ Refresh all {unprocessed.length}
         </button>
         <span className="text-xs" style={{ color: 'var(--faint-ink)' }}>
-          Re-runs refresh every pending paper with the current steering.
+          Refresh re-reads every pending paper with the current steering.
         </span>
         {queueRun.status === 'running' && (
           <button type="button" className="btn btn--quiet btn--sm" onClick={() => { stopRef.current = true; }}>
