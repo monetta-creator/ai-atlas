@@ -112,7 +112,8 @@ export const NAV_TREE: NavGroup[] = [
     detailPrefixes: ['/research/'],
     children: [
       { href: '/research', label: 'Portal', access: 'public' },
-      { href: '/research/console', label: 'Console', access: 'admin', badge: 'papers' },
+      { href: '/research/queue', label: 'Review desk', access: 'admin', badge: 'papers' },
+      { href: '/research/console', label: 'Console', access: 'admin' },
       { href: '/research/digest', label: 'Digest', access: 'admin' },
     ],
   },

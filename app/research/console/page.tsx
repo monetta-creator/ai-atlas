@@ -2,9 +2,9 @@ import Link from 'next/link';
 import { headers } from 'next/headers';
 import { adminGate } from '@/lib/admin-gate';
 import {
-  getResearchRuns, getReviewQueuePapers, countPendingPapers,
+  getResearchRuns, countPendingPapers,
   getResearchThreads, getThreadScan, reconcileThreadScan, getRisingRejects,
-  getFindingCoverage, getSteeringNote, getAllPendingPaperIds, getAgentQueueSummary,
+  getFindingCoverage, getAgentQueueSummary,
   getResearchPrefs, getResearchRunByDay, getResearchHealth, getResearchModelAB, getNavCounts,
 } from '@/lib/data';
 import { createThreadFormAction } from '@/lib/actions';
@@ -20,12 +20,10 @@ import ResearchConsole from '@/components/ResearchConsole';
 import ResearchEnginePanel from '@/components/ResearchEnginePanel';
 import ResearchEnabledToggle from '@/components/ResearchEnabledToggle';
 import ResearchModelPicker from '@/components/ResearchModelPicker';
-import PaperReviewList from '@/components/PaperReviewList';
 import AddPaperForm from '@/components/AddPaperForm';
 import ThreadScanPanel from '@/components/ThreadScanPanel';
 import CitationsPanel from '@/components/CitationsPanel';
 import FindingCoveragePanel from '@/components/FindingCoveragePanel';
-import QueueAgentPanel from '@/components/QueueAgentPanel';
 import CopyHandoff from '@/components/scan/CopyHandoff';
 import DatasetPreview from '@/components/datasets/DatasetPreview';
 
@@ -39,10 +37,12 @@ const pct = (num: number, den: number): string => (den > 0 ? `${Math.round((num 
 
 // The research WORKBENCH (admin): OPERATIONS (the day-keyed engine, its
 // toggle + model pickers, health, and the firewall export) followed by the
-// original workbench (manual runs, the review queue, manual adds, thread
-// tools, citation self-correction, run history). Moved out of /research on
-// 2026-08-14 so the portal proper leads with insights instead of the factory
-// (the /reports/period pattern). Every server action re-checks requireAdmin().
+// original workbench (manual runs, manual adds, thread tools, citation
+// self-correction, run history). Moved out of /research on 2026-08-14 so the
+// portal proper leads with insights instead of the factory (the
+// /reports/period pattern). The review queue and the queue agent moved on to
+// the review desk (/research/queue) with migration 0082. Every server action
+// re-checks requireAdmin().
 export default async function ResearchConsolePage() {
   const gate = await adminGate('/research/console', 'Research console');
   if (gate) return gate;
@@ -52,12 +52,11 @@ export default async function ResearchConsolePage() {
   const { editing, txt } = await getEditContext();
 
   const [
-    runs, queue, rising, rawScan, threads, coverage, steering, unprocessed, agentSummary,
+    runs, rising, rawScan, threads, coverage, agentSummary,
     prefs, todayRun, health, modelStats, h,
   ] = await Promise.all([
-    getResearchRuns(15), getReviewQueuePapers(), getRisingRejects(), getThreadScan(),
-    getResearchThreads(), getFindingCoverage(), getSteeringNote(), getAllPendingPaperIds(),
-    getAgentQueueSummary(),
+    getResearchRuns(15), getRisingRejects(), getThreadScan(),
+    getResearchThreads(), getFindingCoverage(), getAgentQueueSummary(),
     getResearchPrefs(), getResearchRunByDay(), getResearchHealth(30), getResearchModelAB(30),
     headers(),
   ]);
@@ -84,19 +83,7 @@ export default async function ResearchConsolePage() {
   const completedRuns = Math.max(1, health.runs.completed);
   const counts = await countsP;
 
-  // The agent's recommendations turn the queue into a decision surface: track
-  // candidates first (confidence desc), then notes, unprocessed, and dismissals
-  // last (grouped visually by their cluster label on the cards).
-  const RECOMMENDATION_ORDER: Record<string, number> = { tracked: 0, noted: 1, dismissed: 3 };
-  const sortedQueue = [...queue].sort((a, b) => {
-    const oa = a.agent_recommendation ? RECOMMENDATION_ORDER[a.agent_recommendation] ?? 2 : 2;
-    const ob = b.agent_recommendation ? RECOMMENDATION_ORDER[b.agent_recommendation] ?? 2 : 2;
-    if (oa !== ob) return oa - ob;
-    if (oa === 3 && a.agent_cluster !== b.agent_cluster) {
-      return (a.agent_cluster ?? '').localeCompare(b.agent_cluster ?? '');
-    }
-    return (b.agent_confidence ?? 0) - (a.agent_confidence ?? 0);
-  });
+  const queueSize = agentSummary.tracked + agentSummary.noted + agentSummary.dismissed + agentSummary.none;
 
   return (
     <>
@@ -115,7 +102,7 @@ export default async function ResearchConsolePage() {
             />
           }
         >
-          Queue {queue.length}{coverage.missing.length > 0 ? ` · findings gap ${coverage.missing.length}` : ''}{runs.length > 0 ? ` · ${runs.length} runs on record` : ''}
+          Queue {queueSize}{coverage.missing.length > 0 ? ` · findings gap ${coverage.missing.length}` : ''}{runs.length > 0 ? ` · ${runs.length} runs on record` : ''}
         </PageTop>
 
         <section id="engine" style={{ scrollMarginTop: 80 }}>
@@ -340,14 +327,17 @@ export default async function ResearchConsolePage() {
           />
         </section>
 
-        <section id="agent" style={{ marginTop: 8, scrollMarginTop: 80 }}>
-          <div className="section-label">Queue agent · recommend-only</div>
-          <QueueAgentPanel steering={steering} unprocessed={unprocessed} summary={agentSummary} />
-        </section>
-
         <section id="queue" style={{ marginTop: 8, scrollMarginTop: 80 }}>
-          <div className="section-label">Review queue · {queue.length} paper{queue.length === 1 ? '' : 's'}</div>
-          <PaperReviewList papers={sortedQueue} />
+          <div className="section-label">Review queue · {queueSize} paper{queueSize === 1 ? '' : 's'}</div>
+          <div className="rounded-[var(--radius)] border p-[var(--card-pad)] flex items-center gap-3 flex-wrap" style={panel}>
+            <span className="text-sm" style={{ color: 'var(--dim)' }}>
+              Agent: {agentSummary.tracked} track · {agentSummary.noted} note · {agentSummary.dismissed} dismiss
+              {agentSummary.none > 0 ? ` · ${agentSummary.none} unread` : ''}
+            </span>
+            <Link className="btn btn--primary btn--sm" href="/research/queue" style={{ marginLeft: 'auto' }}>
+              Open the review desk
+            </Link>
+          </div>
         </section>
 
         <section id="add" style={{ marginTop: 8, scrollMarginTop: 80 }}>

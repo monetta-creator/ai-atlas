@@ -194,3 +194,21 @@ a.touch-chip:hover { color: var(--accent); border-color: color-mix(in oklab, var
 .ds-list > summary::before { content: '▸'; font-size: 11px; color: var(--faint-ink); }
 .ds-list[open] > summary::before { content: '▾'; }
 
+/* ---- Research review desk (/research/queue, 0082): the sprint card reuses .ds-*, these are the paper bits ---- */
+.ps-card[data-rec="tracked"] { border-left-color: var(--supports); }
+.ps-card[data-rec="noted"] { border-left-color: var(--heat-2); }
+.ps-card[data-rec="dismissed"] { border-left-color: var(--faint-ink); }
+.ps-card[data-rec="none"] { border-left-color: var(--line); }
+.ps-card .section-label { margin-top: 0; padding-top: 0; }
+.ps-rec { text-transform: uppercase; letter-spacing: .1em; color: var(--ink); }
+.ps-authors { margin: -4px 0 0; font-size: 13px; color: var(--faint-ink); }
+.ps-why { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink); padding: 10px 12px; border: 1px solid var(--line); }
+.ps-finding { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--accent); }
+.ps-finding p { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--ink); }
+.ps-finding .ps-sub, .ps-sub { font-size: 13px; color: var(--dim); margin: 0; }
+.ps-abstract > summary { cursor: pointer; font-size: 12.5px; color: var(--faint-ink); font-family: var(--font-mono); }
+.ps-abstract p { margin: 8px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--dim); }
+.ps-track { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ps-track .input { flex: 1; min-width: 220px; }
+.ps-track kbd { font-family: var(--font-mono); font-size: 10.5px; margin-left: 6px; padding: 1px 5px; border: 1px solid currentColor; border-radius: 3px; opacity: .7; }
+

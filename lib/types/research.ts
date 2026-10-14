@@ -123,6 +123,33 @@ export interface ResearchPrefs {
   enabled: boolean;
   triage_model: string | null;
   analysis_models: string[];       // empty = the Sonnet-only fallback path
+  // The review desk's auto-dismiss policy (migration 0082).
+  auto_dismiss: boolean;
+  auto_dismiss_min_confidence: number; // 50-100
+  stale_days: number;              // the bulk "older than" cut, 3-180
+}
+
+// How a review decision was made (papers.review_basis, migration 0082).
+// null = a human read the paper and decided it alone.
+export type PaperReviewBasis = 'agent_policy' | 'bulk_agent' | 'bulk_stale';
+
+// A queue paper as the review sprint reads it: the list columns plus the
+// finding when the engine already analyzed it (agent-positive papers are).
+export interface SprintPaper extends Omit<Paper, 'raw_content' | 'extraction'> {
+  extraction: PaperExtraction | null;
+}
+
+export interface ResearchQueueStats {
+  pending: number;
+  byRec: { tracked: number; noted: number; dismissed: number; none: number };
+  policyDue: number;               // agent dismissals at or above the bar, still pending
+  stale: number;                   // pending past stale_days, not agent-tracked
+  oldestDays: number | null;
+  autoDismissed30d: number;
+  // Paper-by-paper human calls (review_basis null) in the trailing 90 days,
+  // per agent recommendation: how often the human made the same call.
+  agreement: Record<'tracked' | 'noted' | 'dismissed', { n: number; agreed: number }>;
+  dismissBands: { floor: number; n: number; agreed: number }[];
 }
 
 export interface ResearchThread {

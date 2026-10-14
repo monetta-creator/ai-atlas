@@ -12,10 +12,11 @@ import ModelRunPanel from '@/components/jobs/ModelRunPanel';
 
 // The queue agent's console strip: a standing steering note, the "process the
 // queue" run (short recommend-only chunks, resumable, the console discipline),
-// a summary of what the agent recommends, and per-group BULK accept. Accepting
-// tracks chains straight into finding extraction (hydrate + analyze per paper)
-// so processing the queue ends with findings on the shelf. The human commits
-// everything; the agent only ever recommends.
+// a summary of what the agent recommends, and the bulk accept for its track
+// picks, which chains straight into finding extraction (hydrate + analyze per
+// paper). The note and dismiss bulk cuts live on the review desk's backlog bar
+// (components/research/ResearchQueueBar.tsx). The human commits everything;
+// the agent only ever recommends.
 
 const CHUNK = 12;
 
@@ -32,8 +33,6 @@ export default function QueueAgentPanel({
   // Shared between the two model runs below (only one is ever active, since
   // the buttons that start them disable while the other is busy).
   const stopRef = useRef(false);
-  const [otherBusy, setOtherBusy] = useState<string | null>(null);
-  const [otherNote, setOtherNote] = useState<string | null>(null);
 
   const recommended = summary.tracked + summary.noted + summary.dismissed;
   const chunkCount = Math.max(1, Math.ceil(unprocessed.length / CHUNK));
@@ -122,7 +121,7 @@ export default function QueueAgentPanel({
     },
   });
 
-  const busy = queueRun.status === 'running' || acceptTrackedRun.status === 'running' || !!otherBusy;
+  const busy = queueRun.status === 'running' || acceptTrackedRun.status === 'running';
 
   async function saveNote() {
     setSavingNote(true);
@@ -140,20 +139,6 @@ export default function QueueAgentPanel({
     await acceptTrackedRun.start();
   }
 
-  async function acceptOther(decision: 'noted' | 'dismissed') {
-    const n = summary[decision];
-    const label = decision === 'noted' ? 'note' : 'dismiss';
-    if (!window.confirm(`Accept all ${n} "${decision}" recommendations? This will ${label} ${n} paper${n === 1 ? '' : 's'}.`)) return;
-    setOtherBusy(decision);
-    setOtherNote(null);
-    try {
-      const { ids } = await acceptAgentRecommendationsAction(decision);
-      setOtherNote(`${ids.length} paper${ids.length === 1 ? '' : 's'} ${decision}.`);
-      router.refresh();
-    } finally {
-      setOtherBusy(null);
-    }
-  }
 
   return (
     <div className="rounded-[var(--radius)] border p-[var(--card-pad)] flex flex-col gap-3"
@@ -203,16 +188,6 @@ export default function QueueAgentPanel({
               Accept {summary.tracked} track{summary.tracked === 1 ? '' : 's'} + extract findings
             </button>
           )}
-          {summary.noted > 0 && (
-            <button type="button" className="btn btn--quiet btn--sm" disabled={busy} onClick={() => void acceptOther('noted')}>
-              Accept {summary.noted} note{summary.noted === 1 ? '' : 's'}
-            </button>
-          )}
-          {summary.dismissed > 0 && (
-            <button type="button" className="btn btn--quiet btn--sm" disabled={busy} onClick={() => void acceptOther('dismissed')}>
-              Accept {summary.dismissed} dismissal{summary.dismissed === 1 ? '' : 's'}
-            </button>
-          )}
           {acceptTrackedRun.status === 'running' && (
             <button type="button" className="btn btn--quiet btn--sm" onClick={() => { stopRef.current = true; }}>
               Stop
@@ -221,9 +196,6 @@ export default function QueueAgentPanel({
         </div>
       )}
       <ModelRunPanel run={acceptTrackedRun} />
-      {otherNote && (
-        <p className="text-xs" style={{ margin: 0, color: 'var(--faint-ink)' }}>{otherNote}</p>
-      )}
     </div>
   );
 }

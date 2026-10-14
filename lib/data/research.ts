@@ -1,7 +1,9 @@
 import { q, one } from '../db';
 import type {
   Paper, ResearchRun, ResearchEngineRun, ResearchPrefs, ResearchThread, ThreadPaperRow, ResearchThreadScan,
-  WatchlistRow, RisingReject, RecentThreadRevision, RoundupPaper, ResearchHealth, ResearchModelStat, } from '../types';
+  WatchlistRow, RisingReject, RecentThreadRevision, RoundupPaper, ResearchHealth, ResearchModelStat,
+  SprintPaper, ResearchQueueStats, } from '../types';
+import { QUEUE_DEFAULTS } from '../research/queue-core';
 
 // ===== Research section (migration 0023) =====================================
 // Admin-first surface: no personal-layer stripping yet — every getter here is
@@ -69,13 +71,21 @@ export async function getResearchRunByDay(day?: string): Promise<ResearchEngineR
 // getIntelPrefs idiom): the singleton is created lazily by the first toggle
 // or picker save.
 export async function getResearchPrefs(): Promise<ResearchPrefs> {
-  const row = await one<{ enabled: boolean; triage_model: string | null; analysis_models: string[] }>(
-    `select enabled, triage_model, analysis_models from research_prefs where id = true`
+  const row = await one<{
+    enabled: boolean; triage_model: string | null; analysis_models: string[];
+    auto_dismiss: boolean; auto_dismiss_min_confidence: number; stale_days: number;
+  }>(
+    `select enabled, triage_model, analysis_models,
+            auto_dismiss, auto_dismiss_min_confidence, stale_days
+       from research_prefs where id = true`
   );
   return {
     enabled: row?.enabled ?? true,
     triage_model: row?.triage_model ?? null,
     analysis_models: row?.analysis_models ?? [],
+    auto_dismiss: row?.auto_dismiss ?? QUEUE_DEFAULTS.autoDismiss,
+    auto_dismiss_min_confidence: row?.auto_dismiss_min_confidence ?? QUEUE_DEFAULTS.minConfidence,
+    stale_days: row?.stale_days ?? QUEUE_DEFAULTS.staleDays,
   };
 }
 
@@ -450,6 +460,89 @@ export async function getAgentQueueSummary(): Promise<Record<string, number>> {
   return out;
 }
 
+// ---- The review desk (/research/queue, migration 0082) ----------------------
+
+// The sprint's feed: the whole pending queue, agent track picks first, then
+// notes, then papers the agent has not read, then its dismissals; most
+// confident first inside each group. Carries the finding when the engine has
+// already analyzed the paper.
+export async function getSprintPapers(limit = 400): Promise<SprintPaper[]> {
+  return q<SprintPaper>(
+    `select ${PAPER_LIST_COLUMNS}, extraction from papers
+      where triage_status = 'kept' and review_status = 'pending'
+      order by case agent_recommendation
+                 when 'tracked' then 0 when 'noted' then 1 when 'dismissed' then 3 else 2 end,
+               agent_confidence desc nulls last,
+               published_at desc nulls last, created_at desc
+      limit $1`,
+    [limit]
+  );
+}
+
+// The backlog bar's numbers in two reads: the queue's shape now, and the
+// trailing 90 days of paper-by-paper human calls against what the agent said.
+export async function getResearchQueueStats(
+  prefs: Pick<ResearchPrefs, 'auto_dismiss_min_confidence' | 'stale_days'>
+): Promise<ResearchQueueStats> {
+  const [shape, calls] = await Promise.all([
+    one<{
+      pending: number; tracked: number; noted: number; dismissed: number; none: number;
+      policy_due: number; stale: number; oldest_days: number | null; auto_30d: number;
+    }>(
+      `select count(*) filter (where review_status = 'pending')::int as pending,
+              count(*) filter (where review_status = 'pending' and agent_recommendation = 'tracked')::int as tracked,
+              count(*) filter (where review_status = 'pending' and agent_recommendation = 'noted')::int as noted,
+              count(*) filter (where review_status = 'pending' and agent_recommendation = 'dismissed')::int as dismissed,
+              count(*) filter (where review_status = 'pending' and agent_recommendation is null)::int as none,
+              count(*) filter (where review_status = 'pending' and agent_recommendation = 'dismissed'
+                                 and agent_confidence >= $1)::int as policy_due,
+              count(*) filter (where review_status = 'pending'
+                                 and created_at < now() - make_interval(days => $2)
+                                 and agent_recommendation is distinct from 'tracked')::int as stale,
+              (extract(day from now() - min(created_at) filter (where review_status = 'pending')))::int as oldest_days,
+              count(*) filter (where review_basis = 'agent_policy'
+                                 and reviewed_at > now() - interval '30 days')::int as auto_30d
+         from papers
+        where triage_status = 'kept'`,
+      [prefs.auto_dismiss_min_confidence, prefs.stale_days]
+    ),
+    q<{ rec: 'tracked' | 'noted' | 'dismissed'; floor: number; n: number; agreed: number }>(
+      `select agent_recommendation::text as rec,
+              least(90, (agent_confidence / 10) * 10)::int as floor,
+              count(*)::int as n,
+              count(*) filter (where review_status = agent_recommendation)::int as agreed
+         from papers
+        where triage_status = 'kept' and review_status <> 'pending'
+          and review_basis is null and agent_recommendation is not null
+          and agent_confidence is not null
+          and reviewed_at > now() - interval '90 days'
+        group by 1, 2`
+    ),
+  ]);
+  const agreement = {
+    tracked: { n: 0, agreed: 0 }, noted: { n: 0, agreed: 0 }, dismissed: { n: 0, agreed: 0 },
+  };
+  for (const c of calls) {
+    agreement[c.rec].n += c.n;
+    agreement[c.rec].agreed += c.agreed;
+  }
+  return {
+    pending: shape?.pending ?? 0,
+    byRec: {
+      tracked: shape?.tracked ?? 0, noted: shape?.noted ?? 0,
+      dismissed: shape?.dismissed ?? 0, none: shape?.none ?? 0,
+    },
+    policyDue: shape?.policy_due ?? 0,
+    stale: shape?.stale ?? 0,
+    oldestDays: shape?.oldest_days ?? null,
+    autoDismissed30d: shape?.auto_30d ?? 0,
+    agreement,
+    dismissBands: calls
+      .filter((c) => c.rec === 'dismissed')
+      .map((c) => ({ floor: c.floor, n: c.n, agreed: c.agreed })),
+  };
+}
+
 export async function getSteeringNote(): Promise<string | null> {
   const row = await one<{ steering: string | null }>(`select steering from research_agent_prefs where id = true`);
   return row?.steering ?? null;
@@ -465,14 +558,15 @@ export async function getReviewTasteDigest(): Promise<{
   const [tracked, noted, dismissed] = await Promise.all([
     q<{ title: string; note: string | null }>(
       `select title, review_note as note from papers
-        where review_status = 'tracked' order by reviewed_at desc nulls last limit 25`
+        where review_status = 'tracked' and review_basis is null
+        order by reviewed_at desc nulls last limit 25`
     ),
     q<{ title: string }>(
-      `select title from papers where review_status = 'noted'
+      `select title from papers where review_status = 'noted' and review_basis is null
         order by reviewed_at desc nulls last limit 15`
     ),
     q<{ title: string }>(
-      `select title from papers where review_status = 'dismissed'
+      `select title from papers where review_status = 'dismissed' and review_basis is null
         order by reviewed_at desc nulls last limit 25`
     ),
   ]);

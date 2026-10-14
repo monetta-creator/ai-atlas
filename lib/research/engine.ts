@@ -5,11 +5,12 @@ import { hydratePaper, analyzePaper } from './analysis';
 import { checkResearchBudget } from './budget';
 import { lookbackDays } from '../scan/core';
 import {
-  getResearchRun, getUnrecommendedPaperIds, getNextAnalysisCandidates, countPendingPapers,
+  getResearchRun, getUnrecommendedPaperIds, getNextAnalysisCandidates, countPendingPapers, getResearchPrefs,
 } from '../data/research';
 import {
   createDayResearchRun, claimResearchRun, renewResearchLease, releaseResearchLease,
   appendResearchRunNotes, updateResearchRun, pruneRejectedPapers, failStaleResearchRuns,
+  applyResearchQueuePolicy,
 } from '../mutations/research';
 import { embedLater } from '../embed/hooks';
 import type { ResearchEngineRun, ResearchProgress } from '../types';
@@ -21,7 +22,8 @@ import type { ResearchEngineRun, ResearchProgress } from '../types';
 // order: pull (arXiv, one page per unit, offset = the run's scanned_count),
 // triage (metadata relevance filtering, TRIAGE_POOL chunks concurrent per
 // unit), agent (the queue-agent recommendation pass over the pending review
-// queue), analyze (hydrate + finding extraction, ANALYZE_POOL papers
+// queue, AGENT_POOL chunks concurrent per unit, then the review desk's
+// auto-dismiss policy as the step closes), analyze (hydrate + finding extraction, ANALYZE_POOL papers
 // concurrent per unit, budget-guarded, over agent-recommended papers).
 //
 // The OLD manual console flow (startResearchRunAction and friends) creates
@@ -34,7 +36,8 @@ import type { ResearchEngineRun, ResearchProgress } from '../types';
 // on the next one):
 const PULL_DAY_CAP_PER_LOOKBACK_DAY = 1500; // scanned_count ceiling = this * lookbackDays(day)
 const AGENT_CHUNK_SIZE = 12;
-const AGENT_CHUNK_CAP = 8;
+const AGENT_POOL = 2; // agent chunks run concurrently per unit (disjoint ids)
+const AGENT_CHUNK_CAP = 8; // units, so up to AGENT_CHUNK_CAP * AGENT_POOL chunks
 const ANALYZE_CAP = 40;
 const ANALYZE_POOL = 3; // papers hydrated + analyzed concurrently per unit
 const ANALYZE_FAILURE_CAP = 5;
@@ -92,6 +95,22 @@ function progressOf(
     },
     notes,
   };
+}
+
+// Leaving the agent step: commit the review desk's auto-dismiss policy (no
+// model call, so it runs even when the budget stopped the agent), then move
+// on to analyze. A policy failure is a note, never a stuck run.
+async function leaveAgentStep(runId: string, notes: string[]): Promise<void> {
+  try {
+    const prefs = await getResearchPrefs();
+    if (prefs.auto_dismiss) {
+      const n = await applyResearchQueuePolicy(prefs.auto_dismiss_min_confidence);
+      if (n > 0) notes.push(`policy: auto-dismissed ${n} agent dismissal${n === 1 ? '' : 's'} at ${prefs.auto_dismiss_min_confidence}+ confidence`);
+    }
+  } catch (e) {
+    notes.push(`policy failed: ${String((e as Error)?.message ?? 'error').slice(0, 160)}`);
+  }
+  await updateResearchRun(runId, { step: 'analyze' });
 }
 
 async function completeRun(runId: string): Promise<void> {
@@ -209,26 +228,29 @@ export async function advanceResearchRun(runId: string, deadlineAt: number): Pro
         const budget = await checkResearchBudget();
         if (!budget.ok) {
           notes.push(`agent: budget reached after ${agentProcessed} recommendation${agentProcessed === 1 ? '' : 's'} this run`);
-          await updateResearchRun(runId, { step: 'analyze' });
+          await leaveAgentStep(runId, notes);
           continue;
         }
         if (agentChunks >= AGENT_CHUNK_CAP) {
-          notes.push(`agent: chunk cap reached (${AGENT_CHUNK_CAP}), ${agentProcessed} recommendation${agentProcessed === 1 ? '' : 's'} this run`);
-          await updateResearchRun(runId, { step: 'analyze' });
+          notes.push(`agent: unit cap reached (${AGENT_CHUNK_CAP}), ${agentProcessed} recommendation${agentProcessed === 1 ? '' : 's'} this run`);
+          await leaveAgentStep(runId, notes);
           continue;
         }
-        const ids = await getUnrecommendedPaperIds(AGENT_CHUNK_SIZE);
+        const ids = await getUnrecommendedPaperIds(AGENT_CHUNK_SIZE * AGENT_POOL);
         if (!ids.length) {
           notes.push(`agent: ${agentProcessed} recommendation${agentProcessed === 1 ? '' : 's'} this run, queue drained`);
-          await updateResearchRun(runId, { step: 'analyze' });
+          await leaveAgentStep(runId, notes);
           continue;
         }
         agentChunks++;
-        try {
-          const r = await recommendQueueChunk(ids);
-          agentProcessed += r.processed;
-        } catch (e) {
-          notes.push(`agent chunk failed: ${String((e as Error)?.message ?? 'error').slice(0, 160)}`);
+        // One read, split into disjoint chunks: two concurrent reads of the
+        // unrecommended feed would hand both chunks the same papers.
+        const chunks: string[][] = [];
+        for (let i = 0; i < ids.length; i += AGENT_CHUNK_SIZE) chunks.push(ids.slice(i, i + AGENT_CHUNK_SIZE));
+        const settled = await Promise.allSettled(chunks.map((c) => recommendQueueChunk(c)));
+        for (const r of settled) {
+          if (r.status === 'fulfilled') agentProcessed += r.value.processed;
+          else notes.push(`agent chunk failed: ${String((r.reason as Error)?.message ?? 'error').slice(0, 160)}`);
         }
         continue;
       }

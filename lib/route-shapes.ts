@@ -24,7 +24,7 @@ const DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 // that live next to [id] (they must never be judged as ids).
 const UUID_ROUTES: { prefix: string; statics: string[] }[] = [
   { prefix: '/signals', statics: ['new', 'drafts', 'digest'] },
-  { prefix: '/research', statics: ['console', 'digest', 'threads'] },
+  { prefix: '/research', statics: ['console', 'digest', 'queue', 'threads'] },
   { prefix: '/scout', statics: ['console'] },
   { prefix: '/source', statics: [] },
   { prefix: '/theses', statics: ['new'] },

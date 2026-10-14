@@ -13,7 +13,7 @@ const U = '3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b';
 check('well-formed ids and static siblings pass through', () => {
   for (const p of [`/signals/${U}`, `/signals/${U}/edit`, `/research/${U}`, `/scout/${U}`, `/source/${U}`, `/theses/${U}`,
     `/thesis-report/${U}`, `/thesis-report/${U}/pdf`, `/reports/${U}`, `/reports/${U}/pdf`, `/reports/sheet/${U}`, `/reports/sheet/${U}/pdf`,
-    '/signals', '/signals/new', '/signals/drafts', '/signals/digest', '/research/console', '/research/digest', '/research/threads/labor-automation-evidence',
+    '/signals', '/signals/new', '/signals/drafts', '/signals/digest', '/research/console', '/research/digest', '/research/queue', '/research/threads/labor-automation-evidence',
     '/scout/console', '/theses/new', '/reports', '/reports/period', '/reports/sheet', '/blotter', '/blotter/archive', '/blotter/desk',
     '/blotter/2026-09-22', '/blotter/2026-09-22/pdf', '/blotter/2026-09-22/deck/pdf', '/intel/deck', '/intel/deck/none', '/intel/deck/2026-09-23', '/intel/deck/2026-09-23/pdf', '/intel', `/signals/${U.toUpperCase()}`, '/claim/7.1', '/tooling/anything', '/sources',
     '/savant', '/savant/archive', '/savant/desk', '/savant/record', '/savant/2026-09-25', '/savant/2026-09-25/pdf']) {

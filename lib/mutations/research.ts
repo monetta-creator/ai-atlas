@@ -231,10 +231,13 @@ export async function setPaperTriage(
 }
 
 // The review decision + its why (the human gate on the research funnel). Tracking
-// requires a note — enforced in the action; this just writes.
+// requires a note — enforced in the action; this just writes. A paper-by-paper
+// call clears review_basis (0082): it is the revealed-taste evidence.
 export async function setPaperReview(paperId: string, status: PaperReviewStatus, note: string | null): Promise<void> {
   await exec(
-    `update papers set review_status = $1, review_note = $2, reviewed_at = now(), updated_at = now() where id = $3`,
+    `update papers set review_status = $1, review_note = $2, review_basis = null,
+            reviewed_at = now(), updated_at = now()
+      where id = $3`,
     [status, note, paperId]
   );
 }
@@ -584,6 +587,7 @@ export async function acceptAgentRecommendations(
               review_note = case when $1 = 'tracked'
                 then coalesce(nullif(agent_reason, ''), 'Tracked on the queue agent''s recommendation.')
                 else review_note end,
+              review_basis = 'bulk_agent',
               reviewed_at = now(), updated_at = now()
         where triage_status = 'kept' and review_status = 'pending' and agent_recommendation = $1
         returning id`,
@@ -591,4 +595,56 @@ export async function acceptAgentRecommendations(
     );
     return res.rows.map((r) => r.id as string);
   });
+}
+
+// ---- The review desk (/research/queue, migration 0082) ----------------------
+
+// The auto-dismiss policy: commit every pending agent dismissal at or above the
+// confidence bar. No model call; the engine runs it after its agent step and
+// the desk's "Run now" button calls it directly. Dismissal keeps the row and
+// is reversible from the paper page; review_basis marks it so the agent never
+// reads its own calls back as the editor's taste.
+export async function applyResearchQueuePolicy(minConfidence: number): Promise<number> {
+  return withTx(async (c) => {
+    const res = await c.query(
+      `update papers
+          set review_status = 'dismissed', review_basis = 'agent_policy',
+              reviewed_at = now(), updated_at = now()
+        where triage_status = 'kept' and review_status = 'pending'
+          and agent_recommendation = 'dismissed' and agent_confidence >= $1`,
+      [minConfidence]
+    );
+    return res.rowCount ?? 0;
+  });
+}
+
+// The desk's judgment-free cut: dismiss every pending paper older than the
+// staleness window unless the agent recommended tracking it.
+export async function dismissStalePapers(staleDays: number): Promise<number> {
+  return withTx(async (c) => {
+    const res = await c.query(
+      `update papers
+          set review_status = 'dismissed', review_basis = 'bulk_stale',
+              reviewed_at = now(), updated_at = now()
+        where triage_status = 'kept' and review_status = 'pending'
+          and created_at < now() - make_interval(days => $1)
+          and agent_recommendation is distinct from 'tracked'`,
+      [staleDays]
+    );
+    return res.rowCount ?? 0;
+  });
+}
+
+export async function setResearchQueuePolicy(opts: {
+  autoDismiss: boolean; minConfidence: number; staleDays: number;
+}): Promise<void> {
+  await exec(
+    `insert into research_prefs (id, auto_dismiss, auto_dismiss_min_confidence, stale_days)
+     values (true, $1, $2, $3)
+     on conflict (id) do update set
+       auto_dismiss = excluded.auto_dismiss,
+       auto_dismiss_min_confidence = excluded.auto_dismiss_min_confidence,
+       stale_days = excluded.stale_days, updated_at = now()`,
+    [opts.autoDismiss, opts.minConfidence, opts.staleDays]
+  );
 }

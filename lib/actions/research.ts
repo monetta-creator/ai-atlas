@@ -4,7 +4,9 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import * as m from '../mutations';
 import {
-  getSource, getCandidate, getCandidateBySourceId, getSignal, getLastResearchRunAt, countPendingPapers, getPaper, getThreadBySlug, getThreadScan, getResearchRun } from '../data';
+  getSource, getCandidate, getCandidateBySourceId, getSignal, getLastResearchRunAt, countPendingPapers, getPaper, getThreadBySlug, getThreadScan, getResearchRun,
+  getResearchPrefs } from '../data';
+import { clampConfidence, clampStaleDays } from '../research/queue-core';
 import { triageChunk } from '../pipeline/triage';
 import { domainOf, FetchFailure } from '../pipeline/web';
 import { pullPage } from '../research/pull';
@@ -456,7 +458,7 @@ export async function recommendQueueChunkAction(ids: string[]): Promise<{
 export async function saveSteeringNoteAction(text: string): Promise<void> {
   await requireAdmin();
   await m.saveSteeringNote(String(text ?? '').trim().slice(0, 1500) || null);
-  revalidatePath('/research/console');
+  revalidatePath('/research/queue');
 }
 
 export async function acceptAgentRecommendationsAction(decision: string): Promise<{ ids: string[] }> {
@@ -464,8 +466,39 @@ export async function acceptAgentRecommendationsAction(decision: string): Promis
   if (!['tracked', 'noted', 'dismissed'].includes(decision)) throw new Error('Bad decision.');
   const ids = await m.acceptAgentRecommendations(decision as 'tracked' | 'noted' | 'dismissed');
   revalidatePath('/research');
-  revalidatePath('/research/console');
+  revalidatePath('/research/queue');
   return { ids };
+}
+
+// ---- The review desk (/research/queue, migration 0082) ----------------------
+// The auto-dismiss policy, run by hand, and the judgment-free staleness cut.
+// Both dismiss (reversible, the row stays); neither calls a model.
+export async function applyResearchQueuePolicyAction(): Promise<number> {
+  await requireAdmin();
+  const prefs = await getResearchPrefs();
+  const n = await m.applyResearchQueuePolicy(prefs.auto_dismiss_min_confidence);
+  revalidatePath('/research/queue');
+  return n;
+}
+
+export async function dismissStalePapersAction(): Promise<number> {
+  await requireAdmin();
+  const prefs = await getResearchPrefs();
+  const n = await m.dismissStalePapers(prefs.stale_days);
+  revalidatePath('/research/queue');
+  return n;
+}
+
+export async function setResearchQueuePolicyAction(
+  autoDismiss: boolean, minConfidence: number, staleDays: number
+): Promise<void> {
+  await requireAdmin();
+  await m.setResearchQueuePolicy({
+    autoDismiss: autoDismiss === true,
+    minConfidence: clampConfidence(Number(minConfidence)),
+    staleDays: clampStaleDays(Number(staleDays)),
+  });
+  revalidatePath('/research/queue');
 }
 
 // ---- Research engine (migration 0046) ---------------------------------------

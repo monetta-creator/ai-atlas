@@ -167,9 +167,9 @@ const researchReview: AgentCheck = {
       checkKey: 'research.review',
       severity: 'warn',
       title: `Research review queue: ${count} papers, oldest ${oldest} day${oldest === 1 ? '' : 's'}`,
-      detail: `${count} kept papers are waiting on a track/note/dismiss decision, the oldest ${oldest} day${oldest === 1 ? '' : 's'}. The queue agent can recommend the next chunk, or work it on the research console.`,
+      detail: `${count} kept papers are waiting on a track/note/dismiss decision, the oldest ${oldest} day${oldest === 1 ? '' : 's'}. The queue agent can recommend the next chunk, or work it in the review desk's sprint.`,
       metric: { count, oldestDays: oldest },
-      href: '/research/console',
+      href: '/research/queue',
       remedy: remedyRef('research.agent_chunk', 'Recommend the next chunk of the review queue'),
     }];
   },

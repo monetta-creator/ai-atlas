@@ -83,12 +83,35 @@ export const PAGE_INFO_B: Record<string, PageInfoContent> = {
         body: "Today's run status, the crons on/off toggle, and the model pickers for triage and analysis. No frontier model runs anywhere in the loop; every step routes through a cheap model chosen by measurement.",
       },
       {
-        heading: 'Queue and agent',
-        body: 'The review queue sorts track-candidates first using the agent’s recommendation and confidence. The finding-coverage strip flags papers with no structured extraction yet and can batch-analyze the reviewed shelf.',
+        heading: 'Findings and the queue',
+        body: 'The finding-coverage strip flags reviewed papers with no structured extraction yet and can batch-analyze them. The review queue itself lives on the review desk, one tab over.',
       },
       {
         heading: 'Health and exports',
         body: 'Run health over the trailing 30 days, a model A/B table comparing triage and analysis models, and the research-export and research-papers datasets with their importer handoff doc.',
+      },
+    ],
+  },
+  '/research/queue': {
+    title: 'How the review desk works',
+    summary:
+      'Where kept papers get their decision: a backlog bar that clears what needs no reading, then a sprint through the rest one paper at a time.',
+    sections: [
+      {
+        heading: 'The agent reads first',
+        body: 'Every engine run, a cheap model reads each kept paper and recommends track, note, or dismiss with a confidence and a one-line reason. It only recommends; nothing changes until a decision is committed.',
+      },
+      {
+        heading: 'Auto-dismiss',
+        body: 'When the policy is on, agent dismissals at or above the confidence bar are committed after each engine run. A dismissed paper keeps its row, can be revived from its library page, and resurfaces on its own if citations climb. Track and note always stay human, since both put a paper on a public shelf.',
+      },
+      {
+        heading: 'Agreement',
+        body: 'The bar shows how often your own paper-by-paper calls matched the agent over 90 days, and suggests the lowest bar where its dismissals held at 95% or better. Bulk cuts and auto-dismissals never count, so the agent never learns from its own calls.',
+      },
+      {
+        heading: 'The sprint',
+        body: 'Agent track picks come first, then notes, unread papers, and dismissals, most confident first. T opens the track why (prefilled with the agent’s reason when it recommended tracking), N notes, D dismisses, S skips, the left arrow goes back, O opens the paper.',
       },
     ],
   },
