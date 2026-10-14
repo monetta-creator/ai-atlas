@@ -38,16 +38,38 @@ export default async function ResearchQueuePage() {
   const admin = true as const;
   const { editing, txt } = await getEditContext();
 
-  const prefs = await getResearchPrefs();
-  const [stats, papers, targets, threadDigest, steering, unprocessed, agentSummary] = await Promise.all([
-    getResearchQueueStats(prefs),
-    getSprintPapers(SPRINT_LOAD),
-    getTargets(),
-    getThreadDigest(),
-    getSteeringNote(),
-    getAllPendingPaperIds(),
-    getAgentQueueSummary(),
-  ]);
+  // The reads depend on migrations 0082/0083. A production error arrives as
+  // an opaque digest, so this admin-only page shows the database's own
+  // message instead (a missing column means the migrations never ran here).
+  let loaded;
+  try {
+    const prefs = await getResearchPrefs();
+    loaded = [prefs, ...(await Promise.all([
+      getResearchQueueStats(prefs),
+      getSprintPapers(SPRINT_LOAD),
+      getTargets(),
+      getThreadDigest(),
+      getSteeringNote(),
+      getAllPendingPaperIds(),
+      getAgentQueueSummary(),
+    ]))] as const;
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return (
+      <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
+        <PageTop pathname="/research/queue" label="Review desk" viewer={{ admin, portal: admin }} counts={await countsP} title="Review desk" />
+        <div className="dbb">
+          <p className="dbb-note" style={{ color: 'var(--heat-4)' }}>The review desk could not read the database: {message}</p>
+          <p className="dbb-muted" style={{ margin: 0 }}>
+            A missing column (review_basis, auto_dismiss, stale_days) means migrations 0082 and 0083 have not
+            reached this database. From an up-to-date checkout of main, run npm run db:migrate and look for
+            &quot;apply 0082_research_queue_policy.sql ... ok&quot; and &quot;apply 0083_research_queue_cap.sql ... ok&quot;.
+          </p>
+        </div>
+      </section>
+    );
+  }
+  const [prefs, stats, papers, targets, threadDigest, steering, unprocessed, agentSummary] = loaded;
   const counts = await countsP;
 
   // The model that reads the queue (the console's triage pick, else GLM-5.3
