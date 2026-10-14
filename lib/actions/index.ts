@@ -25,3 +25,4 @@ export * from './portal';
 export * from './savant';
 export * from './jobs';
 export * from './field-reports';
+export * from './schema';

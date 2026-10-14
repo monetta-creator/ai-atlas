@@ -13,6 +13,8 @@ import { queueAgentModel } from '@/lib/research/queue-agent';
 import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import QueueAgentPanel from '@/components/QueueAgentPanel';
 import PaperReviewList from '@/components/PaperReviewList';
+import ApplyMigrationsButton from '@/components/research/ApplyMigrationsButton';
+import { getPendingMigrations } from '@/lib/migrations';
 
 export const dynamic = 'force-dynamic';
 // Hosts the queue agent's chunk action, the accept-tracks chain, and the
@@ -55,16 +57,26 @@ export default async function ResearchQueuePage() {
     ]))] as const;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
+    const pending = await getPendingMigrations().catch(() => [] as string[]);
     return (
       <section className="wrap" style={{ maxWidth: 980, paddingBottom: 100 }}>
         <PageTop pathname="/research/queue" label="Review desk" viewer={{ admin, portal: admin }} counts={await countsP} title="Review desk" />
         <div className="dbb">
           <p className="dbb-note" style={{ color: 'var(--heat-4)' }}>The review desk could not read the database: {message}</p>
-          <p className="dbb-muted" style={{ margin: 0 }}>
-            A missing column (review_basis, auto_dismiss, stale_days) means migrations 0082 and 0083 have not
-            reached this database. From an up-to-date checkout of main, run npm run db:migrate and look for
-            &quot;apply 0082_research_queue_policy.sql ... ok&quot; and &quot;apply 0083_research_queue_cap.sql ... ok&quot;.
-          </p>
+          {pending.length > 0 ? (
+            <>
+              <p className="dbb-muted" style={{ margin: 0 }}>
+                This deploy carries {pending.length} migration{pending.length === 1 ? '' : 's'} the database has not applied yet.
+                Applying runs each file in its own transaction and stops at the first failure.
+              </p>
+              <ApplyMigrationsButton pending={pending} />
+            </>
+          ) : (
+            <p className="dbb-muted" style={{ margin: 0 }}>
+              No pending migration files were found for this deploy. Run npm run db:migrate from an up-to-date
+              checkout of main against the production database.
+            </p>
+          )}
         </div>
       </section>
     );

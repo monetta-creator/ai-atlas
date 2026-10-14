@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
     "/field-reports/[id]/pdf": ["./lib/pdf/fonts/*.ttf"],
     "/opengraph-image": ["./lib/pdf/fonts/*.ttf"],
     "/twitter-image": ["./lib/pdf/fonts/*.ttf"],
+    // The review desk's "Apply pending migrations" button reads these files
+    // at run time (lib/migrations.ts).
+    "/research/queue": ["./supabase/migrations/*.sql"],
   },
 };
 
