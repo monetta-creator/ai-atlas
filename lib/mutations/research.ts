@@ -648,3 +648,21 @@ export async function setResearchQueuePolicy(opts: {
     [opts.autoDismiss, opts.minConfidence, opts.staleDays]
   );
 }
+
+// "Triage down to N" (lib/research/queue-cap.ts): dismiss every pending paper
+// outside the keep list in one statement. Returns the agent's call on each
+// dismissed paper so the caller can say what the cut cost.
+export async function capResearchQueue(keepIds: string[]): Promise<{ rec: string | null }[]> {
+  return withTx(async (c) => {
+    const res = await c.query(
+      `update papers
+          set review_status = 'dismissed', review_basis = 'bulk_cap',
+              reviewed_at = now(), updated_at = now()
+        where triage_status = 'kept' and review_status = 'pending'
+          and not (id = any($1::uuid[]))
+        returning agent_recommendation::text as rec`,
+      [keepIds]
+    );
+    return res.rows as { rec: string | null }[];
+  });
+}

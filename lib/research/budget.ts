@@ -6,7 +6,7 @@ import { one } from '../db';
 // never inside them; a trip defers remaining work to the next run rather than
 // failing it. The pull leg is model-free (plain arXiv XML) and always runs.
 
-const RESEARCH_FEATURES = ['research_triage', 'research_analysis', 'research_agent', 'research_synthesis'];
+const RESEARCH_FEATURES = ['research_triage', 'research_analysis', 'research_agent', 'research_synthesis', 'research_queue_pick'];
 
 export async function checkResearchBudget(): Promise<{ ok: boolean; spentUsd: number; capUsd: number }> {
   const capUsd = Number(process.env.RESEARCH_DAILY_BUDGET_USD || 1.0);

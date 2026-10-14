@@ -8,13 +8,17 @@ import PageTop from '@/components/PageTop';
 import Editable from '@/components/Editable';
 import ResearchQueueBar from '@/components/research/ResearchQueueBar';
 import PaperSprint from '@/components/research/PaperSprint';
+import TriageToCapPanel from '@/components/research/TriageToCapPanel';
+import { queueAgentModel } from '@/lib/research/queue-agent';
+import { SCAN_ENRICH_MODELS } from '@/lib/scan/models';
 import QueueAgentPanel from '@/components/QueueAgentPanel';
 import PaperReviewList from '@/components/PaperReviewList';
 
 export const dynamic = 'force-dynamic';
-// Hosts the queue agent's chunk action and the accept-tracks chain (hydrate +
-// analyze per paper); each call fits the 60s cap.
-export const maxDuration = 60;
+// Hosts the queue agent's chunk action, the accept-tracks chain, and the
+// "triage down to N" pass, whose read batch runs eight 12-paper agent calls
+// concurrently (each bounded at 90s) and whose pick call is bounded at 90s.
+export const maxDuration = 300;
 export const metadata = { title: 'Research review desk · The AI Atlas' };
 
 // Papers the sprint loads per page view (each carries its abstract and
@@ -46,6 +50,11 @@ export default async function ResearchQueuePage() {
   ]);
   const counts = await countsP;
 
+  // The model that reads the queue (the console's triage pick, else GLM-5.3
+  // Flash when OpenRouter is configured, else the Haiku fallback).
+  const readerId = queueAgentModel(prefs.triage_model) ?? 'claude-haiku-4-5';
+  const modelLabel = SCAN_ENRICH_MODELS.find((m) => m.id === readerId)?.label ?? readerId;
+
   const statements: Record<string, string> = {};
   for (const t of [...targets.claims, ...targets.bridges]) statements[t.code] = t.statement;
   const threads: Record<string, string> = {};
@@ -76,6 +85,8 @@ export default async function ResearchQueuePage() {
           staleDays: prefs.stale_days,
         }}
       />
+
+      <TriageToCapPanel pending={stats.pending} unread={stats.byRec.none} modelLabel={modelLabel} />
 
       <div className="section-label" style={{ marginTop: 24 }}>Review sprint · agent track picks first</div>
       <PaperSprint papers={papers} total={stats.pending} statements={statements} threads={threads} />

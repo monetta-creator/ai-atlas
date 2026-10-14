@@ -7,6 +7,7 @@ import {
   getSource, getCandidate, getCandidateBySourceId, getSignal, getLastResearchRunAt, countPendingPapers, getPaper, getThreadBySlug, getThreadScan, getResearchRun,
   getResearchPrefs } from '../data';
 import { clampConfidence, clampStaleDays } from '../research/queue-core';
+import { readUnreadBatch, pickAndCap, type CapResult } from '../research/queue-cap';
 import { triageChunk } from '../pipeline/triage';
 import { domainOf, FetchFailure } from '../pipeline/web';
 import { pullPage } from '../research/pull';
@@ -499,6 +500,34 @@ export async function setResearchQueuePolicyAction(
     staleDays: clampStaleDays(Number(staleDays)),
   });
   revalidatePath('/research/queue');
+}
+
+// "Triage down to N" (lib/research/queue-cap.ts). Failures return as data:
+// production server actions redact thrown messages.
+export async function readUnreadBatchAction(): Promise<
+  { ok: true; processed: number; failed: number; remaining: number } | { ok: false; error: string }
+> {
+  await requireAdmin();
+  try {
+    return { ok: true, ...(await readUnreadBatch()) };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Reading failed.' };
+  }
+}
+
+export async function capResearchQueueAction(keep: number): Promise<
+  ({ ok: true } & CapResult) | { ok: false; error: string }
+> {
+  await requireAdmin();
+  const n = Math.round(Number(keep));
+  if (!Number.isFinite(n) || n < 5 || n > 200) return { ok: false, error: 'Keep between 5 and 200 papers.' };
+  try {
+    const r = await pickAndCap(n);
+    revalidatePath('/research/queue');
+    return { ok: true, ...r };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'The cut failed.' };
+  }
 }
 
 // ---- Research engine (migration 0046) ---------------------------------------

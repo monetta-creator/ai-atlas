@@ -17,6 +17,16 @@ import { q } from '../db';
 const AGENT_CHUNK = 12;
 const ABSTRACT_CLIP = 1000;
 
+// The cheap reader when the console's triage picker is empty: GLM-5.3 Flash
+// ($0.075 / $0.25 per Mtok on its 0041 rate card) instead of the dispatcher's
+// Haiku fallback ($1 / $5), whenever OpenRouter is configured.
+export const QUEUE_AGENT_DEFAULT_MODEL = 'z-ai/glm-5.3-flash';
+
+export function queueAgentModel(triageModel: string | null): string | null {
+  if (triageModel?.trim()) return triageModel.trim();
+  return process.env.OPENROUTER_API_KEY ? QUEUE_AGENT_DEFAULT_MODEL : null;
+}
+
 const AGENT_SYSTEM_HEAD = [
   'You are the review-queue agent for The AI Atlas, a tool for staying oriented in the AI-economy debate.',
   'Triage has already kept these papers as plausibly relevant; your job is the next decision, the one the human editor makes for every paper: recommend exactly one of tracked, noted, or dismissed.',
@@ -129,7 +139,7 @@ export async function recommendQueueChunk(paperIds: string[]): Promise<AgentChun
   const out = await researchStructured<{
     decisions: { id: string; recommendation: 'tracked' | 'noted' | 'dismissed'; confidence: number; reason: string; cluster: string }[];
   }>({
-    model: prefs.triage_model,
+    model: queueAgentModel(prefs.triage_model),
     system: await buildSystem(),
     user,
     toolName: 'submit_queue_decisions',

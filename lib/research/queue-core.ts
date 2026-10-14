@@ -75,3 +75,45 @@ export function clampStaleDays(v: number): number {
 export function prefillWhy(rec: string | null, reason: string | null): string {
   return rec === 'tracked' && reason ? reason.trim() : '';
 }
+
+// ---- Triage down to N (lib/research/queue-cap.ts) ---------------------------
+
+export interface FinalistCandidate {
+  id: string;
+  rec: string | null;          // the agent's recommendation
+  confidence: number | null;
+}
+
+// The order the cap falls back on, and the order candidates are shown to the
+// picker: agent track picks, then notes, then unread, then dismissals; most
+// confident first inside each group.
+export function capRank(c: FinalistCandidate): [number, number] {
+  const group = c.rec === 'tracked' ? 0 : c.rec === 'noted' ? 1 : c.rec === 'dismissed' ? 3 : 2;
+  return [group, -(c.confidence ?? 0)];
+}
+
+export function byCapRank(a: FinalistCandidate, b: FinalistCandidate): number {
+  const [ga, ca] = capRank(a);
+  const [gb, cb] = capRank(b);
+  return ga - gb || ca - cb;
+}
+
+// The ids to keep: the picker's choices first (only ids it was shown, each
+// once), then the fallback order fills any shortfall, never past `keep`.
+// A dismissal is never kept by the fallback; the picker may still choose one.
+export function finalists(candidates: FinalistCandidate[], picked: string[], keep: number): string[] {
+  const shown = new Set(candidates.map((c) => c.id));
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const id of picked) {
+    if (out.length >= keep) break;
+    if (shown.has(id) && !seen.has(id)) { out.push(id); seen.add(id); }
+  }
+  for (const c of [...candidates].sort(byCapRank)) {
+    if (out.length >= keep) break;
+    if (c.rec === 'dismissed' || seen.has(c.id)) continue;
+    out.push(c.id);
+    seen.add(c.id);
+  }
+  return out;
+}

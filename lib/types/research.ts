@@ -131,7 +131,7 @@ export interface ResearchPrefs {
 
 // How a review decision was made (papers.review_basis, migration 0082).
 // null = a human read the paper and decided it alone.
-export type PaperReviewBasis = 'agent_policy' | 'bulk_agent' | 'bulk_stale';
+export type PaperReviewBasis = 'agent_policy' | 'bulk_agent' | 'bulk_stale' | 'bulk_cap';
 
 // A queue paper as the review sprint reads it: the list columns plus the
 // finding when the engine already analyzed it (agent-positive papers are).

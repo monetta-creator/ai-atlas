@@ -1,4 +1,5 @@
 import { researchStructured } from './model-route';
+import { queueAgentModel } from './queue-agent';
 import { fetchPedigreeBatch } from './citations';
 import * as m from '../mutations';
 import {
@@ -123,7 +124,7 @@ export async function triagePapersChunk(runId: string, chunkSize = TRIAGE_CHUNK)
   let out: TriageOutput;
   try {
     out = await researchStructured<TriageOutput>({
-      model: prefs.triage_model,
+      model: queueAgentModel(prefs.triage_model),
       // The claim/concept/thread digests are identical for every chunk of a run — they
       // ride in the SYSTEM block (cache_control'd by runStructured on the Anthropic
       // path) so chunks 2..N read them from the prompt cache. Only the paper list

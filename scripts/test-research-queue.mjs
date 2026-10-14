@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import {
-  suggestThreshold, clampConfidence, clampStaleDays, prefillWhy, QUEUE_DEFAULTS,
+  suggestThreshold, clampConfidence, clampStaleDays, prefillWhy, QUEUE_DEFAULTS, finalists, byCapRank,
 } from '../lib/research/queue-core.ts';
 
 let pass = 0;
@@ -79,6 +79,32 @@ check('prefill only on a track recommendation', () => {
   assert.equal(prefillWhy('tracked', ' moves the labor thread '), 'moves the labor thread');
   assert.equal(prefillWhy('dismissed', 'benchmark only'), '');
   assert.equal(prefillWhy(null, null), '');
+});
+
+const pool = [
+  { id: 'd1', rec: 'dismissed', confidence: 95 },
+  { id: 'n1', rec: 'noted', confidence: 90 },
+  { id: 't1', rec: 'tracked', confidence: 60 },
+  { id: 't2', rec: 'tracked', confidence: 85 },
+  { id: 'u1', rec: null, confidence: null },
+];
+
+check('cap rank: tracks, notes, unread, dismissals; confident first', () => {
+  assert.deepEqual([...pool].sort(byCapRank).map((c) => c.id), ['t2', 't1', 'n1', 'u1', 'd1']);
+});
+
+check('picker choices lead, unknown and repeated ids are ignored', () => {
+  assert.deepEqual(finalists(pool, ['n1', 'zz', 'n1', 't1'], 3), ['n1', 't1', 't2']);
+});
+
+check('fallback fills the shortfall and never keeps a dismissal on its own', () => {
+  assert.deepEqual(finalists(pool, [], 10), ['t2', 't1', 'n1', 'u1']);
+  assert.deepEqual(finalists(pool, ['d1'], 2), ['d1', 't2']);
+});
+
+check('never more than keep', () => {
+  assert.equal(finalists(pool, ['t1', 't2', 'n1', 'u1'], 2).length, 2);
+  assert.deepEqual(finalists(pool, [], 0), []);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -599,6 +599,9 @@ export async function getReviewedSince(sinceISO: string, toISO: string): Promise
             ), '{}') as thread_slugs
        from papers p
       where p.review_status in ('tracked', 'noted')
+        -- A bulk note (the desk's "note what the agent would note") is shelf
+        -- memory, not the week's reading: it would flood the roundup pack.
+        and (p.review_status = 'tracked' or p.review_basis is null)
         and p.reviewed_at >= $1::date and p.reviewed_at < ($2::date + 1)
       order by p.reviewed_at desc, p.id`,
     [sinceISO, toISO]
