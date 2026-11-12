@@ -37,7 +37,7 @@ body:has(> .ask-page) { height: 100dvh; min-height: 0; display: flex; flex-direc
 .ask-convo-del { opacity: 0; font-size: 11px; color: var(--faint-ink); background: none; border: none; cursor: pointer; }
 .ask-convo:hover .ask-convo-del, .ask-convo:focus-within .ask-convo-del { opacity: 1; }
 
-.ask-main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; }
+.ask-main { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 /* Explicit row placement: the topbar is display:none on desktop, and a
    hidden element generates NO grid item, so auto-placement was sliding the
    thread into the auto row and stretching the composer across the 1fr (the
@@ -449,7 +449,10 @@ body:has(> .ask-page) { height: 100dvh; min-height: 0; display: flex; flex-direc
 .ask-enh-body li { overflow-wrap: anywhere; }
 
 /* generative views: tables, timelines, charts bound to server-resolved rows */
-.ask-views { display: flex; flex-direction: column; gap: 14px; margin: 8px 0 12px; }
+.ask-views { display: flex; flex-direction: column; gap: 14px; margin: 8px 0 12px; min-width: 0; max-width: 100%; }
+/* A view never widens the thread: grid/flex items default to min-width:auto, which let a table's min-content push the column past the viewport on phones. */
+.ask-thread { min-width: 0; }
+.ask-thread-inner > * { min-width: 0; max-width: 100%; }
 .ask-view { margin: 0; border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); padding: 10px 12px 12px; min-width: 0; }
 .ask-view-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
 .ask-view-title { font-size: 13px; font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
@@ -481,7 +484,8 @@ body:has(> .ask-page) { height: 100dvh; min-height: 0; display: flex; flex-direc
   .ask-view-table, .ask-view-table tbody, .ask-view-table tr, .ask-view-table td { display: block; }
   .ask-view-table thead { display: none; }
   .ask-view-table tr { border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; margin-bottom: 8px; }
-  .ask-view-table td { border: none; padding: 2px 0; text-align: left; }
+  .ask-view-table td { border: none; padding: 2px 0; text-align: left; overflow-wrap: anywhere; }
+  .ask-view-table { width: 100%; }
   .ask-view-table [data-num] { text-align: left; padding-right: 0; }
   .ask-view-table td::before { content: attr(data-label) ': '; font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink); }
   .ask-view-tl li { grid-template-columns: minmax(0, 1fr); }
