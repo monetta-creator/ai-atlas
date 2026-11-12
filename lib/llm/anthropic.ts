@@ -26,7 +26,7 @@ export function toAnthropicMessages(msgs: LlmMessage[]): Record<string, unknown>
   };
   for (const m of msgs) {
     if (m.role === 'system') out.push({ role: 'system', content: m.content });
-    else if (m.role === 'user') pushUser([{ type: 'text', text: m.content }]);
+    else if (m.role === 'user') pushUser([...(m.prefix ? [{ type: 'text', text: m.prefix, cache_control: { type: 'ephemeral' } }] : []), { type: 'text', text: m.content }]);
     else if (m.role === 'tool') {
       pushUser(m.results.map((r) => ({ type: 'tool_result', tool_use_id: r.id, content: r.text, ...(r.isError ? { is_error: true } : {}) })));
     } else {

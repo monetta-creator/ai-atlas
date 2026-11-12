@@ -45,6 +45,10 @@ export interface LoopOpts {
   maxTokens?: number;
   effort?: 'low' | 'medium' | 'high';
   signal?: AbortSignal;
+  // Always write the answer in its own tool-free call once research used any
+  // tool or search (thin/adjacent lanes with web on: an answer written in the
+  // same call as the searches puts web findings above the @@BEYOND@@ marker).
+  separateFinal?: boolean;
   // Called after every model call (cost logging).
   onCall?: (usage: NormalizedUsage, wallMs: number) => Promise<void> | void;
   now?: () => number; // test seam
@@ -58,7 +62,7 @@ export interface LoopResult {
   modelCalls: number;
   toolCalls: number;
   stop: StopReason;
-  forced: null | 'rounds' | 'deadline' | 'input';
+  forced: null | 'rounds' | 'deadline' | 'input' | 'separate';
   // Every successful tool result, for the verifier's deterministic checks.
   corpus: string[];
 }
@@ -175,6 +179,13 @@ export async function runLoop(o: LoopOpts): Promise<LoopResult> {
       continue;
     }
 
+    if (o.separateFinal && !final && (toolCalls > 0 || callUsage.webSearches > 0 || usage.webSearches > 0)) {
+      if (roundText) o.emit({ type: 'retract' });
+      forced = 'separate';
+      o.emit({ type: 'status', text: 'Separating the records from the web findings' });
+      messages.push({ role: 'user', content: o.finalInstruction });
+      continue;
+    }
     return { answer: roundText.trim(), messages, usage, rounds, modelCalls, toolCalls, stop, forced, corpus };
   }
 }

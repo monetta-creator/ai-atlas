@@ -11,7 +11,8 @@ type OaMsg = Record<string, unknown>;
 export function toOpenAiMessages(system: string, msgs: LlmMessage[]): OaMsg[] {
   const out: OaMsg[] = [{ role: 'system', content: system }];
   for (const m of msgs) {
-    if (m.role === 'system' || m.role === 'user') out.push({ role: m.role, content: m.content });
+    if (m.role === 'system') out.push({ role: 'system', content: m.content });
+    else if (m.role === 'user') out.push({ role: 'user', content: m.prefix ? `${m.prefix}\n\n${m.content}` : m.content });
     else if (m.role === 'tool') for (const r of m.results) out.push({ role: 'tool', tool_call_id: r.id, content: r.isError ? `ERROR: ${r.text}` : r.text });
     else {
       const raw = m.raw && typeof m.raw === 'object' ? (m.raw as OaMsg) : null;

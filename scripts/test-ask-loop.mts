@@ -86,6 +86,12 @@ const user: LlmMessage[] = [{ role: 'user', content: 'q' }];
   const r = await runLoop({ ...base, adapter: fake([{ stop: 'pause' }, { text: ['after pause'] }], seen), messages: user, exec: async () => ({ text: '' }), emit: () => {} });
   ok(r.answer === 'after pause' && r.modelCalls === 2, 'pause continuation');
 }
+// 7b. separateFinal: research then a tool-free answer call.
+{
+  const seen: TurnRequest[] = []; const ev: LoopEvent[] = [];
+  const r = await runLoop({ ...base, separateFinal: true, adapter: fake([{ calls: [{ name: 'x', input: {} }] }, { text: ['draft'] }, { text: ['final'] }], seen), messages: user, exec: async () => ({ text: 'r' }), emit: (e) => ev.push(e) });
+  ok(r.forced === 'separate' && r.answer === 'final' && seen[2].noTools === true && ev.some((e) => e.type === 'retract'), `separate final (${r.forced}, ${r.answer})`);
+}
 ok(clip('abcdef', 3).startsWith('abc\n[... clipped'), 'clip');
 ok(toApiUsage({ input: 10, output: 5, cacheRead: 90, cacheWrite: 0, webSearches: 0 }, 'openrouter').input_tokens === 100, 'openrouter cached tokens priced as input');
 

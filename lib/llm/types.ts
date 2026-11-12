@@ -19,7 +19,9 @@ export interface ToolResultMsg {
 export type LlmMessage =
   // A mid-conversation operator instruction (a skill's recipe, a reminder).
   | { role: 'system'; content: string }
-  | { role: 'user'; content: string }
+  // `prefix` is a large stable block (the map skeleton) sent before the
+  // content with its own cache breakpoint on Anthropic; concatenated elsewhere.
+  | { role: 'user'; content: string; prefix?: string }
   // `raw` is the provider's own assistant content (Anthropic blocks with
   // thinking signatures and server-tool results; OpenAI message object),
   // replayed verbatim on the next call so nothing is edited.
@@ -29,7 +31,7 @@ export type LlmMessage =
 export interface ToolSpec {
   name: string;
   description: string;
-  inputSchema: Record<string, unknown>;
+  inputSchema: object;
 }
 
 export interface WebSource {

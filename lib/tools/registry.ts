@@ -42,3 +42,8 @@ export function openaiTools(identity: Identity) {
     function: { name: t.name, description: t.description, parameters: t.inputSchema },
   }));
 }
+
+// The loop's provider-neutral ToolSpec list.
+export function toolSpecs(identity: Identity): { name: string; description: string; inputSchema: object }[] {
+  return toolsFor(identity).map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
+}
