@@ -21,7 +21,7 @@ export interface LoopCaps {
 
 // Sized for 1M-context 5.5 models (10-architecture.md, upgrade #2), with the
 // Haiku 5.5 price line in mind: its cheap rate holds to 100K-token prompts.
-export const DEFAULT_CAPS: LoopCaps = { maxRounds: 8, maxCallsPerRound: 6, resultCap: 5000, inputBudget: 95_000 };
+export const DEFAULT_CAPS: LoopCaps = { maxRounds: 6, maxCallsPerRound: 6, resultCap: 5000, inputBudget: 95_000 };
 
 export type LoopEvent =
   | { type: 'delta'; text: string }
@@ -148,18 +148,22 @@ export async function runLoop(o: LoopOpts): Promise<LoopResult> {
     if (stop === 'tool_use' && !final && assistant.toolCalls.length) {
       const calls = assistant.toolCalls;
       const results = [];
+      // A round's calls run in parallel (the model issues them together
+      // because they are independent); results keep the call order.
+      const settled = await Promise.all(
+        calls.map(async (c, i): Promise<{ text: string; isError?: boolean }> => {
+          if (i >= caps.maxCallsPerRound) return { text: `Too many tool calls in one round (limit ${caps.maxCallsPerRound}). Make this call again next round if still needed.`, isError: true };
+          if (c.input && typeof c.input === 'object' && '__invalid_json' in (c.input as object)) return { text: 'The tool input was not valid JSON. Send the call again.', isError: true };
+          try {
+            return await o.exec(c);
+          } catch (e) {
+            return { text: `Tool error: ${(e as Error).message.slice(0, 200)}`, isError: true };
+          }
+        }),
+      );
       for (let i = 0; i < calls.length; i++) {
         const c = calls[i];
-        let r: { text: string; isError?: boolean };
-        if (i >= caps.maxCallsPerRound) r = { text: `Too many tool calls in one round (limit ${caps.maxCallsPerRound}). Make this call again next round if still needed.`, isError: true };
-        else if (c.input && typeof c.input === 'object' && '__invalid_json' in (c.input as object)) r = { text: 'The tool input was not valid JSON. Send the call again.', isError: true };
-        else {
-          try {
-            r = await o.exec(c);
-          } catch (e) {
-            r = { text: `Tool error: ${(e as Error).message.slice(0, 200)}`, isError: true };
-          }
-        }
+        const r = settled[i];
         toolCalls++;
         const text = clip(r.text, caps.resultCap);
         if (!r.isError) corpus.push(text);

@@ -199,6 +199,9 @@ export async function POST(req: Request): Promise<Response> {
           finalInstruction: v2FinalInstruction(promptOpts),
           deadlineAt: t0 + DEADLINE_MS - FINAL_RESERVE_MS,
           maxTokens: depth === '3' ? 8000 : 4000,
+          // Claude thinks adaptively; low effort on ordinary turns keeps the wait
+          // down (measured 2026-11-11), medium when the turn wants depth.
+          effort: model.provider === 'anthropic' ? (depth === '3' ? 'medium' : 'low') : undefined,
           signal: req.signal,
           onCall: async (u, wallMs) => {
             await recordApiCall({ feature, model: model.id, usage: toApiUsage(u, model.provider), wallMs, metadata });
