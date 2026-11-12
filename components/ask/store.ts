@@ -41,9 +41,26 @@ export interface FieldReportState {
 // older stored messages and the deep route's reports still type-check.
 export type AskCostStored = AskCostReport & { cache_write_tokens?: number; tool_calls?: number };
 
+// The Enhance card (redo P4.6): what the prework found for one ask. Stored on
+// the user turn it produced, so it survives reload and renders above the answer.
+export interface EnhanceCardData {
+  original: string;
+  question: string;
+  plan: string[];
+  clarify: string[];
+  records: string[];
+  decision: { model: string; label: string; tier: string; web: boolean; depth: string; reason: string; estUsd: number; budgetMessage: string | null };
+  enhanceUsd?: number;
+}
+
+export interface AskChip { label: string; prompt: string; kind: string }
+
 export interface AskMessage {
   role: 'user' | 'assistant';
   content: string;
+  enhanced?: EnhanceCardData; // user only: the Enhance card behind this turn
+  skill?: { slug: string; title: string; kind: 'skill' | 'agent' | 'unknown' }; // assistant only: a /skill or @agent turn
+  chips?: AskChip[];       // assistant only: next-step suggestions (P4.7)
   signalMap?: SignalMap;   // assistant only: FROZEN merged tag -> uuid map at completion time
   datasets?: string[];     // assistant only: verified [dataset <slug>] suggestions
   steps?: string[];        // assistant only: the deep-research trail (status lines)
@@ -138,7 +155,7 @@ export function useAskConvos(): AskConvo[] {
 
 // ---------------------------------------------------------------- mutators
 
-export function createConvo(firstUserTurn: string): string {
+export function createConvo(firstUserTurn: string, enhanced?: EnhanceCardData): string {
   const s = read();
   const now = Date.now();
   const convo: AskConvo = {
@@ -146,7 +163,7 @@ export function createConvo(firstUserTurn: string): string {
     title: firstUserTurn.slice(0, TITLE_CAP),
     createdAt: now,
     updatedAt: now,
-    messages: [{ role: 'user', content: firstUserTurn }],
+    messages: [{ role: 'user', content: firstUserTurn, ...(enhanced ? { enhanced } : {}) }],
   };
   persist({ v: 1, convos: [convo, ...s.convos] });
   return convo.id;

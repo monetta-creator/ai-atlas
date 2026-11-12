@@ -14,6 +14,7 @@ import AskCost from '@/components/ask/AskCost';
 import type { V2Decision } from '@/lib/ask/v2-events';
 import { formatTurnCost } from '@/lib/llm/models';
 import AskDatasetCard, { type DatasetSuggestionMeta } from '@/components/datasets/AskDatasetCard';
+import EnhanceCard from '@/components/ask/EnhanceCard';
 import FieldReportPlanCard from '@/components/ask/FieldReportPlanCard';
 import FieldReportRunCard from '@/components/ask/FieldReportRunCard';
 import FieldReportResultCard from '@/components/ask/FieldReportCard';
@@ -56,7 +57,7 @@ const MAP_KINDS = new Set<CitationKind>(['signal', 'paper', 'item', 'fact', 'rep
 export default function AskThread({
   convo, streaming, frPlanning, draft, draftMap, draftSteps, draftLane, validIds, datasets, locked,
   admin, canVerify, verifyingIndex,
-  onPickStarter, onRegenerate, onGenerate, onCite, onVerify, onFieldReportUpdate,
+  onPickStarter, onRegenerate, onGenerate, onCite, onVerify, onFieldReportUpdate, onEditQuestion,
 }: {
   convo: AskConvo | null;
   streaming: boolean;
@@ -77,6 +78,7 @@ export default function AskThread({
   onCite?: (kind: PeekKind, id: string, msgIndex?: number) => void;
   onVerify: (index: number) => void;
   onFieldReportUpdate: (msgIndex: number, patch: Partial<FieldReportState>) => void;
+  onEditQuestion?: (question: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
@@ -117,7 +119,12 @@ export default function AskThread({
         <div className="ask-thread-inner">
           {convo.messages.map((m, i) => {
             if (m.role === 'user') {
-              return <div key={i} className="ask-msg--user">{m.content}</div>;
+              return (
+                <div key={i}>
+                  <div className="ask-msg--user">{m.content}</div>
+                  {m.enhanced && <EnhanceCard card={m.enhanced} onEdit={onEditQuestion} />}
+                </div>
+              );
             }
             if (m.fieldReport) {
               const fr = m.fieldReport;
@@ -180,7 +187,12 @@ export default function AskThread({
               );
             }
             const map = m.signalMap ?? {};
-            const lane = m.lane && <span className="ask-lane" data-lane={m.lane}>{LANE_LABEL[m.lane]}</span>;
+            const lane = (
+              <>
+                {m.lane && <span className="ask-lane" data-lane={m.lane}>{LANE_LABEL[m.lane]}</span>}
+                {m.skill && <span className="ask-skill" title={m.skill.title}>{m.skill.kind === 'agent' ? '@' : '/'}{m.skill.slug}</span>}
+              </>
+            );
             if (m.decline) {
               const d = m.decline;
               return (
@@ -267,6 +279,15 @@ export default function AskThread({
                 )}
                 {m.verify && <AskVerify report={m.verify} />}
                 {m.cost && <AskCost cost={m.cost} />}
+                {m.chips && m.chips.length > 0 && i === convo.messages.length - 1 && !streaming && (
+                  <div className="ask-chips" role="group" aria-label="Next steps">
+                    {m.chips.map((c, j) => (
+                      <button key={j} type="button" className="ask-chip" title={c.prompt} onClick={() => onPickStarter(c.prompt)}>
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {/* Web-informed answers skip the Atlas faithfulness check: web
                     facts are outside the corpus and would flag as unfound. */}
                 {canVerify && !m.verify && !m.error && !streaming && !m.webSources?.length && (

@@ -8,7 +8,7 @@ import type { VerifyReport } from '@/lib/ask/deep';
 import {
   appendMessage, createConvo, deleteConvo, dropLastAssistant, getConvo,
   maxSignalSuffix, mergedSignalMap, setConvoModel, setMessageFieldReport, setMessageVerify, useAskConvos,
-  type AskCostStored, type AskMessage,
+  type AskChip, type AskCostStored, type AskMessage, type EnhanceCardData,
 } from '@/components/ask/store';
 import { extractCostReport, extractWebSources, parseCostReport, type AskWebSource } from '@/lib/ask/history';
 import type { V2Decision } from '@/lib/ask/v2-events';
@@ -18,6 +18,7 @@ import type { FieldReportPlanResponse } from '@/lib/field-report/core';
 import AskRail from '@/components/ask/AskRail';
 import AskThread from '@/components/ask/AskThread';
 import AskComposer from '@/components/ask/AskComposer';
+import EnhanceCard from '@/components/ask/EnhanceCard';
 import AskPeek from '@/components/ask/AskPeek';
 import { buildHighlight, type DocHighlight } from '@/components/ask/AskDoc';
 import PortalUnlock from '@/components/datasets/PortalUnlock';
@@ -69,6 +70,10 @@ export default function AskWorkspace({
   // Selector pick for a conversation that does not exist yet; once it does the pick lives on the convo.
   const [pendingModel, setPendingModel] = useState('auto');
   const [frPlanning, setFrPlanning] = useState(false);
+  // Enhance (P4.6): the call in flight, the card of an Enhance-only run (not sent yet), and a text the composer should load.
+  const [enhancing, setEnhancing] = useState(false);
+  const [pendingEnhance, setPendingEnhance] = useState<EnhanceCardData | null>(null);
+  const [seed, setSeed] = useState<{ id: number; text: string } | null>(null);
   const [verifyingIndex, setVerifyingIndex] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
   const [activePeek, setActivePeek] = useState<{ kind: PeekKind; id: string } | null>(null);
@@ -349,11 +354,19 @@ export default function AskWorkspace({
     let lane: Lane | undefined;
     let declinePayload: DeclinePayload | undefined;
     let decision: V2Decision | undefined;
-    // Admin turns take the v2 path when picked by ?v=2, a manual model, or the toggle.
-    const useV2 = mode === 'admin' && (new URLSearchParams(window.location.search).get('v') === '2' || (convo.model ?? 'auto') !== 'auto' || v2On);
+    let skill: AskMessage['skill'];
+    let chips: AskChip[] | undefined;
+    // Admin turns take the v2 path when picked by ?v=2, a manual model, or the toggle;
+    // a /skill or @agent turn, or an enhanced one, always does (skills only exist there).
+    const lastUser = convo.messages[convo.messages.length - 1];
+    const lastText = lastUser?.role === 'user' ? lastUser.content.trimStart() : '';
+    const enhanced = lastUser?.role === 'user' ? lastUser.enhanced : undefined;
+    const useV2 = mode === 'admin' && (new URLSearchParams(window.location.search).get('v') === '2' || (convo.model ?? 'auto') !== 'auto' || v2On
+      || lastText.startsWith('/') || lastText.startsWith('@') || !!enhanced);
+    const webForTurn = webAvailable && (webOn || !!enhanced?.decision.web);
     const handleLine = (line: string) => {
       if (!line.trim()) return;
-      let ev: { type?: string; text?: unknown; signals?: unknown; report?: unknown; sources?: unknown; lane?: unknown; payload?: unknown; decision?: unknown };
+      let ev: { type?: string; text?: unknown; signals?: unknown; report?: unknown; sources?: unknown; lane?: unknown; payload?: unknown; decision?: unknown; slug?: unknown; title?: unknown; kind?: unknown; chips?: unknown };
       try {
         ev = JSON.parse(line) as typeof ev;
       } catch {
@@ -389,6 +402,15 @@ export default function AskWorkspace({
         }
       } else if (ev.type === 'decision' && ev.decision && typeof ev.decision === 'object') {
         decision = ev.decision as V2Decision;
+      } else if (ev.type === 'skill' && typeof ev.slug === 'string') {
+        const kind = ev.kind === 'agent' || ev.kind === 'unknown' ? ev.kind : 'skill';
+        skill = { slug: ev.slug.slice(0, 60), title: typeof ev.title === 'string' ? ev.title.slice(0, 80) : ev.slug, kind };
+      } else if (ev.type === 'chips' && Array.isArray(ev.chips)) {
+        const list = (ev.chips as AskChip[])
+          .filter((c) => !!c && typeof c.label === 'string' && typeof c.prompt === 'string' && c.label && c.prompt)
+          .map((c) => ({ label: c.label.slice(0, 80), prompt: c.prompt.slice(0, 600), kind: typeof c.kind === 'string' ? c.kind : '' }))
+          .slice(0, 3);
+        chips = list.length ? list : undefined;
       } else if (ev.type === 'retract') {
         // v2: the text so far was narration before a tool call; drop it.
         acc = '';
@@ -412,7 +434,7 @@ export default function AskWorkspace({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: wire, signalOffset: maxSignalSuffix(convo), signalMap: priorMap, fieldReportIds,
-          web: webAvailable && webOn,
+          web: webForTurn,
           ...(useV2 ? { model: convo.model ?? 'auto' } : {}),
         }),
         signal: ac.signal,
@@ -466,6 +488,8 @@ export default function AskWorkspace({
         verify: verifyReport,
         cost: costReport,
         decision,
+        skill,
+        chips,
         webSources,
         lane,
         stopped: errText ? true : undefined, // cut short server-side; partial stands
@@ -482,6 +506,7 @@ export default function AskWorkspace({
             verify: verifyReport,
             cost: costReport,
             decision,
+            skill,
             webSources,
           });
         }
@@ -499,22 +524,76 @@ export default function AskWorkspace({
     }
   }
 
-  function send(text: string) {
+  function send(text: string, enhanced?: EnhanceCardData) {
     const content = text.trim();
     if (!content || streaming || frPlanning || locked) return;
+    setPendingEnhance(null);
     let convoId = activeId;
     if (!convoId || !getConvo(convoId)) {
-      convoId = createConvo(content);
+      convoId = createConvo(content, enhanced);
       if (pendingModel !== 'auto') setConvoModel(convoId, pendingModel);
       setActiveId(convoId);
     } else {
-      appendMessage(convoId, { role: 'user', content });
+      appendMessage(convoId, { role: 'user', content, ...(enhanced ? { enhanced } : {}) });
     }
     if (fieldReportOn) {
       void runFieldReportPlan(convoId);
     } else {
       void run(convoId);
     }
+  }
+
+  // Enhance (admin): tidy the ask, then either send the cleaned question
+  // (andSend) or hand it back to the composer with the card shown. Any failure
+  // falls back to a plain send (or nothing, for Enhance-only) without a word.
+  async function enhance(text: string, andSend: boolean): Promise<void> {
+    const query = text.trim();
+    if (!query || streaming || frPlanning || locked || enhancing) return;
+    const prevConvo = activeId ? getConvo(activeId) : null;
+    const prev = prevConvo ? [...prevConvo.messages].reverse().find((m) => m.role === 'user')?.content : undefined;
+    setEnhancing(true);
+    let card: EnhanceCardData | null = null;
+    try {
+      const res = await fetch('/api/ask/enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, ...(prev ? { prev } : {}) }),
+      });
+      if (res.ok) {
+        const d = (await res.json()) as Partial<EnhanceCardData> & { decision?: Partial<EnhanceCardData['decision']> };
+        if (d && typeof d.question === 'string' && d.question.trim() && d.decision && typeof d.decision.label === 'string') {
+          const dec = d.decision;
+          card = {
+            original: query,
+            question: d.question.trim(),
+            plan: Array.isArray(d.plan) ? d.plan.map(String) : [],
+            clarify: Array.isArray(d.clarify) ? d.clarify.map(String) : [],
+            records: Array.isArray(d.records) ? d.records.map(String) : [],
+            decision: {
+              model: String(dec.model ?? ''), label: dec.label ?? '', tier: String(dec.tier ?? ''),
+              web: !!dec.web, depth: String(dec.depth ?? ''), reason: String(dec.reason ?? ''),
+              estUsd: typeof dec.estUsd === 'number' ? dec.estUsd : 0,
+              budgetMessage: typeof dec.budgetMessage === 'string' ? dec.budgetMessage : null,
+            },
+            enhanceUsd: typeof d.enhanceUsd === 'number' ? d.enhanceUsd : undefined,
+          };
+        }
+      }
+    } catch {
+      // fall through to the plain path
+    } finally {
+      setEnhancing(false);
+    }
+    if (andSend) {
+      send(card ? card.question : query, card ?? undefined);
+    } else if (card) {
+      setPendingEnhance(card);
+      setSeed({ id: Date.now(), text: card.question });
+    }
+  }
+
+  function editQuestion(question: string) {
+    setSeed({ id: Date.now(), text: question });
   }
 
   function pickStarter(question: string) {
@@ -621,6 +700,7 @@ export default function AskWorkspace({
           onCite={openPeek}
           onVerify={(i) => { void verifyMessage(i); }}
           onFieldReportUpdate={(i, patch) => { if (activeId) setMessageFieldReport(activeId, i, patch); }}
+          onEditQuestion={editQuestion}
         />
 
         {locked ? (
@@ -631,8 +711,14 @@ export default function AskWorkspace({
           </div>
         ) : (
           <AskComposer
+            above={pendingEnhance ? <EnhanceCard card={pendingEnhance} onEdit={editQuestion} /> : null}
             streaming={streaming || frPlanning}
-            onSend={send}
+            onSend={(t) => send(t)}
+            audience={mode === 'admin' ? 'admin' : null /* the portal path runs no skills yet */}
+            enhanceAvailable={mode === 'admin'}
+            enhancing={enhancing}
+            onEnhance={(t, andSend) => { void enhance(t, andSend); }}
+            seed={seed}
             onStop={stop}
             researchMode={researchMode}
             webAvailable={webAvailable}

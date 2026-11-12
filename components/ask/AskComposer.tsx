@@ -1,9 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { suggest } from '@/lib/capabilities/registry';
+import { trigger, type Audience } from '@/lib/capabilities/types';
 import { estimateTurnUsd, formatTurnCost, selectorModels } from '@/lib/llm/models';
 
 const MODEL_OPTIONS = selectorModels();
+
+// Dictation: the browser's speech recognition, where it exists. Minimal typings
+// (lib.dom does not ship them); detection runs through useSyncExternalStore so
+// the server render and hydration both say "unsupported".
+interface SpeechResultLike { 0: { transcript: string }; isFinal: boolean; length: number }
+interface SpeechEventLike { resultIndex: number; results: ArrayLike<SpeechResultLike> }
+interface SpeechRec {
+  continuous: boolean; interimResults: boolean; lang: string;
+  onresult: ((e: SpeechEventLike) => void) | null; onend: (() => void) | null; onerror: (() => void) | null;
+  start: () => void; stop: () => void;
+}
+type SpeechCtor = new () => SpeechRec;
+const speechCtor = (): SpeechCtor | null => {
+  const w = window as unknown as { SpeechRecognition?: SpeechCtor; webkitSpeechRecognition?: SpeechCtor };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+};
+const noopSubscribe = () => () => {};
+const speechSupported = () => speechCtor() !== null;
 
 // The pinned composer. Autosize is computed in the change handler from the
 // event target (never a ref read in render); Enter sends, Shift+Enter breaks
@@ -19,6 +39,7 @@ export default function AskComposer({
   webAvailable, web, onToggleWeb,
   fieldReportAvailable, fieldReport, onToggleFieldReport,
   showModel, model, onModel, v2On, onToggleV2,
+  audience, enhanceAvailable, enhancing, onEnhance, seed, above,
 }: {
   streaming: boolean;
   onSend: (text: string) => void;
@@ -37,14 +58,76 @@ export default function AskComposer({
   onModel: (id: string) => void;
   v2On: boolean;
   onToggleV2: () => void;
+  // Smart bar: who the autocomplete lists for (null = none), Enhance (admin), a text to load, a node shown above the box.
+  audience: Audience | null;
+  enhanceAvailable: boolean;
+  enhancing: boolean;
+  onEnhance: (text: string, andSend: boolean) => void;
+  seed: { id: number; text: string } | null;
+  above?: ReactNode;
 }) {
   const [text, setText] = useState('');
+  const [active, setActive] = useState(0);
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const [rec, setRec] = useState<SpeechRec | null>(null);
+  const canDictate = useSyncExternalStore(noopSubscribe, speechSupported, () => false);
+
+  // A parent-supplied text (Enhance, Edit and rerun) replaces the box once per
+  // seed: the derived-state pattern, setState during render keyed on the prop.
+  const [seenSeed, setSeenSeed] = useState<number | null>(null);
+  if (seed && seed.id !== seenSeed) {
+    setSeenSeed(seed.id);
+    setText(seed.text);
+  }
+
+  // Stop dictation if the composer unmounts mid-listen.
+  useEffect(() => () => { rec?.stop(); }, [rec]);
+
+  const listening = rec !== null;
+  function toggleDictation() {
+    if (rec) { rec.stop(); setRec(null); return; }
+    const Ctor = speechCtor();
+    if (!Ctor) return;
+    const r = new Ctor();
+    r.continuous = true;
+    r.interimResults = true;
+    r.lang = navigator.language || 'en-US';
+    const base = text && !/\s$/.test(text) ? `${text} ` : text;
+    r.onresult = (e) => {
+      let t = '';
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      setText(base + t.trimStart());
+    };
+    r.onend = () => setRec(null);
+    r.onerror = () => setRec(null);
+    try { r.start(); setRec(r); } catch { setRec(null); }
+  }
+
+  // Autocomplete: only while the box holds a lone "/word" or "@word".
+  const items = audience && /^[/@][a-z0-9-]*$/i.test(text) && dismissed !== text ? suggest(text, audience) : [];
+  const popOpen = items.length > 0;
+  const activeIdx = Math.min(active, Math.max(0, items.length - 1));
+  function insert(i: number) {
+    const c = items[i];
+    if (!c) return;
+    setText(`${trigger(c)} `);
+    setActive(0);
+    document.getElementById('ask-composer-input')?.focus();
+  }
 
   function submit() {
     const t = text.trim();
     if (!t || streaming) return;
     setText('');
     onSend(t);
+  }
+
+  function enhance(andSend: boolean) {
+    const t = text.trim();
+    if (!t || streaming || enhancing) return;
+    if (rec) { rec.stop(); setRec(null); }
+    if (andSend) setText('');
+    onEnhance(t, andSend);
   }
 
   const freshNote = ' Recent-events questions still search the web automatically.';
@@ -60,20 +143,54 @@ export default function AskComposer({
 
   return (
     <div className="ask-composer">
+      {above}
       <div className="ask-composer-inner">
+        {popOpen && (
+          <ul className="ask-ac" role="listbox" id="ask-ac-list" aria-label="Skills and agents">
+            {items.map((c, i) => (
+              <li
+                key={`${c.kind}-${c.slug}`}
+                id={`ask-ac-${i}`}
+                role="option"
+                aria-selected={i === activeIdx}
+                className="ask-ac-row"
+                onMouseDown={(e) => { e.preventDefault(); insert(i); }}
+                onMouseEnter={() => setActive(i)}
+              >
+                <span className="ask-ac-trig">{trigger(c)}</span>
+                <span className="ask-ac-title">{c.title}</span>
+                <span className="ask-ac-one">{c.oneLiner}</span>
+                <span className="ask-ac-use">{c.usage}</span>
+              </li>
+            ))}
+          </ul>
+        )}
         {!text && <span className="lobby-ask-caret" aria-hidden="true" />}
         <textarea
+          id="ask-composer-input"
           className="input"
           rows={1}
+          role="combobox"
+          aria-expanded={popOpen}
+          aria-controls={popOpen ? 'ask-ac-list' : undefined}
+          aria-activedescendant={popOpen ? `ask-ac-${activeIdx}` : undefined}
+          aria-autocomplete="list"
           placeholder={fieldReport ? 'Ask for a Field Report: the Atlas drafts a research plan first' : 'Ask the Atlas anything it tracks'}
           value={text}
           onChange={(e) => {
             setText(e.target.value);
+            setActive(0);
             const el = e.currentTarget;
             el.style.height = 'auto';
             el.style.height = `${Math.min(200, el.scrollHeight)}px`;
           }}
           onKeyDown={(e) => {
+            if (popOpen) {
+              if (e.key === 'ArrowDown') { e.preventDefault(); setActive((activeIdx + 1) % items.length); return; }
+              if (e.key === 'ArrowUp') { e.preventDefault(); setActive((activeIdx - 1 + items.length) % items.length); return; }
+              if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); insert(activeIdx); return; }
+              if (e.key === 'Escape') { e.preventDefault(); setDismissed(text); return; }
+            }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               submit();
@@ -84,13 +201,42 @@ export default function AskComposer({
             }
           }}
         />
-        {streaming ? (
-          <button type="button" className="btn btn--ghost" onClick={onStop}>Stop</button>
-        ) : (
-          <button type="button" className="btn btn--primary" onClick={submit} disabled={!text.trim()}>
-            Send
-          </button>
-        )}
+        <div className="ask-composer-actions">
+          {canDictate && !streaming && (
+            <button
+              type="button"
+              className="ask-mic"
+              aria-pressed={listening}
+              aria-label={listening ? 'Stop dictation' : 'Dictate'}
+              title={listening ? 'Stop dictation' : 'Dictate your question'}
+              onClick={toggleDictation}
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="9" y="3" width="6" height="11" rx="3" />
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+              </svg>
+            </button>
+          )}
+          {streaming ? (
+            <button type="button" className="btn btn--ghost" onClick={onStop}>Stop</button>
+          ) : enhanceAvailable && !fieldReport ? (
+            <>
+              <button type="button" className="btn btn--quiet btn--sm" onClick={() => enhance(false)} disabled={!text.trim() || enhancing} title="Tidy the question and show the plan, without sending">
+                Enhance
+              </button>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={submit} disabled={!text.trim() || enhancing}>
+                Send
+              </button>
+              <button type="button" className="btn btn--primary" onClick={() => enhance(true)} disabled={!text.trim() || enhancing} title="Tidy the question, then send the cleaned version">
+                {enhancing ? 'Enhancing...' : 'Enhance & send'}
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn btn--primary" onClick={submit} disabled={!text.trim()}>
+              Send
+            </button>
+          )}
+        </div>
       </div>
       <div className="ask-composer-foot">
         {fieldReportAvailable && (
