@@ -5,6 +5,7 @@ import type { SignalMap } from '@/lib/ask/verify';
 import type { VerifyReport } from '@/lib/ask/deep';
 import type { AskCostReport, AskWebSource } from '@/lib/ask/history';
 import type { DeclinePayload, Lane } from '@/lib/ask/lanes';
+import type { V2Decision } from '@/lib/ask/v2-events';
 import type { FieldReportCard, FieldReportPlan, FieldReportPlanResponse, FieldReportSize } from '@/lib/field-report/core';
 
 // The Ask workspace's conversation store: browser-only localStorage, no
@@ -36,6 +37,10 @@ export interface FieldReportState {
   error?: string;
 }
 
+// The v2 cost report adds two fields the shared parser drops; both optional so
+// older stored messages and the deep route's reports still type-check.
+export type AskCostStored = AskCostReport & { cache_write_tokens?: number; tool_calls?: number };
+
 export interface AskMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -44,7 +49,8 @@ export interface AskMessage {
   steps?: string[];        // assistant only: the deep-research trail (status lines)
   verify?: VerifyReport;   // assistant only: faithfulness check (deep always-on, quick on-demand)
   webSources?: AskWebSource[]; // assistant only: cited web sources (the web toggle)
-  cost?: AskCostReport;    // assistant only: what this turn cost (tokens, searches, USD)
+  cost?: AskCostStored;    // assistant only: what this turn cost (tokens, searches, USD)
+  decision?: V2Decision;   // assistant only: the v2 model decision (recommendation chip)
   lane?: Lane;             // assistant only: the classified lane (2026-09-23)
   decline?: DeclinePayload; // assistant only: a coded decline, no model call ran
   fieldReport?: FieldReportState; // assistant only: a Field Report in progress or done (2026-09-28)
@@ -58,6 +64,7 @@ export interface AskConvo {
   createdAt: number;
   updatedAt: number;
   messages: AskMessage[];
+  model?: string;          // the selector pick, sticky per conversation; absent = 'auto'
 }
 
 interface AskStoreV1 {
@@ -212,6 +219,15 @@ export function setMessageFieldReport(convoId: string, index: number, patch: Par
         updatedAt: Date.now(),
       };
     }),
+  });
+}
+
+// Remember the selector pick on the conversation (absent = 'auto').
+export function setConvoModel(convoId: string, model: string): void {
+  const s = read();
+  persist({
+    v: 1,
+    convos: s.convos.map((c) => (c.id === convoId ? { ...c, model } : c)),
   });
 }
 

@@ -1,6 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { estimateTurnUsd, formatTurnCost, selectorModels } from '@/lib/llm/models';
+
+const MODEL_OPTIONS = selectorModels();
 
 // The pinned composer. Autosize is computed in the change handler from the
 // event target (never a ref read in render); Enter sends, Shift+Enter breaks
@@ -15,6 +18,7 @@ export default function AskComposer({
   streaming, onSend, onStop, researchMode,
   webAvailable, web, onToggleWeb,
   fieldReportAvailable, fieldReport, onToggleFieldReport,
+  showModel, model, onModel, v2On, onToggleV2,
 }: {
   streaming: boolean;
   onSend: (text: string) => void;
@@ -27,6 +31,12 @@ export default function AskComposer({
   fieldReportAvailable: boolean;
   fieldReport: boolean;
   onToggleFieldReport: () => void;
+  // Admin only: the model selector and the v2 chat toggle.
+  showModel: boolean;
+  model: string;
+  onModel: (id: string) => void;
+  v2On: boolean;
+  onToggleV2: () => void;
 }) {
   const [text, setText] = useState('');
 
@@ -94,6 +104,37 @@ export default function AskComposer({
           >
             Field Report
           </button>
+        )}
+        {showModel && !fieldReport && (
+          <>
+            <select
+              className="ask-model-select"
+              value={model}
+              onChange={(e) => onModel(e.target.value)}
+              disabled={streaming}
+              aria-label="Answer model"
+              title="Auto lets the Atlas pick a model for each question; a manual pick uses the v2 chat"
+            >
+              <option value="auto">Auto</option>
+              {(['claude', 'open-weight'] as const).map((fam) => (
+                <optgroup key={fam} label={fam === 'claude' ? 'Claude' : 'Open-weight'}>
+                  {MODEL_OPTIONS.filter((m) => m.family === fam).map((m) => (
+                    <option key={m.id} value={m.id}>{m.label} · {formatTurnCost(estimateTurnUsd(m))}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="ask-deep-toggle"
+              aria-pressed={v2On || model !== 'auto'}
+              onClick={onToggleV2}
+              disabled={streaming || model !== 'auto'}
+              title="Use the v2 chat path (tool-calling loop with model choice). Always on when a model is picked"
+            >
+              v2
+            </button>
+          </>
         )}
         {webAvailable && !fieldReport && (
           <button

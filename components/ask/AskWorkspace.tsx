@@ -7,10 +7,11 @@ import type { DatasetSuggestionMeta } from '@/components/datasets/AskDatasetCard
 import type { VerifyReport } from '@/lib/ask/deep';
 import {
   appendMessage, createConvo, deleteConvo, dropLastAssistant, getConvo,
-  maxSignalSuffix, mergedSignalMap, setMessageFieldReport, setMessageVerify, useAskConvos,
-  type AskMessage,
+  maxSignalSuffix, mergedSignalMap, setConvoModel, setMessageFieldReport, setMessageVerify, useAskConvos,
+  type AskCostStored, type AskMessage,
 } from '@/components/ask/store';
-import { extractCostReport, extractWebSources, parseCostReport, type AskCostReport, type AskWebSource } from '@/lib/ask/history';
+import { extractCostReport, extractWebSources, parseCostReport, type AskWebSource } from '@/lib/ask/history';
+import type { V2Decision } from '@/lib/ask/v2-events';
 import { extractDecline, parseLane, type DeclinePayload, type Lane } from '@/lib/ask/lanes';
 import { fieldReportContext } from '@/components/ask/field-report-context';
 import type { FieldReportPlanResponse } from '@/lib/field-report/core';
@@ -64,6 +65,9 @@ export default function AskWorkspace({
   const [draftLane, setDraftLane] = useState<Lane | undefined>(undefined);
   const [webOn, setWebOn] = useState(false);
   const [fieldReportOn, setFieldReportOn] = useState(false);
+  const [v2On, setV2On] = useState(false);
+  // Selector pick for a conversation that does not exist yet; once it does the pick lives on the convo.
+  const [pendingModel, setPendingModel] = useState('auto');
   const [frPlanning, setFrPlanning] = useState(false);
   const [verifyingIndex, setVerifyingIndex] = useState<number | null>(null);
   const [railOpen, setRailOpen] = useState(false);
@@ -81,6 +85,12 @@ export default function AskWorkspace({
   const fieldReportAvailable = mode !== 'locked'; // admin + portal key; the run itself is budget-metered per key
   const locked = mode === 'locked';
   const active = activeId ? convos.find((c) => c.id === activeId) ?? null : null;
+  const showModel = mode === 'admin';
+  const model = active ? active.model ?? 'auto' : pendingModel;
+  function pickModel(id: string) {
+    if (activeId && getConvo(activeId)) setConvoModel(activeId, id);
+    else setPendingModel(id);
+  }
 
   // A ?q= seed (the lobby's chat launcher) fires once as the first turn. The
   // guard lives inside the deferred callback (not the effect body) so Strict
@@ -334,13 +344,16 @@ export default function AskWorkspace({
     let steps: string[] = [];
     let errText = '';
     let verifyReport: VerifyReport | undefined;
-    let costReport: AskCostReport | undefined;
+    let costReport: AskCostStored | undefined;
     let webSources: AskWebSource[] | undefined;
     let lane: Lane | undefined;
     let declinePayload: DeclinePayload | undefined;
+    let decision: V2Decision | undefined;
+    // Admin turns take the v2 path when picked by ?v=2, a manual model, or the toggle.
+    const useV2 = mode === 'admin' && (new URLSearchParams(window.location.search).get('v') === '2' || (convo.model ?? 'auto') !== 'auto' || v2On);
     const handleLine = (line: string) => {
       if (!line.trim()) return;
-      let ev: { type?: string; text?: unknown; signals?: unknown; report?: unknown; sources?: unknown; lane?: unknown; payload?: unknown };
+      let ev: { type?: string; text?: unknown; signals?: unknown; report?: unknown; sources?: unknown; lane?: unknown; payload?: unknown; decision?: unknown };
       try {
         ev = JSON.parse(line) as typeof ev;
       } catch {
@@ -366,8 +379,23 @@ export default function AskWorkspace({
       } else if (ev.type === 'verify' && ev.report && typeof ev.report === 'object') {
         verifyReport = ev.report as VerifyReport;
       } else if (ev.type === 'cost' && ev.report && typeof ev.report === 'object') {
-        costReport = parseCostReport(ev.report) ?? undefined;
-      } else if (ev.type === 'web_sources' && Array.isArray(ev.sources)) {
+        const parsed = parseCostReport(ev.report);
+        if (parsed) {
+          const r = ev.report as { cache_write_tokens?: unknown; tool_calls?: unknown };
+          const extra: AskCostStored = { ...parsed };
+          if (typeof r.cache_write_tokens === 'number' && r.cache_write_tokens > 0) extra.cache_write_tokens = Math.floor(r.cache_write_tokens);
+          if (typeof r.tool_calls === 'number' && r.tool_calls > 0) extra.tool_calls = Math.floor(r.tool_calls);
+          costReport = extra;
+        }
+      } else if (ev.type === 'decision' && ev.decision && typeof ev.decision === 'object') {
+        decision = ev.decision as V2Decision;
+      } else if (ev.type === 'retract') {
+        // v2: the text so far was narration before a tool call; drop it.
+        acc = '';
+        setDraft('');
+      } else if (ev.type === 'tool_call') {
+        // v2: tool progress already arrives as status lines; nothing to render.
+      } else if ((ev.type === 'web_sources' || ev.type === 'sources') && Array.isArray(ev.sources)) {
         const list = (ev.sources as AskWebSource[])
           .filter((s) => !!s && typeof s.url === 'string' && /^https?:\/\//i.test(s.url))
           .map((s) => ({ url: s.url.slice(0, 600), title: String(s.title ?? '').slice(0, 200) || s.url }))
@@ -379,12 +407,13 @@ export default function AskWorkspace({
     };
 
     try {
-      const res = await fetch('/api/ask/deep', {
+      const res = await fetch(useV2 ? '/api/ask/v2' : '/api/ask/deep', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: wire, signalOffset: maxSignalSuffix(convo), signalMap: priorMap, fieldReportIds,
           web: webAvailable && webOn,
+          ...(useV2 ? { model: convo.model ?? 'auto' } : {}),
         }),
         signal: ac.signal,
       });
@@ -436,6 +465,7 @@ export default function AskWorkspace({
         steps: steps.length ? steps : undefined,
         verify: verifyReport,
         cost: costReport,
+        decision,
         webSources,
         lane,
         stopped: errText ? true : undefined, // cut short server-side; partial stands
@@ -451,6 +481,7 @@ export default function AskWorkspace({
             steps: steps.length ? steps : undefined,
             verify: verifyReport,
             cost: costReport,
+            decision,
             webSources,
           });
         }
@@ -474,6 +505,7 @@ export default function AskWorkspace({
     let convoId = activeId;
     if (!convoId || !getConvo(convoId)) {
       convoId = createConvo(content);
+      if (pendingModel !== 'auto') setConvoModel(convoId, pendingModel);
       setActiveId(convoId);
     } else {
       appendMessage(convoId, { role: 'user', content });
@@ -609,6 +641,11 @@ export default function AskWorkspace({
             fieldReportAvailable={fieldReportAvailable}
             fieldReport={fieldReportOn}
             onToggleFieldReport={() => setFieldReportOn((v) => !v)}
+            showModel={showModel}
+            model={model}
+            onModel={pickModel}
+            v2On={v2On}
+            onToggleV2={() => setV2On((v) => !v)}
           />
         )}
       </div>

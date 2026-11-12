@@ -124,6 +124,26 @@ body:has(> .ask-page) { height: 100dvh; min-height: 0; display: flex; flex-direc
 .ask-deep-toggle:hover { border-color: var(--accent); color: var(--dim); }
 .ask-deep-toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 .ask-deep-toggle:disabled { opacity: 0.5; cursor: default; }
+.ask-model-select {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em;
+  padding: 2px 6px; max-width: 220px; min-width: 0;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: transparent; color: var(--faint-ink); cursor: pointer;
+}
+.ask-model-select:hover, .ask-model-select:focus-visible { border-color: var(--accent); color: var(--dim); }
+.ask-model-select:disabled { opacity: 0.5; cursor: default; }
+@media (max-width: 640px) {
+  .ask-composer-foot { flex-wrap: wrap; row-gap: 6px; }
+  .ask-composer-foot .ask-composer-hint { flex-basis: 100%; }
+}
+
+/* the v2 recommendation chip beside the lane label */
+.ask-decision {
+  display: inline-block; margin: 0 0 8px 6px; max-width: 100%;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em;
+  padding: 2px 8px; border: 1px solid var(--line); border-radius: 2px;
+  color: var(--faint-ink); cursor: help; overflow-wrap: anywhere;
+}
 
 /* the deep-research trail: live list while researching, collapsed details on
    the stored message */

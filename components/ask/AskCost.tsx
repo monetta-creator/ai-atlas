@@ -1,6 +1,7 @@
 'use client';
 
-import type { AskCostReport } from '@/lib/ask/history';
+import { getModel } from '@/lib/llm/models';
+import type { AskCostStored } from '@/components/ask/store';
 
 // The per-turn cost line under an answer: what this turn cost in dollars and
 // tokens, with a one-paragraph expandable explainer (the educational half).
@@ -21,12 +22,14 @@ function fmtUsd(v: number): string {
   return `$${v.toFixed(v < 0.1 ? 4 : 2)}`;
 }
 
-export default function AskCost({ cost }: { cost: AskCostReport }) {
+export default function AskCost({ cost }: { cost: AskCostStored }) {
   const bits: string[] = [
+    ...(getModel(cost.model)?.label ? [getModel(cost.model)!.label] : []),
     fmtUsd(cost.cost_usd),
     `${fmtTokens(cost.input_tokens)} in / ${fmtTokens(cost.output_tokens)} out`,
   ];
   if (cost.searches > 0) bits.push(`${cost.searches} web search${cost.searches === 1 ? '' : 'es'}`);
+  if ((cost.cache_write_tokens ?? 0) > 0) bits.push(`${fmtTokens(cost.cache_write_tokens ?? 0)} cache write`);
   if (cost.rounds > 1) bits.push(`${cost.rounds} model calls`);
 
   const cachedShare =

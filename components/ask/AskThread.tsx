@@ -11,6 +11,8 @@ import { renderAnswer } from '@/components/ask/answer';
 import AskStarters from '@/components/ask/AskStarters';
 import AskVerify from '@/components/ask/AskVerify';
 import AskCost from '@/components/ask/AskCost';
+import type { V2Decision } from '@/lib/ask/v2-events';
+import { formatTurnCost } from '@/lib/llm/models';
 import AskDatasetCard, { type DatasetSuggestionMeta } from '@/components/datasets/AskDatasetCard';
 import FieldReportPlanCard from '@/components/ask/FieldReportPlanCard';
 import FieldReportRunCard from '@/components/ask/FieldReportRunCard';
@@ -26,6 +28,17 @@ function hostOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+// The v2 recommendation chip: what the Atlas picked (or recommended when the
+// person chose by hand), with the reason, web state and budget note on hover.
+function DecisionChip({ d }: { d: V2Decision }) {
+  const cost = formatTurnCost(d.estUsd);
+  const text = d.auto || d.recommended === d.model
+    ? `${d.auto ? 'Auto' : 'You picked'} · ${d.label} · ${cost}`
+    : `You picked ${d.label} · Atlas recommends ${d.recommendedLabel}`;
+  const tip = [d.reason, `web ${d.web ? 'on' : 'off'}`, d.budget?.message].filter(Boolean).join(' · ');
+  return <span className="ask-decision" title={tip}>{text}</span>;
 }
 
 // CitationKind -> peek kind; signal, paper, item, fact and report tags
@@ -217,6 +230,7 @@ export default function AskThread({
             return (
               <div key={i}>
                 {lane}
+                {m.decision && <DecisionChip d={m.decision} />}
                 {m.steps && m.steps.length > 0 && (
                   <details className="ask-steps">
                     <summary>Research · {m.steps.length} step{m.steps.length === 1 ? '' : 's'}</summary>
