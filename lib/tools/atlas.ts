@@ -10,7 +10,6 @@ import {
   parseSearchAtlasInput,
   renderArticleHits,
   renderRecord,
-  renderSearchHits,
   statusArticles,
   statusRead,
   statusSearch,
@@ -22,6 +21,23 @@ const SEARCH_KINDS = ['claim', 'bridge', 'stance', 'concept', 'signal', 'paper',
 const FETCH_KINDS = ['claim', 'bridge', 'stance', 'question', 'concept', 'signal', 'paper', 'thread', 'item', 'fact', 'report', 'history'];
 
 const flags = (ctx: ToolContext) => (ctx.identity.kind === 'admin' ? { admin: true } : { portal: true });
+
+// Dated records first (what happened, with dates and sources), then the map
+// nodes that frame them. No inner clip: the old renderer clipped every search
+// at 1,500 characters (RESULT_CAP), so an all-kinds search showed only
+// claims, bridges and stances and never reached a signal, item, fact or paper
+// (found by the 2026-11-11 eval). The loop clips each result at its own cap.
+const KIND_ORDER = ['signal', 'item', 'fact', 'paper', 'report', 'history', 'thread', 'claim', 'bridge', 'stance', 'concept'];
+type Hit = Awaited<ReturnType<typeof searchAtlas>>[number];
+export function renderAtlasHits(hits: Hit[]): string {
+  if (!hits.length) return 'No records matched. Try different terms or other kinds.';
+  const rank = (k: string) => { const i = KIND_ORDER.indexOf(k); return i < 0 ? KIND_ORDER.length : i; };
+  return [...hits]
+    .map((h, i) => ({ h, i }))
+    .sort((a, b) => rank(a.h.kind) - rank(b.h.kind) || a.i - b.i)
+    .map(({ h }) => `${citeToken(h.kind, h.id)} ${h.snippet}`)
+    .join('\n');
+}
 
 type SearchIn = Exclude<ReturnType<typeof parseSearchAtlasInput>, string>;
 type FetchIn = Exclude<ReturnType<typeof parseFetchRecordInput>, string>;
@@ -41,7 +57,15 @@ export const searchAtlasTool: AtlasTool<SearchIn> = {
     additionalProperties: false,
   },
   scopes: ['admin', 'keyholder'],
-  parse: parseSearchAtlasInput,
+  // An all-kinds search defaults to 3 rows a kind (about 8k characters, under
+  // the loop's result cap) so every kind is seen; a narrowed search keeps 5.
+  parse(v) {
+    const p = parseSearchAtlasInput(v);
+    if (typeof p === 'string') return p;
+    const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+    const allKinds = !Array.isArray(o.kinds) || o.kinds.length === 0;
+    return allKinds && o.limit === undefined ? { ...p, limit: 3 } : p;
+  },
   async run(p, ctx) {
     const t = ctx.tagger;
     const hits = await searchAtlas(q, p.query, {
@@ -50,7 +74,7 @@ export const searchAtlasTool: AtlasTool<SearchIn> = {
       factTagFor: t.factTagFor, reportTagFor: t.reportTagFor, historyTagFor: t.historyTagFor,
     });
     ctx.status?.(statusSearch(p.query, hits.length));
-    return { text: renderSearchHits(hits) };
+    return { text: renderAtlasHits(hits) };
   },
 };
 

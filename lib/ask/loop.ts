@@ -21,7 +21,7 @@ export interface LoopCaps {
 
 // Sized for 1M-context 5.5 models (10-architecture.md, upgrade #2), with the
 // Haiku 5.5 price line in mind: its cheap rate holds to 100K-token prompts.
-export const DEFAULT_CAPS: LoopCaps = { maxRounds: 6, maxCallsPerRound: 6, resultCap: 5000, inputBudget: 95_000 };
+export const DEFAULT_CAPS: LoopCaps = { maxRounds: 6, maxCallsPerRound: 6, resultCap: 9000, inputBudget: 95_000 };
 
 export type LoopEvent =
   | { type: 'delta'; text: string }
