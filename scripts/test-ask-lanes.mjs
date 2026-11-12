@@ -69,9 +69,17 @@ check('decideLane: MID_SIM off the atlas beat does not cover on sim alone', () =
 // above STRONG_SIM escapes it on rank alone; below that, low rank + a
 // sub-STRONG sim still declines (this is intentional: an opening turn needs
 // a real signal, not just "above noise", to earn a hearing off the beat).
-check('decideLane: unrelated short-circuit needs BOTH floors on the opening turn (STRONG bar)', () => {
-  assert.equal(decideLane(sig({ hitCount: 0, maxRank: 0.01, maxSim: 0.45, beat: 'unrelated', followUp: false })), 'unrelated');
+check('decideLane: unrelated short-circuit needs BOTH floors on the opening turn (MID bar since 2026-11-12)', () => {
+  assert.equal(decideLane(sig({ hitCount: 0, maxRank: 0.01, maxSim: 0.44, beat: 'unrelated', followUp: false })), 'unrelated');
+  assert.equal(decideLane(sig({ hitCount: 0, maxRank: 0.01, maxSim: 0.45, beat: 'unrelated', followUp: false })), 'adjacent');
   assert.equal(decideLane(sig({ hitCount: 0, maxRank: 0.01, maxSim: STRONG_SIM, beat: 'unrelated', followUp: false })), 'covered');
+});
+check('decideLane: short on-beat prompts the classifier misreads as unrelated are answered, not declined (2026-11-12 eval)', () => {
+  // "agents and banks": rank 0.047, sim 0.528; "help me understand where we are": rank 0.030, sim 0.325.
+  assert.equal(decideLane(sig({ hitCount: 91, maxRank: 0.047, maxSim: 0.528, beat: 'unrelated', followUp: false })), 'thin');
+  assert.equal(decideLane(sig({ hitCount: 70, maxRank: 0.030, maxSim: 0.325, beat: 'unrelated', followUp: false })), 'thin');
+  // "best pasta recipe" still declines.
+  assert.equal(decideLane(sig({ hitCount: 24, maxRank: 0.015, maxSim: 0.2, beat: 'unrelated', followUp: false })), 'unrelated');
 });
 check('decideLane: rank clearing its own floor saves an unrelated-beat question from decline even with low sim', () =>
   assert.equal(decideLane(sig({ hitCount: 20, maxRank: MID_RANK, maxSim: 0.1, beat: 'unrelated', followUp: true })), 'thin'));

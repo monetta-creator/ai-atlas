@@ -79,7 +79,13 @@ export function decideLane(s: LaneSignals): Lane {
   // short-circuit requires BOTH signals to sit under their floor: a lexical
   // near-miss that the vector leg still recognizes should not decline.
   if (s.beat === 'unrelated' && s.maxRank < (s.followUp ? MID_RANK : WEAK_RANK) && s.maxSim < WEAK_SIM) return 'unrelated';
-  if (s.beat === 'unrelated' && !s.followUp && s.maxRank < STRONG_RANK && s.maxSim < STRONG_SIM) return 'unrelated';
+  // An opening question the classifier calls unrelated declines only when
+  // retrieval is below the MID bars too. This was STRONG until 2026-11-12:
+  // the classifier flips on short, vague, on-beat prompts ("agents and
+  // banks" at rank 0.047, "help me understand where we are" at 0.030 were
+  // declined on one eval run and answered on the others), so a decline now
+  // needs retrieval to agree.
+  if (s.beat === 'unrelated' && !s.followUp && s.maxRank < MID_RANK && s.maxSim < MID_SIM) return 'unrelated';
   if (s.maxRank >= STRONG_RANK || s.maxSim >= STRONG_SIM) return 'covered';
   if (s.beat === 'atlas' && (s.maxRank >= MID_RANK || s.maxSim >= MID_SIM)) return 'covered';
   if (s.hitCount >= 1 && s.maxRank >= WEAK_RANK) return 'thin';
