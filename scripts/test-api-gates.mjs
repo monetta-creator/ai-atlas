@@ -28,7 +28,9 @@ const EXEMPT = {
   '/api/access/request': 'public validated write; every field is checked and capped in-route',
 };
 
-const GATE_MARKERS = ['isAdmin(', 'cronGate(', 'identityFromRequest(', 'getPortalIdentity(', 'isPortal(', 'requireAdmin'];
+// chatIdentity (lib/ask/identity.ts) and mcpIdentity (lib/mcp/auth.ts) resolve
+// through isAdmin / identityFromRequest / a timing-safe admin-token check.
+const GATE_MARKERS = ['isAdmin(', 'cronGate(', 'identityFromRequest(', 'getPortalIdentity(', 'isPortal(', 'requireAdmin', 'chatIdentity(', 'mcpIdentity('];
 const REEXPORT_RE = /export\s*\{\s*[A-Z]+(?:\s*,\s*[A-Z]+)*\s*\}\s*from\s*['"]\.\.\/route['"]/;
 
 function walk(dir) {

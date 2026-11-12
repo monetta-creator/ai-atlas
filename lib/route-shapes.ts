@@ -86,6 +86,12 @@ export const PUBLIC_API_PATHS: readonly string[] = [
   '/api/nav/viewer',
   '/api/tickets',
   '/api/access/request',
+  // The redo's one chat box (admin + keyholders), its conversations, and the
+  // MCP door (Bearer token, no atlas_* cookie): each gates in-route
+  // (isAdmin/identityFromRequest, chatIdentity, mcpIdentity).
+  '/api/ask/v2',
+  '/api/conversations',
+  '/api/mcp',
 ];
 
 // Prefix matches (pathname.startsWith(prefix)); each ends in '/' so a
@@ -103,6 +109,8 @@ export const PUBLIC_API_PREFIXES: readonly string[] = [
   // plan, run and poll their own reports; every route gates in-route on
   // identityFromRequest (lib/field-report/access.ts fieldReportActor).
   '/api/field-report/',
+  // Server-side conversations by id (chatIdentity, owner-scoped).
+  '/api/conversations/',
 ];
 
 export function isPublicApiPath(pathname: string): boolean {
