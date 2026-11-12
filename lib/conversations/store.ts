@@ -28,6 +28,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export const isUuid = (s: string) => UUID_RE.test(s);
 const MAX_CONTENT = 60_000;
 const MAX_EXTRAS = 200_000; // chars of JSON
+const MAX_THREAD_CHARS = 2_000_000;
 
 export function ownerFor(identity: { kind: 'admin' } | { kind: 'keyholder'; keyId: string }): Owner {
   return identity.kind === 'admin' ? 'admin' : `key:${identity.keyId}`;
@@ -106,7 +107,14 @@ export async function replaceConversation(
 ): Promise<boolean | null> {
   if (!isUuid(id)) return null;
   const msgs = c.messages.slice(0, 400);
-  for (const m of msgs) if (JSON.stringify(m.extras ?? {}).length > MAX_EXTRAS) throw new Error('message extras too large');
+  let total = 0;
+  for (const m of msgs) {
+    const n = JSON.stringify(m.extras ?? {}).length + m.content.length;
+    if (n > MAX_EXTRAS + MAX_CONTENT) throw new Error('message too large');
+    total += n;
+  }
+  // One thread stays bounded (a keyholder can write here too).
+  if (total > MAX_THREAD_CHARS) throw new Error('conversation too large');
   return withTx(async (cl) => {
     const existing = await cl.query<{ owner: string }>(`select owner from conversations where id = $1 for update`, [id]);
     if (existing.rowCount && existing.rows[0].owner !== owner) return null;

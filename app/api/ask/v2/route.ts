@@ -69,6 +69,8 @@ export async function POST(req: Request): Promise<Response> {
   const requested = typeof b.model === 'string' && b.model !== 'auto' ? b.model : 'auto';
   const picked = requested === 'auto' ? null : getModel(requested);
   if (requested !== 'auto' && (!picked || !picked.roles.includes('answer'))) return new Response('Unknown model', { status: 400 });
+  // Keyholders spend the portal's shared budget: cheap-tier models only.
+  if (!admin && picked && picked.tier !== 'cheap') return new Response('That model is not available with an access key.', { status: 403 });
   const webToggle = b.web === true;
   const msgs = clampHistory(parsed).map((m) => ({ ...m }));
   const audience = admin ? 'admin' : 'keyholder';
