@@ -191,17 +191,24 @@ export function ndEnd(s: NdState): void { ndFeed(s, '\n'); }
 export interface DeepSummary {
   answer: string; lane: string | null; laneReason: string | null; decline: unknown; webSources: WebSource[];
   verify: unknown; cost: Record<string, unknown> | null; signals: Record<string, string>; statuses: string[]; error: string | null;
+  // v2 only (lib/ask/v2-events.ts).
+  decision?: unknown; toolCalls?: string[];
 }
 export function summarizeEvents(events: Record<string, unknown>[]): DeepSummary {
   const out: DeepSummary = {
     answer: '', lane: null, laneReason: null, decline: null, webSources: [], verify: null, cost: null,
-    signals: {}, statuses: [], error: null,
+    signals: {}, statuses: [], error: null, toolCalls: [],
   };
   for (const e of events) {
     switch (e.type) {
       case 'lane': out.lane = String(e.lane ?? ''); out.laneReason = e.reason == null ? null : String(e.reason); break;
       case 'status': out.statuses.push(String(e.text ?? '')); break;
       case 'delta': out.answer += String(e.text ?? ''); break;
+      // v2: text so far was narration before a tool call.
+      case 'retract': out.answer = ''; break;
+      case 'decision': out.decision = e.decision ?? null; break;
+      case 'tool_call': out.toolCalls!.push(String(e.name ?? '')); break;
+      case 'sources':
       case 'web_sources': out.webSources = Array.isArray(e.sources) ? (e.sources as WebSource[]) : []; break;
       case 'verify': out.verify = e.report ?? null; break;
       case 'cost': out.cost = (e.report as Record<string, unknown>) ?? null; break;
@@ -346,16 +353,32 @@ export async function resolveTags(tags: string[], signals: Record<string, string
 
 // ---------------------------------------------------------------- arms
 async function armCurrent(item: Item): Promise<ArmResult> {
+  return armHttp(item, ASK_URL, null);
+}
+
+// The harness arms: /api/ask/v2 with the model pinned (or 'auto' to let the
+// decider pick). One run file per alias.
+export const HARNESS_MODELS: Record<string, string> = {
+  harness: 'claude-haiku-5-5',
+  'harness-sonnet': 'claude-sonnet-5-5',
+  'harness-opus': 'claude-opus-5-5',
+  'harness-dsflash': 'deepseek/deepseek-v4.1-flash',
+  'harness-gemma': 'google/gemma-4-26b-a4b-it',
+  'harness-auto': 'auto',
+};
+const V2_URL = process.env.EVAL_V2_URL || 'http://localhost:3100/api/ask/v2';
+
+async function armHttp(item: Item, url: string, model: string | null): Promise<ArmResult> {
   const cookie = readFileSync(COOKIE_PATH, 'utf8').trim();
   const t0 = Date.now();
   const state = newNdState();
   let status = 0;
   let httpError: string | null = null;
   try {
-    const res = await fetch(ASK_URL, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', cookie: `atlas_admin=${cookie}` },
-      body: JSON.stringify({ query: item.prompt, web: true }),
+      body: JSON.stringify({ query: item.prompt, web: true, ...(model ? { model } : {}) }),
       signal: AbortSignal.timeout(300_000),
     });
     status = res.status;
@@ -382,6 +405,7 @@ async function armCurrent(item: Item): Promise<ArmResult> {
     answer: s.answer, tags, resolved_tags: resolved, web_sources: s.webSources, cost_usd: costUsd,
     wall_ms: Date.now() - t0, lane: s.lane, lane_reason: s.laneReason, decline: s.decline, verify: s.verify,
     cost_report: s.cost, signals: s.signals, statuses: s.statuses, error: s.error ?? httpError, http_status: status,
+    ...(model ? { model, decision: s.decision ?? null, tool_calls: s.toolCalls ?? [] } : {}),
   };
 }
 
@@ -458,7 +482,7 @@ async function armBare(item: Item): Promise<ArmResult> {
 export const ARMS: Record<string, Arm> = {
   current: armCurrent,
   bare: armBare,
-  harness: async () => { throw new Error('harness arm is added in P1.12'); },
+  ...Object.fromEntries(Object.entries(HARNESS_MODELS).map(([alias, model]) => [alias, (item: Item) => armHttp(item, V2_URL, model)])),
 };
 
 // ---------------------------------------------------------------- judge
@@ -581,7 +605,7 @@ async function cmdRun(flags: Record<string, string | true>): Promise<number> {
     try {
       result = await fn(item);
     } catch (e) {
-      if (arm === 'harness') throw e;
+
       console.error(`  ${item.id}: FAILED ${(e as Error).message}`);
       continue; // not written, so a rerun retries it
     }
