@@ -19,7 +19,7 @@ import { openrouterAdapter } from '@/lib/llm/openrouter-adapter';
 import { estimateTurnUsd, getModel, TIER_DEFAULT, type Tier } from '@/lib/llm/models';
 import { runTool, toolSpecs } from '@/lib/tools/registry';
 import { webSearchTool } from '@/lib/tools/web';
-import type { Identity } from '@/lib/tools/types';
+import type { AtlasView, Identity } from '@/lib/tools/types';
 import type { WebSource } from '@/lib/llm/types';
 import { checkKeyBudget, checkPortalBudget, PORTAL_FEATURE } from '@/lib/portal/budget';
 import { helpText, parseInvocation, rosterForPrompt } from '@/lib/capabilities/registry';
@@ -179,7 +179,7 @@ export async function POST(req: Request): Promise<Response> {
           serverWebSearch: web && model.provider === 'anthropic',
           separateFinal: web && (lane === 'thin' || lane === 'adjacent'),
           exec: async (c) => {
-            const ctxT = { identity, tagger, status: (s: string) => emit({ type: 'status', text: deDash(s) }), webSources: addSources };
+            const ctxT = { identity, tagger, status: (s: string) => emit({ type: 'status', text: deDash(s) }), webSources: addSources, view: (v: AtlasView) => emit({ type: 'view', view: v }) };
             if (c.name === 'web_search' && ownWeb) {
               const p = webSearchTool.parse(c.input);
               if (typeof p === 'string') return { text: p, isError: true };

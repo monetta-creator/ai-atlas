@@ -9,19 +9,20 @@ import { metricsTool } from './metrics';
 import { questionMapTool } from './question_map';
 import { reportTool } from './report';
 import { searchItemsTool } from './search_items';
+import { showViewTool } from './show_view';
 import { startupsTool } from './startups';
 import { timelineTool } from './timeline';
 import { toolingTool } from './tooling';
 import { whatsNewTool } from './whats_new';
 import { scopeOf, type AtlasTool, type Identity, type ToolContext, type ToolResult } from './types';
 
-// 13 tools (Phase 3 reach). Under the ~15 where tool search (defer_loading)
+// 14 tools (Phase 3 reach + show_view). Under the ~15 where tool search (defer_loading)
 // starts to pay; revisit when the list grows (P3.11).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const TOOLS: AtlasTool<any>[] = [
   searchAtlasTool, fetchRecordTool, searchArticlesTool,
   whatsNewTool, searchItemsTool, timelineTool, companyTool, metricsTool,
-  questionMapTool, reportTool, toolingTool, startupsTool, engineStatusTool,
+  questionMapTool, reportTool, toolingTool, startupsTool, engineStatusTool, showViewTool,
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

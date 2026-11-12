@@ -7,6 +7,7 @@ const ok = (c: boolean, m: string) => { if (!c) { fail++; console.error('FAIL', 
 
 ok(topicOf('What did IDC report for AI infrastructure spending in Q2 2026?') === 'did IDC report for AI infrastructure spending in Q2 2026', `topic ${topicOf('What did IDC report for AI infrastructure spending in Q2 2026?')}`);
 ok(topicOf('agents and banks') === 'agents and banks', 'bare topic');
+ok(topicOf("Show JPMorgan's metrics as a chart") === "JPMorgan's metrics", `show-verb topic: ${topicOf("Show JPMorgan's metrics as a chart")}`);
 const mapAnswer = 'One reading: [claim 2.3] and [stance Q4-S4A] and [bridge B5] on 2026-11-06, 2026-10-27 and 2026-10-20.';
 const c1 = nextChips({ question: 'Is the capex boom a bubble?', answer: mapAnswer, audience: 'admin', lane: 'covered' });
 ok(c1.length >= 2 && c1.length <= 3, `count ${c1.length}`);

@@ -6,6 +6,7 @@ import type { VerifyReport } from '@/lib/ask/deep';
 import type { AskCostReport, AskWebSource } from '@/lib/ask/history';
 import type { DeclinePayload, Lane } from '@/lib/ask/lanes';
 import type { V2Decision } from '@/lib/ask/v2-events';
+import type { AtlasView } from '@/lib/tools/types';
 import type { FieldReportCard, FieldReportPlan, FieldReportPlanResponse, FieldReportSize } from '@/lib/field-report/core';
 
 // The Ask workspace's conversation store: browser-only localStorage, no
@@ -60,6 +61,7 @@ export interface AskMessage {
   content: string;
   enhanced?: EnhanceCardData; // user only: the Enhance card behind this turn
   skill?: { slug: string; title: string; kind: 'skill' | 'agent' | 'unknown' }; // assistant only: a /skill or @agent turn
+  views?: AtlasView[];     // assistant only: generative views the show_view tool resolved (rows bound server-side)
   chips?: AskChip[];       // assistant only: next-step suggestions (P4.7)
   signalMap?: SignalMap;   // assistant only: FROZEN merged tag -> uuid map at completion time
   datasets?: string[];     // assistant only: verified [dataset <slug>] suggestions

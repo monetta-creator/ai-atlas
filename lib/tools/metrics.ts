@@ -14,6 +14,29 @@ export interface MetricsInput {
   limit: number;
 }
 
+export interface MetricRow { metric_code: string; period: string; value: number; unit: string | null; source: string | null }
+
+// The one metrics query (shared by the text tool and show_view). Leads with
+// company_slug so it rides the (company, metric, period) index.
+export async function queryMetrics(p: MetricsInput): Promise<MetricRow[]> {
+  const params: unknown[] = [p.company];
+  const where = ['company_slug = $1'];
+  if (p.series) {
+    params.push(`%${p.series.replace(/[%_\\]/g, '\\$&')}%`);
+    where.push(`metric_code ilike $${params.length}`);
+  }
+  if (p.from) { params.push(p.from); where.push(`period >= $${params.length}::date`); }
+  if (p.to) { params.push(p.to); where.push(`period <= $${params.length}::date`); }
+  return q<MetricRow>(
+    `select metric_code, to_char(period, 'YYYY-MM-DD') as period, value, unit, source
+       from intel_metrics
+      where ${where.join(' and ')}
+      order by period desc, metric_code
+      limit ${Math.max(1, Math.min(200, Math.floor(p.limit)))}`,
+    params
+  );
+}
+
 const fmt = (v: number): string => {
   if (!Number.isFinite(v)) return String(v);
   const a = Math.abs(v);
@@ -53,22 +76,7 @@ export const metricsTool: AtlasTool<MetricsInput> = {
   },
   async run(p, ctx) {
     ctx.status?.(`Reading metrics for ${p.company}${p.series ? ` (${snip(p.series, 30)})` : ''}`);
-    const params: unknown[] = [p.company];
-    const where = ['company_slug = $1'];
-    if (p.series) {
-      params.push(`%${p.series.replace(/[%_\\]/g, '\\$&')}%`);
-      where.push(`metric_code ilike $${params.length}`);
-    }
-    if (p.from) { params.push(p.from); where.push(`period >= $${params.length}::date`); }
-    if (p.to) { params.push(p.to); where.push(`period <= $${params.length}::date`); }
-    const rows = await q<{ metric_code: string; period: string; value: number; unit: string | null; source: string | null }>(
-      `select metric_code, to_char(period, 'YYYY-MM-DD') as period, value, unit, source
-         from intel_metrics
-        where ${where.join(' and ')}
-        order by period desc, metric_code
-        limit ${p.limit}`,
-      params
-    );
+    const rows = await queryMetrics(p);
 
     const lines: string[] = [];
     if (!rows.length) {

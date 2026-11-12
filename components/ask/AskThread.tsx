@@ -11,6 +11,7 @@ import { renderAnswer } from '@/components/ask/answer';
 import AskStarters from '@/components/ask/AskStarters';
 import AskVerify from '@/components/ask/AskVerify';
 import AskCost from '@/components/ask/AskCost';
+import AskViews from '@/components/ask/AskViews';
 import type { V2Decision } from '@/lib/ask/v2-events';
 import { formatTurnCost } from '@/lib/llm/models';
 import AskDatasetCard, { type DatasetSuggestionMeta } from '@/components/datasets/AskDatasetCard';
@@ -250,6 +251,9 @@ export default function AskThread({
                       {m.steps.map((s, j) => <li key={j}>{s}</li>)}
                     </ol>
                   </details>
+                )}
+                {m.views && m.views.length > 0 && (
+                  <AskViews views={m.views} renderCite={(label) => renderAnswer(label, validIds, map, citeOpts)} />
                 )}
                 <div className="ask-msg--assistant" style={m.error ? { color: 'var(--faint-ink)' } : undefined}>
                   {nodes}

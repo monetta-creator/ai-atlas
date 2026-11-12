@@ -1,9 +1,11 @@
-// The v2 chat's NDJSON protocol (one JSON object per line). Import-free so the
+// The v2 chat's NDJSON protocol (one JSON object per line). Type-only imports, so the
 // order test and the client can load it. Order of a turn:
 //   lane -> (decline -> done) | decision -> status* -> (tool_call | status |
-//   delta | retract | sources)* -> sources? -> verify? -> cost -> error? -> done
+//   delta | retract | view | sources)* -> sources? -> verify? -> cost -> error? -> done
 // `retract` tells the client to drop the answer text streamed so far in this
 // call (it was narration before a tool call or search).
+
+import type { AtlasView } from '../tools/types';
 
 export interface V2Decision {
   model: string;
@@ -48,6 +50,8 @@ export type V2Event =
   | { type: 'verify'; report: unknown }
   // Two or three next steps for this turn (lib/ask/chips.ts).
   | { type: 'chips'; chips: { label: string; prompt: string; kind: string }[] }
+  // A data-bound view resolved by the show_view tool; any time between decision and cost.
+  | { type: 'view'; view: AtlasView }
   | { type: 'cost'; report: V2Cost }
   | { type: 'error'; text: string }
   | { type: 'done'; signals: Record<string, string> };

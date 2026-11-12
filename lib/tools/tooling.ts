@@ -5,16 +5,35 @@ import { q } from '../db';
 import { asObj, capText, clampInt, clip, optStr, ymd } from './util-b';
 import type { AtlasTool } from './types';
 
-interface In { query: string; category?: string; limit: number }
+export interface ToolingInput { query: string; category?: string; limit: number }
 
-interface Row {
+export interface ToolingRow {
   slug: string; name: string; vendor: string | null; category: string | null; one_liner: string | null;
   deployment: string[] | null; pricing_model: string | null; compliance_claims: string[] | null;
   url: string | null; last_seen: Date | string | null; status: string;
   agent_fit?: number | null; agent_scores?: unknown; agent_reason?: string | null; review_note?: string | null; pinned?: boolean;
 }
 
-export const toolingTool: AtlasTool<In> = {
+// The one tooling query (shared by the text tool and show_view). Keyholders get
+// cataloged rows and none of the agent/curation columns. Null = no usable terms.
+export async function queryTooling(p: ToolingInput, admin: boolean): Promise<ToolingRow[] | null> {
+  const terms = p.query.toLowerCase().match(/[a-z0-9]+/g)?.slice(0, 8) ?? [];
+  if (!terms.length) return null;
+  const adminCols = admin ? ', agent_fit, agent_scores, agent_reason, review_note, pinned' : '';
+  return q<ToolingRow>(
+    `select slug, name, vendor, category, one_liner, deployment, pricing_model, compliance_claims, url,
+            last_seen, status::text as status${adminCols}
+       from tooling_products
+      where search_tsv @@ to_tsquery('english', $1)
+        and ${admin ? `status <> 'dismissed'` : `status = 'cataloged'`}
+        and ($2::text is null or lower(category) = lower($2))
+      order by ts_rank(search_tsv, to_tsquery('english', $1)) desc, name
+      limit ${Math.max(1, Math.min(60, Math.floor(p.limit)))}`,
+    [terms.join(' | '), p.category ?? null]
+  );
+}
+
+export const toolingTool: AtlasTool<ToolingInput> = {
   name: 'tooling',
   description:
     'Search the Tooling Monitor catalog of AI tools and vendors by plain words, optionally within one category. Returns name, vendor, category, one-liner, deployment, pricing model, compliance claims, URL and last seen date. Admin callers also get the agent fit read. Rows are labeled [tool slug] for the reader to cite; fetch_record does not open tools yet, so rely on this result for product facts.',
@@ -38,20 +57,8 @@ export const toolingTool: AtlasTool<In> = {
   async run(p, ctx) {
     const admin = ctx.identity.kind === 'admin';
     ctx.status?.(`Searching the tooling catalog for ${clip(p.query, 40)}`);
-    const terms = p.query.toLowerCase().match(/[a-z0-9]+/g)?.slice(0, 8) ?? [];
-    if (!terms.length) return { text: 'Give at least one search word.', isError: true };
-    const adminCols = admin ? ', agent_fit, agent_scores, agent_reason, review_note, pinned' : '';
-    const rows = await q<Row>(
-      `select slug, name, vendor, category, one_liner, deployment, pricing_model, compliance_claims, url,
-              last_seen, status::text as status${adminCols}
-         from tooling_products
-        where search_tsv @@ to_tsquery('english', $1)
-          and ${admin ? `status <> 'dismissed'` : `status = 'cataloged'`}
-          and ($2::text is null or lower(category) = lower($2))
-        order by ts_rank(search_tsv, to_tsquery('english', $1)) desc, name
-        limit ${p.limit}`,
-      [terms.join(' | '), p.category ?? null]
-    );
+    const rows = await queryTooling(p, admin);
+    if (!rows) return { text: 'Give at least one search word.', isError: true };
     if (!rows.length) return { text: `No tooling products match "${p.query}"${p.category ? ` in ${p.category}` : ''}.` };
     const lines = [`${rows.length} tooling product${rows.length === 1 ? '' : 's'} for "${p.query}":`];
     for (const r of rows) {

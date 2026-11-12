@@ -29,6 +29,49 @@ interface Row {
 
 const TSV = "(setweight(to_tsvector('english', coalesce(headline,'')), 'A') || setweight(to_tsvector('english', coalesce(summary,'')), 'B'))";
 
+export type ItemRow = Row & { kind: 'scan' | 'intel' };
+
+// The one items query (shared by the text tool and show_view): scan and/or
+// intel legs, merged and cut to p.limit. Tags are minted by the caller.
+export async function queryItems(p: SearchItemsInput): Promise<ItemRow[]> {
+  const lim = Math.max(1, Math.min(60, Math.floor(p.limit)));
+  const build = (kind: 'scan' | 'intel') => {
+    const params: unknown[] = [];
+    const where: string[] = [];
+    let rank = '0';
+    if (p.query) {
+      params.push(p.query);
+      where.push(`${TSV} @@ ${ORQ}`);
+      rank = `ts_rank(${TSV}, ${ORQ}, 1)`;
+    }
+    if (p.since) { params.push(p.since); where.push(`published_date >= $${params.length}::date`); }
+    if (p.until) { params.push(p.until); where.push(`published_date <= $${params.length}::date`); }
+    if (kind === 'scan' && p.topic) { params.push(p.topic); where.push(`topic_slug = $${params.length}`); }
+    if (kind === 'intel' && p.company) { params.push(p.company); where.push(`company_slug = $${params.length}`); }
+    const label = kind === 'scan' ? 'topic_slug' : 'company_slug';
+    const table = kind === 'scan' ? 'scan_items' : 'intel_items';
+    const sql = `select id::text as id, headline, summary, source_domain,
+                        to_char(published_date, 'YYYY-MM-DD') as published_date, ${label} as label, (${rank})::float8 as rank
+                   from ${table}
+                  ${where.length ? `where ${where.join(' and ')}` : ''}
+                  order by ${p.query ? 'rank desc, ' : ''}published_date desc nulls last
+                  limit ${lim}`;
+    return { sql, params };
+  };
+  const legs: ('scan' | 'intel')[] = p.company ? ['intel'] : p.topic ? ['scan'] : ['scan', 'intel'];
+  const results = await Promise.all(
+    legs.map(async (k) => {
+      const { sql, params } = build(k);
+      return (await q<Row>(sql, params)).map((r) => ({ ...r, kind: k }));
+    })
+  );
+  const rows = results.flat();
+  rows.sort((a, b) =>
+    p.query && b.rank !== a.rank ? b.rank - a.rank : (b.published_date ?? '').localeCompare(a.published_date ?? '')
+  );
+  return rows.slice(0, lim);
+}
+
 export const searchItemsTool: AtlasTool<SearchItemsInput> = {
   name: 'search_items',
   description:
@@ -68,42 +111,7 @@ export const searchItemsTool: AtlasTool<SearchItemsInput> = {
   },
   async run(p, ctx) {
     ctx.status?.(p.query ? `Searching items for "${snip(p.query, 40)}"` : 'Listing recent items');
-    const lim = p.limit;
-    const build = (kind: 'scan' | 'intel') => {
-      const params: unknown[] = [];
-      const where: string[] = [];
-      let rank = '0';
-      if (p.query) {
-        params.push(p.query);
-        where.push(`${TSV} @@ ${ORQ}`);
-        rank = `ts_rank(${TSV}, ${ORQ}, 1)`;
-      }
-      if (p.since) { params.push(p.since); where.push(`published_date >= $${params.length}::date`); }
-      if (p.until) { params.push(p.until); where.push(`published_date <= $${params.length}::date`); }
-      if (kind === 'scan' && p.topic) { params.push(p.topic); where.push(`topic_slug = $${params.length}`); }
-      if (kind === 'intel' && p.company) { params.push(p.company); where.push(`company_slug = $${params.length}`); }
-      const label = kind === 'scan' ? 'topic_slug' : 'company_slug';
-      const table = kind === 'scan' ? 'scan_items' : 'intel_items';
-      const sql = `select id::text as id, headline, summary, source_domain,
-                          to_char(published_date, 'YYYY-MM-DD') as published_date, ${label} as label, (${rank})::float8 as rank
-                     from ${table}
-                    ${where.length ? `where ${where.join(' and ')}` : ''}
-                    order by ${p.query ? 'rank desc, ' : ''}published_date desc nulls last
-                    limit ${lim}`;
-      return { sql, params };
-    };
-    const legs: ('scan' | 'intel')[] = p.company ? ['intel'] : p.topic ? ['scan'] : ['scan', 'intel'];
-    const results = await Promise.all(
-      legs.map(async (k) => {
-        const { sql, params } = build(k);
-        return (await q<Row>(sql, params)).map((r) => ({ ...r, kind: k }));
-      })
-    );
-    const rows = results.flat();
-    rows.sort((a, b) =>
-      p.query && b.rank !== a.rank ? b.rank - a.rank : (b.published_date ?? '').localeCompare(a.published_date ?? '')
-    );
-    const top = rows.slice(0, lim);
+    const top = await queryItems(p);
     if (!top.length) return { text: 'No items matched those filters. Loosen the dates, drop the topic or company, or try other words.' };
     const lines = top.map((r) => {
       const tag = ctx.tagger.itemTagFor(`${r.kind}:${r.id}`);

@@ -27,8 +27,9 @@ const COMPANY_RE = /\[(fact|item) [A-Z]?\d+\]/g;
 // punctuation, cap the length.
 export function topicOf(question: string): string {
   const q = question
-    .replace(/^\s*(what|how|why|who|when|where|which|is|are|does|do|can|should|tell me|explain|catch me up on)\b[^a-z0-9]*/i, '')
+    .replace(/^\s*(what|how|why|who|when|where|which|is|are|does|do|can|should|tell me|explain|catch me up on|show me|show|give me|list|draw|plot|chart)\b[^a-z0-9]*/i, '')
     .replace(/[?.!]+\s*$/, '')
+    .replace(/\s+as an? (chart|table|timeline|graph)$/i, '')
     .trim();
   const t = q.length > 70 ? `${q.slice(0, 70).replace(/\s+\S*$/, '')}` : q;
   return t || question.slice(0, 70);

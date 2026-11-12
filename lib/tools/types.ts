@@ -12,11 +12,28 @@ export type Identity =
 
 export type Tagger = ReturnType<typeof createTagger>;
 
+// A generative view (redo Phase 4): rows the SERVER resolved from a query, sent
+// to the client in a `view` event. The model never types a value into one.
+export interface AtlasView {
+  kind: 'table' | 'timeline' | 'chart';
+  title: string;
+  columns?: { key: string; label: string; type: 'text' | 'number' | 'date' }[];
+  rows: Record<string, string | number | null>[];
+  cite?: string; // per-row key holding the citation label
+  x?: string;
+  y?: string;
+  series?: string;
+  unit?: string;
+  note?: string;
+}
+
 export interface ToolContext {
   identity: Identity;
   tagger: Tagger;
   // Progress line for the client's status strip (already de-dashed by caller).
   status?: (text: string) => void;
+  // Hands a resolved view to the client (the v2 route emits a `view` event).
+  view?: (v: AtlasView) => void;
 }
 
 export interface ToolResult {

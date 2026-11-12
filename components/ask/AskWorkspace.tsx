@@ -11,6 +11,7 @@ import {
   type AskChip, type AskCostStored, type AskMessage, type EnhanceCardData,
 } from '@/components/ask/store';
 import { extractCostReport, extractWebSources, parseCostReport, type AskWebSource } from '@/lib/ask/history';
+import type { AtlasView } from '@/lib/tools/types';
 import type { V2Decision } from '@/lib/ask/v2-events';
 import { extractDecline, parseLane, type DeclinePayload, type Lane } from '@/lib/ask/lanes';
 import { fieldReportContext } from '@/components/ask/field-report-context';
@@ -366,6 +367,7 @@ export default function AskWorkspace({
     let decision: V2Decision | undefined;
     let skill: AskMessage['skill'];
     let chips: AskChip[] | undefined;
+    let views: AtlasView[] = [];
     // Admin turns take the v2 path when picked by ?v=2, a manual model, or the toggle;
     // a /skill or @agent turn, or an enhanced one, always does (skills only exist there).
     const lastUser = convo.messages[convo.messages.length - 1];
@@ -376,7 +378,7 @@ export default function AskWorkspace({
     const webForTurn = webAvailable && (webOn || !!enhanced?.decision.web);
     const handleLine = (line: string) => {
       if (!line.trim()) return;
-      let ev: { type?: string; text?: unknown; signals?: unknown; report?: unknown; sources?: unknown; lane?: unknown; payload?: unknown; decision?: unknown; slug?: unknown; title?: unknown; kind?: unknown; chips?: unknown };
+      let ev: { type?: string; text?: unknown; signals?: unknown; report?: unknown; sources?: unknown; lane?: unknown; payload?: unknown; decision?: unknown; slug?: unknown; title?: unknown; kind?: unknown; chips?: unknown; view?: unknown };
       try {
         ev = JSON.parse(line) as typeof ev;
       } catch {
@@ -421,6 +423,11 @@ export default function AskWorkspace({
           .map((c) => ({ label: c.label.slice(0, 80), prompt: c.prompt.slice(0, 600), kind: typeof c.kind === 'string' ? c.kind : '' }))
           .slice(0, 3);
         chips = list.length ? list : undefined;
+      } else if (ev.type === 'view' && ev.view && typeof ev.view === 'object') {
+        const v = ev.view as AtlasView;
+        if ((v.kind === 'table' || v.kind === 'timeline' || v.kind === 'chart') && Array.isArray(v.rows) && typeof v.title === 'string') {
+          views = [...views, v].slice(0, 6);
+        }
       } else if (ev.type === 'retract') {
         // v2: the text so far was narration before a tool call; drop it.
         acc = '';
@@ -500,6 +507,7 @@ export default function AskWorkspace({
         decision,
         skill,
         chips,
+        views: views.length ? views : undefined,
         webSources,
         lane,
         stopped: errText ? true : undefined, // cut short server-side; partial stands

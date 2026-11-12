@@ -37,6 +37,7 @@ export const TOOL_MANIFESTS: ToolManifest[] = [
   tool('question_map', 'Question map', 'A map question: stances, claims, edges, evidence balance.', ['admin', 'keyholder']),
   tool('report', 'Reports', 'Sections of the Atlas reports (Savant, Daily Edition, roundup).', ['admin', 'keyholder']),
   tool('tooling', 'Tooling market', 'AI tools and vendors from the Tooling Monitor.', ['admin', 'keyholder']),
+  tool('show_view', 'Show a view', 'A table, timeline, or chart the server builds from a query, every row cited.', ['admin', 'keyholder']),
   tool('startups', 'Startups', 'Scout companies in a space, with verdicts.', ['admin']),
   tool('engine_status', 'Engine status', 'Engine runs, failures, and spend.', ['admin']),
 ];
