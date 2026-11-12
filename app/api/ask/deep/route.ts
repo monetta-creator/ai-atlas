@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { isAdmin } from '@/lib/auth';
-import { q } from '@/lib/db';
 import { priceUsage, recordApiCall, type ApiUsage } from '@/lib/cost';
 import { deDash } from '@/lib/voice';
 import { askSystem, laneReminder, deepConversationMessages } from '@/lib/ask/prompt';
@@ -8,14 +7,13 @@ import { splitBeyond } from '@/lib/ask/lanes';
 import { resolveLane } from '@/lib/ask/resolve-lane';
 import { clampHistory, clampSignalOffset, createWebSourceCollector, parseAskBody } from '@/lib/ask/history';
 import { fieldReportContextBlock } from '@/lib/field-report/followup';
-import { fetchRecord, searchArticles, searchAtlas } from '@/lib/ask/search';
+import { runTool } from '@/lib/tools/registry';
 import {
   DEEP_ADDENDUM, DEEP_TOOLS, DEEP_WEB_ADDENDUM, INPUT_TOKEN_CAP, MAX_CALLS_PER_ROUND, MAX_ROUNDS,
   VERIFY_INSTRUCTION, VERIFY_TOOL, type VerifyReport,
-  citeToken, createTagger, ndCost, ndDecline, ndDelta, ndDone, ndError, ndLane, ndStatus, ndVerify, ndWebSources,
-  parseFetchRecordInput, parseSearchArticlesInput, parseSearchAtlasInput, parseSignalMap,
-  parseVerifyOutput, renderArticleHits, renderRecord, renderSearchHits, runDeterministicChecks,
-  STATUS_START, STATUS_VERIFYING, STATUS_WRITING, statusArticles, statusRead, statusRound, statusSearch,
+  createTagger, ndCost, ndDecline, ndDelta, ndDone, ndError, ndLane, ndStatus, ndVerify, ndWebSources,
+  parseSignalMap, parseVerifyOutput, runDeterministicChecks,
+  STATUS_START, STATUS_VERIFYING, STATUS_WRITING, statusRound,
 } from '@/lib/ask/deep';
 
 // "Ask the Atlas" research chat: an agentic tool-use loop over the Atlas
@@ -38,6 +36,8 @@ export const maxDuration = 300;
 
 const MODEL = 'claude-haiku-4-5';
 const FEATURE = 'ask_deep';
+// The three tools this route declares (DEEP_TOOLS); execution runs through the registry.
+const DEEP_TOOL_NAMES = new Set(DEEP_TOOLS.map((t) => t.name));
 const DEADLINE_MS = 280_000; // total research + answer budget inside maxDuration
 const FINAL_RESERVE_MS = 60_000; // stop researching when less than this remains
 const NDJSON_HEADERS = { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' };
@@ -124,62 +124,12 @@ export async function POST(req: Request): Promise<Response> {
 
       // One tool call. Validation failures and misses go back to the model as
       // is_error results so a malformed call self-corrects on the next round.
+      // Runs through the shared tool registry (lib/tools, redo P1.2): same
+      // parsers, renderers, tag minting and admin flags as before; only the
+      // three tools this route declares are reachable.
       async function execTool(name: string, input: unknown): Promise<{ text: string; isError?: boolean }> {
-        if (name === 'search_atlas') {
-          const p = parseSearchAtlasInput(input);
-          if (typeof p === 'string') return { text: p, isError: true };
-          const hits = await searchAtlas(q, p.query, {
-            kinds: p.kinds, limit: p.limit, admin: true,
-            tagFor: tagger.tagFor, paperTagFor: tagger.paperTagFor,
-            itemTagFor: tagger.itemTagFor, factTagFor: tagger.factTagFor,
-            reportTagFor: tagger.reportTagFor, historyTagFor: tagger.historyTagFor,
-          });
-          emit(ndStatus(deDash(statusSearch(p.query, hits.length))));
-          return { text: renderSearchHits(hits) };
-        }
-        if (name === 'fetch_record') {
-          const p = parseFetchRecordInput(input);
-          if (typeof p === 'string') return { text: p, isError: true };
-          let dbId = p.id;
-          if (p.kind === 'signal' || p.kind === 'paper' || p.kind === 'item' || p.kind === 'fact') {
-            const uuid = tagger.idFor(p.id);
-            if (!uuid) {
-              return { text: `Unknown ${p.kind} tag ${p.id}. Use a tag from a result in this conversation.`, isError: true };
-            }
-            dbId = uuid;
-          } else if (p.kind === 'report') {
-            // The map value is the full descriptor ('report:<kind>:<scope>:
-            // <uuid>:<section>'); fetchRecord's 'report' kind wants just the
-            // trailing '<uuid>:<section>'.
-            const descriptor = tagger.idFor(p.id);
-            if (!descriptor) {
-              return { text: `Unknown report tag ${p.id}. Use a tag from a result in this conversation.`, isError: true };
-            }
-            const parts = descriptor.split(':');
-            dbId = parts.length === 5 ? `${parts[3]}:${parts[4]}` : descriptor;
-          } else if (p.kind === 'history') {
-            // The map value is '<uuid>|<url>' (retrieve.ts/search.ts mint it
-            // this way so the client can build the article link without a DB
-            // round trip); fetchRecord's 'history' kind wants just the uuid.
-            const raw = tagger.idFor(p.id);
-            if (!raw) {
-              return { text: `Unknown history tag ${p.id}. Use a tag from a result in this conversation.`, isError: true };
-            }
-            dbId = raw.split('|')[0];
-          }
-          const payload = await fetchRecord(q, p.kind, dbId, { admin: true });
-          if (!payload) return { text: `No ${p.kind} found with id ${p.id}.`, isError: true };
-          emit(ndStatus(statusRead(citeToken(p.kind, p.id))));
-          return { text: renderRecord(payload, p.id, tagger.tagFor) };
-        }
-        if (name === 'search_articles') {
-          const p = parseSearchArticlesInput(input);
-          if (typeof p === 'string') return { text: p, isError: true };
-          const hits = await searchArticles(q, p.query, { tagFor: tagger.tagFor });
-          emit(ndStatus(deDash(statusArticles(p.query, hits.length))));
-          return { text: renderArticleHits(hits) };
-        }
-        return { text: `Unknown tool ${name}.`, isError: true };
+        if (!DEEP_TOOL_NAMES.has(name)) return { text: `Unknown tool ${name}.`, isError: true };
+        return runTool(name, input, { identity: { kind: 'admin' }, tagger, status: (s) => emit(ndStatus(deDash(s))) });
       }
 
       let rounds = 0;
