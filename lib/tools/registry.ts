@@ -3,11 +3,26 @@
 // runTool re-checks scope at call time (a model naming a tool it was not
 // given gets an is_error result, never a run).
 import { fetchRecordTool, searchArticlesTool, searchAtlasTool } from './atlas';
+import { companyTool } from './company';
+import { engineStatusTool } from './engine_status';
+import { metricsTool } from './metrics';
+import { questionMapTool } from './question_map';
+import { reportTool } from './report';
+import { searchItemsTool } from './search_items';
+import { startupsTool } from './startups';
+import { timelineTool } from './timeline';
+import { toolingTool } from './tooling';
+import { whatsNewTool } from './whats_new';
 import { scopeOf, type AtlasTool, type Identity, type ToolContext, type ToolResult } from './types';
 
-// Later phases append here (whats_new, company, metrics, ...).
+// 13 tools (Phase 3 reach). Under the ~15 where tool search (defer_loading)
+// starts to pay; revisit when the list grows (P3.11).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const TOOLS: AtlasTool<any>[] = [searchAtlasTool, fetchRecordTool, searchArticlesTool];
+export const TOOLS: AtlasTool<any>[] = [
+  searchAtlasTool, fetchRecordTool, searchArticlesTool,
+  whatsNewTool, searchItemsTool, timelineTool, companyTool, metricsTool,
+  questionMapTool, reportTool, toolingTool, startupsTool, engineStatusTool,
+];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function toolsFor(identity: Identity): AtlasTool<any>[] {

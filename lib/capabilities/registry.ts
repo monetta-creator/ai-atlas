@@ -29,6 +29,16 @@ export const TOOL_MANIFESTS: ToolManifest[] = [
   tool('search_atlas', 'Search the Atlas', 'Search claims, signals, papers, reports, company items and facts, and history.', ['admin', 'keyholder']),
   tool('fetch_record', 'Open a record', 'Read one record in full: evidence, sources, findings.', ['admin', 'keyholder']),
   tool('search_articles', 'Search source articles', 'Search the retained text of the articles behind signals.', ['admin']),
+  tool('whats_new', 'What is new', 'Everything collected since a date, grouped by engine.', ['admin', 'keyholder']),
+  tool('search_items', 'Search news items', 'News and company items with date, company, and topic filters.', ['admin', 'keyholder']),
+  tool('timeline', 'Timeline', 'Dated history items and signals on a topic.', ['admin', 'keyholder']),
+  tool('company', 'Company', 'A tracked company: registry row, facts, items, history.', ['admin', 'keyholder']),
+  tool('metrics', 'Metrics', 'Company metric series (filings, call reports, complaints, hiring) as a table.', ['admin', 'keyholder']),
+  tool('question_map', 'Question map', 'A map question: stances, claims, edges, evidence balance.', ['admin', 'keyholder']),
+  tool('report', 'Reports', 'Sections of the Atlas reports (Savant, Daily Edition, roundup).', ['admin', 'keyholder']),
+  tool('tooling', 'Tooling market', 'AI tools and vendors from the Tooling Monitor.', ['admin', 'keyholder']),
+  tool('startups', 'Startups', 'Scout companies in a space, with verdicts.', ['admin']),
+  tool('engine_status', 'Engine status', 'Engine runs, failures, and spend.', ['admin']),
 ];
 
 export const CAPABILITIES: Capability[] = [...SKILLS, ...AGENTS, ...TOOL_MANIFESTS];
