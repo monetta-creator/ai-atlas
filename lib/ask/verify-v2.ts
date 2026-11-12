@@ -20,10 +20,14 @@ export const VERIFY_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['excerpt', 'issue'],
+        required: ['excerpt', 'issue', 'verdict'],
         properties: {
           excerpt: { type: 'string', description: 'The first words of the unsupported statement, at most 120 characters.' },
           issue: { type: 'string', description: 'One sentence: what the cited record actually says, or why the statement is unsupported.' },
+          // Written after the reasoning, so a statement the model talks itself
+          // into accepting is marked supported and dropped (2026-11-12: the
+          // phrase filter alone missed "which matches as written").
+          verdict: { type: 'string', enum: ['unsupported', 'misattributed', 'wrong', 'supported'], description: 'Your conclusion about this statement. Use supported if, on checking, the records do back it.' },
         },
       },
     },
@@ -62,7 +66,9 @@ export async function verifyV2(opts: {
   const block = res.content.find((b) => b.type === 'text');
   if (!block || block.type !== 'text') return null;
   try {
-    const parsed = parseVerifyOutput(JSON.parse(block.text));
+    const raw = JSON.parse(block.text) as { flags?: unknown };
+    if (Array.isArray(raw.flags)) raw.flags = raw.flags.filter((f) => !(f && typeof f === 'object' && (f as { verdict?: unknown }).verdict === 'supported'));
+    const parsed = parseVerifyOutput(raw);
     return parsed ? { ...parsed, flags: parsed.flags.filter((f) => !isNonFlag(f.issue)) } : null;
   } catch {
     return null;
@@ -72,5 +78,7 @@ export async function verifyV2(opts: {
 // Haiku 5.5 sometimes reports a checked-and-fine statement as a flag
 // ("Supported: ... no mismatch"). Those are not problems; drop them.
 export function isNonFlag(issue: string): boolean {
-  return /^\s*(supported|accurate|correct|consistent|verified|faithful)\b/i.test(issue) || /\bno (mismatch|issue|discrepancy|problem)s? (found|identified)\b/i.test(issue);
+  return /^\s*(supported|accurate|correct|consistent|verified|faithful)\b/i.test(issue)
+    || /\bno (mismatch|issue|discrepancy|problem)s? (found|identified)\b/i.test(issue)
+    || /\b(which is (supported|accurate|correct)|matches as written|is accurately attributed|consistent with the records|supports the statement as written|no issue with)\b/i.test(issue);
 }

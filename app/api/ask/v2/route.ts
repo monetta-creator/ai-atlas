@@ -14,6 +14,7 @@ import { nd, type V2Decision, type V2Event } from '@/lib/ask/v2-events';
 import { askBudget } from '@/lib/ask/budget';
 import { budgetVerdict } from '@/lib/ask/budget-policy';
 import { decide } from '@/lib/decide';
+import { POLICY } from '@/lib/decide/policy';
 import { anthropicAdapter } from '@/lib/llm/anthropic';
 import { openrouterAdapter } from '@/lib/llm/openrouter-adapter';
 import { estimateTurnUsd, getModel, TIER_DEFAULT, type Tier } from '@/lib/llm/models';
@@ -136,7 +137,8 @@ export async function POST(req: Request): Promise<Response> {
         // 1. Decide (also for a manual pick: the chip shows the recommendation).
         const dt = Date.now();
         const ds = await decide({ text: skill ? `/${skill.slug} ${latest}` : latest, prevUser, lane, webToggle }, undefined, { log: true });
-        const wantedTier = (ds.model_tier?.answer ?? 'cheap') as Tier;
+        const judgedTier = (ds.model_tier?.answer ?? 'cheap') as Tier;
+        const wantedTier: Tier = POLICY.autoEscalate ? judgedTier : 'cheap';
         const recommended = getModel(TIER_DEFAULT[wantedTier])!;
         const verdict = admin
           ? budgetVerdict(budget, picked ? picked.tier : wantedTier, Boolean(picked))

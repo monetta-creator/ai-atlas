@@ -47,7 +47,7 @@ ok(suggest('@', 'keyholder').every((c) => c.kind === 'agent'), 'suggest agents')
 ok(!capabilitiesFor('keyholder').some((c) => c.slug === 'status' || c.slug === 'search_articles'), 'keyholder catalog excludes admin-only');
 const help = helpText('admin');
 ok(/\/brief/.test(help) && /@field-report/.test(help) && !/—/.test(help), 'help lists skills and agents');
-ok(/suggest it/.test(rosterForPrompt('admin')) && !/\/help/.test(rosterForPrompt('admin')), 'roster');
+ok(/never end with a suggestion/.test(rosterForPrompt('admin')) && !/\/help/.test(rosterForPrompt('admin')), 'roster');
 
 console.log(fail ? `${fail} failure(s)` : `ok: ${CAPABILITIES.length} capabilities`);
 process.exit(fail ? 1 : 0);

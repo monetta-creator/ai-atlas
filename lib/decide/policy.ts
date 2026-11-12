@@ -3,6 +3,12 @@
 import type { Decision, QuestionKey } from './types';
 
 export const POLICY = {
+  // Auto follows the judge's model_tier only when this is on. Off since
+  // 2026-11-12: in the redo eval Sonnet 5.5 rescued 3 of 52 questions Haiku
+  // 5.5 and DeepSeek missed, and Auto picked the wrong tier on 24 of 52, so
+  // Auto stays on the cheap tier. The judge still runs and is logged
+  // (decisions table) so the labels can be rebuilt after the prompt work.
+  autoEscalate: false,
   // model_tier: escalate only on real confidence (budget-first, Q6).
   strongAt: 0.55, // P(strong) at or above this picks the strong tier
   midOrAboveAt: 0.6, // P(mid) + P(strong) at or above this picks mid

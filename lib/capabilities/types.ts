@@ -1,5 +1,5 @@
 // One manifest per capability (redo Phase 4, 10-architecture.md "One manifest
-// per capability"). The catalog Kevin asked for (every agent, what it does,
+// per capability"). The catalog the maintainer asked for (every agent, what it does,
 // how to call it) is generated from these, never hand-kept: composer
 // autocomplete for `/` and `@`, the /help answer, the /capabilities page, and
 // the roster the model sees. Import-free so client components and tests load it.

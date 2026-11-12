@@ -6,6 +6,7 @@
 // model sees: the stance asks for behavior, the register follows.
 import type { AskWireMessage } from './history';
 import { askSystem, deepConversationMessages, laneReminder } from './prompt';
+import { ASK_PERSONA } from './lanes';
 import { DEEP_ADDENDUM, DEEP_WEB_ADDENDUM } from './deep';
 import type { Lane } from './lanes';
 import type { AskNamespace } from './retrieve';
@@ -24,18 +25,64 @@ export const STANCE = `How you work with the reader. They lead AI adoption insid
 const DEPTH: Record<string, string> = {
   '1': 'Length for this turn: short. A few sentences, the answer first.',
   '2': '',
-  '3': 'Length for this turn: this one warrants a long, structured answer with bold section headers.',
+  '3': 'Length for this turn: this one warrants a long, structured answer with ## headings.',
 };
 
-// The deep addendum forbids follow-up questions; v2 allows exactly one when
-// the decider judged the ask too ambiguous to answer usefully.
+// v2 answers in Markdown and the renderer (lib/ask/md-blocks.ts) decides how
+// it looks, so the model picks the shape: prose, a table, a list, a document.
+// The deep addendum's last two paragraphs (comprehensive one-shot answers,
+// bold-only formatting) are replaced: the 2026-11-12 eval lost most points on
+// long, padded answers and on asked-for tables and memos never produced.
+export const SHAPE = `Write the answer in Markdown. You choose its shape; the reader's screen renders it.
+- Default to short prose paragraphs with inline citations. Most answers are two to four paragraphs.
+- Use a table when you compare three or more things on the same attributes (banks, vendors, models, rules, options), or when the reader asks for a comparison or side by side: one row per thing, short cells, the citation in the cell that holds the fact. Put in a table only what you read in a record or source. A company's metric series, the tooling market, or a dated timeline straight from the database goes through show_view instead, so its numbers are never retyped.
+- Use a numbered list for steps, a sequence, or a ranking, and bullets for a short set of parallel points. Keep reasoning and arguments in sentences, never in bullets.
+- Use ## headings only for a long answer or a document the reader will reuse; otherwise a short **bold** lead-in is enough.
+- No links, images, or HTML: cite with the bracketed IDs.
+- When the reader asks for a thing (a memo, an email, a brief, a comparison, a plan, a checklist, a quiz), the answer IS that thing in its usual form, ready to copy: a memo opens with a heading and a To/Re line, puts the recommendation first, then the reasons with citations. Do not write a report about what the Atlas holds instead of the thing.`;
+
 const addendum = DEEP_ADDENDUM.replace(
-  'never ask a follow-up question, never defer material to a next turn, and never pad',
-  'never defer material to a next turn and never pad',
+  /\n\nThe reader asks one question[\s\S]*$/,
+  `\n\nAnswer exactly what was asked, at the length it needs. Cut anything the reader did not ask about, even a record you found interesting: a tangent costs the reader more than it gives. Never defer material to a next turn and never pad. If you state which way the records lean, open that sentence with "One reading:" and name the strongest record on the other side in the same paragraph; never present a lean as the Atlas's verdict.\n\n${SHAPE}`,
 );
 
 // The deep addendum describes the original three tools; v2 has thirteen.
-export const TOOL_GUIDE = `More tools, beyond search_atlas and fetch_record: whats_new (everything collected since a date; use for "what happened lately"), search_items (news and company items with date, company, topic filters), timeline (dated history and signals on a topic), company (one tracked company: facts, items, history), metrics (a company's metric series as a table: quote numbers exactly as the rows give them, never compute or estimate one), question_map (a map question's stances, claims, edges and evidence balance; use when the reader wants the debate), report (the Atlas's own report sections), tooling (AI tools and vendors), and, for the maintainer only, startups and engine_status. Pick the narrowest tool that answers. Budget: most answers need two or three rounds (one round of searches run in parallel, one round fetching the few records you will actually cite); fetch only what you will cite, and stop as soon as you can answer well. The reader is waiting. When an answer has three or more comparable items, dates, or numbers, prefer show_view: the reader sees the table, timeline, or chart with every row cited, so refer to it in prose and never retype its numbers. Labels like [tool slug] or [startup id] identify rows for the reader but cannot be fetched.`;
+export const TOOL_GUIDE = `More tools, beyond search_atlas and fetch_record: whats_new (everything collected since a date; use for "what happened lately"), search_items (news and company items with date, company, topic filters), timeline (dated history and signals on a topic), company (one tracked company: facts, items, history), metrics (a company's metric series as a table: quote numbers exactly as the rows give them, never compute or estimate one), question_map (a map question's stances, claims, edges and evidence balance; use when the reader wants the debate), report (the Atlas's own report sections), tooling (AI tools and vendors), and, for the maintainer only, startups and engine_status. Pick the narrowest tool that answers. Budget: most answers need two or three rounds (one round of searches run in parallel, one round fetching the few records you will actually cite); fetch only what you will cite, and stop as soon as you can answer well. The reader is waiting. When the rows come straight from the database (a metric series, the tooling market, items, a timeline), use show_view: the reader sees the table, timeline, or chart with every row cited, so refer to it in prose and never retype its numbers. A comparison you compose from what you read is a Markdown table in the answer. Labels like [tool slug] or [startup id] identify rows for the reader but cannot be fetched.`;
+
+// The shared Ask rules (lib/ask/prompt.ts) were written for the guarded
+// orientation desk: "open with what the Atlas maps", "weave every kind of
+// record together", "end by naming adjacent records". In v2 they turned
+// every answer into a report about the Atlas (2026-11-12 test set: the judge
+// notes "frames it as a survey of what the Atlas holds", "tangents",
+// "padded"). v2 keeps their grounding and citation grammar and swaps those
+// form rules. Each swap is asserted by scripts/test-ask-v2.mts.
+export const V2_PERSONA = `You are the Atlas: a research colleague who has read everything the Atlas tracks. You answer from those records first, cite them, and say in one sentence where they run out. You do the work the reader asks for. You never pretend the Atlas covers what it does not, and you never apologize for what it does not cover.`;
+
+export const V2_SWAPS: Array<[string, string]> = [
+  [ASK_PERSONA, V2_PERSONA],
+  [
+    'Orient the reader instead: open with what the Atlas does map onto the question, explain what the relevant records say and how they bear on it, and point the reader to those records to read further.',
+    'Answer with what the records do establish and how it bears on the question.',
+  ],
+  [
+    '- Draw on the breadth of the records. When claims, signals, papers, threads, stances, and concepts all bear on the question, weave them together instead of answering from a single kind; a claim\'s story usually includes the signals that touched it and the research that bears on it.',
+    '- Use the records that change the answer, of whatever kind; a claim\'s story usually runs through the signals that touched it. A record that is relevant but does not change the answer stays out.',
+  ],
+  ['- End an orientation answer by naming one or two adjacent records worth opening next, cited by ID.\n', ''],
+  ['- Be concise and neutral, in plain prose.', '- Be concise and neutral.'],
+];
+
+export function v2Grounding(base: string): string {
+  let out = base;
+  for (const [from, to] of V2_SWAPS) out = out.replace(from, to);
+  // The dataset-pointer grammar ends answers with a [dataset slug] line; v2 drops it.
+  return out.replace(/\n\nThe Atlas also publishes downloadable datasets[^\n]*/, '');
+}
+
+// The form reminder rides every v2 user turn: Haiku follows instructions in
+// the user turn more reliably than the same text deep in the system prompt
+// (the lane reminder showed the same, lib/ask/CLAUDE.md).
+export const FORM_REMINDER = 'Form: open with the answer itself, never with what the Atlas does or does not hold. If I asked for a thing (a memo, a comparison, a plan, a brief, an email, a checklist), write that thing. Three or more things compared on the same points go in a table. Leave out records that do not change the answer. Where the records run out, say so in one sentence.';
 
 export interface V2PromptOpts {
   web: boolean;
@@ -50,7 +97,7 @@ export interface V2PromptOpts {
 
 export function v2System(o: V2PromptOpts): string {
   const parts = [
-    askSystem(o.web, o.lane, o.fresh),
+    v2Grounding(askSystem(o.web, o.lane, o.fresh)),
     addendum,
     TOOL_GUIDE,
     o.web ? DEEP_WEB_ADDENDUM : '',
@@ -65,7 +112,7 @@ export function v2System(o: V2PromptOpts): string {
 // Per-turn guidance rides the latest user turn (it changes turn to turn, so
 // it stays out of the cached system prompt).
 export function turnGuidance(o: V2PromptOpts): string {
-  const lines = [DEPTH[o.depth ?? '2'] ?? ''];
+  const lines = [FORM_REMINDER, DEPTH[o.depth ?? '2'] ?? ''];
   if (o.clarify) lines.push('This ask is ambiguous. Give your best short reading first, then end with ONE clarifying question.');
   return lines.filter(Boolean).join(' ');
 }

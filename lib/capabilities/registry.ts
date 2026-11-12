@@ -109,5 +109,5 @@ export function helpText(audience: Audience): string {
 // or agent by name (it never launches one itself).
 export function rosterForPrompt(audience: Audience): string {
   const caps = capabilitiesFor(audience).filter((c) => c.kind !== 'tool' && c.slug !== 'help');
-  return `The reader can call these by name; when one would serve them better than this answer, suggest it in one short line at the end (never launch it yourself): ${caps.map((c) => `${trigger(c)} (${c.oneLiner.replace(/\.$/, '')})`).join('; ')}.`;
+  return `The reader can call these by name (never launch one yourself): ${caps.map((c) => `${trigger(c)} (${c.oneLiner.replace(/\.$/, '')})`).join('; ')}. Name one only when the reader asks what you can do or asks for something one of these does and this answer cannot (a long researched write-up is a Field Report). Otherwise never end with a suggestion or an offer: the screen already shows next-step buttons under every answer.`;
 }

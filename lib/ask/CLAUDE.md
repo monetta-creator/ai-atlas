@@ -6,7 +6,7 @@ Ask is the chat surface over the whole corpus, with citations. Public page in th
 - `ask/page.tsx`, `AskWorkspace` + `components/ask/*`.
 - Mode by auth: `admin` uses the research loop at `/api/ask/deep` on EVERY turn; `portal` uses `/api/portal/ask` (the quick path, budget reasons); `locked` gets an inline unlock.
 - Quick `/api/ask` stays for the per-signal widget (`AskAtlas` on `/signals/[id]`, shared renderer `components/ask/answer.tsx`, `/api/signals/[id]/ask`).
-- Conversations live in localStorage only (`components/ask/store.ts`).
+- Conversations: localStorage is the working copy (`components/ask/store.ts`), mirrored to the server for admin and access keys (`lib/conversations/store.ts`, migration 0087, debounced PUT snapshots).
 - The multi-turn wire contract lives in `lib/ask/history.ts`. Signal-tag offsets prevent cross-turn citation mislinks.
 
 ## Access
@@ -30,7 +30,7 @@ Ask is the chat surface over the whole corpus, with citations. Public page in th
 - Priced by `priceUsage` in `lib/cost.ts` (same frozen rate-card math as `recordApiCall`).
 
 ## Rendering and leans
-- Kind-tinted citation pills `.ask-cite[data-kind]`. Bold-only formatting subset: `**Header**` becomes `<strong>`, everything else stays literal.
+- Kind-tinted citation pills `.ask-cite[data-kind]`. Answers render as a Markdown subset (`lib/ask/md-blocks.ts`, `.ask-md-*`): paragraphs, `#`-`###` headings, bullet and numbered lists, GFM tables, rules, inline `**bold**`; citation chips work inside every block, table cells included. Raw HTML, links and images stay literal. The old quick/deep prompts still ask for bold-only; v2 lets the model pick the shape (`SHAPE` + `FORM_REMINDER` in `lib/ask/prompt-v2.ts`).
 - The deep prompt requires a "One reading:" prefix plus the strongest opposing record. The verifier's `verdict_language` field surfaces unlabeled verdicts as caution lines.
 
 ## Retrieval (Ask side)
@@ -47,6 +47,7 @@ Ask is the chat surface over the whole corpus, with citations. Public page in th
 - The marker instruction rides in the system prompt AND as a `laneReminder` in the user turn: Haiku ignores the system-prompt copy alone.
 - Thin/adjacent lane with web on: the deep route routes the answer through its forced final (one extra call), because an answer written in the same turn as the searches puts web findings above the marker.
 - Lane transport: quick routes use an `X-Ask-Lane` response header; the deep route emits a `lane` NDJSON event first.
+- An opening question declines only when the classifier says unrelated AND retrieval is under the MID bars (was STRONG until 2026-11-12: the classifier flips on short vague on-beat prompts like "agents and banks").
 - `unrelated` short-circuits to a coded decline (`composeDecline`, no model call, no cost row): `@@ASK_DECLINE@@` sentinel on quick routes, a `decline` NDJSON event on deep.
 - A fresh, non-covered question auto-enables web search for that turn even with the toggle off.
 
@@ -61,4 +62,11 @@ Ask is the chat surface over the whole corpus, with citations. Public page in th
 
 ## Tests
 - `scripts/test-ask-lanes.mjs`
+- `scripts/test-md-blocks.mts` (the Markdown block grammar)
 - v2 (redo): `scripts/test-ask-v2.mts`, `test-ask-loop.mts`, `test-ask-chips.mts`, `test-ask-budget.mts`, `test-conversations.mts`; live smokes `smoke-ask-loop.mts`, `smoke-skills.mts`, `probe-v2-timing.mts`
+
+## v2 prompt (redo)
+- v2 reuses `askSystem` but `v2Grounding()` swaps its orientation-desk form rules (persona, "open with what the Atlas maps", "weave every kind", "end with adjacent records", the dataset pointer). Each swap's source string is asserted present in `test-ask-v2.mts`: edit `prompt.ts` and the test tells you a swap stopped applying.
+- Per-turn instructions ride the user turn (`turnGuidance`: `FORM_REMINDER` + depth + clarify); Haiku follows them there, not deep in the system prompt.
+- The capability roster must not invite closing suggestions: the UI already shows next-step chips, and the judge scores "/brief would serve" endings as flattery.
+- Measure prompt changes on the test set (`private/answer-gold/dev-ids.txt`, about $0.80 a run) before the full 52.

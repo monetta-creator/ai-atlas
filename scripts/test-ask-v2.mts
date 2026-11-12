@@ -6,7 +6,7 @@
 // Run: npx -y tsx scripts/test-ask-v2.mts [--live]
 import { readFileSync } from 'node:fs';
 import { protocolProblems, type V2Event } from '../lib/ask/v2-events';
-import { STANCE, turnGuidance } from '../lib/ask/prompt-v2';
+import { FORM_REMINDER, STANCE, turnGuidance } from '../lib/ask/prompt-v2';
 import { isNonFlag } from '../lib/ask/verify-v2';
 
 let fail = 0;
@@ -31,11 +31,13 @@ ok(protocolProblems([...good.slice(0, 9), good[9], { type: 'delta', text: 'late'
 ok(!/—/.test(STANCE) && /em dash/.test(STANCE), 'stance: no em dash, carries the rule');
 ok(!/\b(encyclopedia|textbook|lecturer|teammate|collaborator)\b/i.test(STANCE), 'stance never names the felt qualities');
 ok(/premise/.test(STANCE) && /flattery/.test(STANCE) && /One reading:/.test(STANCE), 'stance carries premise, flattery, One reading');
-ok(/short/.test(turnGuidance({ web: false, lane: 'covered', depth: '1' })) && turnGuidance({ web: false, lane: 'covered', depth: '2' }) === '', 'depth guidance');
+ok(/short/.test(turnGuidance({ web: false, lane: 'covered', depth: '1' })) && turnGuidance({ web: false, lane: 'covered', depth: '2' }) === FORM_REMINDER, 'depth guidance (depth 2 adds only the form reminder)');
 ok(/clarifying question/.test(turnGuidance({ web: false, lane: 'covered', clarify: true })), 'clarify guidance');
 
 ok(isNonFlag('Supported: S9 states $121.4 billion; no mismatch found.') && isNonFlag('Accurate: the figure matches S2.'), 'non-flags dropped');
 ok(!isNonFlag('S9 says $121.4B, not $125B.') && !isNonFlag('Unsupported: no record mentions Citi.'), 'real flags kept');
+ok(isNonFlag('Signal S1 says these banks detect unauthorized agents, which matches as written.') && isNonFlag('Citi is named in R105, which supports the statement as written.'), 'trailing-verdict non-flags dropped (2026-11-12)');
+ok(!isNonFlag('R105 names Citi as a blocker, but nothing says it detects agents.'), 'a real flag with a "but" survives');
 
 if (process.argv.includes('--live')) {
   const cookie = `atlas_admin=${readFileSync('private/redo/build/admin-cookie.txt', 'utf8').trim()}`;
@@ -54,6 +56,25 @@ if (process.argv.includes('--live')) {
   const c = events.find((e) => e.type === 'cost');
   console.log(`live: ${((Date.now() - t0) / 1000).toFixed(1)}s, ${events.length} events, cost ${c && c.type === 'cost' ? c.report.cost_usd.toFixed(4) : '?'}, answer: ${answer.slice(0, 160).replace(/\n/g, ' ')}`);
   ok(/20%|20 percent|nearly 20|one-fifth|one fifth/i.test(answer), 'live answer carries the record figure');
+}
+
+// v2 form rules swap the orientation-desk rules (2026-11-12).
+{
+  const { V2_SWAPS, v2Grounding, v2System, turnGuidance, FORM_REMINDER } = await import('../lib/ask/prompt-v2');
+  const { askSystem } = await import('../lib/ask/prompt');
+  for (const web of [false, true]) {
+    const base = askSystem(web, 'covered');
+    for (const [from] of V2_SWAPS) ok(base.includes(from), `swap source still present in askSystem(web=${web}): ${from.slice(0, 50)}`);
+    const g = v2Grounding(base);
+    for (const [from, to] of V2_SWAPS) ok(!from || to.includes(from) || !g.includes(from), `swap applied: ${from.slice(0, 50)}`);
+    ok(!g.includes('downloadable datasets'), 'dataset pointer dropped');
+    ok(g.includes('[claim 2.3]'), 'citation grammar kept');
+  }
+  const sys = v2System({ web: false, lane: 'thin' });
+  ok(sys.includes('@@BEYOND@@'), 'lane addendum kept through the swaps');
+  ok(turnGuidance({ web: false, lane: 'covered' }).startsWith(FORM_REMINDER), 'form reminder rides the turn');
+  ok(!/\u2014/.test(sys + FORM_REMINDER), 'no em dash in the v2 prompt');
+  console.log('ok: v2 form swaps');
 }
 
 console.log(fail ? `${fail} failure(s)` : 'ok: ask v2 tests pass');
