@@ -21,7 +21,7 @@ export default function AskRail({
       </button>
       {convos.length === 0 && (
         <p style={{ fontSize: 12, color: 'var(--faint-ink)', padding: '4px 8px', lineHeight: 1.6 }}>
-          Conversations are saved in this browser only.
+          Conversations are saved in this browser and on the Atlas’s server, so they follow you to another device.
         </p>
       )}
       {convos.map((c) => (

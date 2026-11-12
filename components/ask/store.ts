@@ -119,7 +119,7 @@ function read(): AskStoreV1 {
   return cache;
 }
 
-function persist(next: AskStoreV1): void {
+function persist(next: AskStoreV1, changedId?: string): void {
   const sorted = [...next.convos].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_CONVOS);
   cache = { v: 1, convos: sorted };
   try {
@@ -135,6 +135,7 @@ function persist(next: AskStoreV1): void {
     }
   }
   emit();
+  if (changedId) scheduleMirror(changedId);
 }
 
 function subscribe(cb: () => void): () => void {
@@ -165,7 +166,7 @@ export function createConvo(firstUserTurn: string, enhanced?: EnhanceCardData): 
     updatedAt: now,
     messages: [{ role: 'user', content: firstUserTurn, ...(enhanced ? { enhanced } : {}) }],
   };
-  persist({ v: 1, convos: [convo, ...s.convos] });
+  persist({ v: 1, convos: [convo, ...s.convos] }, convo.id);
   return convo.id;
 }
 
@@ -182,7 +183,7 @@ export function appendMessage(convoId: string, msg: AskMessage): void {
         ? { ...c, messages: [...c.messages, msg], updatedAt: Date.now() }
         : c
     ),
-  });
+  }, convoId);
 }
 
 // Drop the trailing assistant turn (Regenerate / Retry re-sends the same user turn).
@@ -196,7 +197,7 @@ export function dropLastAssistant(convoId: string): void {
       if (!last || last.role !== 'assistant') return c;
       return { ...c, messages: c.messages.slice(0, -1), updatedAt: Date.now() };
     }),
-  });
+  }, convoId);
 }
 
 // Attach an on-demand verification report to one message ("Check this answer").
@@ -213,7 +214,7 @@ export function setMessageVerify(convoId: string, index: number, verify: VerifyR
         updatedAt: Date.now(),
       };
     }),
-  });
+  }, convoId);
 }
 
 // Merges a patch into one message's Field Report state (the plan card editing
@@ -236,7 +237,7 @@ export function setMessageFieldReport(convoId: string, index: number, patch: Par
         updatedAt: Date.now(),
       };
     }),
-  });
+  }, convoId);
 }
 
 // Remember the selector pick on the conversation (absent = 'auto').
@@ -245,12 +246,100 @@ export function setConvoModel(convoId: string, model: string): void {
   persist({
     v: 1,
     convos: s.convos.map((c) => (c.id === convoId ? { ...c, model } : c)),
-  });
+  }, convoId);
 }
 
 export function deleteConvo(convoId: string): void {
   const s = read();
   persist({ v: 1, convos: s.convos.filter((c) => c.id !== convoId) });
+  if (serverSync) void fetch(`/api/conversations/${convoId}`, { method: 'DELETE', keepalive: true }).catch(() => {});
+}
+
+// ---------------------------------------------------------------- server mirror
+// Redo P4.1: localStorage stays the working copy (instant, offline-safe);
+// when sync is on (admin and access-key sessions) every change PUTs a
+// debounced snapshot of that conversation to /api/conversations/<id>, and
+// importServerConvos() brings in threads that exist only on the server
+// (started on another device). Failures are silent: the local copy stands.
+let serverSync = false;
+const pendingMirror = new Map<string, ReturnType<typeof setTimeout>>();
+
+export function enableServerSync(on: boolean): void {
+  serverSync = on;
+}
+
+type WireMessage = { role: 'user' | 'assistant'; content: string; extras: Record<string, unknown>; tagMap: SignalMap; costUsd: number | null };
+
+export function toWire(c: AskConvo): { title: string; model: string | null; messages: WireMessage[] } {
+  return {
+    title: c.title,
+    model: c.model ?? null,
+    messages: c.messages.map(({ role, content, signalMap, ...rest }) => ({
+      role,
+      content,
+      extras: rest as Record<string, unknown>,
+      tagMap: signalMap ?? {},
+      costUsd: typeof rest.cost?.cost_usd === 'number' ? rest.cost.cost_usd : null,
+    })),
+  };
+}
+
+export function fromWire(row: { id: string; title: string; model: string | null; created_at: string; updated_at: string; messages?: { role: 'user' | 'assistant'; content: string; extras: Record<string, unknown>; tag_map: SignalMap }[] }): AskConvo {
+  return {
+    id: row.id,
+    title: row.title,
+    createdAt: Date.parse(row.created_at) || Date.now(),
+    updatedAt: Date.parse(row.updated_at) || Date.now(),
+    ...(row.model ? { model: row.model } : {}),
+    messages: (row.messages ?? []).map((m) => ({
+      ...(m.extras as Partial<AskMessage>),
+      role: m.role,
+      content: m.content,
+      ...(m.tag_map && Object.keys(m.tag_map).length ? { signalMap: m.tag_map } : {}),
+    })),
+  };
+}
+
+function scheduleMirror(id: string): void {
+  if (!serverSync || typeof window === 'undefined') return;
+  const prev = pendingMirror.get(id);
+  if (prev) clearTimeout(prev);
+  pendingMirror.set(id, setTimeout(() => {
+    pendingMirror.delete(id);
+    const c = getConvo(id);
+    if (!c) return;
+    void fetch(`/api/conversations/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(toWire(c)),
+      keepalive: true,
+    }).catch(() => {});
+  }, 1200));
+}
+
+// Pull conversations that exist on the server but not in this browser.
+export async function importServerConvos(limit = 20): Promise<number> {
+  if (!serverSync) return 0;
+  try {
+    const res = await fetch('/api/conversations');
+    if (!res.ok) return 0;
+    const { conversations } = (await res.json()) as { conversations: { id: string }[] };
+    const local = new Set(read().convos.map((c) => c.id));
+    // Local-only threads (from before sync, or offline) go up once.
+    const remote = new Set(conversations.map((c) => c.id));
+    for (const id of local) if (!remote.has(id)) scheduleMirror(id);
+    const missing = conversations.filter((c) => !local.has(c.id)).slice(0, limit);
+    if (!missing.length) return 0;
+    const rows = await Promise.all(missing.map(async (c) => {
+      const r = await fetch(`/api/conversations/${c.id}`);
+      return r.ok ? fromWire(await r.json()) : null;
+    }));
+    const add = rows.filter((c): c is AskConvo => Boolean(c && c.messages.length));
+    if (add.length) persist({ v: 1, convos: [...read().convos, ...add] });
+    return add.length;
+  } catch {
+    return 0;
+  }
 }
 
 // The next request's signalOffset: the highest numeric suffix across every

@@ -95,6 +95,39 @@ export async function appendMessage(owner: Owner, id: string, m: NewMessage): Pr
   });
 }
 
+// Mirror a whole conversation from the browser store (the client keeps
+// localStorage as its working copy and PUTs a snapshot after each change):
+// create it under this owner with the client's uuid if new, then replace its
+// messages. Another owner's id is refused (null). Bounded sizes.
+export async function replaceConversation(
+  owner: Owner,
+  id: string,
+  c: { title: string; model?: string | null; messages: NewMessage[] },
+): Promise<boolean | null> {
+  if (!isUuid(id)) return null;
+  const msgs = c.messages.slice(0, 400);
+  for (const m of msgs) if (JSON.stringify(m.extras ?? {}).length > MAX_EXTRAS) throw new Error('message extras too large');
+  return withTx(async (cl) => {
+    const existing = await cl.query<{ owner: string }>(`select owner from conversations where id = $1 for update`, [id]);
+    if (existing.rowCount && existing.rows[0].owner !== owner) return null;
+    if (!existing.rowCount) {
+      await cl.query(`insert into conversations (id, owner, title, model) values ($1, $2, $3, $4)`, [id, owner, c.title.trim().slice(0, 200), c.model ?? null]);
+    } else {
+      await cl.query(`update conversations set title = $2, model = $3, updated_at = now(), archived_at = null where id = $1`, [id, c.title.trim().slice(0, 200), c.model ?? null]);
+    }
+    await cl.query(`delete from conversation_messages where conversation_id = $1`, [id]);
+    for (let i = 0; i < msgs.length; i++) {
+      const m = msgs[i];
+      await cl.query(
+        `insert into conversation_messages (conversation_id, seq, role, content, extras, tag_map, cost_usd)
+         values ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7)`,
+        [id, i + 1, m.role, m.content.slice(0, MAX_CONTENT), JSON.stringify(m.extras ?? {}), JSON.stringify(m.tagMap ?? {}), m.costUsd ?? null],
+      );
+    }
+    return true;
+  });
+}
+
 export async function updateConversation(owner: Owner, id: string, patch: { title?: string; model?: string | null }): Promise<boolean> {
   if (!isUuid(id)) return false;
   const row = await one<{ id: string }>(

@@ -6,7 +6,7 @@ import type { PeekKind } from '@/lib/ask/search';
 import type { DatasetSuggestionMeta } from '@/components/datasets/AskDatasetCard';
 import type { VerifyReport } from '@/lib/ask/deep';
 import {
-  appendMessage, createConvo, deleteConvo, dropLastAssistant, getConvo,
+  appendMessage, createConvo, deleteConvo, dropLastAssistant, enableServerSync, getConvo, importServerConvos,
   maxSignalSuffix, mergedSignalMap, setConvoModel, setMessageFieldReport, setMessageVerify, useAskConvos,
   type AskChip, type AskCostStored, type AskMessage, type EnhanceCardData,
 } from '@/components/ask/store';
@@ -113,6 +113,16 @@ export default function AskWorkspace({
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Server mirror (redo P4.1): admin and access-key sessions keep a server copy
+  // of every conversation and pull in threads started on another device. The
+  // store is external (useSyncExternalStore), so no component state is set here.
+  useEffect(() => {
+    if (locked) return;
+    enableServerSync(true);
+    void importServerConvos();
+    return () => enableServerSync(false);
+  }, [locked]);
 
   // Escape closes the mobile history sheet first, then steps the peek panel
   // back out: document view returns to the record before the panel closes.
