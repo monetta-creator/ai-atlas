@@ -1,4 +1,4 @@
-import { q } from '@/lib/db';
+import { q, withTx } from '@/lib/db';
 import { ORQ } from '@/lib/pack-shared';
 import type { ValidIdsPlain } from '@/lib/ask/verify';
 import { getAskPrefs } from '@/lib/data/ask';
@@ -709,7 +709,52 @@ interface VecHit { kind: string; record_id: string; sim: number }
 // stance/concept/thread carry no personal-layer columns to begin with, so
 // they need no predicate here; scan/intel items and facts are portal/admin
 // only by construction (buildAskContext is never called for a guest).
-async function vectorSearch(qvec: number[], admin: boolean): Promise<VecHit[]> {
+// Index-first (redo latency pass, 2026-11-11): the HNSW index finds the
+// nearest chunks (ANN_CANDIDATES of them, iterative scan so filtered rows do
+// not starve the result), THEN the same safety predicates and the per-record
+// max apply to that candidate set. The exact query below aggregated over all
+// ~88k chunks before ordering, so it could not use the index: 25 s a turn.
+// Compared on the ask-gold questions (scripts/probe-vector-leg.mts) before the
+// switch.
+const ANN_CANDIDATES = 400;
+export async function vectorSearch(qvec: number[], admin: boolean): Promise<VecHit[]> {
+  return withTx(async (c) => {
+    await c.query(`set local hnsw.ef_search = ${ANN_CANDIDATES}`);
+    await c.query(`set local hnsw.iterative_scan = 'relaxed_order'`);
+    const r = await c.query<VecHit>(
+      `with nn as (
+         select kind, record_id, 1 - (vec <=> $1::vector) as sim
+           from embeddings
+          where model = $2
+          order by vec <=> $1::vector
+          limit ${ANN_CANDIDATES}
+       )
+       select kind, record_id, max(sim) as sim
+         from nn
+        where (
+          (kind = 'signal' and exists (
+            select 1 from signals g where g.id = record_id::uuid and (g.is_published = true or $3::boolean)))
+          or (kind = 'candidate' and exists (
+            select 1 from signal_candidates sc join signals g on g.id = sc.signal_id and g.is_published = true
+             where sc.id = record_id::uuid))
+          or (kind = 'paper' and exists (
+            select 1 from papers p where p.id = record_id::uuid and p.triage_status = 'kept' and p.review_status <> 'dismissed'))
+          or kind in ('scan_item', 'intel_item', 'intel_fact', 'history_item', 'claim', 'bridge', 'stance', 'concept', 'thread')
+          or (kind = 'report' and exists (
+            select 1 from generated_reports gr
+             where gr.id::text = split_part(record_id, ':', 1) and gr.is_published))
+        )
+        group by kind, record_id
+        order by sim desc
+        limit 40`,
+      [`[${qvec.join(',')}]`, embedModel(), admin],
+    );
+    return r.rows.map((x) => ({ ...x, sim: Number(x.sim) }));
+  });
+}
+
+// The original exact query, kept for the comparison probe only.
+export async function vectorSearchExact(qvec: number[], admin: boolean): Promise<VecHit[]> {
   return q<VecHit>(
     `select kind, record_id, max(1 - (vec <=> $1::vector)) as sim
        from embeddings
