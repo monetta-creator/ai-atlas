@@ -18,7 +18,8 @@
     "db:verify": "node scripts/verify.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.100.1",
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@react-pdf/renderer": "^4.6.0",
     "@vercel/analytics": "^2.0.1",
     "gpt-tokenizer": "^3.4.0",

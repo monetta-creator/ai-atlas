@@ -57,7 +57,8 @@ Ask is the chat surface over the whole corpus, with citations. Public page in th
 - The one `deDash` for streamed text is exported from `lib/voice.ts`.
 
 ## Landmines
-- The pinned Anthropic SDK (0.100.1) stream accumulator predates server-tool blocks: on a `messages.stream` call with `web_search`, `finalMessage().content` collapses to bare text blocks (no `server_tool_use`/`web_search_tool_result`, no citations). Capture web sources from the RAW `streamEvent`s instead (`content_block_start` of type `web_search_tool_result`, plus `citations_delta` when the model quotes). Re-check on any SDK upgrade.
+- Stream accumulator (resolved 2026-11-11): the old pinned SDK (0.100.1) collapsed `finalMessage().content` to bare text on a `messages.stream` call with `web_search`. On `@anthropic-ai/sdk` 1.8.0 `finalMessage()` keeps `server_tool_use` and `web_search_tool_result` blocks (`scripts/check-sdk-stream.mts`, one live call). The deep route still reads web sources from the RAW `streamEvent`s, which works on both. SDK 1.x sends API version `2026-10-21`: `temperature`/`top_p`/`top_k` now 400 on every model; nothing in the Ask paths sends them.
 
 ## Tests
 - `scripts/test-ask-lanes.mjs`
+- v2 (redo): `scripts/test-ask-v2.mts`, `test-ask-loop.mts`, `test-ask-chips.mts`, `test-ask-budget.mts`, `test-conversations.mts`; live smokes `smoke-ask-loop.mts`, `smoke-skills.mts`, `probe-v2-timing.mts`
