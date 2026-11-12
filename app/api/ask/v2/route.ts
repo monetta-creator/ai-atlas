@@ -23,6 +23,7 @@ import type { Identity } from '@/lib/tools/types';
 import type { WebSource } from '@/lib/llm/types';
 import { checkKeyBudget, checkPortalBudget, PORTAL_FEATURE } from '@/lib/portal/budget';
 import { helpText, parseInvocation, rosterForPrompt } from '@/lib/capabilities/registry';
+import { nextChips } from '@/lib/ask/chips';
 import { identityFromRequest, touchKey } from '@/lib/portal/identity';
 
 // The one chat box, v2 (redo Phase 1). Beside /api/ask/deep, which stays the
@@ -221,6 +222,8 @@ export async function POST(req: Request): Promise<Response> {
             }
           }
           emit({ type: 'verify', report });
+          const chips = nextChips({ question: latest, answer, skillSlug: skill?.slug ?? null, depth, lane, audience });
+          if (chips.length) emit({ type: 'chips', chips });
         }
 
         // 4. Cost (the answer model only; decider and verifier log their own rows).

@@ -46,6 +46,8 @@ export type V2Event =
   | { type: 'retract' }
   | { type: 'sources'; sources: { url: string; title: string }[] }
   | { type: 'verify'; report: unknown }
+  // Two or three next steps for this turn (lib/ask/chips.ts).
+  | { type: 'chips'; chips: { label: string; prompt: string; kind: string }[] }
   | { type: 'cost'; report: V2Cost }
   | { type: 'error'; text: string }
   | { type: 'done'; signals: Record<string, string> };
