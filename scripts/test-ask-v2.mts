@@ -22,6 +22,9 @@ const good: V2Event[] = [
 ok(protocolProblems(good).length === 0, `good order: ${protocolProblems(good).join('; ')}`);
 ok(protocolProblems([{ type: 'lane', lane: 'unrelated', reason: '' }, { type: 'decline', payload: {} }, { type: 'done', signals: {} }]).length === 0, 'decline order');
 ok(protocolProblems(good.slice(0, -1)).some((p) => /last event/.test(p)), 'missing done caught');
+const skillEv: V2Event = { type: 'skill', slug: 'brief', title: 'Brief', kind: 'skill' };
+ok(protocolProblems([good[0], skillEv, ...good.slice(1)]).length === 0, 'skill turn: lane, skill, decision');
+ok(protocolProblems([good[0], skillEv, { type: 'delta', text: 'help' }, good[9], good[10]]).length === 0, 'model-free skill turn has no decision');
 ok(protocolProblems([good[0], good[6], good[1], good[9], good[10]]).length > 0, 'decision after delta caught');
 ok(protocolProblems([...good.slice(0, 9), good[9], { type: 'delta', text: 'late' }, good[10]]).some((p) => /after cost/.test(p)), 'delta after cost caught');
 

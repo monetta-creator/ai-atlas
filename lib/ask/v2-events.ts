@@ -38,6 +38,8 @@ export type V2Event =
   | { type: 'lane'; lane: string; reason: string }
   | { type: 'decline'; payload: unknown }
   | { type: 'decision'; decision: V2Decision }
+  // A /skill or @agent invocation was recognized (before the decision).
+  | { type: 'skill'; slug: string; title: string; kind: 'skill' | 'agent' | 'unknown' }
   | { type: 'status'; text: string }
   | { type: 'tool_call'; name: string; ok: boolean }
   | { type: 'delta'; text: string }
@@ -66,7 +68,10 @@ export function protocolProblems(events: V2Event[]): string[] {
   }
   const di = events.findIndex((e) => e.type === 'decision');
   const errored = events.some((e) => e.type === 'error');
-  if (di !== 1 && !errored) p.push('decision must follow lane');
+  const skillAt = events.findIndex((e) => e.type === 'skill');
+  // A model-free skill turn (/help, an unknown name, an agent pointer) has no decision.
+  const modelFree = skillAt === 1 && di < 0;
+  if (!modelFree && !errored && di !== (skillAt === 1 ? 2 : 1)) p.push('decision must follow lane (and skill)');
   const firstDelta = events.findIndex((e) => e.type === 'delta');
   if (firstDelta >= 0 && di > firstDelta) p.push('decision before any answer text');
   const ci = events.findIndex((e) => e.type === 'cost');

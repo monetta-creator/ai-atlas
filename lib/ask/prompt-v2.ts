@@ -34,6 +34,9 @@ const addendum = DEEP_ADDENDUM.replace(
   'never defer material to a next turn and never pad',
 );
 
+// The deep addendum describes the original three tools; v2 has thirteen.
+export const TOOL_GUIDE = `More tools, beyond search_atlas and fetch_record: whats_new (everything collected since a date; use for "what happened lately"), search_items (news and company items with date, company, topic filters), timeline (dated history and signals on a topic), company (one tracked company: facts, items, history), metrics (a company's metric series as a table: quote numbers exactly as the rows give them, never compute or estimate one), question_map (a map question's stances, claims, edges and evidence balance; use when the reader wants the debate), report (the Atlas's own report sections), tooling (AI tools and vendors), and, for the maintainer only, startups and engine_status. Pick the narrowest tool that answers; a handful of well-chosen calls beats many shallow ones. Labels like [tool slug] or [startup id] identify rows for the reader but cannot be fetched.`;
+
 export interface V2PromptOpts {
   web: boolean;
   lane: Lane;
@@ -42,14 +45,17 @@ export interface V2PromptOpts {
   clarify?: boolean;
   reportBlock?: string | null;
   today?: string;
+  roster?: string;
 }
 
 export function v2System(o: V2PromptOpts): string {
   const parts = [
     askSystem(o.web, o.lane, o.fresh),
     addendum,
+    TOOL_GUIDE,
     o.web ? DEEP_WEB_ADDENDUM : '',
     STANCE,
+    o.roster ?? '',
     `Today is ${o.today ?? new Date().toISOString().slice(0, 10)}.`,
     o.reportBlock ?? '',
   ];
@@ -68,7 +74,7 @@ export function turnGuidance(o: V2PromptOpts): string {
 // prefix on the first user turn, prior turns as plain text, the latest turn
 // with the research instruction (and the lane reminder that keeps
 // @@BEYOND@@ honest on Haiku).
-export function v2Messages(msgs: AskWireMessage[], ns: AskNamespace, o: V2PromptOpts): LlmMessage[] {
+export function v2Messages(msgs: AskWireMessage[], ns: AskNamespace, o: V2PromptOpts, skillRecipe?: string): LlmMessage[] {
   const params = deepConversationMessages(msgs, ns, { web: o.web, lane: o.lane });
   const out: LlmMessage[] = [];
   params.forEach((p, i) => {
@@ -83,6 +89,10 @@ export function v2Messages(msgs: AskWireMessage[], ns: AskNamespace, o: V2Prompt
   const g = turnGuidance(o);
   const last = out[out.length - 1];
   if (g && last?.role === 'user') last.content = `${last.content}\n\n${g}`;
+  // A skill's recipe rides as a mid-conversation system message right after
+  // the turn it governs (after the cached prefix, so the cache stays warm).
+  // Not before it: the API refuses a system message at messages[0].
+  if (skillRecipe && last?.role === 'user') out.push({ role: 'system', content: skillRecipe });
   return out;
 }
 

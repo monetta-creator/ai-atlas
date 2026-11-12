@@ -22,6 +22,7 @@ import { webSearchTool } from '@/lib/tools/web';
 import type { Identity } from '@/lib/tools/types';
 import type { WebSource } from '@/lib/llm/types';
 import { checkKeyBudget, checkPortalBudget, PORTAL_FEATURE } from '@/lib/portal/budget';
+import { helpText, parseInvocation, rosterForPrompt } from '@/lib/capabilities/registry';
 import { identityFromRequest, touchKey } from '@/lib/portal/identity';
 
 // The one chat box, v2 (redo Phase 1). Beside /api/ask/deep, which stays the
@@ -68,7 +69,16 @@ export async function POST(req: Request): Promise<Response> {
   const picked = requested === 'auto' ? null : getModel(requested);
   if (requested !== 'auto' && (!picked || !picked.roles.includes('answer'))) return new Response('Unknown model', { status: 400 });
   const webToggle = b.web === true;
-  const msgs = clampHistory(parsed);
+  const msgs = clampHistory(parsed).map((m) => ({ ...m }));
+  const audience = admin ? 'admin' : 'keyholder';
+
+  // /skill and @agent invocations. Model-free ones (/help, an unknown name,
+  // an agent pointer) answer at once from the registry; a skill rewrites the
+  // turn to its arguments and carries its recipe into the loop.
+  const inv = parseInvocation(msgs[msgs.length - 1].content, audience);
+  if (inv && (inv.kind !== 'skill' || inv.skill.slug === 'help')) return modelFreeTurn(inv, audience);
+  const skill = inv?.kind === 'skill' ? inv.skill : null;
+  if (inv?.kind === 'skill') msgs[msgs.length - 1].content = inv.args || inv.skill.title;
   const tagger = createTagger(parseSignalMap(b.signalMap), clampSignalOffset(b.signalOffset));
 
   // Keyholders pay from the portal's budgets, metered under its slug.
@@ -93,8 +103,10 @@ export async function POST(req: Request): Promise<Response> {
     admin ? askBudget() : Promise.resolve({ spentUsd: 0, capUsd: Number.POSITIVE_INFINITY }),
   ]);
   const { ns, ctx, cls, autoWeb } = resolved;
-  const lane = reportBlock && resolved.lane === 'unrelated' ? 'thin' : resolved.lane;
-  const decline = reportBlock ? null : resolved.decline;
+  // An explicit /skill is never declined as off-topic (its arguments can be
+  // empty, as in /status).
+  const lane = skill && resolved.lane === 'unrelated' ? 'covered' : reportBlock && resolved.lane === 'unrelated' ? 'thin' : resolved.lane;
+  const decline = reportBlock || skill ? null : resolved.decline;
 
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
@@ -108,6 +120,7 @@ export async function POST(req: Request): Promise<Response> {
       };
       const signals = () => Object.fromEntries(tagger.refs().map((r) => [r.tag, r.id]));
       emit({ type: 'lane', lane, reason: `beat ${cls.beat}${cls.fresh ? ', recent-events question' : ''}, ${ctx.hitCount} records matched, best rank ${ctx.maxRank.toFixed(3)}` });
+      if (skill) emit({ type: 'skill', slug: skill.slug, title: skill.title, kind: 'skill' });
       if (decline) {
         emit({ type: 'decline', payload: decline });
         emit({ type: 'done', signals: signals() });
@@ -119,7 +132,7 @@ export async function POST(req: Request): Promise<Response> {
       try {
         // 1. Decide (also for a manual pick: the chip shows the recommendation).
         const dt = Date.now();
-        const ds = await decide({ text: latest, prevUser, lane, webToggle }, undefined, { log: true });
+        const ds = await decide({ text: skill ? `/${skill.slug} ${latest}` : latest, prevUser, lane, webToggle }, undefined, { log: true });
         const wantedTier = (ds.model_tier?.answer ?? 'cheap') as Tier;
         const recommended = getModel(TIER_DEFAULT[wantedTier])!;
         const verdict = admin
@@ -128,7 +141,7 @@ export async function POST(req: Request): Promise<Response> {
         const model = picked ?? getModel(TIER_DEFAULT[verdict.tier])!;
         const web = webToggle || autoWeb || ds.needs_web?.answer === 'yes';
         const clarify = ds.needs_clarify?.answer === 'yes';
-        const depth = ds.depth?.answer ?? '2';
+        const depth = skill?.depth ?? ds.depth?.answer ?? '2';
         const reasonBits = [
           `${ds.model_tier?.backend ?? 'default'} judge: ${Object.entries(ds.model_tier?.probs ?? {}).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(', ')}`,
           web ? (webToggle ? 'web on' : autoWeb ? 'web on: recent-events question' : 'web on: the judge expects outside facts') : 'records only',
@@ -145,7 +158,7 @@ export async function POST(req: Request): Promise<Response> {
         if (verdict.message) emit({ type: 'status', text: verdict.message });
 
         // 2. The loop.
-        const promptOpts: V2PromptOpts = { web, lane, fresh: cls.fresh, depth, clarify, reportBlock };
+        const promptOpts: V2PromptOpts = { web, lane, fresh: cls.fresh, depth, clarify: clarify && !skill, reportBlock, roster: rosterForPrompt(audience) };
         const adapter = model.provider === 'anthropic' ? anthropicAdapter() : openrouterAdapter();
         const tools = toolSpecs(identity);
         const ownWeb = web && model.provider === 'openrouter';
@@ -160,7 +173,7 @@ export async function POST(req: Request): Promise<Response> {
           adapter,
           model: model.id,
           system: v2System(promptOpts),
-          messages: v2Messages(msgs, ns, promptOpts),
+          messages: v2Messages(msgs, ns, promptOpts, skill?.instructions),
           tools,
           serverWebSearch: web && model.provider === 'anthropic',
           separateFinal: web && (lane === 'thin' || lane === 'adjacent'),
@@ -243,4 +256,29 @@ export async function POST(req: Request): Promise<Response> {
 
   if (keyId) after(() => touchKey(keyId));
   return new Response(stream, { headers: NDJSON_HEADERS });
+}
+
+const centsOrDollars = (usd: number): string => (usd < 1 ? `${Math.round(usd * 100)}¢` : `$${usd.toFixed(2)}`);
+
+// A turn that needs no model: the /help catalog, an unknown name, or an agent
+// that launches from its own card. Same protocol, zero cost.
+function modelFreeTurn(inv: NonNullable<ReturnType<typeof parseInvocation>>, audience: 'admin' | 'keyholder'): Response {
+  const events: V2Event[] = [{ type: 'lane', lane: 'covered', reason: 'invocation' }];
+  let text: string;
+  if (inv.kind === 'skill') {
+    events.push({ type: 'skill', slug: inv.skill.slug, title: inv.skill.title, kind: 'skill' });
+    text = helpText(audience);
+  } else if (inv.kind === 'agent') {
+    events.push({ type: 'skill', slug: inv.agent.slug, title: inv.agent.title, kind: 'agent' });
+    const t = inv.agent.typical;
+    const usual = t ? ` Usually about ${Math.round(t.seconds / 60)} minutes and ${centsOrDollars(t.usd)} a run.` : '';
+    text = `${inv.agent.title}: ${inv.agent.oneLiner}${usual} To start one, switch on Field Report under the box and ask the question there; it drafts a plan you can edit before anything runs.`;
+  } else {
+    events.push({ type: 'skill', slug: inv.trigger, title: inv.trigger, kind: 'unknown' });
+    text = `Nothing is called ${inv.trigger}. Type /help for everything the bar can do.`;
+  }
+  events.push({ type: 'delta', text });
+  events.push({ type: 'cost', report: { cost_usd: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, searches: 0, rounds: 0, tool_calls: 0, model: 'none' } });
+  events.push({ type: 'done', signals: {} });
+  return new Response(events.map(nd).join(''), { headers: NDJSON_HEADERS });
 }
