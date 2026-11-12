@@ -30,7 +30,7 @@ const EPOCH_PATH = path.join(REPO, 'private/redo/build/BUILD_START_EPOCH');
 const COOKIE_PATH = path.join(REPO, 'private/redo/build/admin-cookie.txt');
 const ASK_URL = process.env.EVAL_ASK_URL || 'http://localhost:3100/api/ask/deep';
 
-export const EVAL_SPEND_CAP_USD = 15;
+export const EVAL_SPEND_CAP_USD = Number(process.env.EVAL_SPEND_CAP_USD) || 15; // raised per session with the env var (2026-11-12: 25, the agreed iteration budget)
 export const BARE_MODEL = 'claude-haiku-5-5';
 export const JUDGE_MODEL = 'claude-sonnet-5-5';
 
@@ -73,6 +73,9 @@ export interface Judgment {
   overall: string;
   flattery: boolean;
   em_dash: boolean;
+  // Scored but kept OUT of item_score (added 2026-11-12) so new runs stay
+  // comparable with the base runs: did the answer pick the right form.
+  shape?: CriterionScore;
 }
 
 // ---------------------------------------------------------------- args
@@ -496,9 +499,10 @@ const scoreProp = {
 export const JUDGE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: [...CRITERIA, 'overall', 'flattery', 'em_dash'],
+  required: [...CRITERIA, 'shape', 'overall', 'flattery', 'em_dash'],
   properties: {
     ...Object.fromEntries(CRITERIA.map((c) => [c, scoreProp])),
+    shape: scoreProp,
     overall: { type: 'string' },
     flattery: { type: 'boolean' },
     em_dash: { type: 'boolean' },
@@ -537,15 +541,17 @@ export async function judgeOne(item: Item, a: Parameters<typeof buildJudgeUser>[
   const text = res.content.filter((b): b is Anthropic.TextBlock => b.type === 'text').map((b) => b.text).join('');
   const raw = JSON.parse(text) as Record<string, { score: number | null; note: string }> & { overall: string; flattery: boolean; em_dash: boolean };
   const scores = applyApplicability(raw as unknown as Parameters<typeof applyApplicability>[0], item);
+  const sv = raw.shape?.score;
+  const shape: CriterionScore = { score: sv === 0 || sv === 1 || sv === 2 ? sv : null, note: String(raw.shape?.note ?? '') };
   return {
-    judgment: { scores, overall: String(raw.overall ?? ''), flattery: Boolean(raw.flattery), em_dash: Boolean(raw.em_dash) },
+    judgment: { scores, shape, overall: String(raw.overall ?? ''), flattery: Boolean(raw.flattery), em_dash: Boolean(raw.em_dash) },
     cost_usd: usd,
     item_score: itemScore(scores),
   };
 }
 
 // ---------------------------------------------------------------- report
-interface Judged { id: string; item_score: number | null; scores: Record<Criterion, CriterionScore>; flattery: boolean; em_dash: boolean; probes: string[]; wants: string[] }
+interface Judged { id: string; item_score: number | null; scores: Record<Criterion, CriterionScore>; shape?: CriterionScore; flattery: boolean; em_dash: boolean; probes: string[]; wants: string[] }
 interface RunRow { id: string; cost_usd: number | null; wall_ms: number }
 
 export function buildArmReport(judged: Judged[], runs: RunRow[]) {
@@ -560,6 +566,8 @@ export function buildArmReport(judged: Judged[], runs: RunRow[]) {
     n: judged.length,
     mean_item_score: mean(scored),
     per_criterion: perCriterion,
+    shape: mean(judged.flatMap((j) => (typeof j.shape?.score === 'number' ? [j.shape.score] : []))),
+    shape_n: judged.filter((j) => typeof j.shape?.score === 'number').length,
     per_probe: group(PROBES, (j) => j.probes),
     per_wants: group(WANTS, (j) => j.wants),
     flattery_count: judged.filter((j) => j.flattery).length,
@@ -649,7 +657,7 @@ async function cmdReport(flags: Record<string, string | true>): Promise<number> 
     const r = report[a];
     console.log(`\n== ${a} (n=${r.n}) ==`);
     console.log(`mean item score: ${fmt(r.mean_item_score)}   flattery: ${r.flattery_count}   em dash: ${r.em_dash_count}   mean cost: $${fmt(r.mean_cost_usd, 4)}   mean wall: ${fmt(r.mean_wall_s, 1)}s`);
-    console.log('criteria:  ' + CRITERIA.map((c) => `${c}=${fmt(r.per_criterion[c])}`).join('  '));
+    console.log('criteria:  ' + CRITERIA.map((c) => `${c}=${fmt(r.per_criterion[c])}`).join('  ') + `   [shape=${fmt(r.shape)} (${r.shape_n}), not in score]`);
     console.log('probes:    ' + PROBES.map((p) => `${p}=${fmt(r.per_probe[p].mean)}(${r.per_probe[p].n})`).join('  '));
     console.log('wants:     ' + WANTS.map((w) => `${w}=${fmt(r.per_wants[w].mean)}(${r.per_wants[w].n})`).join('  '));
   }
