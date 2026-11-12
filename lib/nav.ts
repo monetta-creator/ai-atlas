@@ -140,7 +140,7 @@ export const NAV_TREE: NavGroup[] = [
     detailPrefixes: ['/education/'],
     children: [{ href: '/education', label: 'Guides', access: 'public' }],
   },
-  { key: 'ask', href: '/ask', label: 'Ask the Atlas', icon: 'ask', access: 'public', children: [] },
+  { key: 'ask', href: '/ask', label: 'Ask the Atlas', icon: 'ask', access: 'public', detailPrefixes: ['/capabilities'], children: [] },
 ];
 
 // The bottom island: About (with its section tabs), then the admin desk items

@@ -39,6 +39,8 @@ export const metadata: Metadata = {
     title: "The AI Atlas",
     description: ATLAS_ONE_LINER,
   },
+  appleWebApp: { capable: true, title: "Atlas", statusBarStyle: "default" },
+  icons: { apple: "/icons/icon-192.png" },
   twitter: {
     card: "summary_large_image",
     title: "The AI Atlas",

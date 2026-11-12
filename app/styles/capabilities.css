@@ -1,0 +1,29 @@
+/* ============================================================
+   CAPABILITIES (.cap-*): /capabilities, the catalog of skills,
+   agents, and tools behind the Ask bar. Wraps at 390px.
+   ============================================================ */
+.cap-blurb { font-size: 15px; line-height: 1.6; color: var(--dim); max-width: 62ch; margin: 0 0 18px; }
+.cap-blurb code, .cap-usage code { font-family: var(--font-mono); font-size: 0.88em; }
+.cap-section { margin-top: 30px; }
+.cap-section .cap-blurb { margin-top: 8px; }
+.cap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.cap-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: var(--card-pad); }
+.cap-title { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; font-size: 16px; }
+.cap-trigger { font-family: var(--font-mono); font-size: 13px; color: var(--accent); overflow-wrap: anywhere; }
+.cap-line { margin: 0; font-size: 14px; line-height: 1.55; color: var(--dim); }
+.cap-usage { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.cap-label { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint-ink); margin-right: 6px; }
+.cap-examples { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cap-example {
+  display: block; min-width: 0; padding: 6px 9px; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  transition: border-color 0.15s var(--ease-soft);
+}
+.cap-example:hover { border-color: var(--accent); text-decoration: none; }
+.cap-example code { font-family: var(--font-mono); font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+.cap-meta { margin: auto 0 0; padding-top: 4px; font-family: var(--font-mono); font-size: 10.5px; color: var(--faint-ink); }
+.cap-tools { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); background: var(--surface); }
+.cap-tool { display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); gap: 4px 16px; padding: 10px 14px; border-top: 1px solid var(--line); }
+.cap-tool:first-child { border-top: 0; }
+.cap-tool-name { font-weight: 600; font-size: 13.5px; }
+.cap-tool-line { font-size: 13.5px; color: var(--dim); line-height: 1.5; }
+@media (max-width: 599px) { .cap-tool { grid-template-columns: minmax(0, 1fr); } }

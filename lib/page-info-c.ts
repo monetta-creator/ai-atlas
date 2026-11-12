@@ -198,4 +198,18 @@ export const PAGE_INFO_C: Record<string, PageInfoContent> = {
       },
     ],
   },
+  '/capabilities': {
+    title: 'What the bar can do',
+    summary: 'Every skill, agent, and tool behind the Ask bar, generated from the capability manifests so it never drifts from what the bar actually does.',
+    sections: [
+      {
+        heading: 'Skills and agents',
+        body: 'A skill is a short recipe for one answer, started with a slash command. An agent is a longer job started with an at-mention: it plans, runs in the background, and leaves an artifact. Each example links to the Ask bar with the text filled in.',
+      },
+      {
+        heading: 'Who sees what',
+        body: 'Admins see every capability. Access-key holders see the set open to keys. The model-side tools are listed for reference; the bar picks them on its own.',
+      },
+    ],
+  },
 };
