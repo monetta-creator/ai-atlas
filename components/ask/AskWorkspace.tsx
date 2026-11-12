@@ -535,7 +535,11 @@ export default function AskWorkspace({
   }
 
   function send(text: string, enhanced?: EnhanceCardData) {
-    const content = text.trim();
+    // `@field-report <question>` launches the agent from the bar: the same
+    // editable plan card the Field Report switch opens (redo P4.4, first agent).
+    const agentRe = /^\s*@field-report\b\s*/i;
+    const agentCall = fieldReportAvailable && agentRe.test(text);
+    const content = agentCall ? text.replace(agentRe, '').trim() : text.trim();
     if (!content || streaming || frPlanning || locked) return;
     setPendingEnhance(null);
     let convoId = activeId;
@@ -546,7 +550,7 @@ export default function AskWorkspace({
     } else {
       appendMessage(convoId, { role: 'user', content, ...(enhanced ? { enhanced } : {}) });
     }
-    if (fieldReportOn) {
+    if (fieldReportOn || agentCall) {
       void runFieldReportPlan(convoId);
     } else {
       void run(convoId);

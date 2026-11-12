@@ -278,7 +278,7 @@ function modelFreeTurn(inv: NonNullable<ReturnType<typeof parseInvocation>>, aud
     events.push({ type: 'skill', slug: inv.agent.slug, title: inv.agent.title, kind: 'agent' });
     const t = inv.agent.typical;
     const usual = t ? ` Usually about ${Math.round(t.seconds / 60)} minutes and ${centsOrDollars(t.usd)} a run.` : '';
-    text = `${inv.agent.title}: ${inv.agent.oneLiner}${usual} To start one, switch on Field Report under the box and ask the question there; it drafts a plan you can edit before anything runs.`;
+    text = `${inv.agent.title}: ${inv.agent.oneLiner}${usual} Type @field-report followed by your question (or switch on Field Report under the box): it drafts a plan you can edit, and nothing runs until you press Run.`;
   } else {
     events.push({ type: 'skill', slug: inv.trigger, title: inv.trigger, kind: 'unknown' });
     text = `Nothing is called ${inv.trigger}. Type /help for everything the bar can do.`;
