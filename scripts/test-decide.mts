@@ -39,17 +39,28 @@ ok(applyPolicy('needs_clarify', { yes: 0.85, no: 0.15 }, 'high') === 'yes', 'cla
 ok(applyPolicy('depth', { '1': 0.1, '2': 0.3, '3': 0.6 }, 'high') === '3', 'depth EV 2.5 -> 3');
 ok(applyPolicy('depth', { '1': 0.6, '2': 0.3, '3': 0.1 }, 'high') === '2', 'depth EV 1.5 rounds to 2');
 ok(applyPolicy('depth', { '1': 0.8, '2': 0.2, '3': 0 }, 'high') === '1', 'depth EV 1.2 -> 1');
+ok(applyPolicy('shape', { prose: 0.1, table: 0.7, document: 0.1, lesson: 0.1 }, 'high') === 'table', 'shape: clear table');
+ok(applyPolicy('shape', { prose: 0.3, table: 0.35, document: 0.2, lesson: 0.15 }, 'high') === 'prose', 'shape: unsure -> prose');
+ok(applyPolicy('shape', { prose: 0, table: 0, document: 0, lesson: 1 }, 'low') === 'prose', 'shape: low trust -> prose');
 const n = normalize({ a: 2, b: 2 }, ['a', 'b', 'c']);
 ok(near(n.a, 0.5) && n.c === 0, 'normalize');
 ok(near(normalize({}, ['a', 'b']).a, 0.5), 'normalize empty -> uniform');
 
 // 3. Rules.
 const vals = (k: QuestionKey) => QUESTIONS[k].options.map((o) => o.value);
-const r1 = applyRules({ text: 'thanks!' }, ['model_tier', 'needs_web', 'depth'], vals);
-ok(r1.model_tier?.answer === 'cheap' && r1.depth?.answer === '1' && r1.needs_web?.backend === 'rules', 'small talk');
+const r1 = applyRules({ text: 'thanks!' }, ['model_tier', 'needs_web', 'depth', 'shape'], vals);
+ok(r1.model_tier?.answer === 'cheap' && r1.depth?.answer === '1' && r1.needs_web?.backend === 'rules' && r1.shape?.answer === 'prose', 'small talk');
 const r2 = applyRules({ text: 'summarize https://example.com/x' }, ['needs_web', 'model_tier'], vals);
 ok(r2.needs_web?.answer === 'yes' && !r2.model_tier, 'url -> web, tier left to judge');
 ok(applyRules({ text: 'q', webToggle: true }, ['needs_web'], vals).needs_web?.answer === 'yes', 'toggle -> web');
+const shapeOf = (text: string) => applyRules({ text }, ['shape'], vals).shape?.answer;
+ok(shapeOf('Help me really understand the AI capex debate') === 'lesson', 'rule: understand -> lesson');
+ok(shapeOf('Explain AI chip export controls like I am new to it') === 'lesson', 'rule: explain -> lesson');
+ok(shapeOf('compare the big banks on AI') === 'table', 'rule: compare -> table');
+ok(shapeOf('Teach me how pricing works: input vs output tokens') === 'lesson', 'rule: teach beats vs');
+ok(shapeOf('Draft a one-page comparison of the vendors') === 'document', 'rule: draft beats compare');
+ok(shapeOf('help me understand where we are') === undefined, 'rule: vague understand left to the judge');
+ok(shapeOf('How did Arista do last quarter?') === undefined, 'rule: plain question left to the judge');
 
 // 4. decide() with fake backends.
 const { decide } = await import('../lib/decide/index');
@@ -62,6 +73,7 @@ ok(d.model_tier?.answer === 'strong' && d.model_tier.backend === 'logprob', `tie
 ok(d.needs_web?.answer === 'no', 'web: last option (no) at 0.9');
 ok(d.needs_clarify?.backend === 'structured' && d.needs_clarify.answer === 'yes', 'fallback used for missing judge');
 ok(d.depth?.answer === '3', 'depth');
+ok(d.shape?.answer === 'table' && d.shape.backend === 'rules', 'shape: "Compare" settled by rule');
 const slow = async (): Promise<Decision | null> => new Promise((r) => setTimeout(() => r(null), 500));
 const d2 = await decide({ text: 'x' }, ['model_tier'], { log: false, judge: slow, fallback: async () => [], timeoutMs: 50 });
 ok(d2.model_tier?.backend === 'default' && d2.model_tier.answer === 'cheap', 'timeout -> default cheap');

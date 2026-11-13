@@ -33,6 +33,9 @@ ok(!/\b(encyclopedia|textbook|lecturer|teammate|collaborator)\b/i.test(STANCE), 
 ok(/premise/.test(STANCE) && /flattery/.test(STANCE) && /One reading:/.test(STANCE), 'stance carries premise, flattery, One reading');
 ok(/short/.test(turnGuidance({ web: false, lane: 'covered', depth: '1' })) && turnGuidance({ web: false, lane: 'covered', depth: '2' }) === FORM_REMINDER, 'depth guidance (depth 2 adds only the form reminder)');
 ok(/clarifying question/.test(turnGuidance({ web: false, lane: 'covered', clarify: true })), 'clarify guidance');
+ok(/Markdown table/.test(turnGuidance({ web: false, lane: 'covered', shape: 'table' })), 'shape table guidance');
+ok(/teach it/.test(turnGuidance({ web: false, lane: 'covered', shape: 'lesson' })), 'shape lesson guidance');
+ok(turnGuidance({ web: false, lane: 'covered', shape: 'prose' }) === FORM_REMINDER, 'shape prose adds nothing');
 
 ok(isNonFlag('Supported: S9 states $121.4 billion; no mismatch found.') && isNonFlag('Accurate: the figure matches S2.'), 'non-flags dropped');
 ok(!isNonFlag('S9 says $121.4B, not $125B.') && !isNonFlag('Unsupported: no record mentions Citi.'), 'real flags kept');
@@ -74,6 +77,8 @@ if (process.argv.includes('--live')) {
   ok(sys.includes('@@BEYOND@@'), 'lane addendum kept through the swaps');
   ok(turnGuidance({ web: false, lane: 'covered' }).startsWith(FORM_REMINDER), 'form reminder rides the turn');
   ok(!/\u2014/.test(sys + FORM_REMINDER), 'no em dash in the v2 prompt');
+  const { SHAPE_TURN } = await import('../lib/ask/prompt-v2');
+  ok(!/\u2014/.test(Object.values(SHAPE_TURN).join(' ')), 'no em dash in the shape orders');
   console.log('ok: v2 form swaps');
 }
 

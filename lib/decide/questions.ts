@@ -1,6 +1,6 @@
 import type { Question, QuestionKey } from './types';
 
-// The four v1 questions. Options carry single-token answers so the logprob
+// The v1 questions (shape added 2026-11-12). Options carry single-token answers so the logprob
 // judge reads a real probability off the first output token.
 export const QUESTIONS: Record<QuestionKey, Question> = {
   model_tier: {
@@ -41,6 +41,20 @@ export const QUESTIONS: Record<QuestionKey, Question> = {
       { token: '3', value: '3', describe: 'a long, structured answer' },
     ],
   },
+  // The answer's form, picked before it is written (the way the big chat
+  // apps let the model choose a table): the answerer gets the pick as a
+  // per-turn instruction (lib/ask/prompt-v2.ts SHAPE_TURN).
+  shape: {
+    key: 'shape',
+    kind: 'choice',
+    ask: 'What form should the answer take?',
+    options: [
+      { token: 'A', value: 'prose', describe: 'a direct answer in sentences: a question about facts, a view, what happened, or why' },
+      { token: 'B', value: 'table', describe: 'a comparison: several things (banks, vendors, models, rules, options) side by side on the same points' },
+      { token: 'C', value: 'document', describe: 'a usable document the user asked for: a memo, email, brief, plan, checklist, or list of steps' },
+      { token: 'D', value: 'lesson', describe: 'teaching: the user wants to learn or understand a concept, built up from basics' },
+    ],
+  },
 };
 
-export const DEFAULT_KEYS: QuestionKey[] = ['model_tier', 'needs_web', 'needs_clarify', 'depth'];
+export const DEFAULT_KEYS: QuestionKey[] = ['model_tier', 'needs_web', 'needs_clarify', 'depth', 'shape'];

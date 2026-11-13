@@ -84,11 +84,22 @@ export function v2Grounding(base: string): string {
 // (the lane reminder showed the same, lib/ask/CLAUDE.md).
 export const FORM_REMINDER = 'Form: open with the answer itself, never with what the Atlas does or does not hold. If I asked for a thing (a memo, a comparison, a plan, a brief, an email, a checklist), write that thing. Three or more things compared on the same points go in a table. Leave out records that do not change the answer. Where the records run out, say so in one sentence.';
 
+// The decider's shape pick (lib/decide/questions.ts), as a per-turn order.
+// Prose adds nothing: SHAPE in the system prompt still lets the answerer
+// reach for a table or a list on its own.
+export const SHAPE_TURN: Record<string, string> = {
+  prose: '',
+  table: 'Shape for this turn: a comparison. Give the answer in one or two sentences, then a Markdown table with one row per thing compared and a citation in the cell that holds each fact, then at most a short paragraph on what the table means.',
+  document: 'Shape for this turn: the document I asked for, in its usual form and ready to copy, with every fact cited. Before it, at most two lines: the reading you took, or the record that contradicts my premise.',
+  lesson: 'Shape for this turn: teach it. Start from what a practitioner in a regulated bank already knows (model risk, controls, vendor due diligence), build up in steps under ## headings, work one concrete example from the records with its figures and dates, and end with what is still unsettled. Keep every key fact the explanation rests on; this answer may run long.',
+};
+
 export interface V2PromptOpts {
   web: boolean;
   lane: Lane;
   fresh?: boolean;
   depth?: string;
+  shape?: string;
   clarify?: boolean;
   reportBlock?: string | null;
   today?: string;
@@ -112,7 +123,7 @@ export function v2System(o: V2PromptOpts): string {
 // Per-turn guidance rides the latest user turn (it changes turn to turn, so
 // it stays out of the cached system prompt).
 export function turnGuidance(o: V2PromptOpts): string {
-  const lines = [FORM_REMINDER, DEPTH[o.depth ?? '2'] ?? ''];
+  const lines = [FORM_REMINDER, SHAPE_TURN[o.shape ?? 'prose'] ?? '', DEPTH[o.depth ?? '2'] ?? ''];
   if (o.clarify) lines.push('This ask is ambiguous. Give your best short reading first, then end with ONE clarifying question.');
   return lines.filter(Boolean).join(' ');
 }

@@ -147,8 +147,11 @@ export async function POST(req: Request): Promise<Response> {
         const web = webToggle || autoWeb || ds.needs_web?.answer === 'yes';
         const clarify = ds.needs_clarify?.answer === 'yes';
         const depth = skill?.depth ?? ds.depth?.answer ?? '2';
+        // A skill's recipe already fixes its form.
+        const shape = skill ? undefined : ds.shape?.answer;
         const reasonBits = [
           `${ds.model_tier?.backend ?? 'default'} judge: ${Object.entries(ds.model_tier?.probs ?? {}).map(([k, v]) => `${k} ${Math.round(v * 100)}%`).join(', ')}`,
+          ...(shape && shape !== 'prose' ? [`shape: ${shape}`] : []),
           web ? (webToggle ? 'web on' : autoWeb ? 'web on: recent-events question' : 'web on: the judge expects outside facts') : 'records only',
         ];
         const decision: V2Decision = {
@@ -163,7 +166,7 @@ export async function POST(req: Request): Promise<Response> {
         if (verdict.message) emit({ type: 'status', text: verdict.message });
 
         // 2. The loop.
-        const promptOpts: V2PromptOpts = { web, lane, fresh: cls.fresh, depth, clarify: clarify && !skill, reportBlock, roster: rosterForPrompt(audience) };
+        const promptOpts: V2PromptOpts = { web, lane, fresh: cls.fresh, depth, shape, clarify: clarify && !skill, reportBlock, roster: rosterForPrompt(audience) };
         const adapter = model.provider === 'anthropic' ? anthropicAdapter() : openrouterAdapter();
         const tools = toolSpecs(identity);
         const ownWeb = web && model.provider === 'openrouter';

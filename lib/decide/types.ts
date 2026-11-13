@@ -1,10 +1,10 @@
 // The decider's typed questions and answers (redo Phase 1, inspired by
 // TypeSafe's Jev, built in-house). Import-free so tests load it directly.
 
-export type QuestionKey = 'model_tier' | 'needs_web' | 'needs_clarify' | 'depth';
+export type QuestionKey = 'model_tier' | 'needs_web' | 'needs_clarify' | 'depth' | 'shape';
 
 export interface ChoiceOption {
-  token: string; // the single token the judge answers with (A, B, C, Y, N, 1, 2, 3)
+  token: string; // the single token the judge answers with (A, B, C, D, Y, N, 1, 2, 3)
   value: string; // what the decision means (cheap, mid, strong, yes, no, 1, 2, 3)
   describe: string; // shown to the judge after the token
 }

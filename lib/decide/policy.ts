@@ -16,6 +16,9 @@ export const POLICY = {
   webAt: 0.5,
   // needs_clarify: a high bar. Answer first; ask only when nothing useful can be said.
   clarifyAt: 0.8,
+  // shape: the top option wins only when the judge means it; otherwise
+  // prose, which the base prompt's SHAPE rules still let the answerer upgrade.
+  shapeAt: 0.45,
   // A structured-fallback answer (stated, not measured, probabilities) never escalates the tier.
   lowTrustMaxTier: 'cheap' as const,
   // The judge's own latency budget; past it the defaults stand.
@@ -28,6 +31,7 @@ export const DEFAULTS: Record<QuestionKey, string> = {
   needs_web: 'no',
   needs_clarify: 'no',
   depth: '2',
+  shape: 'prose',
 };
 
 // Normalize a probability map over the allowed values; missing values get 0.
@@ -63,6 +67,11 @@ export function applyPolicy(key: QuestionKey, probs: Record<string, number>, tru
       // Expected value, rounded: a score, not a vote.
       const ev = 1 * (probs['1'] ?? 0) + 2 * (probs['2'] ?? 0) + 3 * (probs['3'] ?? 0);
       return String(Math.min(3, Math.max(1, Math.round(ev))));
+    }
+    case 'shape': {
+      if (trust === 'low') return 'prose';
+      const [top, p] = Object.entries(probs).sort((a, b) => b[1] - a[1])[0] ?? ['prose', 0];
+      return p >= POLICY.shapeAt ? top : 'prose';
     }
   }
 }
