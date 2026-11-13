@@ -208,6 +208,60 @@ h3.ask-md-h { font-size: 1.06em; }
 }
 .ask-start-link:hover { text-decoration: underline; }
 
+/* Empty state as one scrolling column (2026-11-12): the title sits about a
+   fifth of the way down so the composer lands near the middle, and the
+   "what is moving" tabs follow below it. With a conversation open the
+   pinned three-row grid above applies unchanged. */
+.ask-main[data-empty] { grid-template-rows: auto auto auto auto; align-content: start; overflow-y: auto; }
+.ask-main[data-empty] > .ask-thread { overflow: visible; padding-top: clamp(28px, 22vh, 230px); padding-bottom: 6px; }
+.ask-main[data-empty] > .ask-trend { grid-row: 4; }
+.ask-main[data-empty] .ask-hero { padding: 0; }
+/* The research-mode hint returns once a conversation is open. */
+.ask-main[data-empty] .ask-composer-hint { display: none; }
+
+/* Same side gutter as .ask-composer so the tabs line up with the box. */
+.ask-trend { box-sizing: border-box; width: 100%; max-width: calc(760px + 2 * clamp(16px, 4vw, 48px)); margin: 0 auto; padding: 22px clamp(16px, 4vw, 48px) 40px; }
+.ask-trend-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.ask-trend-tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.ask-trend-tab {
+  background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer;
+  padding: 8px 10px 9px; margin-bottom: -1px; white-space: nowrap;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim);
+}
+.ask-trend-tab:hover { color: var(--ink); }
+.ask-trend-tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.ask-trend-blurb { margin: 10px 0 12px; font-size: 12.5px; color: var(--dim); }
+.ask-trend-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: 10px; }
+.ask-trend-card { position: relative; display: flex; border: 1px solid var(--line); background: var(--surface); min-width: 0; }
+.ask-trend-card:hover { border-color: var(--ink-faint); }
+.ask-trend-open {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; text-align: left;
+  background: none; border: none; cursor: pointer; padding: 12px 12px 12px 14px; color: var(--ink);
+}
+.ask-trend-title {
+  font-size: 13.5px; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ask-trend-meta { margin-top: auto; font-size: 11.5px; color: var(--faint-ink); }
+.ask-trend-badge {
+  align-self: flex-start; font-family: var(--font-mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid currentColor; padding: 1px 5px;
+}
+.ask-trend-split { display: flex; height: 4px; gap: 2px; }
+.ask-trend-split > span { min-width: 0; }
+.ask-trend-split > [data-dir="sup"] { background: var(--supports); }
+.ask-trend-split > [data-dir="con"] { background: var(--contradicts); }
+.ask-trend-split > [data-dir="other"] { background: var(--ink-faint); }
+.ask-trend-ask {
+  align-self: flex-start; background: none; border: none; border-left: 1px solid var(--line); cursor: pointer;
+  padding: 12px 10px; font-size: 12px; color: var(--accent);
+}
+.ask-trend-ask:hover { text-decoration: underline; }
+@media (max-width: 640px) {
+  .ask-main[data-empty] > .ask-thread { padding-top: clamp(20px, 12vh, 120px); }
+  .ask-trend { padding-bottom: 28px; }
+}
+
 /* the lane chip (2026-09-23): how much of the Atlas actually covers this
    question, shown at the top of every classified assistant turn. */
 .ask-lane {

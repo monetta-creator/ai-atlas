@@ -6,6 +6,7 @@ Ask is the chat surface over the whole corpus, with citations. Public page in th
 - `ask/page.tsx`, `AskWorkspace` + `components/ask/*`.
 - Mode by auth: `admin` uses the research loop at `/api/ask/deep` on EVERY turn; `portal` uses `/api/portal/ask` (the quick path, budget reasons); `locked` gets an inline unlock.
 - Quick `/api/ask` stays for the per-signal widget (`AskAtlas` on `/signals/[id]`, shared renderer `components/ask/answer.tsx`, `/api/signals/[id]/ask`).
+- Empty state (2026-11-12): title, composer mid-page, then "what is moving" tabs (`components/ask/AskTrending.tsx`, data from `getAskTrending()` in `lib/ask/trending.ts`, no model call): Debates in motion (map questions by evidence added in 14 days, direction split, "Rising" vs the prior 14), Signals (published, 21 days), Research (triage-kept papers, 14 days, ranked by public "Bears on" claim count). Card = peek, "Ask" = seeded first turn. Every tab is guest-safe by column choice (no touch_details, confidences, triage or agent output). Company news was tried and dropped: intel significance is about the company, not AI, and names tracked companies. Human paper review has been idle since 2026-09-14, so tracked/noted cannot carry a tab.
 - Conversations: localStorage is the working copy (`components/ask/store.ts`), mirrored to the server for admin and access keys (`lib/conversations/store.ts`, migration 0087, debounced PUT snapshots).
 - The multi-turn wire contract lives in `lib/ask/history.ts`. Signal-tag offsets prevent cross-turn citation mislinks.
 

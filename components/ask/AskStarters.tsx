@@ -1,29 +1,14 @@
 'use client';
 
-import ExamplePill from '@/components/ask/ExamplePill';
-import StartHere from '@/components/lobby/StartHere';
-
-// The empty-state hero: headline face title, one grounding line, and the
-// typing example pill (the lobby launcher's idiom, replacing the old labeled
-// starter card grid). Picking the pill's question submits it as the
-// conversation's first turn (or, when the workspace is locked, focuses the
-// unlock key input instead, handled upstream).
-export default function AskStarters({
-  onPick, locked,
-}: {
-  onPick: (question: string) => void;
-  locked: boolean;
-}) {
+// The empty-state hero: the title only. The composer sits right under it,
+// mid-page, and the "what is moving" tabs follow (AskTrending, rendered by
+// AskWorkspace). The grounding paragraph, the typing example pill and the
+// "Where do I start?" link moved out on 2026-11-12 (the link now heads the
+// tabs). Locked visitors see the unlock panel where the composer sits.
+export default function AskStarters() {
   return (
     <div className="ask-hero">
       <h1>Ask the Atlas</h1>
-      <p style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--dim)', maxWidth: 560, margin: 0 }}>
-        Grounded answers over everything the Atlas tracks: signals, claims and their evidence,
-        research, company news, theses, and the Atlas’s own editions and reports. Every reference
-        is cited and links back to its record{locked ? '. Unlock below with an access key to start.' : '.'}
-      </p>
-      <ExamplePill onPick={onPick} />
-      <StartHere variant="link" onPick={onPick} />
     </div>
   );
 }

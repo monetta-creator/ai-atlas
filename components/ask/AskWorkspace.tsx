@@ -13,6 +13,7 @@ import {
 import { extractCostReport, extractWebSources, parseCostReport, type AskWebSource } from '@/lib/ask/history';
 import type { AtlasView } from '@/lib/tools/types';
 import type { V2Decision } from '@/lib/ask/v2-events';
+import type { TrendingTab } from '@/lib/ask/trending';
 import { extractDecline, parseLane, type DeclinePayload, type Lane } from '@/lib/ask/lanes';
 import { fieldReportContext } from '@/components/ask/field-report-context';
 import type { FieldReportPlanResponse } from '@/lib/field-report/core';
@@ -21,6 +22,8 @@ import AskThread from '@/components/ask/AskThread';
 import AskComposer from '@/components/ask/AskComposer';
 import EnhanceCard from '@/components/ask/EnhanceCard';
 import AskPeek from '@/components/ask/AskPeek';
+import AskTrending from '@/components/ask/AskTrending';
+import StartHere from '@/components/lobby/StartHere';
 import { buildHighlight, type DocHighlight } from '@/components/ask/AskDoc';
 import PortalUnlock from '@/components/datasets/PortalUnlock';
 import type { RenewalState } from '@/components/portal/RenewalNotice';
@@ -49,7 +52,7 @@ function reportIdsIn(messages: AskMessage[]): string[] {
 }
 
 export default function AskWorkspace({
-  mode, validIds, datasets, initialQuestion, keyState,
+  mode, validIds, datasets, initialQuestion, keyState, trending = [],
 }: {
   mode: AskMode;
   validIds: ValidIdsPlain;
@@ -57,6 +60,8 @@ export default function AskWorkspace({
   initialQuestion?: string;
   // Locked mode only: a lapsed key's state, for the unlock panel's notice.
   keyState?: RenewalState | null;
+  // The empty state's "what is moving" tabs (lib/ask/trending.ts).
+  trending?: TrendingTab[];
 }) {
   const convos = useAskConvos();
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -689,7 +694,7 @@ export default function AskWorkspace({
     <div className="ask-shell" data-peek={activePeek ? '' : undefined}>
       <div className="ask-rail">{rail}</div>
 
-      <div className="ask-main">
+      <div className="ask-main" data-empty={active ? undefined : ''}>
         <div className="ask-topbar">
           <button type="button" className="btn btn--quiet btn--sm" onClick={() => setRailOpen(true)}>
             History
@@ -754,6 +759,15 @@ export default function AskWorkspace({
             onModel={pickModel}
             v2On={v2On}
             onToggleV2={() => setV2On((v) => !v)}
+          />
+        )}
+
+        {!active && (
+          <AskTrending
+            tabs={trending}
+            onOpen={(kind, id) => openPeek(kind, id)}
+            onAsk={pickStarter}
+            footer={<StartHere variant="link" onPick={pickStarter} />}
           />
         )}
       </div>

@@ -1,5 +1,6 @@
 import { getPortalIdentity } from '@/lib/portal/identity';
 import { getAskClientData } from '@/lib/ask/retrieve';
+import { getAskTrending } from '@/lib/ask/trending';
 import { DATASETS } from '@/lib/datasets/registry';
 import AskWorkspace from '@/components/ask/AskWorkspace';
 
@@ -22,14 +23,14 @@ export default async function AskPage({ searchParams }: { searchParams: Promise<
   const keyState = identity.state === 'expired' || identity.state === 'revoked'
     ? { state: identity.state, expiresAt: identity.expiresAt }
     : null;
-  const validIds = await getAskClientData();
+  const [validIds, trending] = await Promise.all([getAskClientData(), getAskTrending()]);
   const datasets = DATASETS.map((d) => ({ slug: d.slug, title: d.title, description: d.description }));
   const rawQ = typeof sp.q === 'string' ? sp.q : undefined;
   const initialQuestion = rawQ?.trim().slice(0, 2000) || undefined;
 
   return (
     <div className="ask-page">
-      <AskWorkspace mode={mode} validIds={validIds} datasets={datasets} initialQuestion={initialQuestion} keyState={keyState} />
+      <AskWorkspace mode={mode} validIds={validIds} datasets={datasets} initialQuestion={initialQuestion} keyState={keyState} trending={trending} />
     </div>
   );
 }

@@ -56,7 +56,7 @@ const MAP_KINDS = new Set<CitationKind>(['signal', 'paper', 'item', 'fact', 'rep
 // unless the reader scrolled up (tracked in a ref from the scroll handler;
 // the ref is only read inside the effect, per the React Compiler rules).
 export default function AskThread({
-  convo, streaming, frPlanning, draft, draftMap, draftSteps, draftLane, validIds, datasets, locked,
+  convo, streaming, frPlanning, draft, draftMap, draftSteps, draftLane, validIds, datasets,
   admin, canVerify, verifyingIndex,
   onPickStarter, onRegenerate, onGenerate, onCite, onVerify, onFieldReportUpdate, onEditQuestion,
 }: {
@@ -114,7 +114,7 @@ export default function AskThread({
     >
       {!convo ? (
         <div className="ask-thread-inner">
-          <AskStarters onPick={onPickStarter} locked={locked} />
+          <AskStarters />
         </div>
       ) : (
         <div className="ask-thread-inner">
