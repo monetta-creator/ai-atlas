@@ -59,8 +59,11 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-// Set the saved theme before first paint to avoid a light→dark flash.
-const themeInit = `(function(){try{var s=JSON.parse(localStorage.getItem("atlas-console")||"{}");if(s&&s.theme==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}})();`;
+// Set the saved theme before first paint to avoid a light→dark flash. Also
+// marks the installed iPhone web app (navigator.standalone, iOS only): it
+// draws to the bottom edge under the home bar while reporting a zero safe
+// area, so --safe-bottom (tokens.css) reserves that strip itself.
+const themeInit = `(function(){try{var s=JSON.parse(localStorage.getItem("atlas-console")||"{}");if(s&&s.theme==="dark")document.documentElement.setAttribute("data-theme","dark");}catch(e){}try{if(window.navigator.standalone===true)document.documentElement.setAttribute("data-standalone","");}catch(e){}})();`;
 
 export default function RootLayout({
   children,

@@ -86,7 +86,7 @@
   display: flex; flex-direction: column; gap: 2px;
   max-height: calc(100vh - 100%); max-height: calc(100dvh - 100%);
   overflow-y: auto; overscroll-behavior: contain;
-  padding: 12px; border-top: 1px solid var(--line); background: var(--surface);
+  padding: 12px 12px calc(12px + var(--safe-bottom)); border-top: 1px solid var(--line); background: var(--surface);
   box-shadow: 0 16px 36px rgba(15,23,42,.12);
   animation: navmenu-in .16s var(--ease-soft);
 }

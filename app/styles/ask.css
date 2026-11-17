@@ -614,7 +614,7 @@ ol.ask-md-list { list-style: decimal; }
 
   /* composer: text on top, tools and actions on one row under it */
   .ask-composer {
-    padding: 6px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    padding: 6px 12px max(10px, var(--safe-bottom));
     background: linear-gradient(to bottom, transparent, var(--bg) 16px);
   }
   .ask-composer-inner {
@@ -685,7 +685,7 @@ ol.ask-md-list { list-style: decimal; }
   .ask-chip { border-radius: 16px; font-size: 14px; padding: 8px 14px; }
 
   /* the history sheet: chat-app list rows */
-  .ask-drawer { padding: 16px 12px calc(16px + env(safe-area-inset-bottom, 0px)); gap: 2px; }
+  .ask-drawer { padding: 16px 12px calc(16px + var(--safe-bottom)); gap: 2px; }
   .ask-drawer .btn {
     justify-content: center; text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 600;
     min-height: 44px; border-radius: 999px; color: var(--ink);
@@ -703,7 +703,7 @@ ol.ask-md-list { list-style: decimal; }
 .ask-sheet {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 96;
   max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain;
-  padding: 8px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 16px calc(18px + var(--safe-bottom));
   background: var(--surface); border-radius: 22px 22px 0 0;
   box-shadow: 0 -10px 40px rgba(15,23,42,.18);
   animation: askSheetIn .26s var(--ease);

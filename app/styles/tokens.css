@@ -83,3 +83,11 @@ body {
 /* sticky nav gains a shadow once the page is scrolled (JS adds .scrolled) */
 .nav { background: color-mix(in oklab, var(--bg) 80%, transparent); transition: box-shadow .3s ease, background .35s ease; }
 .nav.scrolled { box-shadow: 0 1px 0 var(--line), 0 8px 24px rgba(15,23,42,.06); }
+
+/* The bottom safe area (the iPhone home bar). Browsers report it through
+   env(); the installed iPhone web app draws to the bottom edge but reports 0
+   there (no viewport-fit=cover, which has height bugs in installed apps), so
+   layout.tsx's boot script marks it [data-standalone] and this reserves the
+   strip. Every bottom-anchored element pads with --safe-bottom. */
+:root { --safe-bottom: env(safe-area-inset-bottom, 0px); }
+html[data-standalone] { --safe-bottom: max(28px, env(safe-area-inset-bottom, 0px)); }
