@@ -261,9 +261,10 @@ body { overflow-wrap: anywhere; }
   .wv-chip__remove button { padding: 6px 8px; font-size: 16px; }
   .editable-pencil { opacity: .55; }
 
-  /* ---- Cap the sticky admin nav so a 5–6 row wrap can't eat the screen; it
-     scrolls internally in the rare case it exceeds half the viewport. ---- */
-  .nav { max-height: 50vh; overflow-y: auto; }
+  /* The old "cap the nav at 50vh, overflow-y:auto" rule is gone: the bar is one
+     row now (brand + theme + hamburger), and any overflow on .nav clips the
+     hamburger sheet, which hangs below it (.nav-mobile-panel, top:100%). The
+     sheet scrolls itself instead (sitenav.css). */
 }
 
 /* No real hover on touch — neutralize the lift transforms so a tap doesn't leave

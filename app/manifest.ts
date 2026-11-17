@@ -1,8 +1,9 @@
 import type { MetadataRoute } from 'next';
 
 // Installable web app: opens straight into the Ask bar. Colors are the light
-// tokens in app/styles/tokens.css (--bg #f5f7fb, --accent #2d5bff). No service
-// worker and no push yet.
+// tokens in app/styles/tokens.css (--bg #f5f7fb, --accent #2d5bff). The icons
+// are the header's Brand mark, white on the accent, full-bleed and opaque (the
+// platform rounds the corners). No service worker and no push yet.
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'The AI Atlas',

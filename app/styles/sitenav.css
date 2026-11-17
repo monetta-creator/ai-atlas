@@ -76,9 +76,16 @@
   font-size: 17px; cursor: pointer;
 }
 
+/* The sheet hangs below the sticky bar, so it scrolls itself: a long admin
+   sheet would otherwise run past the bottom of the screen, out of reach. On an
+   absolutely positioned box, 100% is the bar's height, so the max-height is
+   "the rest of the screen". .nav must never get an overflow value: that clips
+   this sheet to the bar's 65px and the hamburger looks dead (globals.css). */
 .nav-mobile-panel {
   position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
   display: flex; flex-direction: column; gap: 2px;
+  max-height: calc(100vh - 100%); max-height: calc(100dvh - 100%);
+  overflow-y: auto; overscroll-behavior: contain;
   padding: 12px; border-top: 1px solid var(--line); background: var(--surface);
   box-shadow: 0 16px 36px rgba(15,23,42,.12);
   animation: navmenu-in .16s var(--ease-soft);

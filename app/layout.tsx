@@ -40,7 +40,9 @@ export const metadata: Metadata = {
     description: ATLAS_ONE_LINER,
   },
   appleWebApp: { capable: true, title: "Atlas", statusBarStyle: "default" },
-  icons: { apple: "/icons/icon-192.png" },
+  // 180x180 and opaque: iOS fills transparent pixels with black, and it keeps
+  // the icon it captured when the app was added (changing it needs a re-add).
+  icons: { apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }] },
   twitter: {
     card: "summary_large_image",
     title: "The AI Atlas",
