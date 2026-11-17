@@ -204,6 +204,8 @@ ol.ask-md-list { list-style: decimal; }
 /* empty state */
 .ask-hero { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 7vh 0 0; text-align: center; }
 .ask-hero h1 { font-family: var(--font-headline); font-weight: 400; font-size: clamp(28px, 3.6vw, 44px); margin: 0; }
+/* the Atlas mark over the title: phones only (the 760px block shows it) */
+.ask-hero-mark { display: none; }
 .ask-start-link {
   font-size: 12.5px; color: var(--accent); background: none; border: none;
   cursor: pointer; padding: 0; text-decoration: none;
@@ -661,16 +663,17 @@ ol.ask-md-list { list-style: decimal; }
   .ask-composer--locked { background: none; }
   .ask-composer--locked .ask-composer-inner { border: none; border-radius: 0; box-shadow: none; padding: 0; }
 
-  /* Empty state: the page scrolls as one column (title, then the "what is
-     moving" tabs) under a sticky header, and the composer stays pinned to the
-     bottom like a conversation's. Locked visitors keep the unlock panel in
+  /* Empty state: the chat-app start screen. Only the mark and title, centered
+     in the space above the composer pinned at the bottom; the desktop's "what
+     is moving" tabs stay off phones. Locked visitors keep the unlock panel in
      the flow under the title. */
+  .ask-main[data-empty] > .ask-trend { display: none; }
   .ask-main[data-empty] > .ask-topbar { position: sticky; top: 0; z-index: 4; }
   .ask-main[data-empty] > .ask-thread { padding-top: clamp(24px, 13vh, 130px); }
-  .ask-main[data-empty]:not([data-locked]) { grid-template-rows: auto auto 1fr auto; }
-  .ask-main[data-empty]:not([data-locked]) > .ask-trend { grid-row: 3; }
-  .ask-main[data-empty]:not([data-locked]) > .ask-composer { grid-row: 4; position: sticky; bottom: 0; z-index: 3; }
-  .ask-trend { padding: 18px 16px 20px; }
+  .ask-main[data-empty]:not([data-locked]) { grid-template-rows: auto minmax(min-content, 1fr) auto; }
+  .ask-main[data-empty]:not([data-locked]) > .ask-thread { grid-row: 2; align-self: center; padding-top: 0; padding-bottom: 6vh; }
+  .ask-main[data-empty]:not([data-locked]) > .ask-composer { grid-row: 3; position: sticky; bottom: 0; z-index: 3; }
+  .ask-hero-mark { display: block; color: var(--accent); }
 
   /* the answer's action buttons (Check this answer, Regenerate, Retry) as
      soft pills instead of uppercase console buttons */

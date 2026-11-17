@@ -192,9 +192,10 @@ body { overflow-wrap: anywhere; }
    imports after tokens/base/components, so these win the cascade.
    ============================================================ */
 @media (max-width: 720px) {
-  /* Condense the sticky nav: brand on the first row, links wrap neatly below
-     instead of overflowing (admin has ~6 items that can't fit one phone row). */
-  .nav { padding: 12px 16px; gap: 12px; flex-wrap: wrap; }
+  /* Condense the sticky nav to one row: the brand yields (sitenav.css) so the
+     theme toggle and hamburger stay beside it; wrapping put them on a second
+     row on narrow phones (the old wrapping link row is gone). */
+  .nav { padding: 12px 16px; gap: 12px; flex-wrap: nowrap; }
   .brand .tag { display: none; }
   .navlinks { flex-wrap: wrap; gap: 8px 12px; }
 

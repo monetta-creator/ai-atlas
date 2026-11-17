@@ -102,6 +102,11 @@
   .nav .brand { min-width: 0; flex-shrink: 1; overflow: hidden; }
   .sitenav-mobile .theme-label { display: none; }
 }
+/* The narrowest phones (iPhone SE class): the Beta pill gives way so the
+   wordmark, theme toggle and hamburger keep one row. */
+@media (max-width: 379px) {
+  .nav .brand-beta { display: none; }
+}
 
 /* Report document — rendered markdown for the generated report sections (ReportDocument).
    Mirrors .about-prose rhythm; scoped so the model's markdown reads as analyst prose. */
