@@ -53,6 +53,9 @@ body:has(> .ask-page) { height: 100dvh; min-height: 0; display: flex; flex-direc
 /* user turns get a quiet bubble; assistant turns are full-width prose */
 .ask-msg--user {
   align-self: flex-end; max-width: 85%; padding: 10px 14px;
+  /* the bubble's wrapper is the flex item, so align-self alone left it a
+     left-aligned 85% slab: hug the text and sit on the right */
+  width: fit-content; margin-left: auto;
   border: 1px solid var(--line); border-radius: var(--radius);
   background: color-mix(in oklab, var(--ink) 4%, var(--surface));
   font-size: 14px; line-height: 1.6; white-space: pre-wrap;
@@ -69,6 +72,9 @@ body:has(> .ask-page) { height: 100dvh; min-height: 0; display: flex; flex-direc
 h3.ask-md-h { font-size: 1.06em; }
 .ask-md-h:first-child { margin-top: 0; }
 .ask-md-list { margin: 0 0 0.85em; padding-left: 1.4em; white-space: normal; }
+/* Tailwind's preflight strips list markers; answers need them back */
+ul.ask-md-list { list-style: disc; }
+ol.ask-md-list { list-style: decimal; }
 .ask-md-list li { margin: 0.2em 0; white-space: pre-wrap; }
 .ask-md-list li::marker { color: color-mix(in oklab, var(--ink) 45%, transparent); }
 .ask-md-hr { border: 0; border-top: 1px solid var(--line); margin: 1.1em 0; }
@@ -150,10 +156,6 @@ h3.ask-md-h { font-size: 1.06em; }
 }
 .ask-model-select:hover, .ask-model-select:focus-visible { border-color: var(--accent); color: var(--dim); }
 .ask-model-select:disabled { opacity: 0.5; cursor: default; }
-@media (max-width: 640px) {
-  .ask-composer-foot { flex-wrap: wrap; row-gap: 6px; }
-  .ask-composer-foot .ask-composer-hint { flex-basis: 100%; }
-}
 
 /* the v2 recommendation chip beside the lane label */
 .ask-decision {
@@ -481,11 +483,6 @@ h3.ask-md-h { font-size: 1.06em; }
 }
 .ask-mic:hover { border-color: var(--accent); color: var(--dim); }
 .ask-mic[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: color-mix(in oklab, var(--accent) 10%, transparent); }
-@media (max-width: 640px) {
-  .ask-composer-inner { flex-wrap: wrap; }
-  .ask-composer-inner textarea { flex: 1 1 100%; min-width: 0; }
-  .ask-composer-actions { flex: 1 1 100%; }
-}
 
 /* skill label beside the lane label */
 .ask-skill {
@@ -563,3 +560,180 @@ h3.ask-md-h { font-size: 1.06em; }
   .ask-view-tl li { grid-template-columns: minmax(0, 1fr); }
   .ask-view-tl-cite { grid-column: 1; }
 }
+
+/* ---- Phones (<=760px, 2026-11-17): the chat-app layout -------------------
+   Modeled on the phone chat apps: one slim header (history, the admin's model
+   picker as a pill, new chat), a rounded composer pinned to the bottom with
+   "+" for options and active-mode chips on the left and the mic and one round
+   send button on the right, larger reading text, and chat bubbles for the
+   user's turns. The desktop's chip row and three send buttons stay in the DOM
+   and hide here (.ask-desk); the phone-only pieces hide above 760px (.ask-mob,
+   .ask-composer-tools). The options sheet is AskToolsSheet. */
+.ask-composer-tools { display: none; }
+.ask-composer .ask-mob { display: none; }
+
+@media (max-width: 760px) {
+  /* header */
+  .ask-topbar { gap: 8px; padding: 8px 12px 6px; border-bottom: none; background: var(--bg); }
+  .ask-icon-btn {
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; border-radius: 50%; padding: 0;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer;
+  }
+  .ask-icon-btn:active { background: color-mix(in oklab, var(--ink) 6%, var(--surface)); }
+  .ask-topbar-title {
+    flex: 1; min-width: 0; text-align: center; font-size: 14px; font-weight: 600; color: var(--ink);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .ask-model-pill {
+    position: relative; display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+    height: 40px; padding: 0 12px 0 16px; margin-right: auto; border-radius: 999px;
+    background: color-mix(in oklab, var(--ink) 6%, var(--surface)); color: var(--ink);
+    font-size: 15px; font-weight: 600;
+  }
+  .ask-model-pill-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ask-model-pill svg { flex: none; color: var(--dim); }
+  /* the native select sits invisibly over the pill: a tap opens the phone's own picker */
+  .ask-model-pill select {
+    position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0;
+    cursor: pointer; font-size: 16px; appearance: none; -webkit-appearance: none;
+  }
+  .ask-model-pill[data-disabled] { opacity: 0.5; }
+
+  /* reading text */
+  .ask-thread { padding: 10px 16px 8px; }
+  .ask-thread-inner { gap: 18px; }
+  .ask-msg--assistant { font-size: 16px; line-height: 1.62; }
+  .ask-msg--user {
+    font-size: 16px; line-height: 1.5; padding: 10px 16px;
+    border: none; border-radius: 20px;
+    background: color-mix(in oklab, var(--ink) 7%, var(--surface));
+  }
+
+  /* composer: text on top, tools and actions on one row under it */
+  .ask-composer {
+    padding: 6px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(to bottom, transparent, var(--bg) 16px);
+  }
+  .ask-composer-inner {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "text text" "tools actions";
+    align-items: center; gap: 2px 6px;
+    padding: 6px 8px 8px; border: 1px solid var(--line); border-radius: 26px;
+    box-shadow: 0 1px 2px rgba(15,23,42,.05), 0 8px 26px rgba(15,23,42,.09);
+  }
+  .ask-composer-inner:focus-within { border-color: color-mix(in oklab, var(--accent) 55%, var(--line)); }
+  .ask-composer-inner .lobby-ask-caret { display: none; }
+  .ask-composer textarea { grid-area: text; min-height: 42px; padding: 9px 10px 5px; font-size: 16px; }
+  .ask-composer-tools {
+    grid-area: tools; display: flex; align-items: center; gap: 6px; min-width: 0;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .ask-composer-tools::-webkit-scrollbar { display: none; }
+  .ask-composer-actions { grid-area: actions; flex-wrap: nowrap; gap: 4px; }
+  .ask-composer .ask-desk { display: none; }
+  .ask-composer .ask-mob { display: inline-flex; }
+  .ask-composer-foot { display: none; }
+  .ask-composer > .ask-enh { margin: 0 6px 8px; }
+  .ask-ac { border-color: var(--line); border-radius: 18px; box-shadow: 0 10px 30px rgba(15,23,42,.14); }
+
+  .ask-plus, .ask-send {
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; padding: 0; border-radius: 50%; cursor: pointer;
+  }
+  .ask-plus { border: 1px solid var(--line); background: transparent; color: var(--ink); }
+  .ask-send { border: none; background: var(--accent); color: #fff; }
+  [data-theme="dark"] .ask-send { color: #0a1120; }
+  .ask-send:disabled { background: color-mix(in oklab, var(--ink) 10%, var(--surface)); color: var(--faint-ink); cursor: default; }
+  .ask-send[data-stop] { background: var(--ink); color: var(--bg); }
+  .ask-mic { width: 36px; height: 36px; border: none; border-radius: 50%; color: var(--dim); }
+  .ask-mode-chip {
+    flex: none; display: inline-flex; align-items: center; gap: 5px;
+    height: 32px; padding: 0 10px 0 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--line));
+    background: color-mix(in oklab, var(--accent) 8%, var(--surface));
+    color: var(--accent); font-size: 13px; font-weight: 600; white-space: nowrap;
+  }
+  .ask-mode-chip:disabled { opacity: 0.5; cursor: default; }
+  .ask-mode-x { font-size: 16px; line-height: 1; opacity: 0.65; }
+
+  /* the locked unlock panel keeps its own frame: drop the composer's around it */
+  .ask-composer--locked { background: none; }
+  .ask-composer--locked .ask-composer-inner { border: none; border-radius: 0; box-shadow: none; padding: 0; }
+
+  /* Empty state: the page scrolls as one column (title, then the "what is
+     moving" tabs) under a sticky header, and the composer stays pinned to the
+     bottom like a conversation's. Locked visitors keep the unlock panel in
+     the flow under the title. */
+  .ask-main[data-empty] > .ask-topbar { position: sticky; top: 0; z-index: 4; }
+  .ask-main[data-empty] > .ask-thread { padding-top: clamp(24px, 13vh, 130px); }
+  .ask-main[data-empty]:not([data-locked]) { grid-template-rows: auto auto 1fr auto; }
+  .ask-main[data-empty]:not([data-locked]) > .ask-trend { grid-row: 3; }
+  .ask-main[data-empty]:not([data-locked]) > .ask-composer { grid-row: 4; position: sticky; bottom: 0; z-index: 3; }
+  .ask-trend { padding: 18px 16px 20px; }
+
+  /* the answer's action buttons (Check this answer, Regenerate, Retry) as
+     soft pills instead of uppercase console buttons */
+  .ask-msg-actions .btn {
+    text-transform: none; letter-spacing: 0; font-size: 13.5px; font-weight: 600;
+    min-height: 34px; padding: 7px 14px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--surface); color: var(--dim);
+  }
+  .ask-chip { border-radius: 16px; font-size: 14px; padding: 8px 14px; }
+
+  /* the history sheet: chat-app list rows */
+  .ask-drawer { padding: 16px 12px calc(16px + env(safe-area-inset-bottom, 0px)); gap: 2px; }
+  .ask-drawer .btn {
+    justify-content: center; text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 600;
+    min-height: 44px; border-radius: 999px; color: var(--ink);
+  }
+  .ask-drawer .ask-convo { padding: 12px; border-radius: 12px; font-size: 15px; color: var(--ink); }
+  .ask-drawer .ask-convo-del { opacity: 0.6; font-size: 13px; padding: 4px 6px; }
+}
+
+/* the phone options sheet (AskToolsSheet), portaled to <body> */
+.ask-sheet-backdrop {
+  position: fixed; inset: 0; z-index: 95;
+  background: color-mix(in oklab, var(--ink) 30%, transparent);
+  animation: scBackdropIn .2s var(--ease-soft);
+}
+.ask-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 96;
+  max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain;
+  padding: 8px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface); border-radius: 22px 22px 0 0;
+  box-shadow: 0 -10px 40px rgba(15,23,42,.18);
+  animation: askSheetIn .26s var(--ease);
+}
+@keyframes askSheetIn { from { transform: translateY(100%); } to { transform: none; } }
+.ask-sheet-grab { width: 38px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 6px; }
+.ask-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 10px; }
+.ask-sheet-title {
+  margin: 0; font-family: var(--font-mono); font-size: 11px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--faint-ink);
+}
+.ask-sheet-done { background: none; border: none; padding: 6px 4px; color: var(--accent); font-size: 15px; font-weight: 600; cursor: pointer; }
+.ask-sheet-rows { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.ask-sheet-row {
+  display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 14px;
+  text-align: left; font: inherit; color: var(--ink); cursor: pointer;
+  background: var(--surface); border: none; border-top: 1px solid var(--line);
+}
+.ask-sheet-row:first-child { border-top: none; }
+.ask-sheet-row:disabled { opacity: 0.5; cursor: default; }
+.ask-sheet-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ask-sheet-label { font-size: 15.5px; font-weight: 600; }
+.ask-sheet-note { font-size: 13px; line-height: 1.4; color: var(--dim); }
+.ask-sheet-row--action .ask-sheet-label { color: var(--accent); }
+.ask-switch {
+  flex: none; position: relative; width: 46px; height: 28px; border-radius: 999px;
+  background: color-mix(in oklab, var(--ink) 16%, var(--surface)); transition: background .18s;
+}
+.ask-switch > span {
+  position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.3); transition: transform .18s var(--ease-soft);
+}
+.ask-sheet-row[aria-checked="true"] .ask-switch { background: var(--accent); }
+.ask-sheet-row[aria-checked="true"] .ask-switch > span { transform: translateX(18px); }
+.ask-sheet-tip { margin: 12px 4px 0; font-size: 13px; line-height: 1.5; color: var(--dim); }
+.ask-sheet-hint { margin: 8px 4px 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.6; color: var(--faint-ink); }

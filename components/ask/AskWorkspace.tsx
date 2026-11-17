@@ -20,6 +20,7 @@ import type { FieldReportPlanResponse } from '@/lib/field-report/core';
 import AskRail from '@/components/ask/AskRail';
 import AskThread from '@/components/ask/AskThread';
 import AskComposer from '@/components/ask/AskComposer';
+import ModelSelect from '@/components/ask/ModelSelect';
 import EnhanceCard from '@/components/ask/EnhanceCard';
 import AskPeek from '@/components/ask/AskPeek';
 import AskTrending from '@/components/ask/AskTrending';
@@ -694,17 +695,28 @@ export default function AskWorkspace({
     <div className="ask-shell" data-peek={activePeek ? '' : undefined}>
       <div className="ask-rail">{rail}</div>
 
-      <div className="ask-main" data-empty={active ? undefined : ''}>
+      <div className="ask-main" data-empty={active ? undefined : ''} data-locked={locked ? '' : undefined}>
+        {/* Phones only (ask.css hides it above 760px): the chat-app header.
+            History opens the left sheet, the admin's model picker sits in
+            the middle as a pill, New chat on the right. */}
         <div className="ask-topbar">
-          <button type="button" className="btn btn--quiet btn--sm" onClick={() => setRailOpen(true)}>
-            History
+          <button type="button" className="ask-icon-btn" onClick={() => setRailOpen(true)} aria-label="Conversation history" title="History">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M4 8h16M4 16h10" />
+            </svg>
           </button>
-          <button type="button" className="btn btn--quiet btn--sm" onClick={() => setActiveId(null)}>
-            New chat
+          {showModel && !fieldReportOn ? (
+            <ModelSelect variant="pill" model={model} onModel={pickModel} disabled={streaming || frPlanning} />
+          ) : (
+            // The empty state's own title says "Ask the Atlas"; the bar names only an open thread.
+            <span className="ask-topbar-title">{active?.title ?? ''}</span>
+          )}
+          <button type="button" className="ask-icon-btn" onClick={() => setActiveId(null)} aria-label="New chat" title="New chat">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" />
+              <path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4z" />
+            </svg>
           </button>
-          <span style={{ fontSize: 12, color: 'var(--faint-ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {active?.title ?? 'Ask the Atlas'}
-          </span>
         </div>
 
         <AskThread
@@ -731,7 +743,7 @@ export default function AskWorkspace({
         />
 
         {locked ? (
-          <div className="ask-composer">
+          <div className="ask-composer ask-composer--locked">
             <div className="ask-composer-inner" style={{ display: 'block' }}>
               <PortalUnlock keyState={keyState} />
             </div>
